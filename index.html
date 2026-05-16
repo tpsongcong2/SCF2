@@ -2145,6 +2145,42 @@ function App(){
       }catch(err){console.warn(err);}finally{setLoading(false);}
     })();
   },[]);
+
+  /* ── TỰ ĐỘNG TẠO CHUYẾN MỖI NGÀY LÚC 6:00 ── */
+  const[autoNotif,setAutoNotif]=useState(null);
+  useEffect(()=>{
+    if(loading) return;
+    const now=new Date();
+    if(now.getHours()<6) return;
+    const todayKey='scf_autotrip_'+now.toISOString().slice(0,10);
+    if(localStorage.getItem(todayKey)) return;
+    if(!shifts||shifts.length===0) return;
+    const tom=new Date(now); tom.setDate(tom.getDate()+1);
+    const tStr=String(tom.getDate()).padStart(2,'0')+'/'+String(tom.getMonth()+1).padStart(2,'0')+'/'+tom.getFullYear();
+    setTrips(prev=>{
+      const news=[];
+      shifts.forEach(sh=>{
+        if(!prev.some(t=>t.deliveryDate===tStr&&t.shiftId===sh.id)){
+          news.push({
+            id:'CH'+uid(),deliveryDate:tStr,
+            deliveryTime:sh.timeStart||'',
+            shiftId:sh.id,shiftName:sh.name,area:sh.area||'',
+            driverName:'',driverId:'',orderIds:[],totalWeight:0,
+            status:'planning',
+            note:'Tu dong tao: '+sh.name+(sh.area?' - '+sh.area:''),
+            createdAt:fmtDT(),autoCreated:true
+          });
+        }
+      });
+      if(news.length>0){
+        localStorage.setItem(todayKey,'1');
+        setAutoNotif('Da tu dong tao '+news.length+' chuyen giao hang cho ngay '+tStr);
+        return[...prev,...news];
+      }
+      return prev;
+    });
+  },[loading,shifts]);
+
   if(loading)return h('div',{className:'load-screen'},
     h('img',{src:LOGO_SRC,style:{width:68,height:68,marginBottom:8}}),
     h('div',{style:{fontSize:16,fontWeight:600,color:'var(--pri3)'}},'SCF'),
