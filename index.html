@@ -1355,7 +1355,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees
       h('div',{style:{display:'flex',gap:5,flexWrap:'wrap'}},sts.map(([v,l])=>h('button',{key:v,className:'pill'+(filter===v?' on':''),onClick:()=>sf(v)},l+' ('+(v==='all'?orders.length:orders.filter(x=>x.status===v).length)+')'))),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
         h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn hàng...'}),
-        h(ExpBtn,{onClick:()=>{
+        h(ExportBtn,{onClick:()=>{
           // Flatten orders + lines for Excel export
           const rows=[];
           list.forEach(o=>{
