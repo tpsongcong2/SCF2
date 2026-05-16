@@ -821,8 +821,8 @@ function NCCTab({nccs,setNCCs}) {
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-building-store',style:{fontSize:20}}),'Nhà cung cấp'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
-      h(SBar,{value:q,onChange:sq,ph:'Tìm NCC...'}),
-      h(ABtn,{onClick:()=>{se(null);sm('f')},label:'Thêm NCC'})
+      h(SearchBar,{value:q,onChange:sq,ph:'Tìm NCC...'}),
+      h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Thêm NCC'})
     ),
     h('div',{className:'tw'},h('table',null,
       h('thead',null,h('tr',null,...['Mã NCC','Tên NCC','MST','Điện thoại','Người LH','Địa chỉ',''].map(c=>h('th',{key:c},c)))),
@@ -886,7 +886,7 @@ function PurchaseTab({purchases,setPurchases,nccs,materials,products,cu}) {
     h('div',{className:'ptitle'},h('i',{className:'ti ti-shopping-cart',style:{fontSize:20}}),'Đơn mua hàng'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h('div',{style:{display:'flex',gap:5,flexWrap:'wrap'}},sts.map(([v,l])=>h('button',{key:v,className:'pill'+(filter===v?' on':''),onClick:()=>sf(v)},l+' ('+(v==='all'?purchases.length:purchases.filter(x=>x.status===v).length)+')'))),
-      h('div',{style:{display:'flex',gap:6}},h(SBar,{value:q,onChange:sq,ph:'Tìm đơn mua...'}),h(ABtn,{onClick:()=>{se(null);sm('f')},label:'Tạo đơn mua'}))
+      h('div',{style:{display:'flex',gap:6}},h(SearchBar,{value:q,onChange:sq,ph:'Tìm đơn mua...'}),h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Tạo đơn mua'}))
     ),
     h('div',{className:'tw'},h('table',null,
       h('thead',null,h('tr',null,...['Mã đơn','Nhà cung cấp','Ngày đặt','Hạn giao','Số mặt hàng','Tổng tiền','Trạng thái',''].map(c=>h('th',{key:c},c)))),
@@ -1360,10 +1360,10 @@ function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees
           const rows=[];
           list.forEach(o=>{
             if(!o.lines||o.lines.length===0){
-              rows.push({'Mã đơn':o.id,'Khách hàng':o.customer,'Ngày giao':o.deliveryDate,'Giờ giao':o.deliveryTime||'','Địa chỉ':o.address||'','Điểm giao':o.pointName||'','Số HĐ':o.invoiceNo||'','Công đi':o.workOut||0,'Công về':o.workReturn||0,'Trạng thái':o.status,'Ghi chú đơn':o.note||'','Sản phẩm':'','ĐVT':'','SL sản xuất':0,'SL hóa đơn':0,'Ca SX':'','Ghi chú dòng':''});
+              rows.push({'Mã đơn':o.id,'Khách hàng':o.customer,'Ngày giao':o.deliveryDate,'Giờ giao':o.deliveryTime||'','Điểm giao':o.pointName||'','Công đi':o.workOut||0,'Công về':o.workReturn||0,'Trạng thái':o.status,'Ghi chú đơn':o.note||'','Sản phẩm':'','ĐVT':'','SL sản xuất':0,'SL hóa đơn':0,'Ca SX':'','Ghi chú dòng':''});
             } else {
               o.lines.forEach((l,i)=>{
-                rows.push({'Mã đơn':i===0?o.id:'','Khách hàng':i===0?o.customer:'','Ngày giao':i===0?o.deliveryDate:'','Giờ giao':i===0?(o.deliveryTime||''):'','Địa chỉ':i===0?(o.address||''):'','Điểm giao':i===0?(o.pointName||''):'','Số HĐ':i===0?(o.invoiceNo||''):'','Công đi':i===0?(o.workOut||0):'','Công về':i===0?(o.workReturn||0):'','Trạng thái':i===0?o.status:'','Ghi chú đơn':i===0?(o.note||''):'',' Sản phẩm':l.productName||'','ĐVT':l.unit||'','SL sản xuất':l.qtyProd||0,'SL hóa đơn':l.qtyInvoice||0,'Ca SX':l.shift==='night'?'Ca đêm':'Ca ngày','Ghi chú dòng':l.note||''});
+                rows.push({'Mã đơn':i===0?o.id:'','Khách hàng':i===0?o.customer:'','Ngày giao':i===0?o.deliveryDate:'','Giờ giao':i===0?(o.deliveryTime||''):'','Điểm giao':i===0?(o.pointName||''):'','Công đi':i===0?(o.workOut||0):0,'Công về':i===0?(o.workReturn||0):0,'Trạng thái':i===0?o.status:'','Ghi chú đơn':i===0?(o.note||''):'',' Sản phẩm':l.productName||'','ĐVT':l.unit||'','SL sản xuất':l.qtyProd||0,'SL hóa đơn':l.qtyInvoice||0,'Ca SX':l.shift==='night'?'Ca đêm':'Ca ngày','Ghi chú dòng':l.note||''});
               });
             }
           });
@@ -1372,7 +1372,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees
           XLSX.utils.book_append_sheet(wb,ws,'Don giao hang');
           XLSX.writeFile(wb,'Don_giao_hang_'+fmtDate().split('/').join('-')+'.xlsx');
         }}),
-        h(ImpBtn,{onFile:rows=>{
+        h(ImportBtn,{onFile:rows=>{
           // Group rows by Mã đơn to reconstruct orders
           const orderMap={};
           rows.forEach(r=>{
@@ -1387,7 +1387,6 @@ function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees
                 deliveryTime:r['Giờ giao']||'',
                 address:r['Địa chỉ']||'',
                 pointName:r['Điểm giao']||'',ptId:'',
-                invoiceNo:r['Số HĐ']||'',
                 workOut:r['Công đi']||0,workReturn:r['Công về']||0,
                 status:r['Trạng thái']||'pending',
                 note:r['Ghi chú đơn']||'',
