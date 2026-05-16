@@ -296,6 +296,7 @@ function ProductForm({prod,prodCats,onSave,onClose}){
       h(F,{label:'Đơn vị tính (ĐVT)'},h('select',{value:f.unit,onChange:e=>s('unit',e.target.value)},UNITS.map(u=>h('option',{key:u,value:u},u)))),
       needWeight&&h(F,{label:'KL/'+f.unit+' (kg)'},h('input',{type:'number',min:0,step:.001,value:f.weightPerUnit,onChange:e=>s('weightPerUnit',e.target.value),placeholder:'0.000'}))
     ),
+    h(F,{label:'Màu highlight'},h('div',{style:{display:'flex',gap:6,padding:'4px 0'}},h('span',{title:'Không màu',onClick:()=>s('color',''),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#ffffff',border:'3px solid '+(f.color===''?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Vàng',onClick:()=>s('color','#FFF9C4'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#FFF9C4',border:'3px solid '+(f.color==='#FFF9C4'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Xanh lá',onClick:()=>s('color','#EAF3DE'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#EAF3DE',border:'3px solid '+(f.color==='#EAF3DE'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Xanh dương',onClick:()=>s('color','#E6F1FB'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#E6F1FB',border:'3px solid '+(f.color==='#E6F1FB'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Đỏ',onClick:()=>s('color','#FCEBEB'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#FCEBEB',border:'3px solid '+(f.color==='#FCEBEB'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Tím',onClick:()=>s('color','#F3E8FF'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#F3E8FF',border:'3px solid '+(f.color==='#F3E8FF'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Cam',onClick:()=>s('color','#FEE2E2'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#FEE2E2',border:'3px solid '+(f.color==='#FEE2E2'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}))),
     h(F,{label:'Ghi chú'},h('textarea',{value:f.note,onChange:e=>s('note',e.target.value),rows:2})),
     needWeight&&h('div',{style:{background:'var(--bg2)',padding:'8px 12px',borderRadius:'var(--r)',fontSize:12,color:'var(--tx2)',marginBottom:'.85rem'}},
       h('i',{className:'ti ti-info-circle',style:{marginRight:5}}),
@@ -371,9 +372,9 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
 }
 
 /* ─── CUSTOMERS ─── */
-function CustomerForm({cust,onSave,onClose}){
+function CustomerForm({cust,shifts,onSave,onClose}){
   const[f,sf]=useState(cust?{...cust,points:[...cust.points]}:{id:'',code:'',name:'',taxCode:'',address:'',note:'',points:[]});
-  const[np,snp]=useState({name:'',address:'',contact:'',phone:''});
+  const[np,snp]=useState({name:'',address:'',contact:'',phone:'',area:''});
   const set=(k,v)=>sf(p=>({...p,[k]:v}));
   const addPt=()=>{if(!np.name){alert('Nhập tên địa điểm!');return;}sf(p=>({...p,points:[...p.points,{...np,id:'PT'+uid()}]}));snp({name:'',address:'',contact:'',phone:''});};
   const submit=()=>{if(!f.name){alert('Nhập tên khách hàng!');return;}const code=(f.code||'').trim().toUpperCase()||'KH'+String(Date.now()).slice(-6);onSave({...f,id:cust?f.id:code,code});};
@@ -399,6 +400,10 @@ function CustomerForm({cust,onSave,onClose}){
       h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500,marginBottom:6}},'Thêm địa điểm mới'),
       h('div',{className:'g2'},
         h(F,{label:'Tên địa điểm *'},h('input',{value:np.name,onChange:e=>snp(p=>({...p,name:e.target.value})),placeholder:'Kho, Văn phòng, Cửa hàng...'})),
+        h(F,{label:'Khu vực'},h('select',{value:np.area||'',onChange:e=>snp(p=>({...p,area:e.target.value}))},
+          h('option',{value:''},'— Chọn khu vực —'),
+          [...new Set(shifts.map(s=>s.area).filter(Boolean))].map(a=>h('option',{key:a,value:a},a))
+        )),
         h(F,{label:'Địa chỉ'},h('input',{value:np.address,onChange:e=>snp(p=>({...p,address:e.target.value})),placeholder:'Số nhà, đường...'})),
         h(F,{label:'Người liên hệ'},h('input',{value:np.contact,onChange:e=>snp(p=>({...p,contact:e.target.value})),placeholder:'Tên người nhận'})),
         h(F,{label:'Điện thoại'},h('input',{value:np.phone,onChange:e=>snp(p=>({...p,phone:e.target.value})),placeholder:'090...'})),
@@ -408,7 +413,7 @@ function CustomerForm({cust,onSave,onClose}){
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu khách hàng'))
   );
 }
-function CustomersTab({customers,setCustomers}){
+function CustomersTab({customers,setCustomers,shifts}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);const[q,sq]=useState('');
   const save=d=>{if(edit)setCustomers(p=>p.map(x=>x.id===edit.id?d:x));else setCustomers(p=>[...p,d]);sm(null);se(null);};
   const del=id=>{if(confirm('Xóa khách hàng này?'))setCustomers(p=>p.filter(x=>x.id!==id));};
@@ -453,6 +458,7 @@ function CustomersTab({customers,setCustomers}){
               c.points.map(pt=>h('div',{key:pt.id,style:{background:'#fff',border:'.5px solid var(--bd)',borderRadius:6,padding:'8px 12px',fontSize:12,minWidth:180}},
                 h('div',{style:{fontWeight:500,display:'flex',alignItems:'center',gap:5}},h('i',{className:'ti ti-map-pin',style:{fontSize:12,color:'var(--pri)'}}),pt.name),
                 h('div',{style:{color:'var(--tx2)',marginTop:2}},pt.address),
+              pt.area&&h('span',{className:'badge',style:{background:'var(--bg2)',color:'var(--tx)',marginTop:3,fontSize:10}},h('i',{className:'ti ti-map-pin',style:{fontSize:10,marginRight:3}}),pt.area),
                 pt.contact&&h('div',{style:{color:'var(--tx2)',marginTop:1}},pt.contact+' • '+pt.phone)
               ))
             ):h('span',{style:{fontSize:12,color:'var(--tx2)'}},'Chưa có địa điểm giao hàng.')
@@ -460,7 +466,7 @@ function CustomersTab({customers,setCustomers}){
         )):h('tr',null,h('td',{colSpan:6,className:'empty-st'},'Chưa có khách hàng nào.')))
       )
     ),
-    modal==='f'&&h(CustomerForm,{cust:edit,onSave:save,onClose:()=>{sm(null);se(null);}})
+    modal==='f'&&h(CustomerForm,{cust:edit,shifts,onSave:save,onClose:()=>{sm(null);se(null);}})
   );
 }
 
@@ -1035,6 +1041,7 @@ function OrderDetailListTab({orders, products}) {
         time: o.deliveryTime || '',
         note: l.note || o.note || '',
         status: o.status,
+        prodColor: (products.find(p=>p.id===l.productId)||{}).color||'',
       });
     });
   });
@@ -1079,7 +1086,7 @@ function OrderDetailListTab({orders, products}) {
         )),
         h('tbody', null,
           filtered.length ? filtered.map((r,i) =>
-            h('tr', {key:i, style:{background: r.shift==='night'?'rgba(83,52,131,.04)':''}},
+            h('tr', {key:i, style:{background: r.prodColor||(r.shift==='night'?'rgba(83,52,131,.04)':'')}},
               h('td', null, h('span',{style:{fontWeight:500}}, r.date)),
               h('td', null, h('div',{style:{fontWeight:600}}, r.point || '—')),
               h('td', null, r.time || '—'),
@@ -1097,16 +1104,17 @@ function OrderDetailListTab({orders, products}) {
 
 /* ─── CA GIAO HÀNG ─── */
 const D_SHIFTS = [
-  {id:'CA01',name:'Ca sáng',timeStart:'06:00',timeEnd:'12:00',note:''},
-  {id:'CA02',name:'Ca chiều',timeStart:'12:00',timeEnd:'18:00',note:''},
-  {id:'CA03',name:'Ca tối',timeStart:'18:00',timeEnd:'22:00',note:''},
+  {id:'CA01',name:'Ca sáng',area:'Khu vực 1',timeStart:'06:00',timeEnd:'12:00',note:''},
+  {id:'CA02',name:'Ca chiều',area:'Khu vực 1',timeStart:'12:00',timeEnd:'18:00',note:''},
+  {id:'CA03',name:'Ca tối',area:'Khu vực 2',timeStart:'18:00',timeEnd:'22:00',note:''},
 ];
 function ShiftsTab({shifts,setShifts}) {
   const [modal,sm]=useState(null); const [edit,se]=useState(null); const [q,sq]=useState('');
   function ShiftForm({s,onSave,onClose}) {
-    const [f,sf]=useState(s||{name:'',timeStart:'',timeEnd:'',note:''});
+    const [f,sf]=useState(s||{name:'',area:'',timeStart:'',timeEnd:'',note:''});
     return h(Modal,{title:s?'Sửa ca giao hàng':'Thêm ca giao hàng',onClose},
       h(F,{label:'Tên ca *'},h('input',{value:f.name,onChange:e=>sf(p=>({...p,name:e.target.value})),placeholder:'Ca sáng, Ca chiều...'})),
+      h(F,{label:'Khu vực'},h('input',{value:f.area||'',onChange:e=>sf(p=>({...p,area:e.target.value})),placeholder:'Khu vực 1, Nội thành...'})),
       h('div',{className:'g2'},
         h(F,{label:'Giờ bắt đầu'},h('input',{value:f.timeStart,onChange:e=>sf(p=>({...p,timeStart:e.target.value})),placeholder:'06:00'})),
         h(F,{label:'Giờ kết thúc'},h('input',{value:f.timeEnd,onChange:e=>sf(p=>({...p,timeEnd:e.target.value})),placeholder:'12:00'}))
@@ -1128,20 +1136,33 @@ function ShiftsTab({shifts,setShifts}) {
       h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm ca giao hàng...'}),
       h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Thêm ca'})
     ),
-    h('div',{className:'tw'},h('table',null,
-      h('thead',null,h('tr',null,...['Mã ca','Tên ca','Giờ bắt đầu','Giờ kết thúc','Ghi chú',''].map(c=>h('th',{key:c},c)))),
-      h('tbody',null,list.length?list.map(x=>h('tr',{key:x.id},
-        h('td',null,h('span',{style:{color:'var(--pri)',fontWeight:500}},x.id)),
-        h('td',null,h('div',{style:{fontWeight:500}},x.name)),
-        h('td',null,x.timeStart?h('span',{className:'badge',style:{background:'#FFF9C4',color:'#854F0B'}},x.timeStart):'—'),
-        h('td',null,x.timeEnd?h('span',{className:'badge',style:{background:'#EDE9FE',color:'#5B21B6'}},x.timeEnd):'—'),
-        h('td',null,x.note||'—'),
-        h('td',null,h('div',{style:{display:'flex',gap:2}},
-          h('button',{className:'bi',onClick:()=>{se(x);sm('f')}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
-          h('button',{className:'bi',onClick:()=>del(x.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
-        ))
-      )):h('tr',null,h('td',{colSpan:6,className:'empty-st'},'Chưa có ca giao hàng nào.')))
-    )),
+    h('div',null,
+      (()=>{
+        if(!list.length) return h('div',{className:'empty-st'},'Chưa có ca giao hàng nào.');
+        const areas=[...new Set(list.map(x=>x.area||'Chưa phân khu vực'))];
+        return areas.map(area=>h('div',{key:area,style:{marginBottom:'1.25rem'}},
+          h('div',{style:{fontWeight:600,fontSize:13,color:'var(--pri3)',padding:'8px 12px',background:'var(--bg2)',borderRadius:'var(--r) var(--r) 0 0',border:'.5px solid var(--bd)',borderBottom:'none',display:'flex',alignItems:'center',gap:6}},
+            h('i',{className:'ti ti-map-pin',style:{fontSize:14,color:'var(--pri)'}}),
+            area,
+            h('span',{className:'badge',style:{background:'var(--pri)',color:'#fff',marginLeft:4}},list.filter(x=>(x.area||'Chưa phân khu vực')===area).length+' ca')
+          ),
+          h('div',{className:'tw',style:{borderRadius:'0 0 var(--rl) var(--rl)'}},h('table',null,
+            h('thead',null,h('tr',null,...['Mã ca','Tên ca','Giờ bắt đầu','Giờ kết thúc','Ghi chú',''].map(c=>h('th',{key:c},c)))),
+            h('tbody',null,list.filter(x=>(x.area||'Chưa phân khu vực')===area).map(x=>h('tr',{key:x.id},
+              h('td',null,h('span',{style:{color:'var(--pri)',fontWeight:500}},x.id)),
+              h('td',null,h('div',{style:{fontWeight:500}},x.name)),
+              h('td',null,x.timeStart?h('span',{className:'badge',style:{background:'#FFF9C4',color:'#854F0B'}},x.timeStart):'—'),
+              h('td',null,x.timeEnd?h('span',{className:'badge',style:{background:'#EDE9FE',color:'#5B21B6'}},x.timeEnd):'—'),
+              h('td',null,x.note||'—'),
+              h('td',null,h('div',{style:{display:'flex',gap:2}},
+                h('button',{className:'bi',onClick:()=>{se(x);sm('f')}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
+                h('button',{className:'bi',onClick:()=>del(x.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+              ))
+            )))
+          ))
+        ));
+      })()
+    ),
     modal==='f'&&h(ShiftForm,{s:edit,onSave:save,onClose:()=>{sm(null);se(null);}})
   );
 }
@@ -2161,7 +2182,7 @@ function App(){
         canAccess(cu.role,'backup',cu.permissions)&&page==='backup'&&h(BackupTab,{employees,materials,prodCats,products,customers,workcats}),
         canAccess(cu.role,'materials',cu.permissions)&&page==='materials'&&h(MaterialsTab,{materials,setMaterials}),
         canAccess(cu.role,'products',cu.permissions)&&page==='products'&&h(ProductsTab,{products,setProducts,prodCats,setProdCats}),
-        canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers}),
+        canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers,shifts}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats}),
         page==='shifts'&&h(ShiftsTab,{shifts,setShifts}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
