@@ -1040,7 +1040,7 @@ function OrderDetailListTab({orders, products}) {
   });
 
   // Filters
-  const parseD = s => { if(!s) return null; const[d,m,y]=s.split('/'); return new Date(y,m-1,d); };
+  const parseD = s => { if(!s) return null; if(s.includes('-')){const[y,m,d]=s.split('-');return new Date(y,m-1,d);} const[d,m,y]=s.split('/'); return new Date(y,m-1,d); };
   const filtered = rows.filter(r => {
     if (q && !r.product.toLowerCase().includes(q.toLowerCase()) &&
         !r.point.toLowerCase().includes(q.toLowerCase()) &&
@@ -1058,8 +1058,8 @@ function OrderDetailListTab({orders, products}) {
     h('div', {className:'ptitle'}, h('i',{className:'ti ti-list-details',style:{fontSize:20}}), 'Đơn hàng chi tiết'),
     h('div', {className:'card', style:{marginBottom:'1rem'}},
       h('div', {style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:'0 1rem'}},
-        h(F, {label:'Từ ngày'}, h('input',{value:dateF,onChange:e=>sdf(e.target.value),placeholder:'DD/MM/YYYY'})),
-        h(F, {label:'Đến ngày'}, h('input',{value:dateT,onChange:e=>sdt(e.target.value),placeholder:'DD/MM/YYYY'})),
+        h(F, {label:'Từ ngày'}, h('input',{type:'date',value:dateF,onChange:e=>sdf(e.target.value)})),
+        h(F, {label:'Đến ngày'}, h('input',{type:'date',value:dateT,onChange:e=>sdt(e.target.value)})),
         h(F, {label:'Ca sản xuất'}, h('select',{value:shiftF,onChange:e=>ssf(e.target.value)},
           h('option',{value:'all'},'Tất cả ca'),
           h('option',{value:'day'},'☀️ Ca ngày'),
@@ -2161,6 +2161,7 @@ function App(){
         canAccess(cu.role,'products',cu.permissions)&&page==='products'&&h(ProductsTab,{products,setProducts,prodCats,setProdCats}),
         canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats}),
+        page==='shifts'&&h(ShiftsTab,{shifts,setShifts}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
         canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,products,quotes,employees,currentUser:cu,trips,setTrips}),
         canAccess(cu.role,'trips',cu.permissions)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,currentUser:cu}),
