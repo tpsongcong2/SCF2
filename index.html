@@ -869,7 +869,7 @@ function PurchaseTab({purchases,setPurchases,nccs,materials,products,cu}) {
       f.lines.map(l=>h('div',{key:l.id,style:{display:'grid',gridTemplateColumns:'2.5fr 1fr 1fr 1fr auto',gap:6,marginBottom:6,alignItems:'center'}},
         h('select',{value:l.itemId,onChange:e=>{const it=allItems.find(x=>x.id===e.target.value)||{};upd(l.id,{...l,itemId:e.target.value,name:it.name||'',unit:it.unit||'',price:it.price||0});},style:{fontSize:13}},h('option',{value:''},'— Chọn —'),allItems.map(it=>h('option',{key:it.id,value:it.id},it.name))),
         h('input',{value:l.unit,readOnly:true,style:{fontSize:13,background:'var(--bg2)',cursor:'default'}}),
-        h('input',{type:'number',min:0,value:l.qty,onChange:e=>upd(l.id,{...l,qty:num(e.target.value)}),style:{fontSize:13}}),
+        h('input',{type:'number',min:0,value:l.qty,onChange:e=>upd(l.id,{...l,qty:numFmt(e.target.value)}),style:{fontSize:13}}),
         h(NumInput,{value:l.price,onChange:v=>upd(l.id,{...l,price:v}),style:{fontSize:13},placeholder:'0'}),
         h('button',{className:'bi',onClick:()=>sf2(p=>({...p,lines:p.lines.filter(x=>x.id!==l.id)})),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:14}}))
       )),
@@ -957,11 +957,11 @@ function SalesReportTab({orders,customers,products}) {
   });
   // Filter lines by product
   const filtLines=filtered.flatMap(o=>(o.lines||[]).filter(l=>!prod||l.productId===prod).map(l=>({...l,orderId:o.id,customer:o.customer,date:o.deliveryDate,address:o.address})));
-  const totalQtyProd=filtLines.reduce((s,l)=>s+num(l.qtyProd),0);
-  const totalQtyInv=filtLines.reduce((s,l)=>s+num(l.qtyInvoice),0);
-  const totalWeight=filtLines.reduce((s,l)=>{const p2=products.find(x=>x.id===l.productId);return s+(p2?.weightPerUnit||l.weightPerUnit||0)*num(l.qtyInvoice);},0);
+  const totalQtyProd=filtLines.reduce((s,l)=>s+numFmt(l.qtyProd),0);
+  const totalQtyInv=filtLines.reduce((s,l)=>s+numFmt(l.qtyInvoice),0);
+  const totalWeight=filtLines.reduce((s,l)=>{const p2=products.find(x=>x.id===l.productId);return s+(p2?.weightPerUnit||l.weightPerUnit||0)*numFmt(l.qtyInvoice);},0);
   // Group by product
-  const byProd={};filtLines.forEach(l=>{if(!byProd[l.productId])byProd[l.productId]={name:l.productName,unit:l.unit,qtyProd:0,qtyInv:0};byProd[l.productId].qtyProd+=num(l.qtyProd);byProd[l.productId].qtyInv+=num(l.qtyInvoice);});
+  const byProd={};filtLines.forEach(l=>{if(!byProd[l.productId])byProd[l.productId]={name:l.productName,unit:l.unit,qtyProd:0,qtyInv:0};byProd[l.productId].qtyProd+=numFmt(l.qtyProd);byProd[l.productId].qtyInv+=numFmt(l.qtyInvoice);});
   // Group by customer
   const byCust={};filtered.forEach(o=>{if(!byCust[o.customer])byCust[o.customer]={orders:0,lines:0};byCust[o.customer].orders++;byCust[o.customer].lines+=(o.lines||[]).length;});
   // All delivery points for selected customer
@@ -1225,11 +1225,11 @@ function OrderDetailLine({line,products,onChange,onRemove}){
     ),
     h('div',null,
       h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:3}},'SL SX'),
-      h('input',{type:'number',min:0,value:line.qtyProd,onChange:e=>onChange({...line,qtyProd:num(e.target.value)}),style:{fontSize:13}})
+      h('input',{type:'number',min:0,value:line.qtyProd,onChange:e=>onChange({...line,qtyProd:numFmt(e.target.value)}),style:{fontSize:13}})
     ),
     h('div',null,
       h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:3}},'SL HĐ'),
-      h('input',{type:'number',min:0,value:line.qtyInvoice,onChange:e=>onChange({...line,qtyInvoice:num(e.target.value)}),style:{fontSize:13}})
+      h('input',{type:'number',min:0,value:line.qtyInvoice,onChange:e=>onChange({...line,qtyInvoice:numFmt(e.target.value)}),style:{fontSize:13}})
     ),
     h('div',null,
       h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:3}},'ĐVT'),
