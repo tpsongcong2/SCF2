@@ -2088,6 +2088,7 @@ function App(){
   const[products,_sp]=useState(DEF_PRODUCTS);
   const[customers,_scu]=useState(DEF_CUSTOMERS);
   const[workcats,_swc]=useState(DEF_WORKCATS);
+  const[shifts,_ssh]=useState(D_SHIFTS);
   const[quotes,_sq]=useState([]);
   const[orders,_so]=useState([]);
   const[trips,_st]=useState([]);
@@ -2100,6 +2101,7 @@ function App(){
   const setProducts=mkSet('scf_products',_sp);
   const setCustomers=mkSet('scf_customers',_scu);
   const setWorkcats=mkSet('scf_workcats',_swc);
+  const setShifts=mkSet('scf_shifts',_ssh);
   const setQuotes=mkSet('scf_quotes',_sq);
   const setOrders=mkSet('scf_orders',_so);
   const setTrips=mkSet('scf_trips',_st);
