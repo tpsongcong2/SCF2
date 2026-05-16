@@ -278,10 +278,10 @@ function ProdCatForm({cat,onSave,onClose}){
 function ProductForm({prod,prodCats,onSave,onClose}){
   const[f,sf]=useState(prod||{code:'',name:'',catId:prodCats[0]?.id||'',unit:'Cái',weightPerUnit:'',note:''});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
-  const needWeight=f.unit==='Cái'||f.unit==='Gói';
+  const needWeight=!['Kg','Tấn','Lít'].includes(f.unit);
   const submit=()=>{
     if(!f.name){alert('Nhập tên sản phẩm!');return;}
-    onSave({...f,id:prod?.id||'SP'+uid(),weightPerUnit:needWeight?numFmt(f.weightPerUnit):null});
+    onSave({...f,id:prod?.id||'SP'+uid(),weightPerUnit:f.weightPerUnit?numFmt(f.weightPerUnit):0});
   };
   return h(Modal,{title:prod?'Sửa sản phẩm':'Thêm sản phẩm',onClose},
     h('div',{className:'g2'},
@@ -294,12 +294,12 @@ function ProductForm({prod,prodCats,onSave,onClose}){
     h(F,{label:'Tên sản phẩm *'},h('input',{value:f.name,onChange:e=>s('name',e.target.value),placeholder:'Tên sản phẩm...'})),
     h('div',{className:needWeight?'g2':''},
       h(F,{label:'Đơn vị tính (ĐVT)'},h('select',{value:f.unit,onChange:e=>s('unit',e.target.value)},UNITS.map(u=>h('option',{key:u,value:u},u)))),
-      needWeight&&h(F,{label:'Khối lượng/'+f.unit+' (kg)'},h('input',{type:'number',min:0,step:.001,value:f.weightPerUnit,onChange:e=>s('weightPerUnit',e.target.value),placeholder:'0.000'}))
+      needWeight&&h(F,{label:'KL/'+f.unit+' (kg)'},h('input',{type:'number',min:0,step:.001,value:f.weightPerUnit,onChange:e=>s('weightPerUnit',e.target.value),placeholder:'0.000'}))
     ),
     h(F,{label:'Ghi chú'},h('textarea',{value:f.note,onChange:e=>s('note',e.target.value),rows:2})),
     needWeight&&h('div',{style:{background:'var(--bg2)',padding:'8px 12px',borderRadius:'var(--r)',fontSize:12,color:'var(--tx2)',marginBottom:'.85rem'}},
       h('i',{className:'ti ti-info-circle',style:{marginRight:5}}),
-      'Đơn vị "'+f.unit+'" sẽ có thêm trường khối lượng để tính tổng khối lượng chuyến giao'
+      'Nhập khối lượng để tính tổng KL chuyến giao (bỏ trống nếu không cần)'
     ),
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu sản phẩm'))
   );
@@ -1369,8 +1369,75 @@ function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees
     h('div',{className:'ptitle'},h('i',{className:'ti ti-truck-delivery',style:{fontSize:20}}),'Đơn giao hàng'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h('div',{style:{display:'flex',gap:5,flexWrap:'wrap'}},sts.map(([v,l])=>h('button',{key:v,className:'pill'+(filter===v?' on':''),onClick:()=>sf(v)},l+' ('+(v==='all'?orders.length:orders.filter(x=>x.status===v).length)+')'))),
-      h('div',{style:{display:'flex',gap:6}},
+      h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
         h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn hàng...'}),
+        h(ExpBtn,{onClick:()=>{
+          // Flatten orders + lines for Excel export
+          const rows=[];
+          list.forEach(o=>{
+            if(!o.lines||o.lines.length===0){
+              rows.push({'Mã đơn':o.id,'Khách hàng':o.customer,'Ngày giao':o.deliveryDate,'Giờ giao':o.deliveryTime||'','Địa chỉ':o.address||'','Điểm giao':o.pointName||'','Số HĐ':o.invoiceNo||'','Công đi':o.workOut||0,'Công về':o.workReturn||0,'Trạng thái':o.status,'Ghi chú đơn':o.note||'','Sản phẩm':'','ĐVT':'','SL sản xuất':0,'SL hóa đơn':0,'Ca SX':'','Ghi chú dòng':''});
+            } else {
+              o.lines.forEach((l,i)=>{
+                rows.push({'Mã đơn':i===0?o.id:'','Khách hàng':i===0?o.customer:'','Ngày giao':i===0?o.deliveryDate:'','Giờ giao':i===0?(o.deliveryTime||''):'','Địa chỉ':i===0?(o.address||''):'','Điểm giao':i===0?(o.pointName||''):'','Số HĐ':i===0?(o.invoiceNo||''):'','Công đi':i===0?(o.workOut||0):'','Công về':i===0?(o.workReturn||0):'','Trạng thái':i===0?o.status:'','Ghi chú đơn':i===0?(o.note||''):'',' Sản phẩm':l.productName||'','ĐVT':l.unit||'','SL sản xuất':l.qtyProd||0,'SL hóa đơn':l.qtyInvoice||0,'Ca SX':l.shift==='night'?'Ca đêm':'Ca ngày','Ghi chú dòng':l.note||''});
+              });
+            }
+          });
+          const ws=XLSX.utils.json_to_sheet(rows);
+          const wb=XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb,ws,'Don giao hang');
+          XLSX.writeFile(wb,'Don_giao_hang_'+fmtDate().split('/').join('-')+'.xlsx');
+        }}),
+        h(ImpBtn,{onFile:rows=>{
+          // Group rows by Mã đơn to reconstruct orders
+          const orderMap={};
+          rows.forEach(r=>{
+            const id=(r['Mã đơn']||'').toString().trim();
+            if(id){
+              // New order header
+              const seq=Object.keys(orderMap).length+1;
+              orderMap[id]={
+                id:id||('DGH'+String(seq).padStart(4,'0')),
+                customer:r['Khách hàng']||'',custId:'',
+                deliveryDate:r['Ngày giao']||fmtDate(),
+                deliveryTime:r['Giờ giao']||'',
+                address:r['Địa chỉ']||'',
+                pointName:r['Điểm giao']||'',ptId:'',
+                invoiceNo:r['Số HĐ']||'',
+                workOut:r['Công đi']||0,workReturn:r['Công về']||0,
+                status:r['Trạng thái']||'pending',
+                note:r['Ghi chú đơn']||'',
+                lines:[],createdAt:fmtDate(),updatedAt:fmtDT()
+              };
+              // Find custId
+              const cust=customers.find(c=>c.name===r['Khách hàng']);
+              if(cust){orderMap[id].custId=cust.id;}
+            }
+            // Add line to latest order
+            const latestId=id||Object.keys(orderMap)[Object.keys(orderMap).length-1];
+            const sp=r[' Sản phẩm']||r['Sản phẩm']||'';
+            if(latestId&&orderMap[latestId]&&sp){
+              const prod=products.find(p=>p.name===sp);
+              orderMap[latestId].lines.push({
+                id:uid(),
+                productId:prod?prod.id:'',productName:sp,
+                unit:r['ĐVT']||'',
+                weightPerUnit:prod?prod.weightPerUnit||0:0,
+                qtyProd:Number(r['SL sản xuất'])||0,
+                qtyInvoice:Number(r['SL hóa đơn'])||0,
+                shift:(r['Ca SX']||'').includes('đêm')?'night':'day',
+                note:r['Ghi chú dòng']||''
+              });
+            }
+          });
+          const imported=Object.values(orderMap).filter(o=>o.customer);
+          setOrders(p=>{
+            const map={};p.forEach(x=>{map[x.id]=x;});
+            imported.forEach(x=>{map[x.id]=map[x.id]?{...map[x.id],...x,lines:x.lines.length?x.lines:map[x.id].lines}:x;});
+            return Object.values(map);
+          });
+          alert('Đã nhập/cập nhật '+imported.length+' đơn hàng');
+        }}),
         h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Tạo đơn giao'})
       )
     ),
