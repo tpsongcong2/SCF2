@@ -1317,6 +1317,21 @@ function SmartImportModal({prodCats,onImport,onClose}) {
   );
 }
 
+function parseProductStr(s){
+  if(!s) return {name:'',unit:'Kg'};
+  const parts=s.toString().split(',');
+  const unit=parts[parts.length-1].trim();
+  let rest=parts.slice(0,-1);
+  const skip=['VD_QV','VD','SEV'];
+  while(rest.length&&skip.includes(rest[0].trim())) rest.shift();
+  rest=rest.filter(p=>{
+    const u=p.trim().toUpperCase().replace(/\s+/g,'');
+    return !['SÔNGCÔNG','SONGCONG','SONGCÔNG','SÔNGCONG'].includes(u);
+  });
+  return {name:rest.join(',').trim(), unit:unit||'Kg'};
+}
+
+
 const NAV=[
   {key:'welcome',icon:'ti-layout-dashboard',label:'Tổng quan'},
   {sec:'Cài đặt'},
