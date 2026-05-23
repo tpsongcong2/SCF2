@@ -1077,6 +1077,7 @@ function OrderDetailListTab({orders, products}) {
   const [dateF, sdf] = useState('');
   const [dateT, sdt] = useState('');
   const [shiftF, ssf] = useState('all');
+  const [areaF, saf] = useState('all');
 
   // Flatten all order lines
   const rows = [];
@@ -1098,6 +1099,7 @@ function OrderDetailListTab({orders, products}) {
         note: l.note || o.note || '',
         status: o.status,
         prodColor: (products.find(p=>p.id===l.productId)||{}).color||'',
+        area: o.area || '',
       });
     });
   });
@@ -1109,6 +1111,7 @@ function OrderDetailListTab({orders, products}) {
         !r.point.toLowerCase().includes(q.toLowerCase()) &&
         !r.customer.toLowerCase().includes(q.toLowerCase())) return false;
     if (shiftF !== 'all' && r.shift !== shiftF) return false;
+    if (areaF !== 'all' && r.area !== areaF) return false;
     if (dateF) { const d=parseD(r.date),f=parseD(dateF); if(d&&f&&d<f) return false; }
     if (dateT) { const d=parseD(r.date),t=parseD(dateT); if(d&&t&&d>t) return false; }
     return true;
@@ -1120,7 +1123,7 @@ function OrderDetailListTab({orders, products}) {
   return h('div', null,
     h('div', {className:'ptitle'}, h('i',{className:'ti ti-list-details',style:{fontSize:20}}), 'Đơn hàng chi tiết'),
     h('div', {className:'card', style:{marginBottom:'1rem'}},
-      h('div', {style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:'0 1rem'}},
+      h('div', {style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr',gap:'0 1rem'}},
         h(F, {label:'Từ ngày'}, h('input',{type:'date',value:dateF,onChange:e=>sdf(e.target.value)})),
         h(F, {label:'Đến ngày'}, h('input',{type:'date',value:dateT,onChange:e=>sdt(e.target.value)})),
         h(F, {label:'Ca sản xuất'}, h('select',{value:shiftF,onChange:e=>ssf(e.target.value)},
@@ -1128,12 +1131,30 @@ function OrderDetailListTab({orders, products}) {
           h('option',{value:'day'},'☀️ Ca ngày'),
           h('option',{value:'night'},'🌙 Ca đêm')
         )),
+        h(F, {label:'Khu vực'}, h('select',{value:areaF,onChange:e=>saf(e.target.value)},
+          h('option',{value:'all'},'Tất cả khu vực'),
+          [...new Set(orders.filter(o=>o.area).map(o=>o.area))].sort().map(a=>h('option',{key:a,value:a},a))
+        )),
         h('div', {style:{display:'flex',flexDirection:'column',justifyContent:'flex-end'}},
           h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:4}},'Tổng số dòng'),
           h('div',{style:{fontSize:20,fontWeight:600,color:'var(--pri)'}}, filtered.length + ' dòng')
         )
       ),
       h(SearchBar, {value:q, onChange:sq, placeholder:'Tìm sản phẩm, địa điểm...'})
+    ),
+    filtered.length>0&&h('div',{style:{display:'flex',gap:10,marginBottom:'1rem',flexWrap:'wrap'}},
+      h('div',{style:{background:'#EAF3DE',border:'.5px solid #52b788',borderRadius:'var(--r)',padding:'10px 18px'}},
+        h('div',{style:{fontSize:11,color:'#3B6D11',fontWeight:500,marginBottom:3}},'∑ TỔNG SL SX'),
+        h('div',{style:{fontSize:22,fontWeight:700,color:'#2D5A0E'}},filtered.reduce((s,r)=>s+Number(r.qtyProd||0),0).toLocaleString())
+      ),
+      h('div',{style:{background:'#E6F1FB',border:'.5px solid #5B9BD5',borderRadius:'var(--r)',padding:'10px 18px'}},
+        h('div',{style:{fontSize:11,color:'#185FA5',fontWeight:500,marginBottom:3}},'∑ TỔNG SL HĐ'),
+        h('div',{style:{fontSize:22,fontWeight:700,color:'#185FA5'}},filtered.reduce((s,r)=>s+Number(r.qtyInvoice||0),0).toLocaleString())
+      ),
+      (()=>{const diff=filtered.reduce((s,r)=>s+Number(r.qtyProd||0),0)-filtered.reduce((s,r)=>s+Number(r.qtyInvoice||0),0);return h('div',{style:{background:diff===0?'#EAF3DE':'#FCEBEB',border:'.5px solid '+(diff===0?'#52b788':'#E06060'),borderRadius:'var(--r)',padding:'10px 18px'}},
+        h('div',{style:{fontSize:11,color:diff===0?'#3B6D11':'#A32D2D',fontWeight:500,marginBottom:3}},diff===0?'✓ KHỚP':'⚠ CHÊNH LỆCH SX-HĐ'),
+        h('div',{style:{fontSize:22,fontWeight:700,color:diff===0?'#2D5A0E':'#A32D2D'}},(diff>0?'+':'')+diff.toLocaleString())
+      );})()
     ),
     h('div', {className:'tw'},
       h('table', null,
