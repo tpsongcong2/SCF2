@@ -422,7 +422,7 @@ function CustomersTab({customers,setCustomers,shifts}){
   const save=d=>{if(edit)setCustomers(p=>p.map(x=>x.id===edit.id?d:x));else setCustomers(p=>[...p,d]);sm(null);se(null);};
   const del=id=>{if(confirm('Xóa khách hàng này?'))setCustomers(p=>p.filter(x=>x.id!==id));};
   const ECOLS=[['code','Mã KH'],['name','Tên KH'],['taxCode','MST'],['address','Địa chỉ'],['note','Ghi chú']];
-  const list=customers.filter(x=>!q||x.name.toLowerCase().includes(q.toLowerCase())||x.taxCode.includes(q));
+  const list=customers.filter(x=>!q||x.name.toLowerCase().includes(q.toLowerCase())||x.taxCode.includes(q)).sort((a,b)=>(a.code||a.id||'').localeCompare(b.code||b.id||''));
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-users',style:{fontSize:20}}),'Danh mục khách hàng'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
@@ -1493,7 +1493,7 @@ function OrderForm({order,customers,products,quotes,employees,currentUser,onSave
       sf(p=>({...p,pointId:e.target.value,pointName:foundPt?foundPt.name:'',address:foundPt?foundPt.address:'',customerId:foundCust?foundCust.id:'',customer:foundCust?foundCust.name:''}));
     }},
       h('option',{value:''},'— Chọn địa điểm —'),
-      customers.flatMap(c=>(c.points||[]).filter(pt=>pt&&pt.id).map(pt=>h('option',{key:pt.id,value:pt.id},(c.name?c.name+' — ':'')+pt.name)))
+      customers.flatMap(c=>(c.points||[]).filter(pt=>pt&&pt.id).map(pt=>h('option',{key:pt.id,value:pt.id},pt.name)))
     )),
     h('div',{style:{display:'grid',gridTemplateColumns:'120px 80px 100px 80px 80px 80px 1fr',gap:'0 8px'}},
       h(F,{label:'Mã ĐH'},h('input',{value:f.orderId||'',onChange:e=>s('orderId',e.target.value),placeholder:'DGH...'})),
