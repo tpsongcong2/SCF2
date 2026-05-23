@@ -417,7 +417,7 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu khách hàng'))
   );
 }
-function CustomersTab({customers,setCustomers,shifts}){
+function CustomersTab({customers,setCustomers,shifts,cu}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);const[q,sq]=useState('');
   const save=d=>{if(edit)setCustomers(p=>p.map(x=>x.id===edit.id?d:x));else setCustomers(p=>[...p,d]);sm(null);se(null);};
   const del=id=>{if(confirm('Xóa khách hàng này?'))setCustomers(p=>p.filter(x=>x.id!==id));};
@@ -433,7 +433,7 @@ function CustomersTab({customers,setCustomers,shifts}){
           const added=rows.map(r=>({id:'KH'+uid(),name:r['Tên KH']||'',taxCode:r['MST']||'',address:r['Địa chỉ']||'',note:r['Ghi chú']||'',points:[]})).filter(r=>r.name);
           setCustomers(p=>[...p,...added]);alert('Đã nhập '+added.length+' khách hàng');
         }}),
-        h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Thêm khách hàng'})
+        (!cu||canWrite(cu.role,'customers',cu.permLevels))&&h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Thêm khách hàng'})
       )
     ),
     h('div',{className:'tw'},
@@ -686,10 +686,10 @@ function EmpForm({emp,employees,cu,cu2,onSave,onClose}){
     cu2&&cu2.role==='admin'&&h('div',null,
       h('hr',{className:'divider'}),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
-        h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phan quyen chi tiet (bo trong = dung mac dinh theo cap bac)'),
-        h('button',{type:'button',onClick:()=>sf(p=>({...p,permissions:roleDefaults(f.role)})),style:{fontSize:11,padding:'3px 10px'}},'Mac dinh theo cap bac'),
-        f.permissions&&f.permissions.length>0&&h('button',{type:'button',onClick:()=>sf(p=>({...p,permissions:[]})),style:{fontSize:11,padding:'3px 10px',color:'#A32D2D',borderColor:'#F7C1C1'}},'Xoa tuy chinh')
+        h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phan quyen chi tiet (bo trong = mac dinh theo cap bac)'),
+        h('button',{type:'button',onClick:()=>sf(p=>({...p,permissions:[],permLevels:{}})),style:{fontSize:11,padding:'3px 10px',color:'#A32D2D',borderColor:'#F7C1C1'}},'Xoa tuy chinh')
       ),
+      h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = không có nút Thêm/Sửa/Xóa | Xem+Sửa = có nút Thêm/Sửa | Đầy đủ = có tất cả'),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 2rem'}},
         [
           {sec:'Cai dat', pages:[{k:'company',l:'Thong tin cong ty'},{k:'employees',l:'Nhan vien'},{k:'backup',l:'Backup'}]},
@@ -703,15 +703,25 @@ function EmpForm({emp,employees,cu,cu2,onSave,onClose}){
             const active = f.permissions&&f.permissions.length>0
               ? f.permissions.includes(pg.k)
               : canAccess(f.role, pg.k);
-            return h('label',{key:pg.k,style:{display:'flex',alignItems:'center',gap:8,padding:'4px 6px',borderRadius:4,cursor:'pointer',background:active?'var(--bg2)':'',marginBottom:2}},
-              h('input',{type:'checkbox',checked:active,style:{width:'auto'},
+            const curLvl = (f.permLevels&&f.permLevels[pg.k]) || (active?getLvl(f.role,pg.k,null):'');
+            return h('div',{key:pg.k,style:{display:'grid',gridTemplateColumns:'1fr auto',alignItems:'center',padding:'4px 6px',borderRadius:4,background:active?'var(--bg2)':'',marginBottom:2}},
+              h('span',{style:{fontSize:13,color:active?'var(--tx)':'var(--tx2)'}},pg.l),
+              h('select',{value:active?(curLvl||'rw'):'none',style:{fontSize:11,padding:'2px 4px',width:110},
                 onChange:e=>{
-                  const base = f.permissions&&f.permissions.length>0 ? [...f.permissions] : roleDefaults(f.role);
-                  const next = e.target.checked ? [...new Set([...base,pg.k])] : base.filter(x=>x!==pg.k);
-                  sf(p=>({...p,permissions:next}));
+                  const v=e.target.value;
+                  const base=f.permissions&&f.permissions.length>0?[...f.permissions]:roleDefaults(f.role);
+                  const newPerms=v==='none'?base.filter(x=>x!==pg.k):[...new Set([...base,pg.k])];
+                  const newLvls={...(f.permLevels||{})};
+                  if(v==='none')delete newLvls[pg.k];
+                  else newLvls[pg.k]=v;
+                  sf(p=>({...p,permissions:newPerms,permLevels:newLvls}));
                 }
-              }),
-              h('span',{style:{fontSize:13}},pg.l)
+              },
+                h('option',{value:'none'},'Không truy cập'),
+                h('option',{value:'r'},'Chỉ xem'),
+                h('option',{value:'rw'},'Xem + Sửa'),
+                h('option',{value:'rwd'},'Đầy đủ (Xóa)')
+              )
             );
           })
         ))
@@ -740,7 +750,38 @@ function EmployeeTab({employees,setEmployees,cu}){
     h('div',{className:'ptitle'},h('i',{className:'ti ti-users',style:{fontSize:20}}),'Danh sách nhân viên'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm nhân viên...'}),
-      canEdit&&h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Thêm nhân viên'})
+      h('div',{style:{display:'flex',gap:6}},
+        h(ExportBtn,{onClick:()=>{
+          const cols=[['id','Mã NV'],['name','Họ tên'],['birthday','Ngày sinh'],['dept','Bộ phận'],['role','Phân quyền'],['username','Đăng nhập'],['phone','SĐT'],['email','Email'],['note','Ghi chú']];
+          const data=employees.map(e=>Object.fromEntries(cols.map(([k,l])=>[l,e[k]||''])));
+          const ws=XLSX.utils.json_to_sheet(data);const wb=XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb,ws,'Nhan vien');
+          XLSX.writeFile(wb,'Nhan_vien_'+fmtDate().split('/').join('-')+'.xlsx');
+        }}),
+        canEdit&&h(ImportBtn,{onFile:rows=>{
+          const ROLE_MAP={'Admin':'admin','Quản lý':'manager','Nhân viên':'staff','Lái xe':'driver','admin':'admin','manager':'manager','staff':'staff','driver':'driver'};
+          const added=rows.map(r=>({
+            id:(r['Mã NV']||'NV'+uid()).toString().trim(),
+            name:r['Họ tên']||'',
+            birthday:r['Ngày sinh']||'',
+            dept:r['Bộ phận']||DEPTS[0],
+            role:ROLE_MAP[r['Phân quyền']]||'staff',
+            username:(r['Đăng nhập']||'').toString().trim(),
+            password:'123456',
+            phone:(r['SĐT']||'').toString(),
+            email:r['Email']||'',
+            note:r['Ghi chú']||'',
+            updatedBy:cu.name,updatedAt:fmtDT()
+          })).filter(r=>r.name&&r.username);
+          setEmployees(p=>{
+            const map={};p.forEach(x=>{map[x.id]=x;});
+            added.forEach(x=>{map[x.id]=map[x.id]?{...map[x.id],...x,password:map[x.id].password}:x;});
+            return Object.values(map);
+          });
+          alert('Đã nhập/cập nhật '+added.length+' nhân viên. Mật khẩu mặc định: 123456 (nhân viên mới)');
+        }}),
+        canEdit&&h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Thêm nhân viên'})
+      )
     ),
     h('div',{className:'tw'},
       h('table',null,
@@ -2102,6 +2143,18 @@ function canAccess(role, page, perms) {
   const allowed = PAGE_ACCESS[page];
   return !allowed || allowed.includes(role);
 }
+// Mức quyền: 'r'=chỉ xem, 'rw'=xem+sửa, 'rwd'=xem+sửa+xóa
+function getLvl(role, page, lvls) {
+  if (lvls && lvls[page]) return lvls[page];
+  // Mặc định theo role
+  if (role === 'admin') return 'rwd';
+  if (role === 'manager') return 'rwd';
+  if (role === 'staff') return 'rw';
+  if (role === 'driver') return 'r';
+  return 'r';
+}
+function canWrite(role, page, lvls) { const l=getLvl(role,page,lvls); return l==='rw'||l==='rwd'; }
+function canDel(role, page, lvls)   { return getLvl(role,page,lvls)==='rwd'; }
 
 const PTITLES = {
   welcome:'Tổng quan', company:'Thông tin công ty', employees:'Nhân viên',
@@ -2236,7 +2289,7 @@ function App(){
         canAccess(cu.role,'backup',cu.permissions)&&page==='backup'&&h(BackupTab,{employees,materials,prodCats,products,customers,workcats}),
         canAccess(cu.role,'materials',cu.permissions)&&page==='materials'&&h(MaterialsTab,{materials,setMaterials}),
         canAccess(cu.role,'products',cu.permissions)&&page==='products'&&h(ProductsTab,{products,setProducts,prodCats,setProdCats}),
-        canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers,shifts}),
+        canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers,shifts,cu}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats}),
         page==='shifts'&&h(ShiftsTab,{shifts,setShifts}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
