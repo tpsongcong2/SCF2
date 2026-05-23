@@ -1483,13 +1483,13 @@ function OrderForm({order,customers,products,quotes,employees,currentUser,onSave
     onSave({...f,updatedBy:currentUser.name,updatedAt:fmtDT()});
   };
   return h(Modal,{title:order?'Sửa đơn '+order.id:'Tạo đơn giao hàng mới',onClose,lg:true},
-    h(F,{label:'Địa điểm giao *'},h('select',{value:f.pointId,onChange:e=>{
+    h(F,{label:'Địa điểm giao * ('+customers.reduce((n,c)=>n+(c.points||[]).length,0)+' điểm)'},h('select',{value:f.pointId,onChange:e=>{
       let foundCust=null,foundPt=null;
       customers.forEach(c=>{const pt=c.points.find(p=>p.id===e.target.value);if(pt){foundCust=c;foundPt=pt;}});
       sf(p=>({...p,pointId:e.target.value,pointName:foundPt?foundPt.name:'',address:foundPt?foundPt.address:'',customerId:foundCust?foundCust.id:'',customer:foundCust?foundCust.name:''}));
     }},
       h('option',{value:''},'— Chọn địa điểm —'),
-      customers.flatMap(c=>c.points.map(pt=>h('option',{key:pt.id,value:pt.id},pt.name)))
+      customers.flatMap(c=>(c.points||[]).filter(pt=>pt&&pt.id).map(pt=>h('option',{key:pt.id,value:pt.id},(c.name?c.name+' — ':'')+pt.name)))
     )),
     h('div',{style:{display:'grid',gridTemplateColumns:'120px 80px 100px 80px 80px 80px 1fr',gap:'0 8px'}},
       h(F,{label:'Mã ĐH'},h('input',{value:f.orderId||'',onChange:e=>s('orderId',e.target.value),placeholder:'DGH...'})),
