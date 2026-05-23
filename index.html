@@ -377,10 +377,10 @@ function CustomerForm({cust,shifts,onSave,onClose}){
   const[np,snp]=useState({name:'',address:'',contact:'',phone:'',area:''});
   const set=(k,v)=>sf(p=>({...p,[k]:v}));
   const addPt=()=>{if(!np.name){alert('Nhập tên địa điểm!');return;}sf(p=>({...p,points:[...p.points,{...np,id:'PT'+uid()}]}));snp({name:'',address:'',contact:'',phone:''});};
-  const submit=()=>{if(!f.name){alert('Nhập tên khách hàng!');return;}const code=(f.code||'').trim().toUpperCase()||'KH'+String(Date.now()).slice(-6);onSave({...f,id:cust?f.id:code,code});};
+  const submit=()=>{if(!f.name){alert('Nhập tên khách hàng!');return;}const code=(f.code||'').trim().toUpperCase()||'KH'+String(Date.now()).slice(-6);onSave({...f,id:code,code});};
   return h(Modal,{title:cust?'Sửa khách hàng':'Thêm khách hàng',onClose},
     h('div',{className:'g3'},
-      h(F,{label:'Mã KH'+(cust?' (không đổi được)':' (để trống = tự tạo)')},h('input',{value:f.code||f.id||'',onChange:e=>set('code',e.target.value.toUpperCase()),placeholder:'KH001, WELSTORY...',disabled:!!cust,style:cust?{background:'var(--bg2)',cursor:'default'}:{}})),
+      h(F,{label:'Mã KH (để trống = tự tạo)'},h('input',{value:f.code||f.id||'',onChange:e=>set('code',e.target.value.toUpperCase()),placeholder:'KH001, WELSTORY...',style:{}})),
       h(F,{label:'Tên khách hàng *'},h('input',{value:f.name,onChange:e=>set('name',e.target.value),placeholder:'Tên công ty / cá nhân'})),
       h(F,{label:'Mã số thuế'},h('input',{value:f.taxCode,onChange:e=>set('taxCode',e.target.value),placeholder:'0312345678'}))
     ),
