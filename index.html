@@ -372,12 +372,16 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
 }
 
 /* ─── CUSTOMERS ─── */
-function CustomerForm({cust,shifts,onSave,onClose}){
+function CustomerForm({cust,shifts,customers,onSave,onClose}){
   const[f,sf]=useState(cust?{...cust,points:[...cust.points]}:{id:'',code:'',name:'',taxCode:'',address:'',note:'',points:[]});
   const[np,snp]=useState({name:'',address:'',contact:'',phone:'',area:''});
   const set=(k,v)=>sf(p=>({...p,[k]:v}));
   const addPt=()=>{if(!np.name){alert('Nhập tên địa điểm!');return;}sf(p=>({...p,points:[...p.points,{...np,id:'PT'+uid()}]}));snp({name:'',address:'',contact:'',phone:''});};
-  const submit=()=>{if(!f.name){alert('Nhập tên khách hàng!');return;}const code=(f.code||'').trim().toUpperCase()||'KH'+String(Date.now()).slice(-6);onSave({...f,id:code,code});};
+  const submit=()=>{if(!f.name){alert('Nhập tên khách hàng!');return;}const code=(f.code||'').trim().toUpperCase()||'KH'+String(Date.now()).slice(-6);
+    // Kiểm tra trùng mã
+    const isDup = customers && customers.some(c => c.id === code && c.id !== (cust?.id||''));
+    if(isDup){alert('Mã KH "'+code+'" đã tồn tại! Vui lòng dùng mã khác.');return;}
+    onSave({...f,id:code,code});};
   return h(Modal,{title:cust?'Sửa khách hàng':'Thêm khách hàng',onClose},
     h('div',{className:'g3'},
       h(F,{label:'Mã KH (để trống = tự tạo)'},h('input',{value:f.code||f.id||'',onChange:e=>set('code',e.target.value.toUpperCase()),placeholder:'KH001, WELSTORY...',style:{}})),
@@ -466,7 +470,7 @@ function CustomersTab({customers,setCustomers,shifts}){
         )):h('tr',null,h('td',{colSpan:6,className:'empty-st'},'Chưa có khách hàng nào.')))
       )
     ),
-    modal==='f'&&h(CustomerForm,{cust:edit,shifts,onSave:save,onClose:()=>{sm(null);se(null);}})
+    modal==='f'&&h(CustomerForm,{cust:edit,shifts,customers,onSave:save,onClose:()=>{sm(null);se(null);}})
   );
 }
 
