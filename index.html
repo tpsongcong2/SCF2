@@ -1072,7 +1072,7 @@ function SalesReportTab({orders,customers,products}) {
 }
 
 /* ─── ĐƠN HÀNG CHI TIẾT ─── */
-function OrderDetailListTab({orders, products}) {
+function OrderDetailListTab({orders, products, customers, shifts}) {
   const [q, sq] = useState('');
   const [dateF, sdf] = useState('');
   const [dateT, sdt] = useState('');
@@ -1099,7 +1099,16 @@ function OrderDetailListTab({orders, products}) {
         note: l.note || o.note || '',
         status: o.status,
         prodColor: (products.find(p=>p.id===l.productId)||{}).color||'',
-        area: o.area || '',
+        area: (()=>{
+          if(o.area) return o.area;
+          // Look up from customer delivery point
+          let a='';
+          (customers||[]).forEach(c=>(c.points||[]).forEach(pt=>{if(pt.id===o.pointId||pt.name===o.pointName)a=pt.area||'';}) );
+          if(a) return a;
+          // Look up from shifts
+          const sh=(shifts||[]).find(s=>s.id===o.shiftId);
+          return sh?sh.area||'':'';
+        })(),
       });
     });
   });
@@ -1133,7 +1142,15 @@ function OrderDetailListTab({orders, products}) {
         )),
         h(F, {label:'Khu vực'}, h('select',{value:areaF,onChange:e=>saf(e.target.value)},
           h('option',{value:'all'},'Tất cả khu vực'),
-          [...new Set(orders.filter(o=>o.area).map(o=>o.area))].sort().map(a=>h('option',{key:a,value:a},a))
+          (()=>{
+              const areas=new Set();
+              (orders||[]).forEach(o=>{
+                if(o.area) areas.add(o.area);
+                (customers||[]).forEach(c=>(c.points||[]).forEach(pt=>{if((pt.id===o.pointId||pt.name===o.pointName)&&pt.area)areas.add(pt.area);}));
+              });
+              (shifts||[]).forEach(s=>s.area&&areas.add(s.area));
+              return [...areas].sort().map(a=>h('option',{key:a,value:a},a));
+            })()
         )),
         h('div', {style:{display:'flex',flexDirection:'column',justifyContent:'flex-end'}},
           h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:4}},'Tổng số dòng'),
@@ -2491,7 +2508,7 @@ function App(){
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
         canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,products,quotes,employees,currentUser:cu,trips,setTrips}),
         canAccess(cu.role,'trips',cu.permissions)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,currentUser:cu}),
-        page==='orderdetail'&&h(OrderDetailListTab,{orders,products}),
+        page==='orderdetail'&&h(OrderDetailListTab,{orders,products,customers,shifts}),
         canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products}),
         canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,products,currentUser:cu}),
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,currentUser:cu}),
