@@ -1902,6 +1902,95 @@ function OrderForm({order,customers,products,quotes,employees,currentUser,onSave
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu đơn hàng'))
   );
 }
+
+function PrintByCustomerModal({orders,customers,products,company,onClose}) {
+  const [custId,sCust]=useState('');
+  const [df,sdf]=useState('');
+  const [dt,sdt]=useState('');
+  const parseD=s=>{if(!s)return null;const[d,m,y]=s.split('/');return new Date(y,m-1,d);};
+  const inRange=d=>{
+    const dt2=parseD(d);if(!dt2)return false;
+    const f=df?parseD(df):null;const t=dt?parseD(dt):null;
+    if(f&&dt2<f)return false;if(t&&dt2>t)return false;return true;
+  };
+  const filtered=orders.filter(o=>
+    o.status!=='cancelled'&&
+    (!custId||o.customerId===custId||(customers.find(c=>c.id===custId)||{}).name===o.customer)&&
+    inRange(o.deliveryDate)
+  ).sort((a,b)=>a.deliveryDate.localeCompare(b.deliveryDate)||((a.deliveryTime||'').localeCompare(b.deliveryTime||'')));
+
+  const doPrint=()=>{
+    const co=company||{};
+    const logoHtml=LOGO_SRC?'<img src="'+LOGO_SRC+'" style="height:50px;margin-right:12px"/>':'';
+    const slips=filtered.map(o=>{
+      const rows=(o.lines||[]).map(l=>'<tr><td style="padding:6px 8px;border:1px solid #ddd">'+( l.productName||'')+'</td><td style="padding:6px 8px;border:1px solid #ddd;text-align:center">'+(l.unit||'')+'</td><td style="padding:6px 8px;border:1px solid #ddd;text-align:center;font-weight:600">'+(l.qtyProd||0).toLocaleString()+'</td><td style="padding:6px 8px;border:1px solid #ddd;text-align:center;font-weight:600">'+(l.qtyInvoice||0).toLocaleString()+'</td><td style="padding:6px 8px;border:1px solid #ddd">'+(l.note||'')+'</td></tr>').join('');
+      return '<div style="page-break-after:always;padding:20px 28px;font-family:Arial,sans-serif;font-size:13px;max-width:800px;margin:0 auto">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid #2d6a4f;padding-bottom:12px">'+
+          '<div style="display:flex;align-items:center">'+logoHtml+'<div><div style="font-size:16px;font-weight:700;color:#2d6a4f">'+(co.name||'CÔNG TY SCF')+'</div><div style="font-size:11px;color:#666">'+(co.address||'')+' '+(co.phone?'ĐT: '+co.phone:'')+'</div></div></div>'+
+          '<div style="text-align:right"><div style="font-size:18px;font-weight:700;color:#2d6a4f">PHIẾU GIAO HÀNG</div><div style="font-size:13px;font-weight:600">Mã đơn: '+o.id+'</div></div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;margin-bottom:14px;background:#f0f7f4;padding:10px 14px;border-radius:6px">'+
+          '<div><span style="color:#666">Khách hàng:</span> <strong>'+(o.customer||'')+'</strong></div>'+
+          '<div><span style="color:#666">Địa điểm:</span> <strong>'+(o.pointName||o.address||'')+'</strong></div>'+
+          '<div><span style="color:#666">Ngày giao:</span> <strong>'+o.deliveryDate+'</strong></div>'+
+          '<div><span style="color:#666">Giờ giao:</span> <strong>'+(o.deliveryTime||'')+'</strong></div>'+
+          (o.note?'<div style="grid-column:span 2"><span style="color:#666">Ghi chú:</span> '+o.note+'</div>':'')+
+        '</div>'+
+        '<table style="width:100%;border-collapse:collapse;margin-bottom:16px">'+
+          '<thead><tr style="background:#2d6a4f;color:#fff"><th style="padding:7px 8px;text-align:left;border:1px solid #2d6a4f">Sản phẩm</th><th style="padding:7px 8px;border:1px solid #2d6a4f;width:60px">ĐVT</th><th style="padding:7px 8px;border:1px solid #2d6a4f;width:80px">SL SX</th><th style="padding:7px 8px;border:1px solid #2d6a4f;width:80px">SL HĐ</th><th style="padding:7px 8px;text-align:left;border:1px solid #2d6a4f;width:120px">Chú ý</th></tr></thead>'+
+          '<tbody>'+rows+'</tbody></table>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:30px;text-align:center">'+
+          '<div><div style="font-weight:600;margin-bottom:40px">Người giao hàng</div><div style="border-top:1px solid #999;padding-top:4px;font-size:11px;color:#666">Ký và ghi rõ họ tên</div></div>'+
+          '<div><div style="font-weight:600;margin-bottom:40px">Người nhận hàng</div><div style="border-top:1px solid #999;padding-top:4px;font-size:11px;color:#666">Ký và ghi rõ họ tên</div></div>'+
+          '<div><div style="font-weight:600;margin-bottom:40px">Xác nhận KH</div><div style="border-top:1px solid #999;padding-top:4px;font-size:11px;color:#666">Đóng dấu / Ký tên</div></div>'+
+        '</div></div>';
+    }).join('');
+    const win=window.open('','_blank');
+    win.document.write('<!DOCTYPE html><html><head><title>Phieu giao hang</title><style>@media print{@page{margin:10mm}body{margin:0}}</style></head><body>'+slips+'</body></html>');
+    win.document.close();
+    setTimeout(function(){win.print();},500);
+  };
+
+  return h(Modal,{title:'In phiếu giao hàng theo khách hàng',lg:true,onClose},
+    h('div',{className:'g3'},
+      h(F,{label:'Khách hàng'},h('select',{value:custId,onChange:e=>sCust(e.target.value)},
+        h('option',{value:''},'— Tất cả —'),
+        customers.map(c=>h('option',{key:c.id,value:c.id},c.name))
+      )),
+      h(F,{label:'Từ ngày'},h('input',{type:'date',value:df,onChange:e=>sdf(e.target.value)})),
+      h(F,{label:'Đến ngày'},h('input',{type:'date',value:dt,onChange:e=>sdt(e.target.value)}))
+    ),
+    filtered.length>0?h('div',null,
+      h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:'1rem',fontSize:13}},
+        h('i',{className:'ti ti-file-invoice',style:{color:'var(--pri)',marginRight:6}}),
+        h('strong',null,filtered.length+' phiếu'),
+        ' — '+filtered.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng sản phẩm'
+      ),
+      h('div',{style:{maxHeight:200,overflowY:'auto',marginBottom:'1rem'}},
+        h('table',{style:{width:'100%',fontSize:12,borderCollapse:'collapse'}},
+          h('thead',null,h('tr',{style:{background:'var(--bg2)'}},
+            ['Mã đơn','Ngày','Địa điểm','Giờ','SP'].map(c=>h('th',{key:c,style:{padding:'5px 8px',textAlign:'left',borderBottom:'1px solid var(--bd)'}},c))
+          )),
+          h('tbody',null,filtered.map(o=>h('tr',{key:o.id},
+            h('td',{style:{padding:'4px 8px',color:'var(--pri)',fontWeight:500}},o.id),
+            h('td',{style:{padding:'4px 8px'}},o.deliveryDate),
+            h('td',{style:{padding:'4px 8px',fontWeight:500}},o.pointName||'—'),
+            h('td',{style:{padding:'4px 8px'}},o.deliveryTime||'—'),
+            h('td',{style:{padding:'4px 8px'}},(o.lines||[]).length)
+          )))
+        )
+      ),
+      h(Row,null,
+        h('button',{onClick:onClose},'Hủy'),
+        h('button',{className:'bp',onClick:doPrint,style:{padding:'8px 20px'}},h('i',{className:'ti ti-printer',style:{fontSize:15}}),' In '+filtered.length+' phiếu')
+      )
+    ):h('div',null,
+      h('div',{style:{textAlign:'center',padding:'2rem',color:'var(--tx2)',fontSize:13}},'Không có đơn hàng. Chọn khách hàng hoặc điều chỉnh khoảng ngày.'),
+      h(Row,null,h('button',{onClick:onClose},'Đóng'))
+    )
+  );
+}
+
 function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees,currentUser,trips,setTrips,company}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[print,spr]=useState(null);const[q,sq]=useState('');const[filter,sf]=useState('all');let oSeq=orders.length+1;
   const save=d=>{if(edit)setOrders(p=>p.map(x=>x.id===edit.id?d:x));else{const id='DGH'+String(oSeq++).toString().padStart(4,'0');setOrders(p=>[...p,{...d,id,createdAt:fmtDate()}]);}sm(null);se(null);};
