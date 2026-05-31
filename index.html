@@ -411,20 +411,13 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
           onChange:e=>sf(p=>({...p,points:p.points.map(x=>x.id===pt.id?{...x,name:e.target.value}:x)})),
           style:{flex:1,fontWeight:500,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}
         }),
-        h('div',{style:{position:'relative',width:120}},
-          h('input',{
-            value:pt.area||'',
-            placeholder:'Khu vực...',
-            list:'area-list-'+pt.id,
-            onChange:e=>sf(p=>({...p,points:p.points.map(x=>x.id===pt.id?{...x,area:e.target.value}:x)})),
-            style:{width:'100%',padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
-          }),
-          h('datalist',{id:'area-list-'+pt.id},
-            [...new Set([
-              ...(shifts||[]).map(s=>s.area).filter(Boolean),
-              ...f.points.map(p=>p.area).filter(Boolean)
-            ])].map(a=>h('option',{key:a,value:a}))
-          )
+        h('select',{
+          value:pt.area||'',
+          onChange:e=>sf(p=>({...p,points:p.points.map(x=>x.id===pt.id?{...x,area:e.target.value}:x)})),
+          style:{width:120,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
+        },
+          h('option',{value:''},'— Khu vực —'),
+          [...new Set((shifts||[]).map(s=>s.area).filter(Boolean))].map(a=>h('option',{key:a,value:a},a))
         ),
         h('button',{className:'bi',onClick:()=>sf(p=>({...p,points:p.points.filter(x=>x.id!==pt.id)})),style:{color:'#A32D2D',flexShrink:0}},
           h('i',{className:'ti ti-trash',style:{fontSize:14}})
