@@ -382,6 +382,61 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
   );
 }
 
+/* ─── POINT ROW ─── */
+function PointRow({pt,shifts,onAreaChange,onNameChange,onDelete}){
+  const[areaVal,setAreaVal]=useState(pt.area||'');
+  const[showNew,setShowNew]=useState(false);
+  const[newArea,setNewArea]=useState('');
+  const knownAreas=[...new Set((shifts||[]).map(s=>s.area).filter(Boolean))];
+  const isKnown=knownAreas.includes(areaVal)||areaVal==='';
+  const handleSelect=e=>{
+    const v=e.target.value;
+    if(v==='__new__'){setShowNew(true);return;}
+    setAreaVal(v);onAreaChange(pt.id,v);
+  };
+  const commitNew=()=>{
+    const v=newArea.trim();
+    if(!v)return;
+    setAreaVal(v);onAreaChange(pt.id,v);setShowNew(false);setNewArea('');
+  };
+  return h('div',{className:'ptrow',style:{flexDirection:'column',alignItems:'stretch',gap:4}},
+    h('div',{style:{display:'flex',alignItems:'center',gap:8}},
+      h('i',{className:'ti ti-map-pin',style:{fontSize:14,color:'var(--pri)',flexShrink:0}}),
+      h('input',{
+        value:pt.name,
+        onChange:e=>onNameChange(pt.id,e.target.value),
+        style:{flex:1,fontWeight:500,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}
+      }),
+      showNew
+        ? h('div',{style:{display:'flex',gap:4,width:180}},
+            h('input',{
+              value:newArea,autoFocus:true,
+              placeholder:'Nh\u1eadp khu v\u1ef1c m\u1edbi...',
+              onChange:e=>setNewArea(e.target.value),
+              onKeyDown:e=>{if(e.key==='Enter')commitNew();if(e.key==='Escape'){setShowNew(false);setNewArea('');}},
+              style:{flex:1,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--pri)',fontSize:12}
+            }),
+            h('button',{className:'bp',onClick:commitNew,style:{padding:'2px 8px',fontSize:12}},h('i',{className:'ti ti-check',style:{fontSize:13}})),
+            h('button',{onClick:()=>{setShowNew(false);setNewArea('');},style:{padding:'2px 6px',fontSize:12}},h('i',{className:'ti ti-x',style:{fontSize:13}}))
+          )
+        : h('select',{
+            value:isKnown?areaVal:'__custom__',
+            onChange:handleSelect,
+            style:{width:130,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
+          },
+            h('option',{value:''},'— Khu v\u1ef1c —'),
+            knownAreas.map(a=>h('option',{key:a,value:a},a)),
+            !isKnown&&areaVal&&h('option',{value:'__custom__'},areaVal),
+            h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Th\u00eam khu v\u1ef1c m\u1edbi...')
+          ),
+      h('button',{className:'bi',onClick:()=>onDelete(pt.id),style:{color:'#A32D2D',flexShrink:0}},
+        h('i',{className:'ti ti-trash',style:{fontSize:14}})
+      )
+    ),
+    pt.address&&h('div',{style:{fontSize:11,color:'var(--tx2)',paddingLeft:22}},pt.address+(pt.contact?' • '+pt.contact+' '+pt.phone:''))
+  );
+}
+
 /* ─── CUSTOMERS ─── */
 function CustomerForm({cust,shifts,customers,onSave,onClose}){
   const[f,sf]=useState(cust?{...cust,points:[...cust.points]}:{id:'',code:'',name:'',taxCode:'',address:'',note:'',points:[]});
@@ -403,36 +458,32 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
     h(F,{label:'Ghi chú'},h('textarea',{value:f.note,onChange:e=>set('note',e.target.value),rows:2})),
     h('hr',{className:'divider'}),
     h('div',{style:{fontWeight:500,fontSize:13,marginBottom:8,color:'var(--pri3)'}},h('i',{className:'ti ti-map-pin',style:{marginRight:5}}),'Địa điểm giao hàng'),
-    f.points.map(pt=>h('div',{key:pt.id,className:'ptrow',style:{flexDirection:'column',alignItems:'stretch',gap:4}},
-      h('div',{style:{display:'flex',alignItems:'center',gap:8}},
-        h('i',{className:'ti ti-map-pin',style:{fontSize:14,color:'var(--pri)',flexShrink:0}}),
-        h('input',{
-          value:pt.name,
-          onChange:e=>sf(p=>({...p,points:p.points.map(x=>x.id===pt.id?{...x,name:e.target.value}:x)})),
-          style:{flex:1,fontWeight:500,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}
-        }),
-        h('select',{
-          value:pt.area||'',
-          onChange:e=>sf(p=>({...p,points:p.points.map(x=>x.id===pt.id?{...x,area:e.target.value}:x)})),
-          style:{width:120,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
-        },
-          h('option',{value:''},'— Khu vực —'),
-          [...new Set((shifts||[]).map(s=>s.area).filter(Boolean))].map(a=>h('option',{key:a,value:a},a))
-        ),
-        h('button',{className:'bi',onClick:()=>sf(p=>({...p,points:p.points.filter(x=>x.id!==pt.id)})),style:{color:'#A32D2D',flexShrink:0}},
-          h('i',{className:'ti ti-trash',style:{fontSize:14}})
-        )
-      ),
-      pt.address&&h('div',{style:{fontSize:11,color:'var(--tx2)',paddingLeft:22}},pt.address+(pt.contact?' • '+pt.contact+' '+pt.phone:''))
-    )),
+    f.points.map(pt=>h(PointRow,{
+      key:pt.id,pt,shifts,
+      onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
+      onAreaChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,area:v}:x)})),
+      onDelete:id=>sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}))
+    })),
     h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:10,marginTop:4}},
       h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500,marginBottom:6}},'Thêm địa điểm mới'),
       h('div',{className:'g2'},
         h(F,{label:'Tên địa điểm *'},h('input',{value:np.name,onChange:e=>snp(p=>({...p,name:e.target.value})),placeholder:'Kho, Văn phòng, Cửa hàng...'})),
-        h(F,{label:'Khu vực'},h('select',{value:np.area||'',onChange:e=>snp(p=>({...p,area:e.target.value}))},
-          h('option',{value:''},'— Chọn khu vực —'),
-          [...new Set(shifts.map(s=>s.area).filter(Boolean))].map(a=>h('option',{key:a,value:a},a))
-        )),
+        h(F,{label:'Khu vực'},np.area==='__new__'
+          ?h('div',{style:{display:'flex',gap:4}},
+              h('input',{autoFocus:true,placeholder:'Nhập khu vực mới...',
+                onKeyDown:e=>{if(e.key==='Escape')snp(p=>({...p,area:''}));},
+                onChange:e=>snp(p=>({...p,area:e.target.value==='__new__'?'':e.target.value})),
+                value:'',
+                style:{flex:1,padding:'8px 10px',border:'.5px solid var(--pri)',borderRadius:'var(--r)',fontSize:14}
+              }),
+              h('button',{onClick:()=>snp(p=>({...p,area:''})),style:{padding:'6px 10px'}},h('i',{className:'ti ti-x',style:{fontSize:14}}))
+            )
+          :h('select',{value:np.area||'',onChange:e=>{if(e.target.value==='__new__')snp(p=>({...p,area:'__new__'}));else snp(p=>({...p,area:e.target.value}));}},
+              h('option',{value:''},'— Chọn khu vực —'),
+              [...new Set(shifts.map(s=>s.area).filter(Boolean))].map(a=>h('option',{key:a,value:a},a)),
+              h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Thêm khu vực mới...')
+            )
+        ),
         h(F,{label:'Địa chỉ'},h('input',{value:np.address,onChange:e=>snp(p=>({...p,address:e.target.value})),placeholder:'Số nhà, đường...'})),
         h(F,{label:'Người liên hệ'},h('input',{value:np.contact,onChange:e=>snp(p=>({...p,contact:e.target.value})),placeholder:'Tên người nhận'})),
         h(F,{label:'Điện thoại'},h('input',{value:np.phone,onChange:e=>snp(p=>({...p,phone:e.target.value})),placeholder:'090...'})),
