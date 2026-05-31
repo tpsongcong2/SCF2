@@ -2167,7 +2167,7 @@ function PrintByCustomerModal({orders,customers,products,company,onClose}) {
   );
 }
 
-function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees,currentUser,trips,setTrips,company}){
+function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quotes,employees,currentUser,trips,setTrips,company}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[print,spr]=useState(null);const[q,sq]=useState('');const[filter,sf]=useState('all');let oSeq=orders.length+1;
   const save=d=>{if(edit)setOrders(p=>p.map(x=>x.id===edit.id?d:x));else{const datePart=(d.deliveryDate||fmtDate()).split('/').slice(0,2).join('');const id='DGH'+datePart+String(oSeq++).toString().padStart(3,'0');setOrders(p=>[...p,{...d,id,createdAt:fmtDate()}]);}sm(null);se(null);};
   const del=id=>{
@@ -3007,7 +3007,7 @@ function App(){
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats}),
         page==='shifts'&&h(ShiftsTab,{shifts,setShifts}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
-        canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,products,quotes,employees,currentUser:cu,trips,setTrips,company}),
+        canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,setCustomers,products,quotes,employees,currentUser:cu,trips,setTrips,company}),
         canAccess(cu.role,'trips',cu.permissions)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,currentUser:cu}),
         page==='orderdetail'&&h(OrderDetailListTab,{orders,products,customers,shifts}),
         canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products}),
