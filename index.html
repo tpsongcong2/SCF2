@@ -1584,54 +1584,92 @@ function PrintTemplateModal({order, company, onClose}) {
   const [tpl, setTpl] = useState('welstory');
   const doPrint = () => {
     if(tpl==='welstory'){
-      // Fill Excel template directly
       try {
-        const wb = XLSX.read(WEL_TEMPLATE_B64, {type:'base64'});
+        // Read with styles + VBA preserved
+        const wb = XLSX.read(WEL_TEMPLATE_B64, {type:'base64', cellStyles:true, bookVBA:true});
         const ws = wb.Sheets[wb.SheetNames[0]];
         const lines = (order.lines||[]).filter(l=>l.productName);
-        // Fill header info
         const co = company||{};
-        ws['C8'] = {v: order.customer||'', t:'s'};
-        ws['C9'] = {v: order.pointName||order.address||'', t:'s'};
-        ws['C10'] = {v: order.deliveryDate||'', t:'s'};
-        ws['C11'] = {v: order.deliveryTime||'', t:'s'};
-        // Ngày đặt hàng (ngày giao - 1)
-        const ngDat = addDays(order.deliveryDate, -1);
-        ws['M10'] = {v: ngDat, t:'s'};
-        // Fill company info
-        if(co.name) ws['B4'] = {v: co.name, t:'s'};
-        if(co.address) ws['B5'] = {v: co.address, t:'s'};
-        // Fill product rows starting at row 14
+
+        // Helper: chỉ cập nhật giá trị, giữ nguyên style
+        const setVal = (addr, val, type) => {
+          if(ws[addr]) { ws[addr].v = val; delete ws[addr].w; ws[addr].t = type||'s'; }
+          else ws[addr] = {v: val, t: type||'s'};
+        };
+
+        // Header info
+        setVal('C8', order.customer||'');
+        setVal('C9', order.pointName||order.address||'');
+        setVal('C10', order.deliveryDate||'');
+        setVal('C11', order.deliveryTime||'');
+        setVal('M10', addDays(order.deliveryDate,-1));
+        if(co.name) setVal('B4', co.name);
+        if(co.address) setVal('B5', co.address);
+
+        // Template có sẵn 2 dòng sp (14,15), Tổng ở 16
+        // Dùng dòng 14 làm mẫu style cho các dòng thêm
+        const TMPL_ROW = 14;
+        const TMPL_COLS = ['B','C','D','E','F','G','H','I','J','K','L','M','N','O','P'];
         const startRow = 14;
+        const numLines = lines.length;
+
+        // Copy style từ row mẫu cho các dòng extra
+        const copyRowStyle = (fromRow, toRow) => {
+          TMPL_COLS.forEach(c => {
+            const src = ws[c+fromRow];
+            if(src) {
+              const dst = {v:'', t:'s'};
+              if(src.s) dst.s = src.s;
+              ws[c+toRow] = dst;
+            }
+          });
+          if(!ws['!rows']) ws['!rows']=[];
+          while(ws['!rows'].length < toRow) ws['!rows'].push(null);
+          ws['!rows'][toRow-1] = {hpt:46.5};
+        };
+
+        // Đảm bảo đủ dòng trong sheet
+        for(let i=2; i<numLines; i++) copyRowStyle(TMPL_ROW, startRow+i);
+
+        // Điền dữ liệu từng dòng SP
         lines.forEach((l, i) => {
           const r = startRow + i;
-          // Copy row height from row 14
-          if(!ws['!rows']) ws['!rows'] = [];
-          while(ws['!rows'].length <= r) ws['!rows'].push({});
-          ws['!rows'][r-1] = {hpt: 46.5};
-          ws['B'+r] = {v: i+1, t:'n'};
-          ws['C'+r] = {v: l.productName||'', t:'s'};
-          ws['D'+r] = {v: Number(l.qtyInvoice||0), t:'n'};
-          ws['E'+r] = {v: '', t:'s'};
-          ws['F'+r] = {v: l.unit||'Kg', t:'s'};
+          setVal('B'+r, i+1, 'n');
+          setVal('C'+r, l.productName||'');
+          setVal('D'+r, Number(l.qtyInvoice||0), 'n');
+          setVal('E'+r, '');
+          setVal('F'+r, l.unit||'Kg');
         });
-        // Clear unused template rows
-        const totalRows = lines.length;
-        [startRow+totalRows, startRow+totalRows+1].forEach(r => {
-          ['B','C','D','E','F'].forEach(c => { if(ws[c+r]) ws[c+r].v=''; });
-        });
-        // Update Tổng row position
-        const totRow = startRow + lines.length;
+
+        // Xóa các dòng thừa trong template (nếu ít hơn 2 dòng)
+        for(let i=numLines; i<2; i++) {
+          const r = startRow+i;
+          ['B','C','D','E','F'].forEach(c => { if(ws[c+r]) { ws[c+r].v=''; delete ws[c+r].w; }});
+        }
+
+        // Dòng Tổng: đẩy xuống sau dòng cuối
+        const totRow = startRow + numLines;
+        const origTotRow = startRow + 2; // row 16 trong template
+        if(totRow !== origTotRow) {
+          // Copy style dòng Tổng từ 16 xuống vị trí mới
+          TMPL_COLS.forEach(c => {
+            const src = ws[c+origTotRow];
+            if(src) { ws[c+totRow] = {...src, v: src.v, w: undefined}; }
+            if(totRow !== origTotRow && ws[c+origTotRow]) { ws[c+origTotRow].v=''; delete ws[c+origTotRow].w; }
+          });
+        }
         const totQty = lines.reduce((s,l)=>s+Number(l.qtyInvoice||0),0);
-        ws['B'+totRow] = {v:'Tổng', t:'s'};
-        ws['D'+totRow] = {v: totQty, t:'n'};
-        // Update sheet range
+        setVal('B'+totRow, 'Tổng');
+        setVal('D'+totRow, totQty, 'n');
+        setVal('E'+totRow, '');
+
+        // Cập nhật range
         const range = XLSX.utils.decode_range(ws['!ref']||'A1:P20');
-        range.e.r = Math.max(range.e.r, totRow);
+        range.e.r = Math.max(range.e.r, totRow+4);
         ws['!ref'] = XLSX.utils.encode_range(range);
-        // Download
-        const fname = 'PhieuGiaoHang_'+(order.pointName||order.id)+'_'+order.deliveryDate.replace(/\//g,'-')+'.xlsx';
-        XLSX.writeFile(wb, fname);
+
+        const fname = 'PhieuGiaoHang_'+(order.pointName||order.id).replace(/\s+/g,'_')+'_'+order.deliveryDate.replace(/\//g,'-')+'.xlsx';
+        XLSX.writeFile(wb, fname, {bookType:'xlsx', type:'binary'});
       } catch(e) {
         alert('Lỗi xuất Excel: '+e.message);
         console.error(e);
