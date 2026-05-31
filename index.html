@@ -1502,6 +1502,15 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
   <div class="sign-box">Người giao<div class="sign-sub">(Ký, họ tên)</div><div class="sign-line"></div></div>
   <div class="sign-box">Người nhận<div class="sign-sub">(Ký, họ tên)</div><div class="sign-line"></div></div>
 </div>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(r => console.log('SW registered'))
+      .catch(e => console.log('SW error:', e));
+  });
+}
+</script>
 </body></html>`;
   }
 
@@ -2895,6 +2904,15 @@ try {
 }
 
 
+</script>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('./sw.js')
+      .then(function(r){console.log('SW OK');})
+      .catch(function(e){console.log('SW err:',e);});
+  });
+}
 </script>
 </body>
 </html>
