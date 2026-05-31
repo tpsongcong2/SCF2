@@ -1394,12 +1394,12 @@ function buildPrintHTML(template, order, company) {
     const B = 'border:1px solid #333';
     const BC = B+';text-align:center';
     const emCells = `<td style="${BC}"></td>`.repeat(10);
-    const rows = lines.map((l,i) => `<tr style="height:28px">
-      <td style="${BC};font-size:12px">${i+1}</td>
-      <td style="${B};padding:2px 6px;font-size:12px">${l.productName||''}</td>
-      <td style="${BC};font-weight:700;font-size:13px">${Number(l.qtyInvoice||l.qtyProd||0)||''}</td>
+    const rows = lines.map((l,i) => `<tr style="height:42px">
+      <td style="${BC};font-size:16px">${i+1}</td>
+      <td style="${B};padding:2px 6px;font-size:16px">${l.productName||''}</td>
+      <td style="${BC};font-weight:700;font-size:18px">${Number(l.qtyInvoice||l.qtyProd||0)||''}</td>
       <td style="${BC}"></td>
-      <td style="${BC};font-size:12px">${l.unit||''}</td>
+      <td style="${BC};font-size:16px">${l.unit||''}</td>
       ${emCells}
     </tr>`).join('');
     const gd = order.deliveryDate||'';
