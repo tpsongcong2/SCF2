@@ -2225,9 +2225,9 @@ function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees
 }
 
 /* ─── DELIVERY TRIPS ─── */
-function TripForm({trip,orders,employees,currentUser,onSave,onClose}){
+function TripForm({trip,orders,employees,shifts,currentUser,onSave,onClose}){
   const drivers=employees.filter(e=>e.role==='driver'||e.dept==='Lái xe');
-  const[f,sf]=useState(trip?{...trip}:{driverName:'',driverId:'',deliveryDate:fmtDate(),deliveryTime:'07:00',orderIds:[],note:'',status:'planning'});
+  const[f,sf]=useState(trip?{...trip}:{driverName:'',driverId:'',shiftId:'',shiftName:'',deliveryDate:fmtDate(),deliveryTime:'07:00',orderIds:[],note:'',status:'planning',driverWork:0});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
   const availOrders=orders.filter(o=>o.status==='pending'||(trip&&trip.orderIds.includes(o.id)));
   const toggle=id=>sf(p=>({...p,orderIds:p.orderIds.includes(id)?p.orderIds.filter(x=>x!==id):[...p.orderIds,id]}));
@@ -2246,7 +2246,11 @@ function TripForm({trip,orders,employees,currentUser,onSave,onClose}){
     ),
     h('div',{className:'g3'},
       h(F,{label:'Ngày giao'},h('input',{value:f.deliveryDate,onChange:e=>s('deliveryDate',e.target.value),placeholder:'DD/MM/YYYY'})),
-      h(F,{label:'Giờ khởi hành'},h('input',{value:f.deliveryTime,onChange:e=>s('deliveryTime',e.target.value),placeholder:'07:00'})),
+      h(F,{label:'Ca giao'},h('select',{value:f.shiftId,onChange:e=>{const sh=(shifts||[]).find(x=>x.id===e.target.value);sf(p=>({...p,shiftId:e.target.value,shiftName:sh?sh.name:'',deliveryTime:sh&&sh.startTime?sh.startTime:p.deliveryTime}));}},
+        h('option',{value:''},'— Chọn ca —'),
+        (shifts||[]).map(sh=>h('option',{key:sh.id,value:sh.id},sh.name||sh.id))
+      )),
+      h(F,{label:'Công lái xe'},h('input',{type:'number',step:'0.5',min:'0',value:f.driverWork,onChange:e=>s('driverWork',parseFloat(e.target.value)||0),placeholder:'0'})),
       h(F,{label:'Trạng thái'},h('select',{value:f.status,onChange:e=>s('status',e.target.value)},
         [['planning','Lên kế hoạch'],['active','Đang giao'],['completed','Hoàn thành']].map(([v,l])=>h('option',{key:v,value:v},l))
       )),
@@ -2273,8 +2277,9 @@ function TripForm({trip,orders,employees,currentUser,onSave,onClose}){
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu chuyến'))
   );
 }
-function TripsTab({trips,setTrips,orders,setOrders,employees,currentUser}){
+function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,currentUser}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);
+  const[fDate,sfDate]=useState('');const[fShift,sfShift]=useState('');const[fDriver,sfDriver]=useState('');
   let tSeq=trips.length+1;
   const save=d=>{
     if(edit){
@@ -2282,7 +2287,9 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,currentUser}){
       if(old){setOrders(p=>p.map(o=>old.orderIds.includes(o.id)&&!d.orderIds.includes(o.id)?{...o,tripId:null,status:'pending'}:o));}
       setTrips(p=>p.map(t=>t.id===edit.id?{...edit,...d}:t));
     } else {
-      const id='CH'+String(tSeq++).toString().padStart(3,'0');
+      const datePart=(d.deliveryDate||fmtDate()).split('/').reverse().join('').slice(2);
+      const shiftPart=d.shiftName?d.shiftName.replace(/\s+/g,'_'):'CA';
+      const id='CH_'+datePart+'_'+shiftPart;
       setTrips(p=>[...p,{...d,id,createdAt:fmtDate()}]);
     }
     setOrders(p=>p.map(o=>d.orderIds.includes(o.id)?{...o,tripId:d.id||(edit?edit.id:'')}:o));
@@ -2306,8 +2313,26 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,currentUser}){
     h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:'1rem'}},
       h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Tạo chuyến mới'})
     ),
-    trips.length?h('div',{style:{display:'flex',flexDirection:'column',gap:'1rem'}},
-      trips.map(trip=>{
+    h('div',{style:{display:'flex',gap:8,marginBottom:'1rem',flexWrap:'wrap'}},
+      h('input',{type:'date',value:fDate,onChange:e=>sfDate(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}}),
+      h('select',{value:fShift,onChange:e=>sfShift(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},
+        h('option',{value:''},'Tất cả ca'),
+        [...new Set(trips.map(t=>t.shiftName).filter(Boolean))].map(s=>h('option',{key:s,value:s},s))
+      ),
+      h('select',{value:fDriver,onChange:e=>sfDriver(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},
+        h('option',{value:''},'Tất cả lái xe'),
+        [...new Set(trips.map(t=>t.driverName).filter(Boolean))].map(d=>h('option',{key:d,value:d},d))
+      ),
+      (fDate||fShift||fDriver)&&h('button',{onClick:()=>{sfDate('');sfShift('');sfDriver('');},style:{padding:'6px 10px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)',cursor:'pointer',color:'var(--tx2)'}},'✕ Xóa lọc')
+    ),
+    (()=>{
+      let filtered=trips;
+      if(fDate){const d=fDate.split('-').reverse().join('/');filtered=filtered.filter(t=>t.deliveryDate===d);}
+      if(fShift)filtered=filtered.filter(t=>t.shiftName===fShift);
+      if(fDriver)filtered=filtered.filter(t=>t.driverName===fDriver);
+      return filtered;
+    })().length?h('div',{style:{display:'flex',flexDirection:'column',gap:'1rem'}},
+      (trips.filter(t=>((!fDate||(t.deliveryDate===(fDate.split('-').reverse().join('/'))))||!fDate)&&(!fShift||t.shiftName===fShift)&&(!fDriver||t.driverName===fDriver))).map(trip=>{
         const tripOrders=orders.filter(o=>trip.orderIds.includes(o.id));
         const isOpen=open===trip.id;
         const totalW=trip.totalWeight||tripOrders.reduce((s,o)=>s+(o.lines?o.lines.reduce((ss,l)=>ss+(l.weightPerUnit||0)*numFmt(l.qtyInvoice),0):0),0);
@@ -2316,12 +2341,13 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,currentUser}){
             h('i',{className:'ti ti-chevron-'+(isOpen?'up':'down'),style:{fontSize:16,color:'var(--tx2)',flexShrink:0}}),
             h('div',{style:{flex:1}},
               h('div',{style:{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}},
-                h('span',{style:{fontWeight:500}},trip.id),
+                h('span',{style:{fontWeight:500}},trip.deliveryDate&&trip.shiftName?trip.deliveryDate+' — '+trip.shiftName:trip.id),
                 h('span',{style:{color:'var(--tx2)'}},trip.driverName||'—'),
                 h(StatusBadge,{s:trip.status})
               ),
               h('div',{style:{display:'flex',gap:16,fontSize:12,color:'var(--tx2)',flexWrap:'wrap'}},
-                h('span',null,h('i',{className:'ti ti-calendar',style:{fontSize:12,marginRight:3}}),trip.deliveryDate+(trip.deliveryTime?' '+trip.deliveryTime:'')),
+                h('span',null,h('i',{className:'ti ti-calendar',style:{fontSize:12,marginRight:3}}),trip.deliveryDate+(trip.shiftName?' — '+trip.shiftName:trip.deliveryTime?' '+trip.deliveryTime:'')),
+                trip.driverWork?h('span',null,h('i',{className:'ti ti-tools',style:{fontSize:12,marginRight:3}}),'Công: '+trip.driverWork):null,
                 h('span',null,h('i',{className:'ti ti-package',style:{fontSize:12,marginRight:3}}),tripOrders.length+' đơn'),
                 totalW>0&&h('span',{style:{color:'var(--pri)',fontWeight:500}},h('i',{className:'ti ti-weight',style:{fontSize:12,marginRight:3}}),totalW.toFixed(2)+' kg')
               )
@@ -2359,7 +2385,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,currentUser}){
       h('i',{className:'ti ti-steering-wheel',style:{fontSize:56,display:'block',marginBottom:'1rem',color:'var(--pri2)'}}),
       'Chưa có chuyến giao hàng nào.'
     ),
-    modal==='f'&&h(TripForm,{trip:edit,orders,employees,currentUser,onSave:save,onClose:()=>{sm(null);se(null);}})
+    modal==='f'&&h(TripForm,{trip:edit,orders,employees,shifts,currentUser,onSave:save,onClose:()=>{sm(null);se(null);}})
   );
 }
 
@@ -2845,7 +2871,7 @@ function App(){
         page==='shifts'&&h(ShiftsTab,{shifts,setShifts}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
         canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,products,quotes,employees,currentUser:cu,trips,setTrips,company}),
-        canAccess(cu.role,'trips',cu.permissions)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,currentUser:cu}),
+        canAccess(cu.role,'trips',cu.permissions)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,currentUser:cu}),
         page==='orderdetail'&&h(OrderDetailListTab,{orders,products,customers,shifts}),
         canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products}),
         canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,products,currentUser:cu}),
