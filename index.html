@@ -2037,7 +2037,7 @@ function PrintByCustomerModal({orders,customers,products,company,onClose}) {
 
 function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees,currentUser,trips,setTrips,company}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[print,spr]=useState(null);const[q,sq]=useState('');const[filter,sf]=useState('all');let oSeq=orders.length+1;
-  const save=d=>{if(edit)setOrders(p=>p.map(x=>x.id===edit.id?d:x));else{const id='DGH'+String(oSeq++).toString().padStart(4,'0');setOrders(p=>[...p,{...d,id,createdAt:fmtDate()}]);}sm(null);se(null);};
+  const save=d=>{if(edit)setOrders(p=>p.map(x=>x.id===edit.id?d:x));else{const datePart=(d.deliveryDate||fmtDate()).split('/').slice(0,2).join('');const id='DGH'+datePart+String(oSeq++).toString().padStart(3,'0');setOrders(p=>[...p,{...d,id,createdAt:fmtDate()}]);}sm(null);se(null);};
   const del=id=>{
     const o=orders.find(x=>x.id===id);
     if(o?.tripId)setTrips(p=>p.map(t=>t.id===o.tripId?{...t,orderIds:t.orderIds.filter(x=>x!==id)}:t));
@@ -2152,7 +2152,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees
                   const key=dStr+'|'+point+'|'+time;
                   if(!orderMap[key]){
                     orderMap[key]={
-                      id:'DGH'+String(Date.now()+Object.keys(orderMap).length).slice(-8),
+                      id:'DGH'+(dStr||'').split('/').slice(0,2).join('')+String(Object.keys(orderMap).length+1).padStart(3,'0'),
                       deliveryDate:dStr,pointName:point,pointId:'',
                       customer:'',customerId:'',address:'',
                       deliveryTime:time,status:'pending',
