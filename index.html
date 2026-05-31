@@ -1413,9 +1413,7 @@ body{font-family:Arial,sans-serif;font-size:13px;padding:8mm 8mm 5mm 8mm}
 .hdr img{height:64px;width:auto;margin-right:12px}
 .co-name{font-size:15px;font-weight:700}
 .co-addr{font-size:12px;color:#444;margin-top:2px}
-.title{text-align:center;font-size:22px;font-weight:700;letter-spacing:2px;
-       border-top:2px solid #000;border-bottom:2px solid #000;
-       padding:6px 0;margin-bottom:10px}
+.title{text-align:center;font-size:22px;font-weight:700;letter-spacing:2px;padding:6px 0;margin-bottom:10px}
 .info{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:3px 8px;margin-bottom:8px;font-size:13px}
 .lbl{white-space:nowrap;font-style:italic}
 .val{font-weight:700}
@@ -1428,7 +1426,7 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
 .sign-sub{font-size:11px;font-weight:400;color:#666;margin-top:3px}
 .sign-line{height:50px}
 @media print{
-  @page{size:A4 landscape;margin:5mm}
+  @page{size:A4 landscape;margin:5mm 20mm}
   body{padding:0}
 }
 </style></head><body>
@@ -1566,7 +1564,7 @@ function PrintTemplateModal({order, company, onClose}) {
   const [tpl, setTpl] = useState('welstory');
   const doPrint = () => {
     const html = buildPrintHTML(tpl, order, company);
-    const w = window.open('','_blank','width=900,height=700');
+    const w = window.open('','_blank','width='+Math.round(screen.availWidth*0.9)+',height='+Math.round(screen.availHeight*0.9)+',left='+Math.round(screen.availWidth*0.05)+',top='+Math.round(screen.availHeight*0.05)+',resizable=yes,scrollbars=yes');
     w.document.write(html);
     w.document.close();
     setTimeout(() => { w.print(); }, 500);
