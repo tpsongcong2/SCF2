@@ -1954,6 +1954,129 @@ function OrderForm({order,customers,products,quotes,employees,currentUser,onSave
   );
 }
 
+
+/* ─── IMPORT PREVIEW MODAL ─── */
+function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, onClose}) {
+  const {newOrders=[], dupOrders=[], unknownPts=[]} = data||{};
+  const [skipDups, setSkipDups] = React.useState(true);
+  const [ptAssign, setPtAssign] = React.useState({}); // pointName -> customerId
+  const [addToCustomer, setAddToCustomer] = React.useState({}); // pointName -> bool
+
+  const toImport = skipDups ? newOrders.filter(o=>!dupOrders.includes(o)) : newOrders;
+
+  const doImport = () => {
+    // Add unknown points to selected customers
+    Object.entries(ptAssign).forEach(([pt, custId]) => {
+      if(!custId || !addToCustomer[pt]) return;
+      setCustomers(prev => prev.map(c => {
+        if(c.id !== custId) return c;
+        const pts = c.points||[];
+        if(pts.find(p=>p.name.trim().toUpperCase()===pt.toUpperCase())) return c;
+        return {...c, points:[...pts,{id:'PT'+Date.now(),name:pt,area:'',address:''}]};
+      }));
+      // Update orders with customer info
+      const cust = customers.find(c=>c.id===custId);
+      if(cust) toImport.forEach(o=>{
+        if(o.pointName.trim().toUpperCase()===pt.toUpperCase()){
+          o.customerId=cust.id; o.customer=cust.name;
+        }
+      });
+    });
+    setOrders(p=>[...p,...toImport]);
+    alert('Đã import '+toImport.length+' đơn hàng, '+toImport.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng sản phẩm!');
+    onClose();
+  };
+
+  return h(Modal,{title:'Xem trước import đơn hàng',lg:true,onClose},
+    // Summary
+    h('div',{style:{display:'flex',gap:10,marginBottom:'1rem',flexWrap:'wrap'}},
+      h('div',{style:{background:'#EAF3DE',border:'1px solid #52b788',borderRadius:'var(--r)',padding:'8px 16px',fontSize:13}},
+        h('div',{style:{fontWeight:600,color:'#2D5A0E'}},newOrders.length+' đơn mới'),
+        h('div',{style:{color:'#555'}},newOrders.reduce((s,o)=>s+(o.lines||[]).length,0)+' sản phẩm')
+      ),
+      dupOrders.length>0&&h('div',{style:{background:'#FFF3CD',border:'1px solid #FFC107',borderRadius:'var(--r)',padding:'8px 16px',fontSize:13}},
+        h('div',{style:{fontWeight:600,color:'#856404'}},dupOrders.length+' đơn trùng'),
+        h('div',{style:{color:'#555'}},'Cùng địa điểm + ngày + giờ')
+      ),
+      unknownPts.length>0&&h('div',{style:{background:'#FEE8E8',border:'1px solid #E06060',borderRadius:'var(--r)',padding:'8px 16px',fontSize:13}},
+        h('div',{style:{fontWeight:600,color:'#A32D2D'}},unknownPts.length+' địa điểm mới'),
+        h('div',{style:{color:'#555'}},'Chưa có trong danh sách KH')
+      )
+    ),
+
+    // Duplicate handling
+    dupOrders.length>0&&h('div',{style:{background:'#FFFBF0',border:'1px solid #FFC107',borderRadius:'var(--r)',padding:'12px',marginBottom:'1rem'}},
+      h('div',{style:{fontWeight:600,marginBottom:8,fontSize:14}},'⚠️ Các đơn trùng:'),
+      dupOrders.map(o=>h('div',{key:o.id,style:{fontSize:12,padding:'3px 0',color:'#666'}},
+        '• '+o.deliveryDate+' '+o.deliveryTime+' — '+o.pointName
+      )),
+      h('div',{style:{marginTop:10,display:'flex',gap:16}},
+        h('label',{style:{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13}},
+          h('input',{type:'radio',checked:skipDups,onChange:()=>setSkipDups(true)}),
+          'Bỏ qua đơn trùng'
+        ),
+        h('label',{style:{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13}},
+          h('input',{type:'radio',checked:!skipDups,onChange:()=>setSkipDups(false)}),
+          'Import thêm cả đơn trùng'
+        )
+      )
+    ),
+
+    // Unknown points handling
+    unknownPts.length>0&&h('div',{style:{background:'#FEF6F6',border:'1px solid #E06060',borderRadius:'var(--r)',padding:'12px',marginBottom:'1rem'}},
+      h('div',{style:{fontWeight:600,marginBottom:8,fontSize:14}},'🆕 Địa điểm giao mới — chưa có trong danh mục:'),
+      unknownPts.map(pt=>h('div',{key:pt,style:{padding:'6px 0',borderBottom:'1px solid #f5c6c6'}},
+        h('div',{style:{fontWeight:500,marginBottom:6}},pt),
+        h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
+          h('select',{
+            value:ptAssign[pt]||'',
+            onChange:e=>setPtAssign(p=>({...p,[pt]:e.target.value})),
+            style:{padding:'4px 8px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)'}
+          },
+            h('option',{value:''},'— Gán vào khách hàng... —'),
+            customers.map(c=>h('option',{key:c.id,value:c.id},c.name))
+          ),
+          ptAssign[pt]&&h('label',{style:{display:'flex',alignItems:'center',gap:5,fontSize:12,cursor:'pointer'}},
+            h('input',{type:'checkbox',checked:!!addToCustomer[pt],
+              onChange:e=>setAddToCustomer(p=>({...p,[pt]:e.target.checked}))}),
+            'Thêm vào danh mục địa điểm'
+          )
+        )
+      ))
+    ),
+
+    // Orders preview table
+    h('div',{style:{maxHeight:200,overflowY:'auto',marginBottom:'1rem'}},
+      h('table',{style:{width:'100%',fontSize:12,borderCollapse:'collapse'}},
+        h('thead',null,h('tr',{style:{background:'var(--bg2)'}},
+          ['Ngày','Địa điểm','Giờ','Khách hàng','SP','Trạng thái'].map(c=>
+            h('th',{key:c,style:{padding:'5px 8px',textAlign:'left',borderBottom:'1px solid var(--bd)',fontWeight:600}},c)
+          )
+        )),
+        h('tbody',null,toImport.map(o=>h('tr',{key:o.id},
+          h('td',{style:{padding:'4px 8px'}},o.deliveryDate),
+          h('td',{style:{padding:'4px 8px',fontWeight:500}},o.pointName),
+          h('td',{style:{padding:'4px 8px'}},o.deliveryTime),
+          h('td',{style:{padding:'4px 8px',color:'var(--tx2)'}},o.customer||h('span',{style:{color:'#E06060'}},'Chưa gán')),
+          h('td',{style:{padding:'4px 8px'}},(o.lines||[]).length+' SP'),
+          h('td',{style:{padding:'4px 8px'}},
+            dupOrders.includes(o)?h('span',{style:{color:'#856404',fontSize:11}},'⚠️ trùng'):
+            h('span',{style:{color:'#2D5A0E',fontSize:11}},'✓ mới')
+          )
+        )))
+      )
+    ),
+
+    h(Row,null,
+      h('button',{onClick:onClose},'Hủy'),
+      h('button',{className:'bp',onClick:doImport,style:{padding:'8px 20px'}},
+        h('i',{className:'ti ti-file-import',style:{fontSize:14}}),
+        ' Import '+toImport.length+' đơn'
+      )
+    )
+  );
+}
+
 function PrintByCustomerModal({orders,customers,products,company,onClose}) {
   const [custId,sCust]=useState('');
   const [df,sdf]=useState('');
@@ -2127,6 +2250,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees
           alert('Đã nhập/cập nhật '+imported.length+' đơn hàng');
         }}),
         modal==='print'&&h(PrintByCustomerModal,{orders,customers,products,company,onClose:()=>sm(null)}),
+        modal==='importPreview'&&window._importData&&h(ImportPreviewModal,{data:window._importData,customers,setCustomers,orders,setOrders,onClose:()=>{sm(null);delete window._importData;}}),
         h('button',{
           onClick:()=>sm('print'),
           style:{padding:'6px 12px',fontSize:12,display:'flex',alignItems:'center',gap:5,background:'#185FA5',color:'#fff',border:'none',borderRadius:'var(--r)',cursor:'pointer'}
@@ -2192,8 +2316,12 @@ function DeliveryOrdersTab({orders,setOrders,customers,products,quotes,employees
                 });
                 const newOrders=Object.values(orderMap).filter(o=>o.lines.length>0);
                 if(newOrders.length===0){alert('Không đọc được đơn hàng nào!');return;}
-                setOrders(p=>[...p,...newOrders]);
-                alert('Đã tạo '+newOrders.length+' đơn hàng từ '+newOrders.reduce((s,o)=>s+o.lines.length,0)+' dòng sản phẩm!');
+                // Check duplicates & unknown points
+                const dupOrders=newOrders.filter(o=>orders.some(ex=>ex.deliveryDate===o.deliveryDate&&ex.pointName===o.pointName&&ex.deliveryTime===o.deliveryTime));
+                const unknownPts=[...new Set(newOrders.filter(o=>!o.customerId).map(o=>o.pointName))];
+                // Store parsed data for modal
+                window._importData={newOrders,dupOrders,unknownPts};
+                sm('importPreview');
               };
               reader.readAsBinaryString(file);
             };
