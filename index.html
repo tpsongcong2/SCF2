@@ -411,12 +411,21 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
           onChange:e=>sf(p=>({...p,points:p.points.map(x=>x.id===pt.id?{...x,name:e.target.value}:x)})),
           style:{flex:1,fontWeight:500,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}
         }),
-        h('input',{
-          value:pt.area||'',
-          placeholder:'Khu vực...',
-          onChange:e=>sf(p=>({...p,points:p.points.map(x=>x.id===pt.id?{...x,area:e.target.value}:x)})),
-          style:{width:110,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
-        }),
+        h('div',{style:{position:'relative',width:120}},
+          h('input',{
+            value:pt.area||'',
+            placeholder:'Khu vực...',
+            list:'area-list-'+pt.id,
+            onChange:e=>sf(p=>({...p,points:p.points.map(x=>x.id===pt.id?{...x,area:e.target.value}:x)})),
+            style:{width:'100%',padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
+          }),
+          h('datalist',{id:'area-list-'+pt.id},
+            [...new Set([
+              ...(shifts||[]).map(s=>s.area).filter(Boolean),
+              ...f.points.map(p=>p.area).filter(Boolean)
+            ])].map(a=>h('option',{key:a,value:a}))
+          )
+        ),
         h('button',{className:'bi',onClick:()=>sf(p=>({...p,points:p.points.filter(x=>x.id!==pt.id)})),style:{color:'#A32D2D',flexShrink:0}},
           h('i',{className:'ti ti-trash',style:{fontSize:14}})
         )
@@ -2203,29 +2212,29 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h('div',{style:{display:'flex',gap:5,flexWrap:'wrap'}},sts.map(([v,l])=>h('button',{key:v,className:'pill'+(filter===v?' on':''),onClick:()=>sf(v)},l+' ('+(v==='all'?orders.length:orders.filter(x=>x.status===v).length)+')'))),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
-        h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn hàng...'}),
-      h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}},
+        h('div',{style:{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}},
+        h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn hàng...',style:{flex:'1 1 160px',minWidth:130}}),
         h('input',{type:'date',value:fDate,onChange:e=>sfDate(e.target.value),
-          title:'Lọc theo ngày giao',
-          style:{padding:'5px 8px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12}}),
+          title:'Ngày giao',
+          style:{padding:'5px 8px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,width:130}}),
         h('input',{type:'text',value:fPoint,onChange:e=>sfPoint(e.target.value),
           placeholder:'Địa điểm...',
-          style:{padding:'5px 8px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,width:130}}),
+          style:{padding:'5px 8px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,width:110}}),
         h('select',{value:fTime,onChange:e=>sfTime(e.target.value),
-          style:{padding:'5px 8px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12}},
+          style:{padding:'5px 8px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,width:100}},
           h('option',{value:''},'Tất cả giờ'),
           [...new Set(orders.map(o=>o.deliveryTime).filter(Boolean))].sort().map(t=>h('option',{key:t,value:t},t))
         ),
         h('select',{value:fArea,onChange:e=>sfArea(e.target.value),
-          style:{padding:'5px 8px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12}},
-          h('option',{value:''},'Tất cả khu vực'),
+          style:{padding:'5px 8px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,width:120}},
+          h('option',{value:''},'Tất cả KV'),
           [...new Set(customers.flatMap(c=>(c.points||[]).map(p=>p.area)).filter(Boolean))].sort().map(a=>h('option',{key:a,value:a},a))
         ),
         (fDate||fPoint||fTime||fArea)&&h('button',{
           onClick:()=>{sfDate('');sfPoint('');sfTime('');sfArea('');},
-          style:{padding:'5px 8px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)',cursor:'pointer',color:'var(--tx2)'}
-        },'✕ Xóa lọc'),
-        (fDate||fPoint||fTime||fArea)&&h('span',{style:{fontSize:12,color:'var(--pri)',alignSelf:'center',fontWeight:500}},
+          style:{padding:'5px 8px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)',cursor:'pointer',color:'var(--tx2)',whiteSpace:'nowrap'}
+        },'✕'),
+        (fDate||fPoint||fTime||fArea)&&h('span',{style:{fontSize:12,color:'var(--pri)',fontWeight:500,whiteSpace:'nowrap'}},
           list.length+' kết quả'
         )
       ),
