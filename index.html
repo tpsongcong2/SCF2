@@ -384,19 +384,27 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
 
 /* ─── POINT ROW ─── */
 function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
+  const[localArea,setLocalArea]=useState(pt.area||'');
   const[showNew,setShowNew]=useState(false);
   const[newArea,setNewArea]=useState('');
-  const curArea=pt.area||'';
-  const isKnown=allAreas.includes(curArea)||curArea==='';
+  // sync nếu pt.area thay đổi từ bên ngoài (vd: sort)
+  const prevId=React.useRef(pt.id);
+  if(prevId.current!==pt.id){prevId.current=pt.id;setLocalArea(pt.area||'');}
+  const displayArea=localArea;
+  const isKnown=allAreas.includes(displayArea)||displayArea==='';
   const handleSelect=e=>{
     const v=e.target.value;
     if(v==='__new__'){setShowNew(true);return;}
-    onAreaChange(pt.id,v);
+    setLocalArea(v);
+    // defer để tránh re-render cha chặn select
+    setTimeout(()=>onAreaChange(pt.id,v),0);
   };
   const commitNew=()=>{
     const v=newArea.trim();
     if(!v)return;
-    onAreaChange(pt.id,v);setShowNew(false);setNewArea('');
+    setLocalArea(v);
+    setTimeout(()=>onAreaChange(pt.id,v),0);
+    setShowNew(false);setNewArea('');
   };
   return h('div',{className:'ptrow',style:{flexDirection:'column',alignItems:'stretch',gap:4}},
     h('div',{style:{display:'flex',alignItems:'center',gap:8}},
@@ -419,13 +427,13 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
             h('button',{onClick:()=>{setShowNew(false);setNewArea('');},style:{padding:'2px 6px',fontSize:12}},h('i',{className:'ti ti-x',style:{fontSize:13}}))
           )
         : h('select',{
-            value:isKnown?curArea:'__custom__',
+            value:isKnown?displayArea:'__custom__',
             onChange:handleSelect,
             style:{width:130,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
           },
             h('option',{value:''},'— Khu v\u1ef1c —'),
             allAreas.map(a=>h('option',{key:a,value:a},a)),
-            !isKnown&&curArea&&h('option',{value:'__custom__'},curArea),
+            !isKnown&&displayArea&&h('option',{value:'__custom__'},displayArea),
             h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Th\u00eam khu v\u1ef1c m\u1edbi...')
           ),
       h('button',{className:'bi',onClick:()=>onDelete(pt.id),style:{color:'#A32D2D',flexShrink:0}},
@@ -463,8 +471,8 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
         style:{fontSize:11,padding:'3px 10px',display:'flex',alignItems:'center',gap:4,border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
       },h('i',{className:'ti ti-arrows-sort',style:{fontSize:13}}),'Sắp xếp theo khu vực')
     ),
-    f.points.map((pt,idx)=>h(PointRow,{
-      key:pt.id+'|'+idx,pt,
+    f.points.map((pt)=>h(PointRow,{
+      key:pt.id,pt,
       allAreas:[...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')),
       onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
       onAreaChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,area:v}:x)})),
