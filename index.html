@@ -458,7 +458,7 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
     h(F,{label:'Ghi chú'},h('textarea',{value:f.note,onChange:e=>set('note',e.target.value),rows:2})),
     h('hr',{className:'divider'}),
     h('div',{style:{fontWeight:500,fontSize:13,marginBottom:8,color:'var(--pri3)'}},h('i',{className:'ti ti-map-pin',style:{marginRight:5}}),'Địa điểm giao hàng'),
-    f.points.map(pt=>h(PointRow,{
+    [...f.points].sort((a,b)=>(a.area||'').localeCompare(b.area||'')+(a.name||'').localeCompare(b.name||'')).map(pt=>h(PointRow,{
       key:pt.id,pt,shifts,
       onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
       onAreaChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,area:v}:x)})),
