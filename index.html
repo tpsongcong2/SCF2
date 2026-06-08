@@ -1241,6 +1241,28 @@ function OrderDetailListTab({orders, products, customers, shifts}) {
   const shiftLabel = s => s === 'night' ? '🌙 Ca đêm' : '☀️ Ca ngày';
   const statusColor = {pending:'#FAEEDA',delivering:'#EAF3DE',done:'#E1F5EE'};
 
+  // Sort theo khu vực → địa điểm → giờ
+  const sorted=[...filtered].sort((a,b)=>{
+    const ac=(a.area||'zzz').localeCompare(b.area||'zzz','vi');
+    if(ac!==0)return ac;
+    const pc=(a.point||'').localeCompare(b.point||'','vi');
+    if(pc!==0)return pc;
+    return (a.time||'').localeCompare(b.time||'');
+  });
+  // Build rows với dòng header khu vực + dòng tổng
+  const tableRows=[];
+  let curArea=null,areaSX=0,areaHD=0;
+  sorted.forEach((r,i)=>{
+    if(r.area!==curArea){
+      if(curArea!==null) tableRows.push({_sub:true,area:curArea,sx:areaSX,hd:areaHD});
+      curArea=r.area;areaSX=0;areaHD=0;
+      tableRows.push({_hdr:true,area:r.area||'Chưa phân khu vực'});
+    }
+    areaSX+=Number(r.qtyProd||0);areaHD+=Number(r.qtyInvoice||0);
+    tableRows.push(r);
+    if(i===sorted.length-1) tableRows.push({_sub:true,area:curArea,sx:areaSX,hd:areaHD});
+  });
+
   return h('div', null,
     h('div', {className:'ptitle'}, h('i',{className:'ti ti-list-details',style:{fontSize:20}}), 'Đơn hàng chi tiết'),
     h('div', {className:'card', style:{marginBottom:'1rem'}},
@@ -1291,17 +1313,24 @@ function OrderDetailListTab({orders, products, customers, shifts}) {
           ...['Ngày giao','Địa điểm','Sản phẩm','SL SX','SL HĐ','Giờ','Chú ý'].map(c=>h('th',{key:c},c))
         )),
         h('tbody', null,
-          filtered.length ? filtered.map((r,i) =>
-            h('tr', {key:i, style:{background: r.prodColor||(r.shift==='night'?'rgba(83,52,131,.04)':'')}},
-              h('td', null, h('span',{style:{fontWeight:500}}, r.date)),
-              h('td', null, h('div',{style:{fontWeight:600}}, r.point || '—')),
-              h('td', null, h('div',{style:{fontWeight:500}}, r.product)),
-              h('td', null, h('span',{style:{fontWeight:600,color:'var(--pri)',fontSize:15}}, r.qtyProd.toLocaleString())),
-              h('td', null, h('span',{style:{fontWeight:600,fontSize:15}}, r.qtyInvoice.toLocaleString())),
-              h('td', null, r.time || '—'),
-              h('td', null, h('span',{style:{fontSize:12,color:'var(--tx2)'}}, r.note || '—'))
-            )
-          ) : h('tr', null, h('td',{colSpan:7,className:'empty-st'},'Không có dữ liệu.'))
+          sorted.length ? tableRows.map((r,i)=>{
+            if(r._hdr) return h('tr',{key:'h'+i},h('td',{colSpan:7,style:{background:'#2d6a4f',color:'#fff',fontWeight:700,fontSize:13,padding:'5px 12px'}},'📍 Khu vực: '+(r.area)));
+            if(r._sub) return h('tr',{key:'s'+i},
+              h('td',{colSpan:3,style:{background:'#e8f5e9',fontWeight:600,fontSize:12,padding:'4px 12px',color:'#2d6a4f',textAlign:'right'}},'Tổng '+r.area+':'),
+              h('td',{style:{background:'#e8f5e9',fontWeight:700,color:'var(--pri)',fontSize:14,padding:'4px 8px'}},r.sx.toLocaleString()),
+              h('td',{style:{background:'#e8f5e9',fontWeight:700,fontSize:14,padding:'4px 8px'}},r.hd.toLocaleString()),
+              h('td',{colSpan:2,style:{background:'#e8f5e9'}})
+            );
+            return h('tr',{key:i,style:{background:r.prodColor||(r.shift==='night'?'rgba(83,52,131,.04)':'')}},
+              h('td',null,h('span',{style:{fontWeight:500}},r.date)),
+              h('td',null,h('div',{style:{fontWeight:600}},r.point||'—')),
+              h('td',null,h('div',{style:{fontWeight:500}},r.product)),
+              h('td',null,h('span',{style:{fontWeight:600,color:'var(--pri)',fontSize:15}},r.qtyProd.toLocaleString())),
+              h('td',null,h('span',{style:{fontWeight:600,fontSize:15}},r.qtyInvoice.toLocaleString())),
+              h('td',null,r.time||'—'),
+              h('td',null,h('span',{style:{fontSize:12,color:'var(--tx2)'}},r.note||'—'))
+            );
+          }) : h('tr',null,h('td',{colSpan:7,className:'empty-st'},'Không có dữ liệu.'))
         )
       )
     )
@@ -2505,12 +2534,42 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
         h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Tạo đơn giao'})
       )
     ),
+    // Sort list theo khu vực → địa điểm → giờ
+    const sortedList=[...list].sort((a,b)=>{
+      const aA=getArea(a),bA=getArea(b);
+      const ac=(aA||'zzz').localeCompare(bA||'zzz','vi');
+      if(ac!==0)return ac;
+      const pc=(a.pointName||'').localeCompare(b.pointName||'','vi');
+      if(pc!==0)return pc;
+      return (a.deliveryTime||'').localeCompare(b.deliveryTime||'');
+    });
+    // Build rows với header khu vực + dòng tổng KL
+    const orderTableRows=[];
+    let ocurArea=null,oAreaKL=0,oAreaCount=0;
+    sortedList.forEach((o,i)=>{
+      const oa=getArea(o)||'';
+      const totalW=o.lines?o.lines.reduce((s,l)=>{const p=products.find(x=>x.id===l.productId);return s+(p?.weightPerUnit||0)*numFmt(l.qtyInvoice);},0):0;
+      if(oa!==ocurArea){
+        if(ocurArea!==null) orderTableRows.push({_sub:true,area:ocurArea,kl:oAreaKL,cnt:oAreaCount});
+        ocurArea=oa;oAreaKL=0;oAreaCount=0;
+        orderTableRows.push({_hdr:true,area:oa||'Chưa phân khu vực'});
+      }
+      oAreaKL+=totalW;oAreaCount++;
+      orderTableRows.push({...o,_totalW:totalW});
+      if(i===sortedList.length-1) orderTableRows.push({_sub:true,area:ocurArea,kl:oAreaKL,cnt:oAreaCount});
+    });
+
     h('div',{className:'tw'},
       h('table',null,
         h('thead',null,h('tr',null,...['Mã đơn','Địa điểm giao','Ngày giao','Giờ','Hàng hóa','Chuyến','Trạng thái',''].map(c=>h('th',{key:c},c)))),
-        h('tbody',null,list.length?list.map(o=>{
+        h('tbody',null,list.length?orderTableRows.map((o,_i)=>{
+          if(o._hdr) return h('tr',{key:'oh'+_i},h('td',{colSpan:8,style:{background:'#2d6a4f',color:'#fff',fontWeight:700,fontSize:13,padding:'5px 12px'}},'📍 Khu vực: '+o.area));
+          if(o._sub) return h('tr',{key:'os'+_i},
+            h('td',{colSpan:5,style:{background:'#e8f5e9',fontWeight:600,fontSize:12,padding:'4px 12px',color:'#2d6a4f',textAlign:'right'}},'Tổng '+o.area+': '+o.cnt+' đơn — '+o.kl.toFixed(1)+' kg'),
+            h('td',{colSpan:3,style:{background:'#e8f5e9'}})
+          );
           const trip=trips.find(t=>t.id===o.tripId);
-          const totalW=o.lines?o.lines.reduce((s,l)=>{const p=products.find(x=>x.id===l.productId);return s+(p?.weightPerUnit||0)*numFmt(l.qtyInvoice);},0):0;
+          const totalW=o._totalW||0;
           return h('tr',{key:o.id},
             h('td',null,h('span',{style:{color:'var(--pri)',fontWeight:500}},o.id)),
             h('td',null,
