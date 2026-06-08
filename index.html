@@ -467,67 +467,75 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
     if(!close){setSaved(true);setTimeout(()=>setSaved(false),2000);}
   };
   const submit=()=>doSave(true);
+  // Shared buttons row
+  const BtnRow=()=>h(Row,null,
+    h('button',{onClick:onClose},'Hủy'),
+    h('button',{
+      onClick:()=>doSave(false),
+      style:{padding:'8px 16px',display:'flex',alignItems:'center',gap:4,background:saved?'#2d6a4f':'var(--bg2)',color:saved?'#fff':'var(--tx)',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:'pointer',fontSize:13,transition:'all .3s'}
+    },h('i',{className:'ti ti-'+(saved?'check':'device-floppy'),style:{fontSize:14}}),saved?'Đã lưu!':'Lưu (giữ mở)'),
+    h('button',{className:'bp',onClick:()=>doSave(true),style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu & Đóng')
+  );
+  // Add-point form
+  const AddPtForm=()=>h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:10,marginTop:4}},
+    h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500,marginBottom:6}},'Thêm địa điểm mới'),
+    h('div',{className:'g2'},
+      h(F,{label:'Tên địa điểm *'},h('input',{value:np.name,onChange:e=>snp(p=>({...p,name:e.target.value})),placeholder:'Kho, Văn phòng, Cửa hàng...'})),
+      h(F,{label:'Khu vực'},np.area==='__new__'
+        ?h('div',{style:{display:'flex',gap:4}},
+            h('input',{autoFocus:true,placeholder:'Nhập khu vực mới...',
+              onKeyDown:e=>{if(e.key==='Escape')snp(p=>({...p,area:''}));},
+              onChange:e=>snp(p=>({...p,area:e.target.value==='__new__'?'':e.target.value})),
+              value:'',
+              style:{flex:1,padding:'8px 10px',border:'.5px solid var(--pri)',borderRadius:'var(--r)',fontSize:14}
+            }),
+            h('button',{onClick:()=>snp(p=>({...p,area:''})),style:{padding:'6px 10px'}},h('i',{className:'ti ti-x',style:{fontSize:14}}))
+          )
+        :h('select',{value:np.area||'',onChange:e=>{if(e.target.value==='__new__')snp(p=>({...p,area:'__new__'}));else snp(p=>({...p,area:e.target.value}));}},
+            h('option',{value:''},'— Chọn khu vực —'),
+            [...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')).map(a=>h('option',{key:a,value:a},a)),
+            h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Thêm khu vực mới...')
+          )
+      ),
+      h(F,{label:'Địa chỉ'},h('input',{value:np.address,onChange:e=>snp(p=>({...p,address:e.target.value})),placeholder:'Số nhà, đường...'})),
+      h(F,{label:'Người liên hệ'},h('input',{value:np.contact,onChange:e=>snp(p=>({...p,contact:e.target.value})),placeholder:'Tên người nhận'})),
+      h(F,{label:'Điện thoại'},h('input',{value:np.phone,onChange:e=>snp(p=>({...p,phone:e.target.value})),placeholder:'090...'})),
+    ),
+    h('button',{onClick:addPt,style:{fontSize:12,padding:'5px 14px'}},h('i',{className:'ti ti-plus',style:{fontSize:13,marginRight:4}}),'Thêm địa điểm')
+  );
   return h(Modal,{title:cust?'Sửa khách hàng':'Thêm khách hàng',onClose,lg:'xl'},
     h('div',{style:{display:'grid',gridTemplateColumns:'340px 1fr',gap:24,alignItems:'start'}},
-      h('div',null,
+      // ── Cột trái: thông tin KH + form thêm địa điểm + nút lưu ──
+      h('div',{style:{display:'flex',flexDirection:'column',gap:12}},
         h('div',{className:'g3'},
           h(F,{label:'Mã KH (để trống = tự tạo)'},h('input',{value:f.code||f.id||'',onChange:e=>set('code',e.target.value.toUpperCase()),placeholder:'KH001, WELSTORY...',style:{}})),
           h(F,{label:'Tên khách hàng *'},h('input',{value:f.name,onChange:e=>set('name',e.target.value),placeholder:'Tên công ty / cá nhân'})),
           h(F,{label:'Mã số thuế'},h('input',{value:f.taxCode,onChange:e=>set('taxCode',e.target.value),placeholder:'0312345678'}))
         ),
         h(F,{label:'Địa chỉ chính'},h('input',{value:f.address,onChange:e=>set('address',e.target.value),placeholder:'Địa chỉ...'})),
-        h(F,{label:'Ghi chú'},h('textarea',{value:f.note,onChange:e=>set('note',e.target.value),rows:3}))
+        h(F,{label:'Ghi chú'},h('textarea',{value:f.note,onChange:e=>set('note',e.target.value),rows:2})),
+        h('hr',{className:'divider',style:{margin:'4px 0'}}),
+        h(AddPtForm),
+        h('hr',{className:'divider',style:{margin:'4px 0'}}),
+        h(BtnRow)
       ),
+      // ── Cột phải: danh sách địa điểm ──
       h('div',null,
-    h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}},
-      h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},h('i',{className:'ti ti-map-pin',style:{marginRight:5}}),'Địa điểm giao hàng (',f.points.length,')'),
-      h('button',{
-        onClick:()=>sf(p=>({...p,points:[...p.points].sort((a,b)=>{const ac=(a.area||'').localeCompare(b.area||'','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');})})),
-        style:{fontSize:11,padding:'3px 10px',display:'flex',alignItems:'center',gap:4,border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
-      },h('i',{className:'ti ti-arrows-sort',style:{fontSize:13}}),'Sắp xếp theo khu vực')
-    ),
-    f.points.map((pt)=>h(PointRow,{
-      key:pt.id,pt,
-      allAreas:[...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')),
-      onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
-      onAreaChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,area:v}:x)})),
-      onDelete:id=>sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}))
-    })),
-    h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:10,marginTop:4}},
-      h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500,marginBottom:6}},'Thêm địa điểm mới'),
-      h('div',{className:'g2'},
-        h(F,{label:'Tên địa điểm *'},h('input',{value:np.name,onChange:e=>snp(p=>({...p,name:e.target.value})),placeholder:'Kho, Văn phòng, Cửa hàng...'})),
-        h(F,{label:'Khu vực'},np.area==='__new__'
-          ?h('div',{style:{display:'flex',gap:4}},
-              h('input',{autoFocus:true,placeholder:'Nhập khu vực mới...',
-                onKeyDown:e=>{if(e.key==='Escape')snp(p=>({...p,area:''}));},
-                onChange:e=>snp(p=>({...p,area:e.target.value==='__new__'?'':e.target.value})),
-                value:'',
-                style:{flex:1,padding:'8px 10px',border:'.5px solid var(--pri)',borderRadius:'var(--r)',fontSize:14}
-              }),
-              h('button',{onClick:()=>snp(p=>({...p,area:''})),style:{padding:'6px 10px'}},h('i',{className:'ti ti-x',style:{fontSize:14}}))
-            )
-          :h('select',{value:np.area||'',onChange:e=>{if(e.target.value==='__new__')snp(p=>({...p,area:'__new__'}));else snp(p=>({...p,area:e.target.value}));}},
-              h('option',{value:''},'— Chọn khu vực —'),
-              [...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')).map(a=>h('option',{key:a,value:a},a)),
-              h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Thêm khu vực mới...')
-            )
+        h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}},
+          h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},h('i',{className:'ti ti-map-pin',style:{marginRight:5}}),'Địa điểm giao hàng (',f.points.length,')'),
+          h('button',{
+            onClick:()=>sf(p=>({...p,points:[...p.points].sort((a,b)=>{const ac=(a.area||'').localeCompare(b.area||'','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');})})),
+            style:{fontSize:11,padding:'3px 10px',display:'flex',alignItems:'center',gap:4,border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
+          },h('i',{className:'ti ti-arrows-sort',style:{fontSize:13}}),'Sắp xếp theo khu vực')
         ),
-        h(F,{label:'Địa chỉ'},h('input',{value:np.address,onChange:e=>snp(p=>({...p,address:e.target.value})),placeholder:'Số nhà, đường...'})),
-        h(F,{label:'Người liên hệ'},h('input',{value:np.contact,onChange:e=>snp(p=>({...p,contact:e.target.value})),placeholder:'Tên người nhận'})),
-        h(F,{label:'Điện thoại'},h('input',{value:np.phone,onChange:e=>snp(p=>({...p,phone:e.target.value})),placeholder:'090...'})),
-      ),
-      h('button',{onClick:addPt,style:{fontSize:12,padding:'5px 14px'}},h('i',{className:'ti ti-plus',style:{fontSize:13,marginRight:4}}),'Thêm địa điểm')
-    ),
-      ) // end right col div
-    ), // end grid div
-    h(Row,null,
-      h('button',{onClick:onClose},'Hủy'),
-      h('button',{
-        onClick:()=>doSave(false),
-        style:{padding:'8px 16px',display:'flex',alignItems:'center',gap:4,background:saved?'#2d6a4f':'var(--bg2)',color:saved?'#fff':'var(--tx)',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:'pointer',fontSize:13,transition:'all .3s'}
-      },h('i',{className:'ti ti-'+(saved?'check':'device-floppy'),style:{fontSize:14}}),saved?'Đã lưu!':'Lưu (giữ mở)'),
-      h('button',{className:'bp',onClick:()=>doSave(true),style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu & Đóng')
+        f.points.map((pt)=>h(PointRow,{
+          key:pt.id,pt,
+          allAreas:[...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')),
+          onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
+          onAreaChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,area:v}:x)})),
+          onDelete:id=>sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}))
+        }))
+      )
     )
   );
 }
