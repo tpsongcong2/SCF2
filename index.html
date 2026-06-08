@@ -383,16 +383,11 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
 }
 
 /* ─── POINT ROW ─── */
-function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete,onLocalArea}){
+function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
   const[showNew,setShowNew]=useState(false);
   const[newArea,setNewArea]=useState('');
-  const curArea=pt.area||'';
+  const curArea=pt.area||'';;
   const isKnown=allAreas.includes(curArea)||curArea==='';
-  const handleSelect=e=>{
-    const v=e.target.value;
-    if(v==='__new__'){setShowNew(true);return;}
-    onAreaChange(pt.id,v);
-  };
   const commitNew=()=>{
     const v=newArea.trim();
     if(!v)return;
@@ -420,8 +415,13 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete,onLocalArea}){
             h('button',{onClick:()=>{setShowNew(false);setNewArea('');},style:{padding:'2px 6px',fontSize:12}},h('i',{className:'ti ti-x',style:{fontSize:13}}))
           )
         : h('select',{
-            value:isKnown?curArea:'__custom__',
-            onChange:handleSelect,
+            key:pt.id+'|'+curArea,
+            defaultValue:isKnown?curArea:'__custom__',
+            onChange:e=>{
+              const v=e.target.value;
+              if(v==='__new__'){setShowNew(true);e.target.value=curArea;return;}
+              onAreaChange(pt.id,v);
+            },
             style:{width:130,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
           },
             h('option',{value:''},'— Khu v\u1ef1c —'),
