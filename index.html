@@ -383,28 +383,20 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
 }
 
 /* ─── POINT ROW ─── */
-function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete,areaOverride,onLocalArea}){
-  const[localArea,setLocalArea]=useState(pt.area||'');
+function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete,onLocalArea}){
   const[showNew,setShowNew]=useState(false);
   const[newArea,setNewArea]=useState('');
-  // Khi pt.id đổi (sort), sync lại localArea
-  const prevId=React.useRef(pt.id);
-  React.useEffect(()=>{
-    if(prevId.current!==pt.id){prevId.current=pt.id;setLocalArea(pt.area||'');}
-  });
-  // Báo lên cha giá trị hiện tại để submit dùng
-  React.useEffect(()=>{if(onLocalArea)onLocalArea(pt.id,localArea);},[localArea]);
-  const displayArea=localArea;
-  const isKnown=allAreas.includes(displayArea)||displayArea==='';
+  const curArea=pt.area||'';
+  const isKnown=allAreas.includes(curArea)||curArea==='';
   const handleSelect=e=>{
     const v=e.target.value;
     if(v==='__new__'){setShowNew(true);return;}
-    setLocalArea(v);
+    onAreaChange(pt.id,v);
   };
   const commitNew=()=>{
     const v=newArea.trim();
     if(!v)return;
-    setLocalArea(v);
+    onAreaChange(pt.id,v);
     setShowNew(false);setNewArea('');
   };
   return h('div',{className:'ptrow',style:{flexDirection:'column',alignItems:'stretch',gap:4}},
@@ -428,13 +420,13 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete,areaOverride,o
             h('button',{onClick:()=>{setShowNew(false);setNewArea('');},style:{padding:'2px 6px',fontSize:12}},h('i',{className:'ti ti-x',style:{fontSize:13}}))
           )
         : h('select',{
-            value:isKnown?displayArea:'__custom__',
+            value:isKnown?curArea:'__custom__',
             onChange:handleSelect,
             style:{width:130,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
           },
             h('option',{value:''},'— Khu v\u1ef1c —'),
             allAreas.map(a=>h('option',{key:a,value:a},a)),
-            !isKnown&&displayArea&&h('option',{value:'__custom__'},displayArea),
+            !isKnown&&curArea&&h('option',{value:'__custom__'},curArea),
             h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Th\u00eam khu v\u1ef1c m\u1edbi...')
           ),
       h('button',{className:'bi',onClick:()=>onDelete(pt.id),style:{color:'#A32D2D',flexShrink:0}},
@@ -449,21 +441,18 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete,areaOverride,o
 function CustomerForm({cust,shifts,customers,onSave,onClose}){
   const[f,sf]=useState(cust?{...cust,points:[...cust.points]}:{id:'',code:'',name:'',taxCode:'',address:'',note:'',points:[]});
   const[np,snp]=useState({name:'',address:'',contact:'',phone:'',area:''});
-  const localAreasRef=React.useRef({});
-  // Pre-populate ref từ dữ liệu ban đầu
-  React.useEffect(()=>{
-    f.points.forEach(pt=>{if(localAreasRef.current[pt.id]===undefined)localAreasRef.current[pt.id]=pt.area||'';});
-  },[]);
+  const[saved,setSaved]=useState(false);
   const set=(k,v)=>sf(p=>({...p,[k]:v}));
   const addPt=()=>{if(!np.name){alert('Nhập tên địa điểm!');return;}sf(p=>({...p,points:[...p.points,{...np,id:'PT'+uid()}]}));snp({name:'',address:'',contact:'',phone:'',area:''});};
-  const submit=()=>{
+  const doSave=(close)=>{
     if(!f.name){alert('Nhập tên khách hàng!');return;}
     const code=(f.code||'').trim().toUpperCase()||'KH'+String(Date.now()).slice(-6);
     const isDup=customers&&customers.some(c=>c.id===code&&c.id!==(cust?.id||''));
     if(isDup){alert('Mã KH "'+code+'" đã tồn tại! Vui lòng dùng mã khác.');return;}
-    // Merge localArea từ mỗi PointRow vào points trước khi lưu
-    const finalPoints=f.points.map(pt=>({...pt,area:localAreasRef.current[pt.id]!==undefined?localAreasRef.current[pt.id]:pt.area}));
-    onSave({...f,id:code,code,points:finalPoints});};
+    onSave({...f,id:code,code},close);
+    if(!close){setSaved(true);setTimeout(()=>setSaved(false),2000);}
+  };
+  const submit=()=>doSave(true);
   return h(Modal,{title:cust?'Sửa khách hàng':'Thêm khách hàng',onClose},
     h('div',{className:'g3'},
       h(F,{label:'Mã KH (để trống = tự tạo)'},h('input',{value:f.code||f.id||'',onChange:e=>set('code',e.target.value.toUpperCase()),placeholder:'KH001, WELSTORY...',style:{}})),
@@ -482,11 +471,10 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
     ),
     f.points.map((pt)=>h(PointRow,{
       key:pt.id,pt,
-      allAreas:[...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area),...Object.values(localAreasRef.current)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')),
-      onLocalArea:(id,v)=>{localAreasRef.current[id]=v;},
+      allAreas:[...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')),
       onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
-      onAreaChange:()=>{},
-      onDelete:id=>{delete localAreasRef.current[id];sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}));}
+      onAreaChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,area:v}:x)})),
+      onDelete:id=>sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}))
     })),
     h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:10,marginTop:4}},
       h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500,marginBottom:6}},'Thêm địa điểm mới'),
@@ -514,12 +502,19 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
       ),
       h('button',{onClick:addPt,style:{fontSize:12,padding:'5px 14px'}},h('i',{className:'ti ti-plus',style:{fontSize:13,marginRight:4}}),'Thêm địa điểm')
     ),
-    h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu khách hàng'))
+    h(Row,null,
+      h('button',{onClick:onClose},'Hủy'),
+      h('button',{
+        onClick:()=>doSave(false),
+        style:{padding:'8px 16px',display:'flex',alignItems:'center',gap:4,background:saved?'#2d6a4f':'var(--bg2)',color:saved?'#fff':'var(--tx)',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:'pointer',fontSize:13,transition:'all .3s'}
+      },h('i',{className:'ti ti-'+(saved?'check':'device-floppy'),style:{fontSize:14}}),saved?'Đã lưu!':'Lưu (giữ mở)'),
+      h('button',{className:'bp',onClick:()=>doSave(true),style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu & Đóng')
+    )
   );
 }
 function CustomersTab({customers,setCustomers,shifts,cu}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);const[q,sq]=useState('');
-  const save=d=>{if(edit)setCustomers(p=>p.map(x=>x.id===edit.id?d:x));else setCustomers(p=>[...p,d]);sm(null);se(null);};
+  const save=(d,close)=>{if(edit)setCustomers(p=>p.map(x=>x.id===edit.id?d:x));else setCustomers(p=>[...p,d]);if(close!==false){sm(null);se(null);}};
   const del=id=>{if(confirm('Xóa khách hàng này?'))setCustomers(p=>p.filter(x=>x.id!==id));};
   const ECOLS=[['code','Mã KH'],['name','Tên KH'],['taxCode','MST'],['address','Địa chỉ'],['note','Ghi chú']];
   const list=customers.filter(x=>!q||x.name.toLowerCase().includes(q.toLowerCase())||x.taxCode.includes(q)).sort((a,b)=>(a.code||a.id||'').localeCompare(b.code||b.id||''));
