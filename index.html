@@ -1086,7 +1086,7 @@ function PurchaseTab({purchases,setPurchases,nccs,materials,products,cu}) {
 
 /* --- Báo cáo mua hàng --- */
 function PurchaseReportTab({purchases,nccs}) {
-  const [df,sdf]=useState(''); const [dt,sdt]=useState(''); const [ncc,sn]=useState('');
+  const _td5=fmtDate();const _ti5=_td5.split('/').reverse().join('-');const [df,sdf]=useState(_ti5); const [dt,sdt]=useState(_ti5); const [ncc,sn]=useState('');
   const parseDate=s=>{if(!s)return null;const[d,m,y]=s.split('/');return new Date(y,m-1,d);};
   const inRange=d=>{const dt2=parseDate(d);if(!dt2)return false;const f2=df?parseDate(df):null;const t=dt?parseDate(dt):null;if(f2&&dt2<f2)return false;if(t&&dt2>t)return false;return true;};
   const filtered=purchases.filter(p=>inRange(p.orderDate)&&(!ncc||p.nccId===ncc));
@@ -1117,7 +1117,7 @@ function PurchaseReportTab({purchases,nccs}) {
 
 /* --- Báo cáo bán hàng --- */
 function SalesReportTab({orders,customers,products}) {
-  const [df,sdf]=useState(''); const [dt,sdt]=useState('');
+  const _td2=fmtDate();const _ti2=_td2.split('/').reverse().join('-');const [df,sdf]=useState(_ti2); const [dt,sdt]=useState(_ti2);
   const [cust,sCust]=useState(''); const [pt,sPt]=useState(''); const [prod,sProd]=useState('');
   const parseDate=s=>{if(!s)return null;const[d,m,y]=s.split('/');return new Date(y,m-1,d);};
   const inRange=d=>{const dt2=parseDate(d);if(!dt2)return false;const f2=df?parseDate(df):null;const t=dt?parseDate(dt):null;if(f2&&dt2<f2)return false;if(t&&dt2>t)return false;return true;};
@@ -1185,8 +1185,9 @@ function SalesReportTab({orders,customers,products}) {
 /* ─── ĐƠN HÀNG CHI TIẾT ─── */
 function OrderDetailListTab({orders, products, customers, shifts}) {
   const [q, sq] = useState('');
-  const [dateF, sdf] = useState('');
-  const [dateT, sdt] = useState('');
+  const _td3=fmtDate();const _ti3=_td3.split('/').reverse().join('-');
+  const [dateF, sdf] = useState(_ti3);
+  const [dateT, sdt] = useState(_ti3);
   const [shiftF, ssf] = useState('all');
   const [areaF, saf] = useState('all');
 
@@ -2307,7 +2308,7 @@ function PrintByCustomerModal({orders,customers,products,company,onClose}) {
 }
 
 function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quotes,employees,currentUser,trips,setTrips,company}){
-  const[modal,sm]=useState(null);const[edit,se]=useState(null);const[print,spr]=useState(null);const[q,sq]=useState('');const[filter,sf]=useState('all');const[fDate,sfDate]=useState('');const[fPoint,sfPoint]=useState('');const[fTime,sfTime]=useState('');const[fArea,sfArea]=useState('');let oSeq=orders.length+1;
+  const[modal,sm]=useState(null);const[edit,se]=useState(null);const[print,spr]=useState(null);const[q,sq]=useState('');const[filter,sf]=useState('all');const _td0=fmtDate();const _ti0=_td0.split('/').reverse().join('-');const[fDate,sfDate]=useState(_ti0);const[fPoint,sfPoint]=useState('');const[fTime,sfTime]=useState('');const[fArea,sfArea]=useState('');let oSeq=orders.length+1;
   const save=d=>{if(edit)setOrders(p=>p.map(x=>x.id===edit.id?d:x));else{const datePart=(d.deliveryDate||fmtDate()).split('/').slice(0,2).join('');const id='DGH'+datePart+String(oSeq++).toString().padStart(3,'0');setOrders(p=>[...p,{...d,id,createdAt:fmtDate()}]);}sm(null);se(null);};
   const del=id=>{
     const o=orders.find(x=>x.id===id);
@@ -2382,7 +2383,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
               // New order header
               const seq=Object.keys(orderMap).length+1;
               orderMap[id]={
-                id:id||('DGH'+String(seq).padStart(4,'0')),
+                id:id||('D'+new Date().getFullYear().toString().slice(-2)+String(seq).padStart(6,'0')),
                 customer:r['Khách hàng']||'',custId:'',
                 deliveryDate:r['Ngày giao']||fmtDate(),
                 deliveryTime:r['Giờ giao']||'',
@@ -2458,7 +2459,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
                   const key=dStr+'|'+point+'|'+time;
                   if(!orderMap[key]){
                     orderMap[key]={
-                      id:'DGH'+(dStr||'').split('/').slice(0,2).join('')+String(Object.keys(orderMap).length+1).padStart(3,'0'),
+                      id:'D'+(dStr?dStr.split('/')[2].slice(-2):new Date().getFullYear().toString().slice(-2))+(dStr||'').split('/').slice(0,2).join('')+String(Object.keys(orderMap).length+1).padStart(3,'0'),
                       deliveryDate:dStr,pointName:point,pointId:'',
                       customer:'',customerId:'',address:'',
                       deliveryTime:time,status:'pending',
@@ -2589,7 +2590,7 @@ function TripForm({trip,orders,employees,shifts,currentUser,onSave,onClose}){
 }
 function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,currentUser}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);
-  const[fDate,sfDate]=useState('');const[fShift,sfShift]=useState('');const[fDriver,sfDriver]=useState('');
+  const _td1=fmtDate();const _ti1=_td1.split('/').reverse().join('-');const[fDate,sfDate]=useState(_ti1);const[fShift,sfShift]=useState('');const[fDriver,sfDriver]=useState('');
   let tSeq=trips.length+1;
   const save=d=>{
     if(edit){
