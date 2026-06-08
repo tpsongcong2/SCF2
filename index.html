@@ -2355,6 +2355,29 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
     if(fArea&&getArea(x)!==fArea) return false;
     return true;
   });
+  // Sort + group theo khu vực
+  const sortedList=[...list].sort((a,b)=>{
+    const aA=getArea(a),bA=getArea(b);
+    const ac=(aA||'zzz').localeCompare(bA||'zzz','vi');
+    if(ac!==0)return ac;
+    const pc=(a.pointName||'').localeCompare(b.pointName||'','vi');
+    if(pc!==0)return pc;
+    return (a.deliveryTime||'').localeCompare(b.deliveryTime||'');
+  });
+  const orderTableRows=[];
+  let ocurArea=null,oAreaKL=0,oAreaCount=0;
+  sortedList.forEach((o,i)=>{
+    const oa=getArea(o)||'';
+    const totalW=o.lines?o.lines.reduce((s,l)=>{const p=products.find(x=>x.id===l.productId);return s+(p?.weightPerUnit||0)*numFmt(l.qtyInvoice);},0):0;
+    if(oa!==ocurArea){
+      if(ocurArea!==null)orderTableRows.push({_sub:true,area:ocurArea,kl:oAreaKL,cnt:oAreaCount});
+      ocurArea=oa;oAreaKL=0;oAreaCount=0;
+      orderTableRows.push({_hdr:true,area:oa||'Chưa phân khu vực'});
+    }
+    oAreaKL+=totalW;oAreaCount++;
+    orderTableRows.push({...o,_totalW:totalW});
+    if(i===sortedList.length-1)orderTableRows.push({_sub:true,area:ocurArea,kl:oAreaKL,cnt:oAreaCount});
+  });
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-truck-delivery',style:{fontSize:20}}),'Đơn giao hàng'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
@@ -2534,31 +2557,6 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
         h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Tạo đơn giao'})
       )
     ),
-    // Sort list theo khu vực → địa điểm → giờ
-    const sortedList=[...list].sort((a,b)=>{
-      const aA=getArea(a),bA=getArea(b);
-      const ac=(aA||'zzz').localeCompare(bA||'zzz','vi');
-      if(ac!==0)return ac;
-      const pc=(a.pointName||'').localeCompare(b.pointName||'','vi');
-      if(pc!==0)return pc;
-      return (a.deliveryTime||'').localeCompare(b.deliveryTime||'');
-    });
-    // Build rows với header khu vực + dòng tổng KL
-    const orderTableRows=[];
-    let ocurArea=null,oAreaKL=0,oAreaCount=0;
-    sortedList.forEach((o,i)=>{
-      const oa=getArea(o)||'';
-      const totalW=o.lines?o.lines.reduce((s,l)=>{const p=products.find(x=>x.id===l.productId);return s+(p?.weightPerUnit||0)*numFmt(l.qtyInvoice);},0):0;
-      if(oa!==ocurArea){
-        if(ocurArea!==null) orderTableRows.push({_sub:true,area:ocurArea,kl:oAreaKL,cnt:oAreaCount});
-        ocurArea=oa;oAreaKL=0;oAreaCount=0;
-        orderTableRows.push({_hdr:true,area:oa||'Chưa phân khu vực'});
-      }
-      oAreaKL+=totalW;oAreaCount++;
-      orderTableRows.push({...o,_totalW:totalW});
-      if(i===sortedList.length-1) orderTableRows.push({_sub:true,area:ocurArea,kl:oAreaKL,cnt:oAreaCount});
-    });
-
     h('div',{className:'tw'},
       h('table',null,
         h('thead',null,h('tr',null,...['Mã đơn','Địa điểm giao','Ngày giao','Giờ','Hàng hóa','Chuyến','Trạng thái',''].map(c=>h('th',{key:c},c)))),
