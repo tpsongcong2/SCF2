@@ -383,11 +383,38 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
 }
 
 /* ─── POINT ROW ─── */
+/* AreaSelect: component riêng để key hoạt động đúng khi dùng h() */
+function AreaSelect({ptId,curArea,allAreas,onAreaChange,onShowNew}){
+  const isKnown=allAreas.includes(curArea)||curArea==='';
+  const selRef=React.useRef(null);
+  // Sync DOM thủ công khi curArea thay đổi (uncontrolled)
+  React.useEffect(()=>{
+    if(selRef.current){
+      const target=isKnown?curArea:'__custom__';
+      if(selRef.current.value!==target)selRef.current.value=target;
+    }
+  },[curArea]);
+  return h('select',{
+    ref:selRef,
+    defaultValue:isKnown?curArea:'__custom__',
+    onChange:e=>{
+      const v=e.target.value;
+      if(v==='__new__'){onShowNew();selRef.current.value=curArea;return;}
+      onAreaChange(ptId,v);
+    },
+    style:{width:130,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
+  },
+    h('option',{value:''},'— Khu v\u1ef1c —'),
+    allAreas.map(a=>h('option',{key:a,value:a},a)),
+    !isKnown&&curArea&&h('option',{value:'__custom__'},curArea),
+    h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Th\u00eam khu v\u1ef1c m\u1edbi...')
+  );
+}
+
 function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
   const[showNew,setShowNew]=useState(false);
   const[newArea,setNewArea]=useState('');
-  const curArea=pt.area||'';;
-  const isKnown=allAreas.includes(curArea)||curArea==='';
+  const curArea=pt.area||'';
   const commitNew=()=>{
     const v=newArea.trim();
     if(!v)return;
@@ -414,21 +441,7 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
             h('button',{className:'bp',onClick:commitNew,style:{padding:'2px 8px',fontSize:12}},h('i',{className:'ti ti-check',style:{fontSize:13}})),
             h('button',{onClick:()=>{setShowNew(false);setNewArea('');},style:{padding:'2px 6px',fontSize:12}},h('i',{className:'ti ti-x',style:{fontSize:13}}))
           )
-        : h('select',{
-            key:pt.id+'|'+curArea,
-            defaultValue:isKnown?curArea:'__custom__',
-            onChange:e=>{
-              const v=e.target.value;
-              if(v==='__new__'){setShowNew(true);e.target.value=curArea;return;}
-              onAreaChange(pt.id,v);
-            },
-            style:{width:130,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
-          },
-            h('option',{value:''},'— Khu v\u1ef1c —'),
-            allAreas.map(a=>h('option',{key:a,value:a},a)),
-            !isKnown&&curArea&&h('option',{value:'__custom__'},curArea),
-            h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Th\u00eam khu v\u1ef1c m\u1edbi...')
-          ),
+        : h(AreaSelect,{key:pt.id,ptId:pt.id,curArea,allAreas,onAreaChange,onShowNew:()=>setShowNew(true)}),
       h('button',{className:'bi',onClick:()=>onDelete(pt.id),style:{color:'#A32D2D',flexShrink:0}},
         h('i',{className:'ti ti-trash',style:{fontSize:14}})
       )
