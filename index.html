@@ -383,27 +383,28 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
 }
 
 /* ─── POINT ROW ─── */
-function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
+function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete,areaOverride,onLocalArea}){
   const[localArea,setLocalArea]=useState(pt.area||'');
   const[showNew,setShowNew]=useState(false);
   const[newArea,setNewArea]=useState('');
-  // sync nếu pt.area thay đổi từ bên ngoài (vd: sort)
+  // Khi pt.id đổi (sort), sync lại localArea
   const prevId=React.useRef(pt.id);
-  if(prevId.current!==pt.id){prevId.current=pt.id;setLocalArea(pt.area||'');}
+  React.useEffect(()=>{
+    if(prevId.current!==pt.id){prevId.current=pt.id;setLocalArea(pt.area||'');}
+  });
+  // Báo lên cha giá trị hiện tại để submit dùng
+  React.useEffect(()=>{if(onLocalArea)onLocalArea(pt.id,localArea);},[localArea]);
   const displayArea=localArea;
   const isKnown=allAreas.includes(displayArea)||displayArea==='';
   const handleSelect=e=>{
     const v=e.target.value;
     if(v==='__new__'){setShowNew(true);return;}
     setLocalArea(v);
-    // defer để tránh re-render cha chặn select
-    setTimeout(()=>onAreaChange(pt.id,v),0);
   };
   const commitNew=()=>{
     const v=newArea.trim();
     if(!v)return;
     setLocalArea(v);
-    setTimeout(()=>onAreaChange(pt.id,v),0);
     setShowNew(false);setNewArea('');
   };
   return h('div',{className:'ptrow',style:{flexDirection:'column',alignItems:'stretch',gap:4}},
@@ -448,13 +449,21 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
 function CustomerForm({cust,shifts,customers,onSave,onClose}){
   const[f,sf]=useState(cust?{...cust,points:[...cust.points]}:{id:'',code:'',name:'',taxCode:'',address:'',note:'',points:[]});
   const[np,snp]=useState({name:'',address:'',contact:'',phone:'',area:''});
+  const localAreasRef=React.useRef({});
+  // Pre-populate ref từ dữ liệu ban đầu
+  React.useEffect(()=>{
+    f.points.forEach(pt=>{if(localAreasRef.current[pt.id]===undefined)localAreasRef.current[pt.id]=pt.area||'';});
+  },[]);
   const set=(k,v)=>sf(p=>({...p,[k]:v}));
   const addPt=()=>{if(!np.name){alert('Nhập tên địa điểm!');return;}sf(p=>({...p,points:[...p.points,{...np,id:'PT'+uid()}]}));snp({name:'',address:'',contact:'',phone:'',area:''});};
-  const submit=()=>{if(!f.name){alert('Nhập tên khách hàng!');return;}const code=(f.code||'').trim().toUpperCase()||'KH'+String(Date.now()).slice(-6);
-    // Kiểm tra trùng mã
-    const isDup = customers && customers.some(c => c.id === code && c.id !== (cust?.id||''));
+  const submit=()=>{
+    if(!f.name){alert('Nhập tên khách hàng!');return;}
+    const code=(f.code||'').trim().toUpperCase()||'KH'+String(Date.now()).slice(-6);
+    const isDup=customers&&customers.some(c=>c.id===code&&c.id!==(cust?.id||''));
     if(isDup){alert('Mã KH "'+code+'" đã tồn tại! Vui lòng dùng mã khác.');return;}
-    onSave({...f,id:code,code});};
+    // Merge localArea từ mỗi PointRow vào points trước khi lưu
+    const finalPoints=f.points.map(pt=>({...pt,area:localAreasRef.current[pt.id]!==undefined?localAreasRef.current[pt.id]:pt.area}));
+    onSave({...f,id:code,code,points:finalPoints});};
   return h(Modal,{title:cust?'Sửa khách hàng':'Thêm khách hàng',onClose},
     h('div',{className:'g3'},
       h(F,{label:'Mã KH (để trống = tự tạo)'},h('input',{value:f.code||f.id||'',onChange:e=>set('code',e.target.value.toUpperCase()),placeholder:'KH001, WELSTORY...',style:{}})),
@@ -473,10 +482,11 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
     ),
     f.points.map((pt)=>h(PointRow,{
       key:pt.id,pt,
-      allAreas:[...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')),
+      allAreas:[...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area),...Object.values(localAreasRef.current)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')),
+      onLocalArea:(id,v)=>{localAreasRef.current[id]=v;},
       onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
-      onAreaChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,area:v}:x)})),
-      onDelete:id=>sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}))
+      onAreaChange:()=>{},
+      onDelete:id=>{delete localAreasRef.current[id];sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}));}
     })),
     h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:10,marginTop:4}},
       h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500,marginBottom:6}},'Thêm địa điểm mới'),
