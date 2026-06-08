@@ -1455,15 +1455,34 @@ function SmartImportModal({prodCats,onImport,onClose}) {
 function parseProductStr(s){
   if(!s) return {name:'',unit:'Kg'};
   const parts=s.toString().split(',');
-  const unit=parts[parts.length-1].trim();
-  let rest=parts.slice(0,-1);
-  const skip=['VD_QV','VD','SEV'];
-  while(rest.length&&skip.includes(rest[0].trim())) rest.shift();
-  rest=rest.filter(p=>{
-    const u=p.trim().toUpperCase().replace(/\s+/g,'');
-    return !['SÔNGCÔNG','SONGCONG','SONGCÔNG','SÔNGCONG'].includes(u);
-  });
-  return {name:rest.join(',').trim(), unit:unit||'Kg'};
+  const rawUnit=parts[parts.length-1].trim();
+  const rawUnitUP=rawUnit.toUpperCase();
+  let unit,name;
+  if(rawUnitUP.includes('PAC')){
+    // Đơn vị = Gói, tên SP gồm cả phần xKG/PAC
+    // vd: "VD,BÚN TƯƠI,SÔNG CÔNG,5KG/PAC" → name="BÚN TƯƠI,5KG/PAC", unit="Gói"
+    unit='Gói';
+    let rest=parts.slice(0,-1); // bỏ phần cuối (5KG/PAC đã ở rawUnit)
+    const skip=['VD_QV','VD','SEV'];
+    while(rest.length&&skip.includes(rest[0].trim())) rest.shift();
+    rest=rest.filter(p=>{
+      const u=p.trim().toUpperCase().replace(/\s+/g,'');
+      return !['SÔNGCÔNG','SONGCONG','SONGCÔNG','SÔNGCONG'].includes(u);
+    });
+    // Ghép tên + rawUnit vào tên sản phẩm
+    name=(rest.join(',').trim()+','+rawUnit).replace(/^,|,$/g,'');
+  } else {
+    unit=rawUnitUP.includes('KG')?'KG':(rawUnit||'Kg');
+    let rest=parts.slice(0,-1);
+    const skip=['VD_QV','VD','SEV'];
+    while(rest.length&&skip.includes(rest[0].trim())) rest.shift();
+    rest=rest.filter(p=>{
+      const u=p.trim().toUpperCase().replace(/\s+/g,'');
+      return !['SÔNGCÔNG','SONGCONG','SONGCÔNG','SÔNGCONG'].includes(u);
+    });
+    name=rest.join(',').trim();
+  }
+  return {name, unit};
 }
 
 
@@ -2058,6 +2077,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, o
   const [skipDups, setSkipDups] = React.useState(true);
   const [ptAssign, setPtAssign] = React.useState({}); // pointName -> customerId
   const [addToCustomer, setAddToCustomer] = React.useState({}); // pointName -> bool
+  const [ptArea, setPtArea] = React.useState({}); // pointName -> area
 
   const toImport = skipDups ? newOrders.filter(o=>!dupOrders.includes(o)) : newOrders;
 
@@ -2069,7 +2089,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, o
         if(c.id !== custId) return c;
         const pts = c.points||[];
         if(pts.find(p=>p.name.trim().toUpperCase()===pt.toUpperCase())) return c;
-        return {...c, points:[...pts,{id:'PT'+Date.now(),name:pt,area:'',address:''}]};
+        return {...c, points:[...pts,{id:'PT'+Date.now(),name:pt,area:ptArea[pt]||'',address:''}]};
       }));
       // Update orders with customer info
       const cust = customers.find(c=>c.id===custId);
@@ -2128,10 +2148,18 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, o
           h('select',{
             value:ptAssign[pt]||'',
             onChange:e=>setPtAssign(p=>({...p,[pt]:e.target.value})),
-            style:{padding:'4px 8px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)'}
+            style:{padding:'4px 8px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)',minWidth:160}
           },
             h('option',{value:''},'— Gán vào khách hàng... —'),
             customers.map(c=>h('option',{key:c.id,value:c.id},c.name))
+          ),
+          h('select',{
+            value:ptArea[pt]||'',
+            onChange:e=>setPtArea(p=>({...p,[pt]:e.target.value})),
+            style:{padding:'4px 8px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)',minWidth:110}
+          },
+            h('option',{value:''},'— Khu vực —'),
+            [...new Set(customers.flatMap(c=>(c.points||[]).map(p=>p.area)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')).map(a=>h('option',{key:a,value:a},a))
           ),
           ptAssign[pt]&&h('label',{style:{display:'flex',alignItems:'center',gap:5,fontSize:12,cursor:'pointer'}},
             h('input',{type:'checkbox',checked:!!addToCustomer[pt],
