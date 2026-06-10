@@ -1533,8 +1533,10 @@ function parseProductStr(s){
 /* ═══════ PRINT TEMPLATES ═══════ */
 
 const PRINT_TEMPLATES = [
-  {id:'welstory', name:'Welstory — Phiếu giao hàng'},
-  {id:'foseca',   name:'Foseca — Phiếu giao nhận hàng'},
+  {id:'welstory',       name:'Welstory — Phiếu giao hàng'},
+  {id:'foseca',         name:'Foseca — Phiếu giao nhận hàng'},
+  {id:'youngsun_dbg',   name:'Youngsun DBG — 送货确认单'},
+  {id:'youngsun_trina', name:'Youngsun TRINA — 送货确认单'},
 ];
 
 function addDays(dateStr, n) {
@@ -1743,6 +1745,92 @@ if('serviceWorker' in navigator){
       <div style="width:180px"><div>Người nhận hàng</div><div style="font-size:10px;color:#555">(Ký, ghi rõ họ tên)</div></div>
       <div style="width:180px"><div>Người lập</div><div style="font-size:10px;color:#555">(Ký, ghi rõ họ tên)</div></div>
       <div style="width:180px"><div>Người giao hàng</div><div style="font-size:10px;color:#555">(Ký, ghi rõ họ tên)</div></div>
+    </div>
+    </body></html>`;
+  }
+  if (template === 'youngsun_dbg' || template === 'youngsun_trina') {
+    const isDBG = template === 'youngsun_dbg';
+    const bep = isDBG ? 'DBG' : 'TRINA SOLAR';
+    const caLabel = isDBG ? 'CA TRƯA' : 'CA SÁNG';
+    // Shift label from order
+    const caMap = {day:'CA SÁNG', night:'CA ĐÊM'};
+    const caDisplay = order.shiftLabel || caLabel;
+    // Delivery date (ngày giao)
+    const ngayGiao = order.deliveryDate || fmtDate();
+    // MVĐ = order id
+    const mvd = order.id || '';
+    const co = company || {};
+    const coName = co.name || 'CÔNG TY TNHH THỰC PHẨM SÔNG CÔNG';
+    const coAddr = co.address || 'Tổ 1, phường Bá Xuyên, tỉnh Thái Nguyên';
+    const coPhone = co.phone || '0917856968';
+    const B = 'border:1px solid #333';
+    const BC = B+';text-align:center;padding:4px';
+    const rows = lines.map((l,i) => `
+      <tr>
+        <td style="${BC};font-size:14px">${i+1}</td>
+        <td style="${BC};font-size:12px">${l.productId||''}</td>
+        <td style="${BC};font-size:13px;font-weight:600;text-align:left;padding:4px 8px">${l.productName||''}</td>
+        <td style="${BC};font-size:13px">${l.unit||'KG'}</td>
+        <td style="${BC};font-size:15px;font-weight:700">${Number(l.qtyInvoice||l.qtyProd||0)||''}</td>
+        <td style="${BC}"></td>
+        <td style="${BC};font-size:12px">${l.note||''}</td>
+      </tr>`).join('');
+    const totalQ = lines.reduce((s,l)=>s+Number(l.qtyInvoice||l.qtyProd||0),0);
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>送货确认单 - ${bep}</title>
+    <style>
+      body{margin:0;padding:16px;font-family:'Arial',sans-serif;font-size:13px;color:#111}
+      table{border-collapse:collapse;width:100%}
+      .header-info{font-size:11px;color:#444;margin-bottom:2px}
+      .title{font-size:18px;font-weight:700;text-align:center;margin:8px 0 4px}
+      .subtitle{font-size:12px;text-align:center;margin-bottom:10px;color:#444}
+      .meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13px}
+      .meta b{font-size:14px}
+      th{background:#d9e8d9;border:1px solid #333;padding:5px 4px;font-size:11px;text-align:center;line-height:1.3}
+      .foot{margin-top:16px;display:flex;justify-content:space-between}
+      .foot-col{text-align:center;width:45%}
+      .foot-col .name{margin-top:40px;font-size:12px;color:#555}
+      .legal{font-size:10px;color:#888;margin-bottom:4px}
+      @media print{body{padding:6px}@page{margin:8mm}}
+    </style></head><body>
+    <div class="legal">Chứng từ này được tạo bằng bản in điện tử, có giá trị pháp lý tương đương với bản gốc</div>
+    <div class="legal">本单据为电子打印生成，与原件具有同等效力</div>
+    <div class="header-info">CÔNG TY: ${coName}</div>
+    <div class="header-info">ĐỊA CHỈ: ${coAddr}</div>
+    <div class="header-info">LIÊN HỆ: ${coPhone}</div>
+    <div class="title">送货确认单</div>
+    <div class="subtitle">Bảng xác nhận số lượng giao hàng</div>
+    <div class="meta">
+      <span>Ngày giao: <b>${ngayGiao}</b></span>
+      <span>MVĐ: <b>${mvd}</b></span>
+      <span><b>${caDisplay}</b></span>
+      <span>Bếp: <b>${bep}</b></span>
+    </div>
+    <table>
+      <thead><tr>
+        <th style="width:36px">STT<br>序号</th>
+        <th style="width:70px">原材料代码<br>Mã NVL</th>
+        <th>原材料名称<br>Tên nguyên vật liệu</th>
+        <th style="width:52px">单位<br>Đơn vị</th>
+        <th style="width:72px">送货数量<br>SL đặt hàng</th>
+        <th style="width:72px">实收数量<br>SL nhận thực tế</th>
+        <th style="width:90px">备注<br>Ghi chú</th>
+      </tr></thead>
+      <tbody>${rows}
+      <tr><td colspan="4" style="${BC};font-weight:700;text-align:right">TỔNG</td>
+          <td style="${BC};font-weight:700;font-size:16px">${totalQ}</td>
+          <td style="${BC}"></td><td style="${BC}"></td>
+      </tr></tbody>
+    </table>
+    <div class="foot">
+      <div class="foot-col">
+        <div>Người giao hàng</div>
+        <div class="name">(Ký và ghi rõ họ tên)</div>
+      </div>
+      <div class="foot-col">
+        <div>Người nhận hàng</div>
+        <div class="name">(Ký và ghi rõ họ tên)</div>
+      </div>
     </div>
     </body></html>`;
   }
