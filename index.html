@@ -3195,69 +3195,95 @@ function BulkTripModal({orders,employees,shifts,customers,trips,currentUser,onSa
   const dateVN=fmtDate2(date);
 
   // Đơn hàng chờ theo ngày
-  const pendingOrders=orders.filter(o=>o.status==='pending'&&(!dateVN||o.deliveryDate===dateVN));
+  const pendingOrders=orders.filter(o=>{
+    if(o.tripId||o.status==='done'||o.status==='cancelled')return false;
+    return !dateVN||o.deliveryDate===dateVN;
+  });
   const allAreas=[...new Set(pendingOrders.map(o=>getOArea(o)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
   const allShifts=shifts||[];
 
   const toggleShift=id=>setSelShifts(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
   const toggleArea=a=>setSelAreas(p=>p.includes(a)?p.filter(x=>x!==a):[...p,a]);
 
-  // Preview: mỗi combo shift+area = 1 chuyến
+  // Preview: logic đúng
+  // - Chọn ca + khu vực → mỗi combo (ca × khu vực) = 1 chuyến, đơn thuộc khu vực đó
+  // - Chỉ chọn ca (không chọn khu vực) → mỗi ca = 1 chuyến, gộp tất cả đơn
+  // - Chỉ chọn khu vực (không chọn ca) → mỗi khu vực = 1 chuyến
+  // - Không chọn gì → mỗi khu vực = 1 chuyến (gộp tất cả)
   const preview=React.useMemo(()=>{
     const combos=[];
-    const useShifts=selShifts.length>0?allShifts.filter(s=>selShifts.includes(s.id)):allShifts;
+    const useShifts=selShifts.length>0?allShifts.filter(s=>selShifts.includes(s.id)):[];
     const useAreas=selAreas.length>0?selAreas:allAreas;
-    useShifts.forEach(sh=>{
-      useAreas.forEach(area=>{
-        const matchOrders=pendingOrders.filter(o=>{
-          const oa=getOArea(o);
-          return oa===area;
+    if(useShifts.length>0&&useAreas.length>0){
+      // Ca × Khu vực
+      useShifts.forEach(sh=>{
+        useAreas.forEach(area=>{
+          const matchOrders=pendingOrders.filter(o=>getOArea(o)===area);
+          if(matchOrders.length===0)return;
+          combos.push({shiftId:sh.id,shiftName:sh.name||sh.id,area,orders:matchOrders});
         });
-        if(matchOrders.length===0)return;
-        combos.push({shiftId:sh.id,shiftName:sh.name||sh.id,area,orders:matchOrders});
       });
-    });
-    // Nếu không chọn ca, gộp tất cả đơn theo khu vực
-    if(selShifts.length===0&&allShifts.length===0){
-      const useAreas2=selAreas.length>0?selAreas:allAreas;
-      useAreas2.forEach(area=>{
+    } else if(useShifts.length>0){
+      // Chỉ theo ca — gộp tất cả khu vực vào mỗi ca
+      useShifts.forEach(sh=>{
+        if(pendingOrders.length===0)return;
+        combos.push({shiftId:sh.id,shiftName:sh.name||sh.id,area:'Tất cả',orders:pendingOrders});
+      });
+    } else {
+      // Theo khu vực (mặc định)
+      useAreas.forEach(area=>{
         const matchOrders=pendingOrders.filter(o=>getOArea(o)===area);
         if(matchOrders.length===0)return;
         combos.push({shiftId:'',shiftName:'',area,orders:matchOrders});
       });
     }
     return combos;
-  },[selShifts,selAreas,date,pendingOrders.length]);
+  },[selShifts.join(','),selAreas.join(','),date,pendingOrders.length]);
 
   const submit=()=>{
-    if(preview.length===0){alert('Không có đơn hàng phù hợp!');return;}
+    if(preview.length===0){alert('Không có đơn hàng phù hợp để tạo chuyến!');return;}
     if(!driverName&&!driver){alert('Nhập tên lái xe!');return;}
     const drName=driverName||(drivers.find(d=>d.id===driver)?.name||'');
-    const newTrips=preview.map(combo=>{
+    // Tạo ID trước để check trùng trong batch
+    const usedIds=new Set(trips.map(t=>t.id));
+    const newTrips=[];
+    const dupWarnings=[];
+    preview.forEach(combo=>{
       const [dd,mm,yy]=(dateVN||fmtDate()).split('/');
       const datePart=(dd||'')+(mm||'')+(yy||'').slice(-2);
       const shiftAbbr=(combo.shiftName||'').toUpperCase()
         .replace(/CA\s*/,'')
         .replace(/SÁNG|SANG/,'S').replace(/TRƯA|TRUA/,'T')
         .replace(/CHIỀU|CHIEU/,'C').replace(/ĐÊM|DEM/,'D')
-        .replace(/[^A-Z0-9]/g,'').slice(0,3)||combo.area.slice(0,2).toUpperCase();
+        .replace(/[^A-Z0-9]/g,'').slice(0,3)||(combo.area||'XX').replace(/[^A-Z0-9]/gi,'').slice(0,2).toUpperCase();
       const driverAbbr=drName.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,3);
-      let baseId='CH'+datePart+shiftAbbr+'_'+combo.area+'_'+(driverAbbr||'XX');
+      const areaCode=(combo.area||'').replace(/[^A-Z0-9]/gi,'').slice(0,3).toUpperCase();
+      let baseId='CH'+datePart+shiftAbbr+'_'+areaCode+'_'+(driverAbbr||'XX');
       let id=baseId; let seq=2;
-      while(trips.find(t=>t.id===id)||newTrips?.find(t=>t?.id===id)){id=baseId+'_'+seq;seq++;}
-      const w=combo.orders.reduce((sum,o)=>{
-        if(!o.lines)return sum;
-        return sum+o.lines.reduce((s,l)=>(s+(l.weightPerUnit||0)*numFmt(l.qtyInvoice)),0);
-      },0);
-      return {
+      while(usedIds.has(id)){id=baseId+'_'+seq;seq++;}
+      // Kiểm tra trùng: chuyến cùng ngày + ca + khu vực đã tồn tại chưa
+      const dupTrip=trips.find(t=>
+        t.deliveryDate===dateVN&&
+        (combo.shiftId?t.shiftId===combo.shiftId:true)&&
+        t.id.includes(areaCode)
+      );
+      if(dupTrip) dupWarnings.push('⚠ Khu vực '+combo.area+(combo.shiftName?' / '+combo.shiftName:'')+' đã có chuyến: '+dupTrip.id);
+      usedIds.add(id);
+      const w=combo.orders.reduce((sum,o)=>sum+(o.lines?o.lines.reduce((s,l)=>s+(l.weightPerUnit||0)*numFmt(l.qtyInvoice),0):0),0);
+      newTrips.push({
         id,driverName:drName,driverId:driver||'',
         shiftId:combo.shiftId,shiftName:combo.shiftName,
         deliveryDate:dateVN,deliveryTime:'',
         orderIds:combo.orders.map(o=>o.id),
         status:'planning',note:'',driverWork:0,totalWeight:w,
         createdAt:fmtDate(),updatedBy:currentUser.name,updatedAt:fmtDT()
-      };
+      });
     });
+    // Cảnh báo trùng
+    if(dupWarnings.length>0){
+      const msg=dupWarnings.join('\n')+'\n\nVẫn tiếp tục tạo '+newTrips.length+' chuyến mới?';
+      if(!confirm(msg))return;
+    }
     onSave(newTrips);
   };
 
