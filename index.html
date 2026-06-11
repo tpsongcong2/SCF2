@@ -1750,89 +1750,149 @@ if('serviceWorker' in navigator){
   }
   if (template === 'youngsun_dbg' || template === 'youngsun_trina') {
     const isDBG = template === 'youngsun_dbg';
-    const bep = isDBG ? 'DBG' : 'TRINA SOLAR';
-    const caLabel = isDBG ? 'CA TRƯA' : 'CA SÁNG';
-    // Shift label from order
-    const caMap = {day:'CA SÁNG', night:'CA ĐÊM'};
-    const caDisplay = order.shiftLabel || caLabel;
-    // Delivery date (ngày giao)
-    const ngayGiao = order.deliveryDate || fmtDate();
-    // MVĐ = order id
-    const mvd = order.id || '';
+    const bep     = isDBG ? 'DBG'        : 'TRINA SOLAR';
+    const bepCode = isDBG ? 'DBG'        : 'TS';
+    const caDefault = isDBG ? 'CA TRƯA' : 'CA SÁNG';
+
+    // Bảng tra mã Youngsun từ tên sản phẩm SCF
+    // key: chuỗi viết tắt trong Sheet1 → {code, name, unit}
+    const YS_MAP = {
+      'BC':  {code:'B001', name:'BÁNH CUỐN',        unit:'KG'},
+      'B':   {code:'B002', name:'BÚN TƯƠI',          unit:'KG'},
+      'T':   {code:'B005', name:'BÚN TƯƠI SỢI TO',   unit:'KG'},
+      'L':   {code:'B006', name:'BÚN LÁ',            unit:'KG'},
+      'P':   {code:'B003', name:'BÁNH PHỞ TƯƠI',     unit:'KG'},
+      'Q':   {code:'K0039',name:'QUẨY ĐÔI',          unit:'CÁI'},
+      'C':   {code:'K0041',name:'BÁNH CHƯNG NHỎ',    unit:'CÁI'},
+    };
+    // Tra mã Youngsun từ tên sản phẩm SCF
+    function findYS(productName) {
+      const n = (productName||'').toUpperCase();
+      if(n.includes('BÁNH CUỐN')||n.includes('BANH CUON'))  return YS_MAP['BC'];
+      if(n.includes('SỢI TO')||n.includes('SOI TO'))         return YS_MAP['T'];
+      if(n.includes('BÚN TƯƠI')||n.includes('BUN TUOI'))    return YS_MAP['B'];
+      if(n.includes('BÚN LÁ')||n.includes('BUN LA'))        return YS_MAP['L'];
+      if(n.includes('BÁNH PHỞ')||n.includes('BANH PHO'))    return YS_MAP['P'];
+      if(n.includes('QUẨY')||n.includes('QUAY'))            return YS_MAP['Q'];
+      if(n.includes('BÁNH CHƯNG')||n.includes('BANH CHUNG'))return YS_MAP['C'];
+      return null;
+    }
+
     const co = company || {};
-    const coName = co.name || 'CÔNG TY TNHH THỰC PHẨM SÔNG CÔNG';
-    const coAddr = co.address || 'Tổ 1, phường Bá Xuyên, tỉnh Thái Nguyên';
-    const coPhone = co.phone || '0917856968';
-    const B = 'border:1px solid #333';
-    const BC = B+';text-align:center;padding:4px';
-    const rows = lines.map((l,i) => `
-      <tr>
+    const coName  = co.name  || 'CÔNG TY TNHH THỰC PHẨM SÔNG CÔNG - A0031';
+    const coAddr  = co.address|| 'Tổ 1, phường Bá Xuyên, tỉnh Thái Nguyên';
+    const coPhone = co.phone  || '0917856968';
+
+    // Ngày giao & MVĐ
+    const ngayGiao = order.deliveryDate || fmtDate();
+    // MVĐ: YS + ddmmyy + DBG/TS  (theo công thức Excel B28&B29&B30)
+    const [dd,mm,yyyy] = ngayGiao.split('/');
+    const ddmmyy = (dd||'00')+(mm||'00')+(yyyy||'0000').slice(-2);
+    const mvd = 'YS' + ddmmyy + bepCode;
+
+    // Ca
+    const caDisplay = order.shiftLabel || caDefault;
+
+    const B  = 'border:1px solid #333';
+    const BC = B+';text-align:center;padding:4px 6px';
+    const BL = B+';text-align:left;padding:4px 8px';
+
+    // Build rows — dùng mã Youngsun, không dùng mã SCF
+    const rows = lines.map((l,i) => {
+      const ys = findYS(l.productName);
+      const yscode = ys ? ys.code : (l.productId||'');
+      const ysname = ys ? ys.name : (l.productName||'');
+      const ysunit = ys ? ys.unit : (l.unit||'KG');
+      const qty    = Number(l.qtyInvoice||l.qtyProd||0);
+      return `<tr style="height:36px">
         <td style="${BC};font-size:14px">${i+1}</td>
-        <td style="${BC};font-size:12px">${l.productId||''}</td>
-        <td style="${BC};font-size:13px;font-weight:600;text-align:left;padding:4px 8px">${l.productName||''}</td>
-        <td style="${BC};font-size:13px">${l.unit||'KG'}</td>
-        <td style="${BC};font-size:15px;font-weight:700">${Number(l.qtyInvoice||l.qtyProd||0)||''}</td>
+        <td style="${BC};font-size:13px;font-weight:600">${yscode}</td>
+        <td style="${BL};font-size:13px;font-weight:600">${ysname}</td>
+        <td style="${BC};font-size:13px">${ysunit}</td>
+        <td style="${BC};font-size:15px;font-weight:700">${qty||''}</td>
         <td style="${BC}"></td>
         <td style="${BC};font-size:12px">${l.note||''}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
     const totalQ = lines.reduce((s,l)=>s+Number(l.qtyInvoice||l.qtyProd||0),0);
+
     return `<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>送货确认单 - ${bep}</title>
-    <style>
-      body{margin:0;padding:16px;font-family:'Arial',sans-serif;font-size:13px;color:#111}
-      table{border-collapse:collapse;width:100%}
-      .header-info{font-size:11px;color:#444;margin-bottom:2px}
-      .title{font-size:18px;font-weight:700;text-align:center;margin:8px 0 4px}
-      .subtitle{font-size:12px;text-align:center;margin-bottom:10px;color:#444}
-      .meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13px}
-      .meta b{font-size:14px}
-      th{background:#d9e8d9;border:1px solid #333;padding:5px 4px;font-size:11px;text-align:center;line-height:1.3}
-      .foot{margin-top:16px;display:flex;justify-content:space-between}
-      .foot-col{text-align:center;width:45%}
-      .foot-col .name{margin-top:40px;font-size:12px;color:#555}
-      .legal{font-size:10px;color:#888;margin-bottom:4px}
-      @media print{body{padding:6px}@page{margin:8mm}}
-    </style></head><body>
-    <div class="legal">Chứng từ này được tạo bằng bản in điện tử, có giá trị pháp lý tương đương với bản gốc</div>
-    <div class="legal">本单据为电子打印生成，与原件具有同等效力</div>
-    <div class="header-info">CÔNG TY: ${coName}</div>
-    <div class="header-info">ĐỊA CHỈ: ${coAddr}</div>
-    <div class="header-info">LIÊN HỆ: ${coPhone}</div>
-    <div class="title">送货确认单</div>
-    <div class="subtitle">Bảng xác nhận số lượng giao hàng</div>
-    <div class="meta">
-      <span>Ngày giao: <b>${ngayGiao}</b></span>
-      <span>MVĐ: <b>${mvd}</b></span>
-      <span><b>${caDisplay}</b></span>
-      <span>Bếp: <b>${bep}</b></span>
+<title>送货确认单 - ${bep}</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:14px 18px;font-family:'Arial',sans-serif;font-size:13px;color:#111}
+  table{border-collapse:collapse;width:100%}
+  .legal{font-size:10px;color:#666;line-height:1.6}
+  .coinfo{font-size:11.5px;color:#333;margin:1px 0}
+  .title-wrap{text-align:center;margin:6px 0 2px}
+  .title-cn{font-size:20px;font-weight:700}
+  .title-vn{font-size:12px;color:#444;margin-bottom:8px}
+  .meta-row{display:flex;align-items:center;gap:0;border:1px solid #333;margin-bottom:0}
+  .meta-cell{padding:4px 10px;font-size:13px;border-right:1px solid #333;white-space:nowrap}
+  .meta-cell:last-child{border-right:none;flex:1}
+  .meta-label{font-size:11px;color:#666}
+  .meta-val{font-weight:700;font-size:14px}
+  thead tr th{background:#c6e0b4;border:1px solid #333;padding:5px 4px;font-size:11px;text-align:center;line-height:1.4;white-space:pre-line}
+  tbody tr td{vertical-align:middle}
+  .tong-row td{background:#e2efda;font-weight:700}
+  .foot{margin-top:20px;display:flex;justify-content:space-between;padding:0 20px}
+  .foot-col{text-align:center;width:40%}
+  .foot-col .sign-space{height:44px}
+  .foot-col .sub{font-size:11px;color:#555}
+  @media print{body{padding:6px 10px}@page{size:A4;margin:8mm 10mm}}
+</style></head><body>
+  <div class="legal">Chứng từ này được tạo bằng bản in điện tử, có giá trị pháp lý tương đương với bản gốc</div>
+  <div class="legal">本单据为电子打印生成，与原件具有同等效力</div>
+  <div class="coinfo">CÔNG TY: ${coName}</div>
+  <div class="coinfo">ĐỊA CHỈ: ${coAddr}</div>
+  <div class="coinfo">LIÊN HỆ: ${coPhone}</div>
+
+  <div class="title-wrap">
+    <div class="title-cn">送货确认单</div>
+    <div class="title-vn">Bảng xác nhận số lượng giao hàng</div>
+  </div>
+
+  <div class="meta-row">
+    <div class="meta-cell"><span class="meta-label">Ngày giao&nbsp;</span><span class="meta-val">${ngayGiao}</span></div>
+    <div class="meta-cell"><span class="meta-label">MVĐ:&nbsp;</span><span class="meta-val">${mvd}</span></div>
+    <div class="meta-cell"><span class="meta-val">${caDisplay}</span></div>
+    <div class="meta-cell"><span class="meta-label">Bếp:&nbsp;</span><span class="meta-val">${bep}</span></div>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th style="width:38px">STT<br>序号</th>
+      <th style="width:68px">原材料代码&#10;Mã nguyên&#10;vật liệu</th>
+      <th>原材料名称&#10;Tên nguyên vật liệu</th>
+      <th style="width:52px">单位&#10;Đơn vị</th>
+      <th style="width:80px">送货数量&#10;Số lượng&#10;đơn đặt hàng</th>
+      <th style="width:80px">实收数量&#10;Số lượng&#10;nhận thực tế</th>
+      <th style="width:88px">备注&#10;Ghi chú</th>
+    </tr></thead>
+    <tbody>
+      ${rows}
+      <tr class="tong-row">
+        <td colspan="4" style="${BC};text-align:right;font-size:13px">TỔNG</td>
+        <td style="${BC};font-size:17px">${totalQ}</td>
+        <td style="${BC}"></td>
+        <td style="${BC}"></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="foot">
+    <div class="foot-col">
+      <div>Người giao hàng</div>
+      <div class="sign-space"></div>
+      <div class="sub">(Ký và ghi rõ họ tên)</div>
     </div>
-    <table>
-      <thead><tr>
-        <th style="width:36px">STT<br>序号</th>
-        <th style="width:70px">原材料代码<br>Mã NVL</th>
-        <th>原材料名称<br>Tên nguyên vật liệu</th>
-        <th style="width:52px">单位<br>Đơn vị</th>
-        <th style="width:72px">送货数量<br>SL đặt hàng</th>
-        <th style="width:72px">实收数量<br>SL nhận thực tế</th>
-        <th style="width:90px">备注<br>Ghi chú</th>
-      </tr></thead>
-      <tbody>${rows}
-      <tr><td colspan="4" style="${BC};font-weight:700;text-align:right">TỔNG</td>
-          <td style="${BC};font-weight:700;font-size:16px">${totalQ}</td>
-          <td style="${BC}"></td><td style="${BC}"></td>
-      </tr></tbody>
-    </table>
-    <div class="foot">
-      <div class="foot-col">
-        <div>Người giao hàng</div>
-        <div class="name">(Ký và ghi rõ họ tên)</div>
-      </div>
-      <div class="foot-col">
-        <div>Người nhận hàng</div>
-        <div class="name">(Ký và ghi rõ họ tên)</div>
-      </div>
+    <div class="foot-col">
+      <div>Người nhận hàng</div>
+      <div class="sign-space"></div>
+      <div class="sub">(Ký và ghi rõ họ tên)</div>
     </div>
-    </body></html>`;
+  </div>
+</body></html>`;
   }
   return '';
 }
@@ -2006,7 +2066,9 @@ function QuoteForm({quote,customers,products,currentUser,onSave,onClose}){
   const fromInput=s=>{if(!s)return'';const[y,m,d]=s.split('-');return d+'/'+m+'/'+y;};
   const[f,sf]=useState(quote?{...quote,dateFromI:toInput(quote.dateFrom),dateToI:toInput(quote.dateTo)}:{customerId:'',customer:'',dateFromI:today,dateToI:'',status:'draft',note:'',lines:[]});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
-  const setCust=cid=>{const c=customers.find(x=>x.id===cid);sf(p=>({...p,customerId:cid,customer:c?c.name:''}));};
+  const setCust=cid=>{const c=customers.find(x=>x.id===cid);sf(p=>({...p,customerId:cid,customer:c?c.name:'',pointId:'',pointName:''}));};
+  const selCust=customers.find(x=>x.id===f.customerId);
+  const custPoints=(selCust?.points||[]);
   const addLine=()=>sf(p=>({...p,lines:[...p.lines,{id:uid(),productId:'',productName:'',unit:'',price:0}]}));
   const updLine=(id,data)=>sf(p=>({...p,lines:p.lines.map(l=>l.id===id?data:l)}));
   const delLine=id=>sf(p=>({...p,lines:p.lines.filter(l=>l.id!==id)}));
@@ -2023,6 +2085,25 @@ function QuoteForm({quote,customers,products,currentUser,onSave,onClose}){
       h(F,{label:'Trạng thái'},h('select',{value:f.status,onChange:e=>s('status',e.target.value)},
         [['draft','Nháp'],['sent','Đã gửi'],['approved','Đã duyệt'],['expired','Hết hạn'],['cancelled','Hủy']].map(([v,l])=>h('option',{key:v,value:v},l))
       )),
+    ),
+    f.customerId&&h(F,{label:'Địa điểm áp dụng *'},
+      custPoints.length>0
+        ?h('select',{
+            value:f.pointId||'',
+            onChange:e=>{
+              const pt=custPoints.find(p=>p.id===e.target.value);
+              s('pointId',e.target.value);s('pointName',pt?pt.name:'');
+            },
+            style:{width:'100%'}
+          },
+            h('option',{value:''},'— Chọn địa điểm —'),
+            custPoints.map(pt=>h('option',{key:pt.id,value:pt.id},
+              pt.name+(pt.area?' ('+pt.area+')':'')
+            ))
+          )
+        :h('div',{style:{padding:'8px 10px',fontSize:12,color:'#A32D2D',background:'#FFF0F0',borderRadius:'var(--r)',border:'1px solid #f0a0a0'}},
+            '⚠ Khách hàng này chưa có địa điểm giao hàng. Vui lòng thêm địa điểm trong danh mục Khách hàng.'
+          )
     ),
     h('div',{className:'g2'},
       h(F,{label:'Ngày bắt đầu'},h('input',{type:'date',value:f.dateFromI,onChange:e=>s('dateFromI',e.target.value)})),
