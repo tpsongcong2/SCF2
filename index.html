@@ -276,7 +276,7 @@ function ProdCatForm({cat,onSave,onClose}){
 
 /* ─── PRODUCTS ─── */
 function ProductForm({prod,prodCats,onSave,onClose}){
-  const[f,sf]=useState(prod||{code:'',name:'',catId:prodCats[0]?.id||'',unit:'Cái',weightPerUnit:'',note:''});
+  const[f,sf]=useState(prod||{code:'',name:'',catId:prodCats[0]?.id||'',unit:'Cái',weightPerUnit:'',note:'',custCode:'',custName:''});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
   const needWeight=!['Kg','Tấn','Lít'].includes(f.unit);
   const submit=()=>{
@@ -298,6 +298,12 @@ function ProductForm({prod,prodCats,onSave,onClose}){
     ),
     h(F,{label:'Màu highlight'},h('div',{style:{display:'flex',gap:6,padding:'4px 0'}},h('span',{title:'Không màu',onClick:()=>s('color',''),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#ffffff',border:'3px solid '+(f.color===''?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Vàng',onClick:()=>s('color','#FFF9C4'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#FFF9C4',border:'3px solid '+(f.color==='#FFF9C4'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Xanh lá',onClick:()=>s('color','#EAF3DE'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#EAF3DE',border:'3px solid '+(f.color==='#EAF3DE'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Xanh dương',onClick:()=>s('color','#E6F1FB'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#E6F1FB',border:'3px solid '+(f.color==='#E6F1FB'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Đỏ',onClick:()=>s('color','#FCEBEB'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#FCEBEB',border:'3px solid '+(f.color==='#FCEBEB'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Tím',onClick:()=>s('color','#F3E8FF'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#F3E8FF',border:'3px solid '+(f.color==='#F3E8FF'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}),h('span',{title:'Cam',onClick:()=>s('color','#FEE2E2'),style:{display:'inline-block',width:26,height:26,borderRadius:4,background:'#FEE2E2',border:'3px solid '+(f.color==='#FEE2E2'?'var(--pri)':'#ddd'),cursor:'pointer',boxSizing:'border-box'}}))),
     h(F,{label:'Ghi chú'},h('textarea',{value:f.note,onChange:e=>s('note',e.target.value),rows:2})),
+    h('div',{className:'divider'}),
+    h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:600,marginBottom:6}},h('i',{className:'ti ti-id-badge',style:{marginRight:4}}),'Mã & tên theo khách hàng (dùng khi in đơn)'),
+    h('div',{className:'g2'},
+      h(F,{label:'Mã SP của KH'},h('input',{value:f.custCode||'',onChange:e=>s('custCode',e.target.value),placeholder:'Mã theo khách hàng...'})),
+      h(F,{label:'Tên SP của KH'},h('input',{value:f.custName||'',onChange:e=>s('custName',e.target.value),placeholder:'Tên theo khách hàng...'})),
+    ),
     needWeight&&h('div',{style:{background:'var(--bg2)',padding:'8px 12px',borderRadius:'var(--r)',fontSize:12,color:'var(--tx2)',marginBottom:'.85rem'}},
       h('i',{className:'ti ti-info-circle',style:{marginRight:5}}),
       'Nhập khối lượng để tính tổng KL chuyến giao (bỏ trống nếu không cần)'
@@ -312,7 +318,10 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
   const delProd=id=>{if(confirm('Xóa sản phẩm?'))setProducts(p=>p.filter(x=>x.id!==id));};
   const delCat=id=>{if(products.some(p=>p.catId===id)){alert('Danh mục này đang có sản phẩm, không thể xóa!');return;}if(confirm('Xóa danh mục?'))setProdCats(p=>p.filter(x=>x.id!==id));};
   const COLS=[['code','Mã SP'],['name','Tên SP'],['catName','Danh mục'],['unit','ĐVT'],['weightPerUnit','KL/đơn vị (kg)'],['note','Ghi chú']];
-  const list=products.filter(x=>(filterCat==='all'||x.catId===filterCat)&&(!q||x.name.toLowerCase().includes(q.toLowerCase())||x.code.toLowerCase().includes(q.toLowerCase())));
+  const[sortProd,setSortProd]=useState('name'); // 'name' | 'code'
+  const list=products
+    .filter(x=>(filterCat==='all'||x.catId===filterCat)&&(!q||x.name.toLowerCase().includes(q.toLowerCase())||x.code.toLowerCase().includes(q.toLowerCase())))
+    .sort((a,b)=>sortProd==='code'?(a.code||'').localeCompare(b.code||'','vi'):(a.name||'').localeCompare(b.name||'','vi'));
   const exportRows=list.map(x=>({...x,catName:prodCats.find(c=>c.id===x.catId)?.name||''}));
   return h('div',null,
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}},
@@ -326,6 +335,10 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
       ),
       h('div',{style:{display:'flex',gap:6}},
         h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm sản phẩm...'}),
+        h('div',{style:{display:'flex',border:'1px solid var(--bd)',borderRadius:'var(--r)',overflow:'hidden',fontSize:12}},
+          h('button',{onClick:()=>setSortProd('name'),style:{padding:'5px 10px',background:sortProd==='name'?'var(--pri)':'var(--bg2)',color:sortProd==='name'?'#fff':'var(--tx)',border:'none',cursor:'pointer',fontWeight:sortProd==='name'?600:400}},'Theo tên'),
+          h('button',{onClick:()=>setSortProd('code'),style:{padding:'5px 10px',background:sortProd==='code'?'var(--pri)':'var(--bg2)',color:sortProd==='code'?'#fff':'var(--tx)',border:'none',cursor:'pointer',fontWeight:sortProd==='code'?600:400}},'Theo mã')
+        ),
         h(ExportBtn,{onClick:()=>xlsxExport(exportRows,COLS,'San_pham')}),
         h(ImportBtn,{onFile:rows=>{
           const added=rows.map(r=>({id:'SP'+uid(),code:r['Mã SP']||'',name:r['Tên SP']||'',catId:prodCats.find(c=>c.name===r['Danh mục'])?.id||'',unit:r['ĐVT']||'Cái',weightPerUnit:numFmt(r['KL/đơn vị (kg)']),note:r['Ghi chú']||''})).filter(r=>r.name);
@@ -345,7 +358,7 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
         return [...p,...newOnes];
       });
     },onClose:()=>sm(null)}),
-    h(TableWrap,{cols:['Mã SP','Tên sản phẩm','Danh mục','Đơn vị','Khối lượng/đv','Ghi chú',''],empty:'Chưa có sản phẩm nào.',
+    h(TableWrap,{cols:['Mã SP','Tên sản phẩm','Danh mục','Đơn vị','Khối lượng/đv','Ghi chú','Mã KH','Tên SP KH',''],empty:'Chưa có sản phẩm nào.',
       rows:list.map(x=>{
         const cat=prodCats.find(c=>c.id===x.catId);
         const needW=x.unit==='Cái'||x.unit==='Gói';
@@ -356,6 +369,8 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
           h('td',null,h('span',{className:'badge',style:{background:'#E6F1FB',color:'#185FA5'}},x.unit)),
           h('td',null,needW&&x.weightPerUnit?x.weightPerUnit+' kg/'+x.unit:'—'),
           h('td',null,x.note||'—'),
+          h('td',null,h('span',{style:{color:'var(--pri)',fontWeight:500,fontSize:12}},x.custCode||'—')),
+          h('td',null,h('span',{style:{fontSize:12}},x.custName||'—')),
           h('td',null,h('div',{style:{display:'flex',gap:2}},
             h('button',{className:'bi',onClick:()=>{se(x);sm('f')}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
             h('button',{className:'bi',onClick:()=>delProd(x.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
@@ -2124,12 +2139,10 @@ function QuoteForm({quote,customers,products,currentUser,onSave,onClose}){
                     if(pt.area) rows.push(h('div',{key:'a'+pt.area,style:{padding:'3px 10px',fontSize:11,fontWeight:700,color:'var(--pri3)',background:'#f5fbf5',borderTop:'1px solid var(--bd)'}},pt.area));
                   }
                   const checked=f.pointIds.includes(pt.id);
-                  rows.push(h('label',{key:pt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'6px 12px 6px '+(pt.area?'22px':'12px'),cursor:'pointer',background:checked?'#f0faf0':'#fff',borderTop:'1px solid var(--bd)',transition:'background .15s'},
-                    onClick:e=>{e.preventDefault();togglePoint(pt.id);}
-                  },
-                    h('input',{type:'checkbox',checked,readOnly:true,style:{cursor:'pointer',accentColor:'var(--pri)'}}),
-                    h('span',{style:{fontSize:13,flex:1}},pt.name),
-                    pt.area&&h('span',{style:{fontSize:11,color:'var(--tx2)',background:'var(--bg2)',padding:'1px 6px',borderRadius:10}},pt.area)
+                  rows.push(h('div',{key:pt.id,style:{display:'flex',alignItems:'center',gap:8,padding:'6px 12px 6px '+(pt.area?'22px':'12px'),background:checked?'#f0faf0':'#fff',borderTop:'1px solid var(--bd)',transition:'background .15s'}},
+                    h('input',{type:'checkbox',checked,onChange:()=>togglePoint(pt.id),style:{cursor:'pointer',accentColor:'var(--pri)',flexShrink:0}}),
+                    h('span',{style:{fontSize:13,flex:1,textAlign:'left',cursor:'default'}},pt.name),
+                    pt.area&&h('span',{style:{fontSize:11,color:'var(--tx2)',background:'var(--bg2)',padding:'1px 6px',borderRadius:10,flexShrink:0}},pt.area)
                   ));
                 });
                 return rows;
