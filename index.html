@@ -3022,7 +3022,13 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
               style:{fontSize:12,padding:'2px 4px',borderRadius:'var(--r)',border:'1px solid var(--bd)',maxWidth:130,color:o.tripId?'var(--pri)':'var(--tx2)'}
             },
               h('option',{value:''},'— Chọn chuyến —'),
-              trips.filter(t=>!t.deliveryDate||t.deliveryDate===o.deliveryDate).map(t=>h('option',{key:t.id,value:t.id},t.id+(t.driverName?' · '+t.driverName:''))),
+              trips.filter(t=>!t.deliveryDate||t.deliveryDate===o.deliveryDate).map(t=>{
+                const parts=[t.id];
+                if(t.shiftName) parts.push(t.shiftName);
+                if(t.driverName) parts.push(t.driverName);
+                if(t.totalWeight) parts.push(t.totalWeight.toFixed(0)+'kg');
+                return h('option',{key:t.id,value:t.id},parts.join(' · '));
+              }),
               // Nếu chuyến đang chọn không cùng ngày vẫn hiện
               o.tripId&&!trips.filter(t=>!t.deliveryDate||t.deliveryDate===o.deliveryDate).find(t=>t.id===o.tripId)&&
                 h('option',{value:o.tripId},o.tripId)
@@ -3120,9 +3126,21 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,cu
       if(old){setOrders(p=>p.map(o=>old.orderIds.includes(o.id)&&!d.orderIds.includes(o.id)?{...o,tripId:null,status:'pending'}:o));}
       setTrips(p=>p.map(t=>t.id===edit.id?{...edit,...d}:t));
     } else {
-      const datePart=(d.deliveryDate||fmtDate()).split('/').reverse().join('').slice(2);
-      const shiftPart=d.shiftName?d.shiftName.replace(/\s+/g,'_'):'CA';
-      const id='CH_'+datePart+'_'+shiftPart;
+      const [dd2,mm2,yy2]=(d.deliveryDate||fmtDate()).split('/');
+      const datePart=(dd2||'00')+(mm2||'00')+(yy2||'0000').slice(-2);
+      // Ca: lấy chữ viết tắt (CA SANG→S, CA TRUA→T, CA CHIEU→C, CA DEM→D)
+      const shiftAbbr=(d.shiftName||'').toUpperCase()
+        .replace(/CA\s*/,'')
+        .replace(/SÁNG|SANG/,'S').replace(/TRƯA|TRUA/,'T')
+        .replace(/CHIỀU|CHIEU/,'C').replace(/ĐÊM|DEM/,'D')
+        .replace(/[^A-Z0-9]/g,'').slice(0,3)||'CA';
+      // Lái xe: 2-3 chữ cái đầu họ tên
+      const driverAbbr=d.driverName?(d.driverName.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,3)):'';
+      const baseId='CH'+datePart+shiftAbbr+(driverAbbr?'_'+driverAbbr:'');
+      // Tránh trùng: thêm số thứ tự nếu cần
+      let id=baseId;
+      let seq=2;
+      while(trips.find(t=>t.id===id)){id=baseId+'_'+seq;seq++;}
       setTrips(p=>[...p,{...d,id,createdAt:fmtDate()}]);
     }
     setOrders(p=>p.map(o=>d.orderIds.includes(o.id)?{...o,tripId:d.id||(edit?edit.id:'')}:o));
