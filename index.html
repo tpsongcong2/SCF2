@@ -3053,15 +3053,43 @@ function TripForm({trip,orders,employees,shifts,customers,currentUser,onSave,onC
   const drivers=employees.filter(e=>e.role==='driver'||e.dept==='Lái xe');
   const[f,sf]=useState(trip?{...trip}:{driverName:'',driverId:'',shiftId:'',shiftName:'',deliveryDate:fmtDate(),deliveryTime:'07:00',orderIds:[],note:'',status:'planning',driverWork:0});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
+  // Bộ lọc đơn hàng
+  const[fArea,setFArea]=useState('');
+  const[fDate,setFDate]=useState('');
+  const[fCust,setFCust]=useState('');
+  // Lấy khu vực của đơn
+  const getOArea=o=>{
+    const c=customers?.find(x=>x.id===o.customerId);
+    const pt=(c?.points||[]).find(p=>p.id===o.pointId||p.name===o.pointName);
+    return o.area||pt?.area||'';
+  };
   const availOrders=orders.filter(o=>o.status==='pending'||(trip&&trip.orderIds.includes(o.id)));
+  // Áp dụng bộ lọc
+  const filteredOrders=availOrders.filter(o=>{
+    if(fDate&&o.deliveryDate!==fDate.split('-').reverse().join('/'))return false;
+    if(fArea&&getOArea(o)!==fArea)return false;
+    if(fCust&&o.customerId!==fCust)return false;
+    return true;
+  });
   const toggle=id=>sf(p=>({...p,orderIds:p.orderIds.includes(id)?p.orderIds.filter(x=>x!==id):[...p.orderIds,id]}));
+  const toggleAll=()=>{
+    const ids=filteredOrders.map(o=>o.id);
+    const allChecked=ids.every(id=>f.orderIds.includes(id));
+    sf(p=>({...p,orderIds:allChecked?p.orderIds.filter(id=>!ids.includes(id)):[...new Set([...p.orderIds,...ids])]}));
+  };
   const totalW=f.orderIds.reduce((sum,oid)=>{const o=orders.find(x=>x.id===oid);if(!o||!o.lines)return sum;return sum+o.lines.reduce((s,l)=>{if(!l.weightPerUnit)return s;return s+numFmt(l.weightPerUnit)*numFmt(l.qtyInvoice);},0);},0);
   const submit=()=>{
     if(!f.driverName){alert('Chọn hoặc nhập tên lái xe!');return;}
     if(f.orderIds.length===0){alert('Chọn ít nhất 1 đơn hàng!');return;}
     onSave({...f,totalWeight:totalW,updatedBy:currentUser.name,updatedAt:fmtDT()});
   };
-  return h(Modal,{title:trip?'Sửa chuyến '+trip.id:'Tạo chuyến giao hàng',onClose},
+  // Danh sách khu vực và KH để lọc
+  const allAreas=[...new Set(availOrders.map(o=>getOArea(o)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const allCusts=[...new Set(availOrders.map(o=>o.customerId).filter(Boolean))].map(id=>customers?.find(c=>c.id===id)).filter(Boolean);
+  const allFilteredChecked=filteredOrders.length>0&&filteredOrders.every(o=>f.orderIds.includes(o.id));
+  const someFilteredChecked=filteredOrders.some(o=>f.orderIds.includes(o.id))&&!allFilteredChecked;
+
+  return h(Modal,{title:trip?'Sửa chuyến '+trip.id:'Tạo chuyến giao hàng',onClose,lg:true},
     h('div',{className:'g2'},
       h(F,{label:'Lái xe *'},h('select',{value:f.driverId,onChange:e=>{const emp=employees.find(x=>x.id===e.target.value);sf(p=>({...p,driverId:e.target.value,driverName:emp?emp.name:p.driverName}));},style:{marginBottom:0}},
         h('option',{value:''},'— Chọn từ danh sách —'),drivers.map(e=>h('option',{key:e.id,value:e.id},e.name))
@@ -3081,12 +3109,44 @@ function TripForm({trip,orders,employees,shifts,customers,currentUser,onSave,onC
     ),
     h(F,{label:'Ghi chú'},h('textarea',{value:f.note,onChange:e=>s('note',e.target.value),rows:2})),
     h('div',{className:'divider'}),
-    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
-      h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Chọn đơn hàng'),
-      totalW>0&&h('div',{style:{fontSize:13,fontWeight:500,color:'var(--pri)'}},'Tổng KL: '+totalW.toFixed(2)+' kg')
+    // Header chọn đơn + bộ lọc
+    h('div',{style:{marginBottom:8}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}},
+        h('div',{style:{fontWeight:600,fontSize:13,color:'var(--pri3)'}},
+          'Chọn đơn hàng',
+          h('span',{style:{fontWeight:400,color:'var(--tx2)',marginLeft:6,fontSize:12}},
+            f.orderIds.length+' đã chọn'+(totalW>0?' · '+totalW.toFixed(1)+' kg':'')
+          )
+        ),
+        filteredOrders.length>0&&h('button',{
+          onClick:toggleAll,
+          style:{fontSize:12,padding:'3px 10px',border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
+        },allFilteredChecked?'Bỏ chọn tất cả':'Chọn tất cả ('+filteredOrders.length+')')
+      ),
+      // Bộ lọc nhanh
+      h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+        h('input',{type:'date',value:fDate,onChange:e=>setFDate(e.target.value),
+          style:{padding:'4px 8px',fontSize:12,border:'1px solid var(--bd)',borderRadius:'var(--r)',flex:'0 0 auto'}
+        }),
+        h('select',{value:fArea,onChange:e=>setFArea(e.target.value),
+          style:{padding:'4px 8px',fontSize:12,border:'1px solid var(--bd)',borderRadius:'var(--r)',flex:'1 1 100px'}
+        },
+          h('option',{value:''},'Tất cả khu vực'),
+          allAreas.map(a=>h('option',{key:a,value:a},a))
+        ),
+        h('select',{value:fCust,onChange:e=>setFCust(e.target.value),
+          style:{padding:'4px 8px',fontSize:12,border:'1px solid var(--bd)',borderRadius:'var(--r)',flex:'1 1 120px'}
+        },
+          h('option',{value:''},'Tất cả khách hàng'),
+          allCusts.map(c=>h('option',{key:c.id,value:c.id},c.name))
+        ),
+        (fDate||fArea||fCust)&&h('button',{onClick:()=>{setFDate('');setFArea('');setFCust('');},
+          style:{padding:'4px 8px',fontSize:12,color:'#A32D2D',border:'1px solid #f0a0a0',borderRadius:'var(--r)',background:'transparent',cursor:'pointer'}
+        },'✕ Xóa lọc')
+      )
     ),
-    h('div',{style:{maxHeight:250,overflowY:'auto',border:'.5px solid var(--bd)',borderRadius:'var(--r)',padding:8}},
-      availOrders.length?availOrders.map(o=>{
+    h('div',{style:{maxHeight:300,overflowY:'auto',border:'.5px solid var(--bd)',borderRadius:'var(--r)',padding:6}},
+      filteredOrders.length?filteredOrders.map(o=>{
         const checked=f.orderIds.includes(o.id);
         const w=o.lines?o.lines.reduce((s,l)=>s+(l.weightPerUnit||0)*numFmt(l.qtyInvoice),0):0;
         // Lấy khu vực từ customers
@@ -3111,11 +3171,168 @@ function TripForm({trip,orders,employees,shifts,customers,currentUser,onSave,onC
             )
           )
         );
-      }):h('div',{style:{textAlign:'center',padding:'1rem',color:'var(--tx2)',fontSize:13}},'Không có đơn hàng chờ giao.')
+      }):h('div',{style:{textAlign:'center',padding:'1rem',color:'var(--tx2)',fontSize:13}},fDate||fArea||fCust?'Không có đơn hàng khớp bộ lọc.':'Không có đơn hàng chờ giao.')
     ),
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu chuyến'))
   );
 }
+function BulkTripModal({orders,employees,shifts,customers,trips,currentUser,onSave,onClose}){
+  const today=new Date().toISOString().slice(0,10);
+  const [date,setDate]=useState(today);
+  const [selShifts,setSelShifts]=useState([]); // shift ids
+  const [selAreas,setSelAreas]=useState([]);   // areas
+  const [driver,setDriver]=useState('');
+  const [driverName,setDriverName]=useState('');
+  const drivers=employees.filter(e=>e.role==='driver'||e.dept==='Lái xe');
+
+  // Lấy khu vực của đơn
+  const getOArea=o=>{
+    const c=customers?.find(x=>x.id===o.customerId);
+    const pt=(c?.points||[]).find(p=>p.id===o.pointId||p.name===o.pointName);
+    return o.area||pt?.area||'';
+  };
+  const fmtDate2=s=>{if(!s)return'';const[y,m,d]=s.split('-');return d+'/'+m+'/'+y;};
+  const dateVN=fmtDate2(date);
+
+  // Đơn hàng chờ theo ngày
+  const pendingOrders=orders.filter(o=>o.status==='pending'&&(!dateVN||o.deliveryDate===dateVN));
+  const allAreas=[...new Set(pendingOrders.map(o=>getOArea(o)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const allShifts=shifts||[];
+
+  const toggleShift=id=>setSelShifts(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  const toggleArea=a=>setSelAreas(p=>p.includes(a)?p.filter(x=>x!==a):[...p,a]);
+
+  // Preview: mỗi combo shift+area = 1 chuyến
+  const preview=React.useMemo(()=>{
+    const combos=[];
+    const useShifts=selShifts.length>0?allShifts.filter(s=>selShifts.includes(s.id)):allShifts;
+    const useAreas=selAreas.length>0?selAreas:allAreas;
+    useShifts.forEach(sh=>{
+      useAreas.forEach(area=>{
+        const matchOrders=pendingOrders.filter(o=>{
+          const oa=getOArea(o);
+          return oa===area;
+        });
+        if(matchOrders.length===0)return;
+        combos.push({shiftId:sh.id,shiftName:sh.name||sh.id,area,orders:matchOrders});
+      });
+    });
+    // Nếu không chọn ca, gộp tất cả đơn theo khu vực
+    if(selShifts.length===0&&allShifts.length===0){
+      const useAreas2=selAreas.length>0?selAreas:allAreas;
+      useAreas2.forEach(area=>{
+        const matchOrders=pendingOrders.filter(o=>getOArea(o)===area);
+        if(matchOrders.length===0)return;
+        combos.push({shiftId:'',shiftName:'',area,orders:matchOrders});
+      });
+    }
+    return combos;
+  },[selShifts,selAreas,date,pendingOrders.length]);
+
+  const submit=()=>{
+    if(preview.length===0){alert('Không có đơn hàng phù hợp!');return;}
+    if(!driverName&&!driver){alert('Nhập tên lái xe!');return;}
+    const drName=driverName||(drivers.find(d=>d.id===driver)?.name||'');
+    const newTrips=preview.map(combo=>{
+      const [dd,mm,yy]=(dateVN||fmtDate()).split('/');
+      const datePart=(dd||'')+(mm||'')+(yy||'').slice(-2);
+      const shiftAbbr=(combo.shiftName||'').toUpperCase()
+        .replace(/CA\s*/,'')
+        .replace(/SÁNG|SANG/,'S').replace(/TRƯA|TRUA/,'T')
+        .replace(/CHIỀU|CHIEU/,'C').replace(/ĐÊM|DEM/,'D')
+        .replace(/[^A-Z0-9]/g,'').slice(0,3)||combo.area.slice(0,2).toUpperCase();
+      const driverAbbr=drName.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,3);
+      let baseId='CH'+datePart+shiftAbbr+'_'+combo.area+'_'+(driverAbbr||'XX');
+      let id=baseId; let seq=2;
+      while(trips.find(t=>t.id===id)||newTrips?.find(t=>t?.id===id)){id=baseId+'_'+seq;seq++;}
+      const w=combo.orders.reduce((sum,o)=>{
+        if(!o.lines)return sum;
+        return sum+o.lines.reduce((s,l)=>(s+(l.weightPerUnit||0)*numFmt(l.qtyInvoice)),0);
+      },0);
+      return {
+        id,driverName:drName,driverId:driver||'',
+        shiftId:combo.shiftId,shiftName:combo.shiftName,
+        deliveryDate:dateVN,deliveryTime:'',
+        orderIds:combo.orders.map(o=>o.id),
+        status:'planning',note:'',driverWork:0,totalWeight:w,
+        createdAt:fmtDate(),updatedBy:currentUser.name,updatedAt:fmtDT()
+      };
+    });
+    onSave(newTrips);
+  };
+
+  return h(Modal,{title:'Tạo nhiều chuyến cùng lúc',onClose,lg:true},
+    h('div',{className:'g2',style:{marginBottom:12}},
+      h(F,{label:'Ngày giao'},h('input',{type:'date',value:date,onChange:e=>setDate(e.target.value)})),
+      h('div',{style:{display:'flex',flexDirection:'column',gap:6}},
+        h(F,{label:'Lái xe'},h('select',{value:driver,onChange:e=>{setDriver(e.target.value);const emp=drivers.find(x=>x.id===e.target.value);if(emp)setDriverName(emp.name);}},
+          h('option',{value:''},'— Chọn từ danh sách —'),
+          drivers.map(e=>h('option',{key:e.id,value:e.id},e.name))
+        )),
+        h(F,{label:'Hoặc nhập tên'},h('input',{value:driverName,onChange:e=>setDriverName(e.target.value),placeholder:'Tên lái xe...'}))
+      )
+    ),
+    // Chọn ca
+    allShifts.length>0&&h('div',{style:{marginBottom:12}},
+      h('div',{style:{fontSize:12,fontWeight:600,color:'var(--tx2)',marginBottom:6}},
+        'Ca giao hàng (không chọn = tạo theo khu vực, không phân ca)'
+      ),
+      h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+        allShifts.map(sh=>h('label',{key:sh.id,
+          style:{display:'flex',alignItems:'center',gap:6,padding:'5px 12px',
+            borderRadius:'var(--r)',border:'1px solid '+(selShifts.includes(sh.id)?'var(--pri)':'var(--bd)'),
+            cursor:'pointer',background:selShifts.includes(sh.id)?'#f0faf0':'#fff',fontSize:13}
+        },
+          h('input',{type:'checkbox',checked:selShifts.includes(sh.id),onChange:()=>toggleShift(sh.id),style:{cursor:'pointer'}}),
+          sh.name||sh.id
+        ))
+      )
+    ),
+    // Chọn khu vực
+    allAreas.length>0&&h('div',{style:{marginBottom:12}},
+      h('div',{style:{fontSize:12,fontWeight:600,color:'var(--tx2)',marginBottom:6}},
+        'Khu vực (không chọn = tất cả khu vực)'
+      ),
+      h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+        allAreas.map(a=>h('label',{key:a,
+          style:{display:'flex',alignItems:'center',gap:6,padding:'5px 12px',
+            borderRadius:'var(--r)',border:'1px solid '+(selAreas.includes(a)?'var(--pri)':'var(--bd)'),
+            cursor:'pointer',background:selAreas.includes(a)?'#f0faf0':'#fff',fontSize:13}
+        },
+          h('input',{type:'checkbox',checked:selAreas.includes(a),onChange:()=>toggleArea(a),style:{cursor:'pointer'}}),
+          a
+        ))
+      )
+    ),
+    // Preview chuyến sẽ tạo
+    preview.length>0&&h('div',{style:{marginBottom:12}},
+      h('div',{style:{fontWeight:600,fontSize:13,color:'var(--pri3)',marginBottom:8}},
+        '📋 Sẽ tạo '+preview.length+' chuyến:'
+      ),
+      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8}},
+        preview.map((combo,i)=>h('div',{key:i,style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',
+          padding:'8px 10px',background:'#f5fbf5'}},
+          h('div',{style:{fontWeight:600,fontSize:13,color:'var(--pri)'}},combo.area),
+          combo.shiftName&&h('div',{style:{fontSize:12,color:'var(--tx2)'}},combo.shiftName),
+          h('div',{style:{fontSize:12,marginTop:4}},combo.orders.length+' đơn · '+
+            combo.orders.reduce((s,o)=>s+(o.lines?o.lines.reduce((ss,l)=>ss+(l.weightPerUnit||0)*numFmt(l.qtyInvoice),0):0),0).toFixed(1)+' kg'
+          )
+        ))
+      )
+    ),
+    preview.length===0&&date&&h('div',{style:{textAlign:'center',padding:'1rem',color:'var(--tx2)',fontSize:13}},
+      'Không có đơn hàng chờ giao vào ngày '+fmtDate2(date)
+    ),
+    h(Row,null,
+      h('button',{onClick:onClose},'Hủy'),
+      h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'},disabled:preview.length===0},
+        h('i',{className:'ti ti-stack-2',style:{fontSize:14}}),
+        ' Tạo '+preview.length+' chuyến'
+      )
+    )
+  );
+}
+
 function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,currentUser}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);
   const _td1=fmtDate();const _ti1=_td1.split('/').reverse().join('-');const[fDate,sfDate]=useState(_ti1);const[fShift,sfShift]=useState('');const[fDriver,sfDriver]=useState('');
@@ -3161,7 +3378,13 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,cu
   };
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-steering-wheel',style:{fontSize:20}}),'Chuyến giao hàng'),
-    h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:'1rem'}},
+    h('div',{style:{display:'flex',justifyContent:'flex-end',gap:8,marginBottom:'1rem'}},
+      h('button',{
+        onClick:()=>sm('bulk'),
+        style:{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',fontSize:13,
+          border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',
+          borderRadius:'var(--r)',cursor:'pointer',fontWeight:500}
+      },h('i',{className:'ti ti-stack-2',style:{fontSize:15}}),'Tạo nhiều chuyến'),
       h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Tạo chuyến mới'})
     ),
     h('div',{style:{display:'flex',gap:8,marginBottom:'1rem',flexWrap:'wrap'}},
@@ -3236,7 +3459,18 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,cu
       h('i',{className:'ti ti-steering-wheel',style:{fontSize:56,display:'block',marginBottom:'1rem',color:'var(--pri2)'}}),
       'Chưa có chuyến giao hàng nào.'
     ),
-    modal==='f'&&h(TripForm,{trip:edit,orders,employees,shifts,customers,currentUser,onSave:save,onClose:()=>{sm(null);se(null);}})
+    modal==='f'&&h(TripForm,{trip:edit,orders,employees,shifts,customers,currentUser,onSave:save,onClose:()=>{sm(null);se(null);}}),
+    modal==='bulk'&&h(BulkTripModal,{orders,employees,shifts,customers,trips,currentUser,
+      onSave:(newTrips)=>{
+        setTrips(p=>[...p,...newTrips]);
+        // Cập nhật tripId cho đơn hàng
+        newTrips.forEach(t=>{
+          setOrders(p=>p.map(o=>t.orderIds.includes(o.id)?{...o,tripId:t.id,status:'delivering'}:o));
+        });
+        sm(null);
+      },
+      onClose:()=>sm(null)
+    })
   );
 }
 
