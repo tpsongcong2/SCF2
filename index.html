@@ -541,12 +541,52 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
       ),
       // ── Cột phải: danh sách địa điểm ──
       h('div',null,
-        h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}},
+        h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,flexWrap:'wrap',gap:6}},
           h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},h('i',{className:'ti ti-map-pin',style:{marginRight:5}}),'Địa điểm giao hàng (',f.points.length,')'),
-          h('button',{
-            onClick:()=>sf(p=>({...p,points:[...p.points].sort((a,b)=>{const ac=(a.area||'').localeCompare(b.area||'','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');})})),
-            style:{fontSize:11,padding:'3px 10px',display:'flex',alignItems:'center',gap:4,border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
-          },h('i',{className:'ti ti-arrows-sort',style:{fontSize:13}}),'Sắp xếp theo khu vực')
+          h('div',{style:{display:'flex',gap:6}},
+            // Nút gộp địa điểm gần giống
+            h('button',{
+              onClick:()=>{
+                // Tìm các nhóm địa điểm có tên gần giống (sau khi trim + normalize)
+                const normalize=s=>(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+                const groups={};
+                f.points.forEach(pt=>{
+                  const key=normalize(pt.name);
+                  if(!groups[key])groups[key]=[];
+                  groups[key].push(pt);
+                });
+                const dupGroups=Object.values(groups).filter(g=>g.length>1);
+                if(dupGroups.length===0){alert('Không tìm thấy địa điểm trùng hoặc gần giống!');return;}
+                // Hiện confirm với danh sách
+                const lines=dupGroups.map(g=>g.map(p=>'  • "'+p.name+'" ('+( p.area||'chưa có khu vực')+')').join('\n')).join('\n---\n');
+                const msg='Tìm thấy '+dupGroups.length+' nhóm trùng:\n\n'+lines+'\n\nGộp lại? (giữ địa điểm đầu tiên mỗi nhóm, xóa các địa điểm trùng)';
+                if(!confirm(msg))return;
+                // Gộp: giữ pt đầu tiên mỗi nhóm
+                const keepIds=new Set();
+                const mergeMap={}; // id cũ → id giữ lại
+                dupGroups.forEach(g=>{
+                  const keep=g[0];
+                  keepIds.add(keep.id);
+                  g.slice(1).forEach(dup=>{mergeMap[dup.id]=keep.id;});
+                });
+                // Giữ tất cả điểm không trùng + điểm đầu tiên mỗi nhóm
+                const newPoints=f.points.filter(pt=>{
+                  const key=normalize(pt.name);
+                  const grp=groups[key];
+                  if(grp.length===1)return true; // không trùng
+                  return pt.id===grp[0].id; // chỉ giữ cái đầu
+                });
+                sf(p=>({...p,points:newPoints}));
+                alert('Đã gộp '+dupGroups.reduce((s,g)=>s+g.length-1,0)+' địa điểm trùng!');
+              },
+              style:{fontSize:11,padding:'3px 10px',display:'flex',alignItems:'center',gap:4,border:'1px solid #E06060',color:'#A32D2D',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
+            },h('i',{className:'ti ti-git-merge',style:{fontSize:13}}),'Gộp địa điểm trùng'),
+            // Nút sắp xếp
+            h('button',{
+              onClick:()=>sf(p=>({...p,points:[...p.points].sort((a,b)=>{const ac=(a.area||'').localeCompare(b.area||'','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');})})),
+              style:{fontSize:11,padding:'3px 10px',display:'flex',alignItems:'center',gap:4,border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
+            },h('i',{className:'ti ti-arrows-sort',style:{fontSize:13}}),'Sắp xếp theo khu vực')
+          )
         ),
         f.points.map((pt)=>h(PointRow,{
           key:pt.id,pt,
@@ -2402,24 +2442,71 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, o
   const [ptAssign, setPtAssign] = React.useState({}); // pointName -> customerId
   const [addToCustomer, setAddToCustomer] = React.useState({}); // pointName -> bool
   const [ptArea, setPtArea] = React.useState({}); // pointName -> area
+  const [ptMerge, setPtMerge] = React.useState({}); // pointName -> existingPointId (gộp vào điểm có sẵn)
+
+  // Hàm tính độ tương đồng tên (Levenshtein đơn giản)
+  const similarity = (a, b) => {
+    const s1 = (a||'').trim().toLowerCase().replace(/\s+/g,' ');
+    const s2 = (b||'').trim().toLowerCase().replace(/\s+/g,' ');
+    if(s1===s2) return 1;
+    if(!s1||!s2) return 0;
+    const longer = s1.length>s2.length?s1:s2;
+    const shorter = s1.length>s2.length?s2:s1;
+    if(longer.includes(shorter)) return shorter.length/longer.length;
+    // Levenshtein
+    const dp=Array.from({length:shorter.length+1},(_,i)=>i);
+    for(let i=1;i<=longer.length;i++){
+      let prev=i;
+      for(let j=1;j<=shorter.length;j++){
+        const val=longer[i-1]===shorter[j-1]?dp[j-1]:1+Math.min(dp[j-1],dp[j],prev);
+        dp[j-1]=prev; prev=val;
+      }
+      dp[shorter.length]=prev;
+    }
+    return 1-dp[shorter.length]/longer.length;
+  };
+
+  // Tìm địa điểm gần giống (>= 75%) trong tất cả khách hàng
+  const allExistingPts = customers.flatMap(c=>(c.points||[]).map(p=>({...p, custId:c.id, custName:c.name})));
+  const similarMap = {}; // ptName -> [{pt, score}]
+  unknownPts.forEach(pt=>{
+    const matches = allExistingPts
+      .map(ep=>({ep, score:similarity(pt, ep.name)}))
+      .filter(x=>x.score>=0.75)
+      .sort((a,b)=>b.score-a.score)
+      .slice(0,3);
+    if(matches.length>0) similarMap[pt]=matches;
+  });
 
   const toImport = skipDups ? newOrders.filter(o=>!dupOrders.includes(o)) : newOrders;
 
   const doImport = () => {
-    // Add unknown points to selected customers
+    // Xử lý từng địa điểm mới
     Object.entries(ptAssign).forEach(([pt, custId]) => {
-      if(!custId || !addToCustomer[pt]) return;
-      setCustomers(prev => prev.map(c => {
-        if(c.id !== custId) return c;
-        const pts = c.points||[];
-        if(pts.find(p=>p.name.trim().toUpperCase()===pt.toUpperCase())) return c;
-        return {...c, points:[...pts,{id:'PT'+Date.now(),name:pt,area:ptArea[pt]||'',address:''}]};
-      }));
-      // Update orders with customer info
+      if(!custId) return;
+      const mergeIntoId = ptMerge[pt]; // gộp vào điểm đã có
+      let resolvedPointId='', resolvedPointName='';
+      if(mergeIntoId) {
+        // Gộp: dùng điểm đã có, không tạo mới
+        const existing = allExistingPts.find(p=>p.id===mergeIntoId);
+        if(existing){ resolvedPointId=existing.id; resolvedPointName=existing.name; }
+      } else if(addToCustomer[pt]) {
+        // Tạo mới
+        const newId='PT'+uid();
+        resolvedPointId=newId; resolvedPointName=pt;
+        setCustomers(prev => prev.map(c => {
+          if(c.id !== custId) return c;
+          const pts = c.points||[];
+          if(pts.find(p=>p.name.trim().toUpperCase()===pt.toUpperCase())) return c;
+          return {...c, points:[...pts,{id:newId,name:pt,area:ptArea[pt]||'',address:''}]};
+        }));
+      }
+      // Cập nhật đơn hàng với thông tin khách hàng & điểm giao
       const cust = customers.find(c=>c.id===custId);
       if(cust) toImport.forEach(o=>{
         if(o.pointName.trim().toUpperCase()===pt.toUpperCase()){
           o.customerId=cust.id; o.customer=cust.name;
+          if(resolvedPointId){ o.pointId=resolvedPointId; o.pointName=resolvedPointName||pt; }
         }
       });
     });
@@ -2466,32 +2553,94 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, o
     // Unknown points handling
     unknownPts.length>0&&h('div',{style:{background:'#FEF6F6',border:'1px solid #E06060',borderRadius:'var(--r)',padding:'12px',marginBottom:'1rem'}},
       h('div',{style:{fontWeight:600,marginBottom:8,fontSize:14}},'🆕 Địa điểm giao mới — chưa có trong danh mục:'),
-      unknownPts.map(pt=>h('div',{key:pt,style:{padding:'6px 0',borderBottom:'1px solid #f5c6c6'}},
-        h('div',{style:{fontWeight:500,marginBottom:6}},pt),
-        h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
-          h('select',{
-            value:ptAssign[pt]||'',
-            onChange:e=>setPtAssign(p=>({...p,[pt]:e.target.value})),
-            style:{padding:'4px 8px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)',minWidth:160}
-          },
-            h('option',{value:''},'— Gán vào khách hàng... —'),
-            customers.map(c=>h('option',{key:c.id,value:c.id},c.name))
+      unknownPts.map(pt=>{
+        const similar = similarMap[pt]||[];
+        const isMerging = !!ptMerge[pt];
+        return h('div',{key:pt,style:{padding:'8px 0',borderBottom:'1px solid #f5c6c6'}},
+          // Tên địa điểm + badge gần giống
+          h('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:6}},
+            h('span',{style:{fontWeight:600,fontSize:13}},pt),
+            similar.length>0&&h('span',{style:{fontSize:11,background:'#FFF3CD',color:'#856404',
+              border:'1px solid #FFC107',borderRadius:10,padding:'1px 8px'}},
+              '⚠ có '+similar.length+' địa điểm gần giống'
+            )
           ),
-          h('select',{
-            value:ptArea[pt]||'',
-            onChange:e=>setPtArea(p=>({...p,[pt]:e.target.value})),
-            style:{padding:'4px 8px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)',minWidth:110}
-          },
-            h('option',{value:''},'— Khu vực —'),
-            [...new Set(customers.flatMap(c=>(c.points||[]).map(p=>p.area)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')).map(a=>h('option',{key:a,value:a},a))
+          // Gợi ý gộp nếu có địa điểm gần giống
+          similar.length>0&&h('div',{style:{background:'#FFFBF0',border:'1px solid #FFC107',
+            borderRadius:'var(--r)',padding:'8px 10px',marginBottom:6}},
+            h('div',{style:{fontSize:12,fontWeight:600,color:'#856404',marginBottom:6}},
+              '🔍 Địa điểm gần giống — chọn để gộp hoặc tạo mới:'
+            ),
+            similar.map(({ep,score})=>h('label',{key:ep.id,
+              style:{display:'flex',alignItems:'center',gap:8,padding:'4px 6px',
+                borderRadius:4,cursor:'pointer',marginBottom:2,
+                background:ptMerge[pt]===ep.id?'#FFF3CD':'transparent'}
+            },
+              h('input',{type:'radio',
+                name:'merge_'+pt,
+                checked:ptMerge[pt]===ep.id,
+                onChange:()=>{
+                  setPtMerge(p=>({...p,[pt]:ep.id}));
+                  setPtAssign(p=>({...p,[pt]:ep.custId}));
+                  setAddToCustomer(p=>({...p,[pt]:false}));
+                },
+                style:{cursor:'pointer',accentColor:'#856404'}
+              }),
+              h('div',{style:{flex:1}},
+                h('span',{style:{fontWeight:500,fontSize:12}},ep.name),
+                h('span',{style:{fontSize:11,color:'var(--tx2)',marginLeft:6}},'('+ep.custName+')'),
+                ep.area&&h('span',{style:{fontSize:11,background:'var(--bg2)',
+                  padding:'0 5px',borderRadius:8,marginLeft:4}},ep.area)
+              ),
+              h('span',{style:{fontSize:11,color:'#856404',fontWeight:600}},
+                Math.round(score*100)+'% giống'
+              )
+            )),
+            // Option tạo mới
+            h('label',{style:{display:'flex',alignItems:'center',gap:8,padding:'4px 6px',
+              borderRadius:4,cursor:'pointer',
+              background:!ptMerge[pt]?'#F0FAF0':'transparent'}
+            },
+              h('input',{type:'radio',
+                name:'merge_'+pt,
+                checked:!ptMerge[pt],
+                onChange:()=>setPtMerge(p=>{const n={...p};delete n[pt];return n;}),
+                style:{cursor:'pointer',accentColor:'var(--pri)'}
+              }),
+              h('span',{style:{fontSize:12,color:'var(--pri)',fontWeight:500}},
+                '+ Tạo địa điểm mới "'+pt+'"'
+              )
+            )
           ),
-          ptAssign[pt]&&h('label',{style:{display:'flex',alignItems:'center',gap:5,fontSize:12,cursor:'pointer'}},
-            h('input',{type:'checkbox',checked:!!addToCustomer[pt],
-              onChange:e=>setAddToCustomer(p=>({...p,[pt]:e.target.checked}))}),
-            'Thêm vào danh mục địa điểm'
+          // Chọn khách hàng + khu vực + thêm vào danh mục (ẩn nếu đang gộp)
+          h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
+            h('select',{
+              value:ptAssign[pt]||'',
+              onChange:e=>{setPtAssign(p=>({...p,[pt]:e.target.value}));setPtMerge(p=>{const n={...p};delete n[pt];return n;});},
+              style:{padding:'4px 8px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)',minWidth:160}
+            },
+              h('option',{value:''},'— Gán vào khách hàng... —'),
+              customers.map(c=>h('option',{key:c.id,value:c.id},c.name))
+            ),
+            !isMerging&&h('select',{
+              value:ptArea[pt]||'',
+              onChange:e=>setPtArea(p=>({...p,[pt]:e.target.value})),
+              style:{padding:'4px 8px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)',minWidth:110}
+            },
+              h('option',{value:''},'— Khu vực —'),
+              [...new Set(customers.flatMap(c=>(c.points||[]).map(p=>p.area)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')).map(a=>h('option',{key:a,value:a},a))
+            ),
+            !isMerging&&ptAssign[pt]&&h('label',{style:{display:'flex',alignItems:'center',gap:5,fontSize:12,cursor:'pointer'}},
+              h('input',{type:'checkbox',checked:!!addToCustomer[pt],
+                onChange:e=>setAddToCustomer(p=>({...p,[pt]:e.target.checked}))}),
+              'Thêm vào danh mục địa điểm'
+            ),
+            isMerging&&h('span',{style:{fontSize:12,color:'#856404',fontWeight:500}},
+              '↪ Gộp vào: "'+( allExistingPts.find(p=>p.id===ptMerge[pt])?.name||'')+'"'
+            )
           )
-        )
-      ))
+        );
+      })
     ),
 
     // Orders preview table
