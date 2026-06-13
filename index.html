@@ -408,53 +408,56 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
 function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
   const[showNew,setShowNew]=useState(false);
   const[newArea,setNewArea]=useState('');
-  const curArea=pt.area||'';
-  const isKnown=allAreas.includes(curArea)||curArea==='';
+  const[inputVal,setInputVal]=useState(pt.area||'');
+
+  // Sync khi pt.area thay đổi từ bên ngoài
+  const prevArea=React.useRef(pt.area);
+  if(prevArea.current!==pt.area){prevArea.current=pt.area;setInputVal(pt.area||'');}
+
   const commitNew=()=>{
-    const v=newArea.trim();
-    if(!v)return;
-    onAreaChange(pt.id,v);
-    setShowNew(false);setNewArea('');
+    const v=newArea.trim();if(!v)return;
+    onAreaChange(pt.id,v);setShowNew(false);setNewArea('');
   };
+  const dlId='dl-'+pt.id;
   return h('div',{className:'ptrow',style:{flexDirection:'column',alignItems:'stretch',gap:4}},
     h('div',{style:{display:'flex',alignItems:'center',gap:8}},
       h('i',{className:'ti ti-map-pin',style:{fontSize:14,color:'var(--pri)',flexShrink:0}}),
-      h('input',{
-        value:pt.name,
-        onChange:e=>onNameChange(pt.id,e.target.value),
-        style:{flex:1,fontWeight:500,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}
-      }),
+      h('input',{value:pt.name,onChange:e=>onNameChange(pt.id,e.target.value),
+        style:{flex:1,fontWeight:500,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}}),
       showNew
         ? h('div',{style:{display:'flex',gap:4,width:180}},
-            h('input',{
-              value:newArea,autoFocus:true,
-              placeholder:'Nh\u1eadp khu v\u1ef1c m\u1edbi...',
+            h('input',{value:newArea,autoFocus:true,placeholder:'Nhập khu vực mới...',
               onChange:e=>setNewArea(e.target.value),
               onKeyDown:e=>{if(e.key==='Enter')commitNew();if(e.key==='Escape'){setShowNew(false);setNewArea('');}},
-              style:{flex:1,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--pri)',fontSize:12}
-            }),
-            h('button',{className:'bp',onClick:commitNew,style:{padding:'2px 8px',fontSize:12}},h('i',{className:'ti ti-check',style:{fontSize:13}})),
-            h('button',{onClick:()=>{setShowNew(false);setNewArea('');},style:{padding:'2px 6px',fontSize:12}},h('i',{className:'ti ti-x',style:{fontSize:13}}))
+              style:{flex:1,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--pri)',fontSize:12}}),
+            h('button',{className:'bp',onClick:commitNew,style:{padding:'2px 8px',fontSize:12}},
+              h('i',{className:'ti ti-check',style:{fontSize:13}})),
+            h('button',{onClick:()=>{setShowNew(false);setNewArea('');},style:{padding:'2px 6px',fontSize:12}},
+              h('i',{className:'ti ti-x',style:{fontSize:13}}))
           )
-        : h('select',{
-            defaultValue:isKnown?curArea:'__custom__',
-            onChange:e=>{
-              const v=e.target.value;
-              if(v==='__new__'){setShowNew(true);return;}
-              onAreaChange(pt.id,v);
-            },
-            style:{width:130,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
-          },
-            h('option',{value:''},'— Khu vực —'),
-            allAreas.map(a=>h('option',{key:a,value:a},a)),
-            !isKnown&&curArea&&h('option',{value:'__custom__'},curArea),
-            h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Thêm khu vực mới...')
+        : h('div',{style:{display:'flex',gap:4,alignItems:'center'}},
+            h('input',{
+              value:inputVal,
+              list:dlId,
+              placeholder:'Khu vực...',
+              onChange:e=>setInputVal(e.target.value),
+              onBlur:e=>{
+                const v=e.target.value.trim();
+                if(v!==pt.area) onAreaChange(pt.id,v);
+              },
+              onKeyDown:e=>{if(e.key==='Enter'){const v=e.target.value.trim();if(v!==pt.area)onAreaChange(pt.id,v);e.target.blur();}},
+              style:{width:110,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
+            }),
+            h('datalist',{id:dlId},allAreas.map(a=>h('option',{key:a,value:a}))),
+            h('button',{onClick:()=>setShowNew(true),title:'Thêm khu vực mới',
+              style:{padding:'2px 6px',border:'1px dashed var(--pri)',color:'var(--pri)',background:'transparent',borderRadius:'var(--r)',cursor:'pointer',fontSize:11}},
+              '+')
           ),
       h('button',{className:'bi',onClick:()=>onDelete(pt.id),style:{color:'#A32D2D',flexShrink:0}},
-        h('i',{className:'ti ti-trash',style:{fontSize:14}})
-      )
+        h('i',{className:'ti ti-trash',style:{fontSize:14}}))
     ),
-    pt.address&&h('div',{style:{fontSize:11,color:'var(--tx2)',paddingLeft:22}},pt.address+(pt.contact?' • '+pt.contact+' '+pt.phone:''))
+    pt.address&&h('div',{style:{fontSize:11,color:'var(--tx2)',paddingLeft:22}},
+      pt.address+(pt.contact?' • '+pt.contact+' '+pt.phone:''))
   );
 }
 function CustomerForm({cust,shifts,customers,onSave,onClose}){
@@ -603,7 +606,7 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
               ));
             }
             rows.push(h(PointRow,{
-              key:pt.id+'::'+pt.area,pt,allAreas,
+              key:pt.id,pt,allAreas,
               onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
               onAreaChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,area:v}:x)})),
               onDelete:id=>sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}))
