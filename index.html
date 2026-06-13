@@ -408,28 +408,14 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
 function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
   const[showNew,setShowNew]=useState(false);
   const[newArea,setNewArea]=useState('');
-  // localArea: hiển thị ngay, tách biệt với pt.area (state cha)
-  const[localArea,setLocalArea]=useState(pt.area||'');
-
-  // Chỉ sync localArea khi pt.id thay đổi (sort) hoặc lần đầu mount
-  const mountedRef=React.useRef(false);
-  const prevIdRef=React.useRef(pt.id);
-  if(!mountedRef.current){mountedRef.current=true;} 
-  else if(prevIdRef.current!==pt.id){prevIdRef.current=pt.id;setLocalArea(pt.area||'');}
-
-  const isKnown=allAreas.includes(localArea)||localArea==='';
+  const curArea=pt.area||'';
+  const isKnown=allAreas.includes(curArea)||curArea==='';
   const commitNew=()=>{
     const v=newArea.trim();
     if(!v)return;
-    setLocalArea(v);
     onAreaChange(pt.id,v);
     setShowNew(false);setNewArea('');
   };
-  const handleAreaChange=v=>{
-    setLocalArea(v);          // cập nhật local ngay lập tức
-    onAreaChange(pt.id,v);    // cập nhật state cha
-  };
-
   return h('div',{className:'ptrow',style:{flexDirection:'column',alignItems:'stretch',gap:4}},
     h('div',{style:{display:'flex',alignItems:'center',gap:8}},
       h('i',{className:'ti ti-map-pin',style:{fontSize:14,color:'var(--pri)',flexShrink:0}}),
@@ -451,20 +437,18 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
             h('button',{onClick:()=>{setShowNew(false);setNewArea('');},style:{padding:'2px 6px',fontSize:12}},h('i',{className:'ti ti-x',style:{fontSize:13}}))
           )
         : h('select',{
-            // KEY = ptId + localArea: React tạo lại DOM mới khi area thực sự đổi
-            key:pt.id+'::'+localArea,
-            defaultValue:isKnown?localArea:'__custom__',
+            defaultValue:isKnown?curArea:'__custom__',
             onChange:e=>{
               const v=e.target.value;
               if(v==='__new__'){setShowNew(true);return;}
-              handleAreaChange(v);
+              onAreaChange(pt.id,v);
             },
             style:{width:130,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
           },
-            h('option',{value:''},'— Khu v\u1ef1c —'),
+            h('option',{value:''},'— Khu vực —'),
             allAreas.map(a=>h('option',{key:a,value:a},a)),
-            !isKnown&&localArea&&h('option',{value:'__custom__'},localArea),
-            h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Th\u00eam khu v\u1ef1c m\u1edbi...')
+            !isKnown&&curArea&&h('option',{value:'__custom__'},curArea),
+            h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Thêm khu vực mới...')
           ),
       h('button',{className:'bi',onClick:()=>onDelete(pt.id),style:{color:'#A32D2D',flexShrink:0}},
         h('i',{className:'ti ti-trash',style:{fontSize:14}})
@@ -473,8 +457,6 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
     pt.address&&h('div',{style:{fontSize:11,color:'var(--tx2)',paddingLeft:22}},pt.address+(pt.contact?' • '+pt.contact+' '+pt.phone:''))
   );
 }
-
-/* ─── CUSTOMERS ─── */
 function CustomerForm({cust,shifts,customers,onSave,onClose}){
   const dedup=pts=>{const seen=new Set();return (pts||[]).filter(p=>{const k=(p.id||'')+'|'+(p.name||'').trim().toUpperCase();if(seen.has(k))return false;seen.add(k);return true;});};
   const[f,sf]=useState(cust?{...cust,points:dedup(cust.points)}:{id:'',code:'',name:'',taxCode:'',address:'',note:'',points:[]});
@@ -621,7 +603,7 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
               ));
             }
             rows.push(h(PointRow,{
-              key:pt.id,pt,allAreas,
+              key:pt.id+'::'+pt.area,pt,allAreas,
               onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
               onAreaChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,area:v}:x)})),
               onDelete:id=>sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}))
