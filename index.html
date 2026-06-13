@@ -407,51 +407,55 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
 /* ─── POINT ROW ─── */
 function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
   const[showNew,setShowNew]=useState(false);
-  const[newArea,setNewArea]=useState('');
-  const[inputVal,setInputVal]=useState(pt.area||'');
-
-  // Sync khi pt.area thay đổi từ bên ngoài
-  const prevArea=React.useRef(pt.area);
-  if(prevArea.current!==pt.area){prevArea.current=pt.area;setInputVal(pt.area||'');}
-
+  const[newAreaTxt,setNewAreaTxt]=useState('');
+  // Select uncontrolled - defaultValue set 1 lần khi mount
+  // key={pt.id} ở cha giữ nguyên → DOM không bị tạo lại khi list re-render
+  const selRef=React.useRef(null);
+  // Khi pt.area thay đổi từ bên ngoài (vd sau khi lưu), cập nhật DOM trực tiếp
+  React.useEffect(()=>{
+    if(selRef.current && selRef.current.value!==pt.area){
+      selRef.current.value=pt.area||'';
+    }
+  },[pt.area]);
   const commitNew=()=>{
-    const v=newArea.trim();if(!v)return;
-    onAreaChange(pt.id,v);setShowNew(false);setNewArea('');
+    const v=newAreaTxt.trim();if(!v)return;
+    onAreaChange(pt.id,v);
+    if(selRef.current)selRef.current.value=v;
+    setShowNew(false);setNewAreaTxt('');
   };
-  const dlId='dl-'+pt.id;
+  const curArea=pt.area||'';
+  const isKnown=allAreas.includes(curArea)||curArea==='';
   return h('div',{className:'ptrow',style:{flexDirection:'column',alignItems:'stretch',gap:4}},
     h('div',{style:{display:'flex',alignItems:'center',gap:8}},
       h('i',{className:'ti ti-map-pin',style:{fontSize:14,color:'var(--pri)',flexShrink:0}}),
       h('input',{value:pt.name,onChange:e=>onNameChange(pt.id,e.target.value),
         style:{flex:1,fontWeight:500,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}}),
       showNew
-        ? h('div',{style:{display:'flex',gap:4,width:180}},
-            h('input',{value:newArea,autoFocus:true,placeholder:'Nhập khu vực mới...',
-              onChange:e=>setNewArea(e.target.value),
-              onKeyDown:e=>{if(e.key==='Enter')commitNew();if(e.key==='Escape'){setShowNew(false);setNewArea('');}},
+        ? h('div',{style:{display:'flex',gap:4,width:200}},
+            h('input',{value:newAreaTxt,autoFocus:true,placeholder:'Tên khu vực mới...',
+              onChange:e=>setNewAreaTxt(e.target.value),
+              onKeyDown:e=>{if(e.key==='Enter')commitNew();if(e.key==='Escape'){setShowNew(false);setNewAreaTxt('');}},
               style:{flex:1,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--pri)',fontSize:12}}),
             h('button',{className:'bp',onClick:commitNew,style:{padding:'2px 8px',fontSize:12}},
               h('i',{className:'ti ti-check',style:{fontSize:13}})),
-            h('button',{onClick:()=>{setShowNew(false);setNewArea('');},style:{padding:'2px 6px',fontSize:12}},
+            h('button',{onClick:()=>{setShowNew(false);setNewAreaTxt('');},style:{padding:'2px 6px',fontSize:12}},
               h('i',{className:'ti ti-x',style:{fontSize:13}}))
           )
-        : h('div',{style:{display:'flex',gap:4,alignItems:'center'}},
-            h('input',{
-              value:inputVal,
-              list:dlId,
-              placeholder:'Khu vực...',
-              onChange:e=>setInputVal(e.target.value),
-              onBlur:e=>{
-                const v=e.target.value.trim();
-                if(v!==pt.area) onAreaChange(pt.id,v);
-              },
-              onKeyDown:e=>{if(e.key==='Enter'){const v=e.target.value.trim();if(v!==pt.area)onAreaChange(pt.id,v);e.target.blur();}},
-              style:{width:110,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
-            }),
-            h('datalist',{id:dlId},allAreas.map(a=>h('option',{key:a,value:a}))),
-            h('button',{onClick:()=>setShowNew(true),title:'Thêm khu vực mới',
-              style:{padding:'2px 6px',border:'1px dashed var(--pri)',color:'var(--pri)',background:'transparent',borderRadius:'var(--r)',cursor:'pointer',fontSize:11}},
-              '+')
+        : h('select',{
+            ref:selRef,
+            defaultValue:isKnown?curArea:'__custom__',
+            onChange:e=>{
+              const v=e.target.value;
+              if(v==='__new__'){setShowNew(true);if(selRef.current)selRef.current.value=curArea;return;}
+              // Gọi onAreaChange để cập nhật pendingAreas ref ở cha (không re-render)
+              onAreaChange(pt.id,v);
+            },
+            style:{width:130,padding:'3px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)'}
+          },
+            h('option',{value:''},'— Khu vực —'),
+            allAreas.map(a=>h('option',{key:a,value:a},a)),
+            !isKnown&&curArea&&h('option',{value:'__custom__'},curArea),
+            h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Thêm khu vực mới...')
           ),
       h('button',{className:'bi',onClick:()=>onDelete(pt.id),style:{color:'#A32D2D',flexShrink:0}},
         h('i',{className:'ti ti-trash',style:{fontSize:14}}))
@@ -462,17 +466,32 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
 }
 function CustomerForm({cust,shifts,customers,onSave,onClose}){
   const dedup=pts=>{const seen=new Set();return (pts||[]).filter(p=>{const k=(p.id||'')+'|'+(p.name||'').trim().toUpperCase();if(seen.has(k))return false;seen.add(k);return true;});};
-  const[f,sf]=useState(cust?{...cust,points:dedup(cust.points)}:{id:'',code:'',name:'',taxCode:'',address:'',note:'',points:[]});
+  const initPoints=dedup(cust?.points||[]);
+  const[f,sf]=useState(cust?{...cust,points:initPoints}:{id:'',code:'',name:'',taxCode:'',address:'',note:'',points:[]});
   const[np,snp]=useState({name:'',address:'',contact:'',phone:'',area:''});
   const[saved,setSaved]=useState(false);
+  // pendingAreas: lưu thay đổi khu vực mà KHÔNG trigger re-render
+  const pendingAreas=React.useRef(Object.fromEntries(initPoints.map(p=>[p.id,p.area||''])));
   const set=(k,v)=>sf(p=>({...p,[k]:v}));
-  const addPt=()=>{if(!np.name){alert('Nhập tên địa điểm!');return;}sf(p=>({...p,points:[...p.points,{...np,id:'PT'+uid()}]}));snp({name:'',address:'',contact:'',phone:'',area:''});};
+  const addPt=()=>{
+    if(!np.name){alert('Nhập tên địa điểm!');return;}
+    const newId='PT'+uid();
+    pendingAreas.current[newId]=np.area||'';
+    sf(p=>({...p,points:[...p.points,{...np,id:newId}]}));
+    snp({name:'',address:'',contact:'',phone:'',area:''});
+  };
+  // onAreaChange: chỉ cập nhật ref, KHÔNG re-render
+  const onAreaChange=(id,v)=>{pendingAreas.current[id]=v;};
   const doSave=(close)=>{
+    // Merge pendingAreas vào f.points trước khi lưu
+    const mergedPoints=f.points.map(pt=>({...pt,area:pendingAreas.current[pt.id]!==undefined?pendingAreas.current[pt.id]:pt.area}));
+    sf(p=>({...p,points:mergedPoints}));
     if(!f.name){alert('Nhập tên khách hàng!');return;}
     const code=(f.code||'').trim().toUpperCase()||'KH'+String(Date.now()).slice(-6);
     const isDup=customers&&customers.some(c=>c.id===code&&c.id!==(cust?.id||''));
     if(isDup){alert('Mã KH "'+code+'" đã tồn tại! Vui lòng dùng mã khác.');return;}
-    onSave({...f,id:code,code},close);
+    const pts2=f.points.map(pt=>({...pt,area:pendingAreas.current[pt.id]!==undefined?pendingAreas.current[pt.id]:pt.area}));
+    onSave({...f,id:code,code,points:pts2},close);
     if(!close){setSaved(true);setTimeout(()=>setSaved(false),2000);}
   };
   const submit=()=>doSave(true);
@@ -608,8 +627,8 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
             rows.push(h(PointRow,{
               key:pt.id,pt,allAreas,
               onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
-              onAreaChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,area:v}:x)})),
-              onDelete:id=>sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}))
+              onAreaChange:onAreaChange,
+              onDelete:id=>{delete pendingAreas.current[id];sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}));}
             }));
           });
           return rows;
