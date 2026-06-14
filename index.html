@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
 <meta charset="UTF-8"/>
@@ -144,7 +144,7 @@ function mkSet(key,setter){return valOrFn=>{setter(prev=>{const next=typeof valO
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const fmtDate=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
 const fmtDT=()=>{const d=new Date();return fmtDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
-const numFmt=n=>Number(n)||0;
+const numFmt=n=>{if(n===null||n===undefined||n==='')return 0;if(typeof n==='number')return Number.isFinite(n)?n:0;const s=String(n).trim().replace(/\s+/g,'').replace(',','.');const m=s.match(/-?\d+(\.\d+)?/);return m?Number(m[0])||0:0;};
 const moneyFmt=n=>n?Number(n).toLocaleString('vi-VN')+'đ':'—';
 const initials=n=>n.split(' ').map(w=>w[0]).filter(Boolean).slice(-2).join('').toUpperCase();
 function isBirthday(bd){if(!bd)return false;const t=new Date();const p=bd.split('/');if(p.length<2)return false;return parseInt(p[0])===t.getDate()&&parseInt(p[1])===(t.getMonth()+1);}
@@ -1594,7 +1594,9 @@ function SalesReportTab({orders,customers,products}) {
   const filtLines=filtered.flatMap(o=>(o.lines||[]).filter(l=>!prod||l.productId===prod).map(l=>({...l,orderId:o.id,customer:o.customer,date:o.deliveryDate,address:o.address})));
   const totalQtyProd=filtLines.reduce((s,l)=>s+numFmt(l.qtyProd),0);
   const totalQtyInv=filtLines.reduce((s,l)=>s+numFmt(l.qtyInvoice),0);
-  const totalWeight=filtLines.reduce((s,l)=>{const p2=products.find(x=>x.id===l.productId);return s+(p2?.weightPerUnit||l.weightPerUnit||0)*numFmt(l.qtyInvoice);},0);
+  const lineQty=l=>numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||numFmt(l.qty)||numFmt(l.quantity)||0;
+  const lineWeight=l=>{const p2=products.find(x=>x.id===l.productId);const unit=String(l.unit||p2?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');const qty=lineQty(l);if(unit==='kg'||unit==='kgs'||unit==='kilogram'||unit==='kilograms')return qty;return (p2?.weightPerUnit||numFmt(l.weightPerUnit)||0)*qty;};
+  const totalWeight=filtLines.reduce((s,l)=>s+lineWeight(l),0);
   // Group by product
   const byProd={};filtLines.forEach(l=>{if(!byProd[l.productId])byProd[l.productId]={name:l.productName,unit:l.unit,qtyProd:0,qtyInv:0};byProd[l.productId].qtyProd+=numFmt(l.qtyProd);byProd[l.productId].qtyInv+=numFmt(l.qtyInvoice);});
   // Group by customer
@@ -2792,7 +2794,9 @@ function OrderForm({order,customers,products,quotes,employees,currentUser,onSave
   const addLine=()=>sf(p=>({...p,lines:[...p.lines,{id:uid(),productId:'',productName:'',unit:'',weightPerUnit:0,qtyProd:0,qtyInvoice:0,shift:'day',price:0,note:''}]}));
   const updLine=(id,data)=>sf(p=>({...p,lines:p.lines.map(l=>l.id===id?data:l)}));
   const delLine=id=>sf(p=>({...p,lines:p.lines.filter(l=>l.id!==id)}));
-  const totalWeight=f.lines.reduce((s,l)=>{const p=products.find(x=>x.id===l.productId);const w=(p?.weightPerUnit||0);return s+(w*numFmt(l.qtyInvoice));},0);
+  const lineQty=l=>numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||numFmt(l.qty)||numFmt(l.quantity)||0;
+  const lineWeight=l=>{const p=products.find(x=>x.id===l.productId);const unit=String(l.unit||p?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');const qty=lineQty(l);if(unit==='kg'||unit==='kgs'||unit==='kilogram'||unit==='kilograms')return qty;return (p?.weightPerUnit||numFmt(l.weightPerUnit)||0)*qty;};
+  const totalWeight=f.lines.reduce((s,l)=>s+lineWeight(l),0);
   const submit=()=>{
     if(!f.customerId){alert('Chọn khách hàng!');return;}
     onSave({...f,updatedBy:currentUser.name,updatedAt:fmtDT()});
@@ -3187,11 +3191,21 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
     if(pc!==0)return pc;
     return (a.deliveryTime||'').localeCompare(b.deliveryTime||'');
   });
+  const orderLineQty=l=>numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||numFmt(l.qty)||numFmt(l.quantity)||0;
+  const orderLineWeight=l=>{
+    const p=products?.find(x=>x.id===l.productId);
+    const unit=String(l.unit||p?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');
+    const qty=orderLineQty(l);
+    if(unit==='kg'||unit==='kgs'||unit==='kilogram'||unit==='kilograms')return qty;
+    const wpu=p?.weightPerUnit||numFmt(l.weightPerUnit)||0;
+    return wpu*qty;
+  };
+  const calcOrderWeight=o=>(o.lines||[]).reduce((s,l)=>s+orderLineWeight(l),0);
   const orderTableRows=[];
   let ocurArea=null,oAreaKL=0,oAreaCount=0;
   sortedList.forEach((o,i)=>{
     const oa=getArea(o)||'';
-    const totalW=o.lines?o.lines.reduce((s,l)=>{const p=products?.find(x=>x.id===l.productId);const wpu=p?.weightPerUnit||numFmt(l.weightPerUnit)||0;const qty=numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||0;return s+wpu*qty;},0):0;
+    const totalW=calcOrderWeight(o);
     if(oa!==ocurArea){
       if(ocurArea!==null)orderTableRows.push({_sub:true,area:ocurArea,kl:oAreaKL,cnt:oAreaCount});
       ocurArea=oa;oAreaKL=0;oAreaCount=0;
@@ -3409,7 +3423,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
             h('td',{colSpan:3,style:{background:'#e8f5e9'}})
           );
           const trip=trips.find(t=>t.id===o.tripId);
-          const totalW=o._totalW||(o.lines?o.lines.reduce((s,l)=>{const p=products?.find(x=>x.id===l.productId);const wpu=p?.weightPerUnit||numFmt(l.weightPerUnit)||0;return s+wpu*(numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||0);},0):0);
+          const totalW=o._totalW||calcOrderWeight(o);
           return h('tr',{key:o.id},
             h('td',null,h('span',{style:{color:'var(--pri)',fontWeight:500}},o.id)),
             h('td',null,
@@ -3519,7 +3533,10 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
     const allChecked=ids.every(id=>(f.orderIds||[]).includes(id));
     sf(p=>({...p,orderIds:allChecked?p.orderIds.filter(id=>!ids.includes(id)):[...new Set([...p.orderIds,...ids])]}));
   };
-  const totalW=(f.orderIds||[]).reduce((sum,oid)=>{const o=orders.find(x=>x.id===oid);if(!o||!o.lines)return sum;return sum+o.lines.reduce((s,l)=>{const prod=products?.find(p=>p.id===l.productId);const wpu=prod?.weightPerUnit||numFmt(l.weightPerUnit)||0;return s+wpu*numFmt(l.qtyInvoice);},0);},0);
+  const lineQty=l=>numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||numFmt(l.qty)||numFmt(l.quantity)||0;
+  const lineWeight=l=>{const prod=products?.find(p=>p.id===l.productId);const unit=String(l.unit||prod?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');const qty=lineQty(l);if(unit==='kg'||unit==='kgs'||unit==='kilogram'||unit==='kilograms')return qty;const wpu=prod?.weightPerUnit||numFmt(l.weightPerUnit)||0;return wpu*qty;};
+  const orderWeight=o=>(o.lines||[]).reduce((s,l)=>s+lineWeight(l),0);
+  const totalW=(f.orderIds||[]).reduce((sum,oid)=>{const o=orders.find(x=>x.id===oid);return sum+(o?orderWeight(o):0);},0);
   const submit=()=>{
     if(!f.driverName){alert('Chọn hoặc nhập tên lái xe!');return;}
     if(f.orderIds.length===0){alert('Chọn ít nhất 1 đơn hàng!');return;}
@@ -3568,7 +3585,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
         h('div',{style:{maxHeight:180,overflowY:'auto',border:'1px solid #2d6a4f',borderTop:'none',
           borderRadius:'0 0 var(--r) var(--r)',padding:4,background:'#f5fbf5'}},
           inTripAll.map(o=>{
-            const w=o.lines?o.lines.reduce((s,l)=>{const prod=products?.find(p=>p.id===l.productId);const wpu=prod?.weightPerUnit||numFmt(l.weightPerUnit)||0;return s+wpu*numFmt(l.qtyInvoice);},0):0;
+            const w=orderWeight(o);
             const oCust=customers?.find(c=>c.id===o.customerId)||null;
             const oPt=oCust?(oCust.points||[]).find(p=>p.id===o.pointId||p.name===o.pointName):null;
             const oArea=o.area||oPt?.area||'';
@@ -3633,7 +3650,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
     (()=>{
       // Render 1 order item
       const renderOrder=(o,checked,highlight)=>{
-        const w=o.lines?o.lines.reduce((s,l)=>{const prod=products?.find(p=>p.id===l.productId);const wpu=prod?.weightPerUnit||numFmt(l.weightPerUnit)||0;return s+wpu*numFmt(l.qtyInvoice);},0):0;
+        const w=orderWeight(o);
         const oCust=customers?.find(c=>c.id===o.customerId)||null;
         const oPt=oCust?(oCust.points||[]).find(p=>p.id===o.pointId||p.name===o.pointName):null;
         const oArea=o.area||oPt?.area||'';
@@ -3660,25 +3677,13 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
         );
       };
       // Đã trong chuyến: lấy từ TẤT CẢ đơn (không qua filter) để luôn hiện đủ
-      const inTrip=availOrders.filter(o=>(f.orderIds||[]).includes(o.id));
       // Có thể thêm: qua filter, chưa trong chuyến
       const notInTrip=filteredOrders.filter(o=>!(f.orderIds||[]).includes(o.id));
       return h('div',{style:{border:'.5px solid var(--bd)',borderRadius:'var(--r)',overflow:'hidden'}},
         // Phần ĐÃ CÓ trong chuyến
-        inTrip.length>0&&h('div',null,
-          h('div',{style:{padding:'5px 10px',background:'#2d6a4f',color:'#fff',fontSize:11,fontWeight:700,letterSpacing:.5,display:'flex',justifyContent:'space-between',alignItems:'center'}},
-            h('span',null,'✓ ĐÃ TRONG CHUYẾN ('+inTrip.length+' đơn · '+(inTrip||[]).reduce((s,o)=>s+(o.lines?o.lines.reduce((ss,l)=>ss+(l.weightPerUnit||0)*numFmt(l.qtyInvoice),0):0),0).toFixed(1)+' kg)'),
-            h('button',{onClick:()=>sf(p=>({...p,orderIds:p.orderIds.filter(id=>!inTrip.map(o=>o.id).includes(id))})),
-              style:{fontSize:11,padding:'1px 8px',background:'rgba(255,255,255,.2)',border:'1px solid rgba(255,255,255,.4)',color:'#fff',borderRadius:4,cursor:'pointer'}
-            },'Bỏ tất cả')
-          ),
-          h('div',{style:{maxHeight:200,overflowY:'auto',padding:6,background:'#f5fbf5'}},
-            inTrip.map(o=>renderOrder(o,true,true))
-          )
-        ),
         // Phần CÓ THỂ THÊM
         h('div',null,
-          h('div',{style:{padding:'5px 10px',background:'var(--bg2)',fontSize:11,fontWeight:700,color:'var(--tx2)',letterSpacing:.5,borderTop:inTrip.length>0?'1px solid var(--bd)':'none',display:'flex',justifyContent:'space-between',alignItems:'center'}},
+          h('div',{style:{padding:'5px 10px',background:'var(--bg2)',fontSize:11,fontWeight:700,color:'var(--tx2)',letterSpacing:.5,borderTop:'none',display:'flex',justifyContent:'space-between',alignItems:'center'}},
             h('span',null,notInTrip.length>0?'+ CÓ THỂ THÊM ('+notInTrip.length+' đơn)':'Không có đơn hàng nào thêm'),
             notInTrip.length>0&&h('button',{onClick:()=>sf(p=>({...p,orderIds:[...new Set([...p.orderIds,...notInTrip.map(o=>o.id)])]})),
               style:{fontSize:11,padding:'1px 8px',border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',borderRadius:4,cursor:'pointer'}
@@ -3687,7 +3692,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
           notInTrip.length>0&&h('div',{style:{maxHeight:220,overflowY:'auto',padding:6}},
             notInTrip.map(o=>renderOrder(o,false,false))
           ),
-          notInTrip.length===0&&inTrip.length===0&&h('div',{style:{textAlign:'center',padding:'1rem',color:'var(--tx2)',fontSize:13}},
+          notInTrip.length===0&&h('div',{style:{textAlign:'center',padding:'1rem',color:'var(--tx2)',fontSize:13}},
             fDate||fArea||fCust?'Không có đơn hàng khớp bộ lọc.':'Không có đơn hàng chờ giao.'
           )
         )
@@ -3724,6 +3729,10 @@ function BulkTripModal({orders,employees,shifts,customers,trips,currentUser,onSa
 
   const toggleShift=id=>setSelShifts(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
   const toggleArea=a=>setSelAreas(p=>p.includes(a)?p.filter(x=>x!==a):[...p,a]);
+  const lineQty=l=>numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||numFmt(l.qty)||numFmt(l.quantity)||0;
+  const lineWeight=l=>{const prod=products?.find(p=>p.id===l.productId);const unit=String(l.unit||prod?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');const qty=lineQty(l);if(unit==='kg'||unit==='kgs'||unit==='kilogram'||unit==='kilograms')return qty;const wpu=prod?.weightPerUnit||numFmt(l.weightPerUnit)||0;return wpu*qty;};
+  const orderWeight=o=>(o.lines||[]).reduce((s,l)=>s+lineWeight(l),0);
+  const ordersWeight=rows=>(rows||[]).reduce((s,o)=>s+orderWeight(o),0);
 
   // Preview: logic đúng
   // - Chọn ca + khu vực → mỗi combo (ca × khu vực) = 1 chuyến, đơn thuộc khu vực đó
@@ -3789,7 +3798,7 @@ function BulkTripModal({orders,employees,shifts,customers,trips,currentUser,onSa
       );
       if(dupTrip) dupWarnings.push('⚠ Khu vực '+combo.area+(combo.shiftName?' / '+combo.shiftName:'')+' đã có chuyến: '+dupTrip.id);
       usedIds.add(id);
-      const w=combo.orders.reduce((sum,o)=>sum+(o.lines?o.lines.reduce((s,l)=>s+(l.weightPerUnit||0)*numFmt(l.qtyInvoice),0):0),0);
+      const w=ordersWeight(combo.orders);
       newTrips.push({
         id,driverName:drName,driverId:driver||'',
         shiftId:combo.shiftId,shiftName:combo.shiftName,
@@ -3861,7 +3870,7 @@ function BulkTripModal({orders,employees,shifts,customers,trips,currentUser,onSa
           h('div',{style:{fontWeight:600,fontSize:13,color:'var(--pri)'}},combo.area),
           combo.shiftName&&h('div',{style:{fontSize:12,color:'var(--tx2)'}},combo.shiftName),
           h('div',{style:{fontSize:12,marginTop:4}},combo.orders.length+' đơn · '+
-            (combo.orders||[]).reduce((s,o)=>s+(o.lines?o.lines.reduce((ss,l)=>{const p=products?.find(x=>x.id===l.productId);return ss+(p?.weightPerUnit||l.weightPerUnit||0)*(numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||0);},0):0),0).toFixed(1)+' kg'
+            ordersWeight(combo.orders).toFixed(1)+' kg'
           )
         ))
       )
@@ -3936,11 +3945,14 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
       if(status==='completed')setOrders(p=>p.map(o=>(t.orderIds||[]).includes(o.id)?{...o,status:'done'}:o));
     }
   };
+  const lineQty=l=>numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||numFmt(l.qty)||numFmt(l.quantity)||0;
+  const lineWeight=l=>{const prod=products?.find(p=>p.id===l.productId);const unit=String(l.unit||prod?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');const qty=lineQty(l);if(unit==='kg'||unit==='kgs'||unit==='kilogram'||unit==='kilograms')return qty;const wpu=prod?.weightPerUnit||numFmt(l.weightPerUnit)||0;return wpu*qty;};
+  const orderWeight=o=>(o.lines||[]).reduce((s,l)=>s+lineWeight(l),0);
   const calcTripWeight=t=>{
     const tripOrders=orders.filter(o=>(t.orderIds||[]).includes(o.id));
-    return t.totalWeight||tripOrders.reduce((s,o)=>s+(o.lines?o.lines.reduce((ss,l)=>ss+(l.weightPerUnit||0)*numFmt(l.qtyInvoice),0):0),0);
+    return tripOrders.reduce((s,o)=>s+orderWeight(o),0)||numFmt(t.totalWeight);
   };
-  const filteredTrips=trips.filter(t=>((!fDate||(t.deliveryDate===(fDate.split('-').reverse().join('/'))))||!fDate)&&(!fShift||t.shiftName===fShift)&&(!fDriver||t.driverName===fDriver));
+  const filteredTrips=trips.filter(t=>((!fDate||(t.deliveryDate===(fDate.split('-').reverse().join('/'))))||!fDate)&&(!fShift||t.shiftId===fShift)&&(!fDriver||t.driverName===fDriver));
   const attendanceRows=filteredTrips.filter(t=>t.status==='completed').map(t=>{
     const tripOrders=orders.filter(o=>(t.orderIds||[]).includes(o.id));
     const weight=calcTripWeight(t);
@@ -3958,6 +3970,45 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
   const confirmAttendance=id=>{
     setTrips(p=>p.map(t=>t.id===id?{...t,attendanceStatus:'confirmed',confirmedBy:currentUser.name,confirmedAt:fmtDT()}:t));
   };
+  const createTripForSelection=()=>{
+    if(!fDate){alert('Chọn ngày giao trước khi tạo chuyến!');return;}
+    if(!fShift){alert('Chọn ca giao hàng trước khi tạo chuyến!');return;}
+    const sh=(shifts||[]).find(x=>x.id===fShift);
+    if(!sh){alert('Ca giao hàng không hợp lệ!');return;}
+    const dateVN=fDate.split('-').reverse().join('/');
+    const [dd2,mm2,yy2]=dateVN.split('/');
+    const datePart=(dd2||'00')+(mm2||'00')+(yy2||'0000').slice(-2);
+    const shiftAbbr=(sh.name||sh.id||'').toUpperCase()
+      .replace(/CA\s*/,'')
+      .replace(/SÁNG|SANG/,'S').replace(/TRƯA|TRUA/,'T')
+      .replace(/CHIỀU|CHIEU/,'C').replace(/ĐÊM|DEM/,'D')
+      .replace(/[^A-Z0-9]/g,'').slice(0,3)||'CA';
+    const baseId='CH'+datePart+shiftAbbr;
+    let id=baseId;let seq=2;
+    while(trips.find(t=>t.id===id)){id=baseId+'_'+seq;seq++;}
+    const stamp=fmtDT();
+    setTrips(p=>[...p,{
+      id,deliveryDate:dateVN,deliveryTime:sh.timeStart||sh.startTime||'',
+      shiftId:sh.id,shiftName:sh.name||sh.id,area:sh.area||'',
+      driverName:'',driverId:'',orderIds:[],totalWeight:0,
+      status:'planning',note:'',driverWork:0,weightRate:0,tripAllowance:0,
+      attendanceStatus:'pending',createdAt:stamp,updatedBy:currentUser.name,updatedAt:stamp
+    }]);
+    so(id);
+  };
+  const printTrip=trip=>{
+    const tripOrders=orders.filter(o=>(trip.orderIds||[]).includes(o.id));
+    const totalW=calcTripWeight(trip);
+    const w=window.open('','_blank','width=900,height=700');
+    if(!w){alert('Trình duyệt đang chặn cửa sổ in. Hãy cho phép popup rồi thử lại.');return;}
+    const rows=tripOrders.map(o=>{
+      const ow=orderWeight(o);
+      const items=(o.lines||[]).reduce((s,l)=>s+(l.productName?'• '+l.productName+' '+lineQty(l)+(l.unit?' '+l.unit:'')+'<br>':''),'');
+      return '<tr><td>'+o.id+'</td><td>'+(o.pointName||o.customer||'')+'</td><td>'+(o.area||'')+'</td><td>'+(o.deliveryTime||'')+'</td><td>'+items+'</td><td style="font-weight:700">'+ow.toFixed(2)+'</td></tr>';
+    }).join('');
+    w.document.write('<html><head><title>Chuyến '+trip.id+'</title><style>body{font-family:Arial;padding:16px;font-size:13px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:5px 8px}th{background:#d9e8d9}h2{color:#2d6a4f}.total{font-weight:700;text-align:right;padding:8px;background:#f5fbf5}@media print{@page{margin:8mm}}</style></head><body><h2>Chuyến: '+trip.id+'</h2><p>Ngày: <b>'+trip.deliveryDate+'</b> &nbsp;|&nbsp; Ca: <b>'+(trip.shiftName||'—')+'</b> &nbsp;|&nbsp; Lái xe: <b>'+(trip.driverName||'—')+'</b> &nbsp;|&nbsp; Tổng KL: <b>'+totalW.toFixed(2)+' kg</b></p><table><thead><tr><th>Mã đơn</th><th>Địa điểm</th><th>Khu vực</th><th>Giờ</th><th>Hàng hóa</th><th>KL (kg)</th></tr></thead><tbody>'+rows+'</tbody></table><div class="total">Tổng: '+tripOrders.length+' đơn — '+totalW.toFixed(2)+' kg</div><br><div style="display:flex;justify-content:space-between;margin-top:24px"><div style="text-align:center;width:40%"><div>Lái xe</div><div style="height:50px"></div><small>(Ký tên)</small></div><div style="text-align:center;width:40%"><div>Người nhận</div><div style="height:50px"></div><small>(Ký tên)</small></div></div></body></html>');
+    w.document.close();setTimeout(()=>w.print(),400);
+  };
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-steering-wheel',style:{fontSize:20}}),'Chuyến giao hàng'),
     h('div',{style:{display:'flex',justifyContent:'flex-end',gap:8,marginBottom:'1rem'}},
@@ -3967,13 +4018,13 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
           border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',
           borderRadius:'var(--r)',cursor:'pointer',fontWeight:500}
       },h('i',{className:'ti ti-stack-2',style:{fontSize:15}}),'Tạo nhiều chuyến'),
-      h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Tạo chuyến mới'})
+      h(AddBtn,{onClick:createTripForSelection,label:'Tạo chuyến mới'})
     ),
     h('div',{style:{display:'flex',gap:8,marginBottom:'1rem',flexWrap:'wrap'}},
       h('input',{type:'date',value:fDate,onChange:e=>sfDate(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}}),
       h('select',{value:fShift,onChange:e=>sfShift(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},
         h('option',{value:''},'Tất cả ca'),
-        [...new Set(trips.map(t=>t.shiftName).filter(Boolean))].map(s=>h('option',{key:s,value:s},s))
+        (shifts||[]).map(sh=>h('option',{key:sh.id,value:sh.id},sh.name||sh.id))
       ),
       h('select',{value:fDriver,onChange:e=>sfDriver(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},
         h('option',{value:''},'Tất cả lái xe'),
@@ -4017,7 +4068,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
       filteredTrips.map(trip=>{
         const tripOrders=orders.filter(o=>(trip.orderIds||[]).includes(o.id));
         const isOpen=open===trip.id;
-        const totalW=trip.totalWeight||tripOrders.reduce((s,o)=>s+(o.lines?o.lines.reduce((ss,l)=>{const prod=products?.find(p=>p.id===l.productId);return ss+(prod?.weightPerUnit||l.weightPerUnit||0)*numFmt(l.qtyInvoice);},0):0),0);
+        const totalW=calcTripWeight(trip);
         return h('div',{key:trip.id,className:'card',style:{padding:0,overflow:'hidden'}},
           h('div',{style:{display:'flex',alignItems:'center',gap:12,padding:'1rem 1.25rem',cursor:'pointer'},onClick:()=>so(isOpen?null:trip.id)},
             h('i',{className:'ti ti-chevron-'+(isOpen?'up':'down'),style:{fontSize:16,color:'var(--tx2)',flexShrink:0}}),
@@ -4038,7 +4089,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
               trip.status==='planning'&&h('button',{onClick:()=>updStatus(trip.id,'assigned'),style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},'Giao lái xe'),
               (trip.status==='planning'||trip.status==='assigned')&&h('button',{onClick:()=>updStatus(trip.id,'active'),style:{fontSize:11,padding:'4px 10px',background:'#EAF3DE',color:'#3B6D11',border:'none',borderRadius:4}},'Bắt đầu giao'),
               trip.status==='active'&&h('button',{onClick:()=>updStatus(trip.id,'completed'),style:{fontSize:11,padding:'4px 10px',background:'#E1F5EE',color:'#0F6E56',border:'none',borderRadius:4}},'Hoàn thành'),
-              h('button',{className:'bi',title:'In chuyến',onClick:()=>{sm('print_'+trip.id);}},h('i',{className:'ti ti-printer',style:{fontSize:15}})),
+              h('button',{className:'bi',title:'In chuyến',onClick:()=>printTrip(trip)},h('i',{className:'ti ti-printer',style:{fontSize:15}})),
               h('button',{className:'bi',onClick:()=>{se(trip);sm('f')}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
               h('button',{className:'bi',onClick:()=>del(trip.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
             )
@@ -4053,21 +4104,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
               h('span',{style:{fontSize:13,color:'var(--tx2)'}},tripOrders.length+' đơn hàng'),
               // Nút in
               h('button',{
-                onClick:()=>{
-                  const co={}; // company placeholder
-                  const lines=tripOrders.flatMap(o=>(o.lines||[]).map(l=>({
-                    ...l,
-                    pointName:o.pointName,customer:o.customer,orderId:o.id,
-                    deliveryTime:o.deliveryTime,area:o.area
-                  })));
-                  const w=window.open('','_blank','width=900,height=700');
-                  const rows=tripOrders.map(o=>{
-                    const ow=o.lines?o.lines.reduce((s,l)=>{const p2=products?.find(p=>p.id===l.productId);return s+(p2?.weightPerUnit||l.weightPerUnit||0)*numFmt(l.qtyInvoice);},0):0;
-                    return '<tr><td>'+o.id+'</td><td>'+(o.pointName||o.customer||'')+'</td><td>'+(o.area||'')+'</td><td>'+(o.deliveryTime||'')+'</td><td>'+(o.lines||[]).reduce((s,l)=>s+(l.productName?'• '+l.productName+' '+numFmt(l.qtyInvoice)+(l.unit?' '+l.unit:'')+'<br>':''),'')+'</td><td style="font-weight:700">'+ow.toFixed(2)+'</td></tr>';
-                  }).join('');
-                  w.document.write('<html><head><title>Chuyến '+trip.id+'</title><style>body{font-family:Arial;padding:16px;font-size:13px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:5px 8px}th{background:#d9e8d9}h2{color:#2d6a4f}.total{font-weight:700;text-align:right;padding:8px;background:#f5fbf5}@media print{@page{margin:8mm}}</style></head><body><h2>Chuyến: '+trip.id+'</h2><p>Ngày: <b>'+trip.deliveryDate+'</b> &nbsp;|&nbsp; Ca: <b>'+(trip.shiftName||'—')+'</b> &nbsp;|&nbsp; Lái xe: <b>'+(trip.driverName||'—')+'</b> &nbsp;|&nbsp; Tổng KL: <b>'+totalW.toFixed(2)+' kg</b></p><table><thead><tr><th>Mã đơn</th><th>Địa điểm</th><th>Khu vực</th><th>Giờ</th><th>Hàng hóa</th><th>KL (kg)</th></tr></thead><tbody>'+rows+'</tbody></table><div class="total">Tổng: '+tripOrders.length+' đơn — '+totalW.toFixed(2)+' kg</div><br><div style="display:flex;justify-content:space-between;margin-top:24px"><div style="text-align:center;width:40%"><div>Lái xe</div><div style="height:50px"></div><small>(Ký tên)</small></div><div style="text-align:center;width:40%"><div>Người nhận</div><div style="height:50px"></div><small>(Ký tên)</small></div></div></body></html>');
-                  w.document.close();setTimeout(()=>w.print(),400);
-                },
+                onClick:()=>printTrip(trip),
                 style:{padding:'4px 12px',fontSize:12,display:'flex',alignItems:'center',gap:4,
                   border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',
                   borderRadius:'var(--r)',cursor:'pointer'}
@@ -4082,7 +4119,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
               h('table',null,
                 h('thead',null,h('tr',null,...['Mã đơn','Địa điểm','Khu vực','Giờ','Hàng hóa','KL (kg)','Trạng thái'].map(c=>h('th',{key:c},c)))),
                 h('tbody',null,tripOrders.map(o=>{
-                  const w=o.lines?o.lines.reduce((s,l)=>{const p2=products?.find(p=>p.id===l.productId);return s+(p2?.weightPerUnit||l.weightPerUnit||0)*numFmt(l.qtyInvoice);},0):0;
+                  const w=orderWeight(o);
                   const oCust=customers?.find(c=>c.id===o.customerId);
                   const oPt=(oCust?.points||[]).find(p=>p.id===o.pointId||p.name===o.pointName);
                   const oArea=o.area||oPt?.area||'';
@@ -4091,7 +4128,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
                     h('td',null,h('span',{style:{fontWeight:600}},o.pointName||o.customer||'—')),
                     h('td',null,oArea?h('span',{style:{background:'#e8f5e9',color:'#2d6a4f',padding:'1px 7px',borderRadius:10,fontSize:11,fontWeight:600}},oArea):'—'),
                     h('td',null,o.deliveryTime||'—'),
-                    h('td',null,h('div',{style:{fontSize:11}},(o.lines||[]).map((l,i)=>h('div',{key:i},l.productName+' · '+numFmt(l.qtyInvoice)+(l.unit?' '+l.unit:''))))),
+                    h('td',null,h('div',{style:{fontSize:11}},(o.lines||[]).map((l,i)=>h('div',{key:i},l.productName+' · '+lineQty(l)+(l.unit?' '+l.unit:''))))),
                     h('td',null,w>0?h('span',{style:{fontWeight:600,color:'var(--pri)'}},w.toFixed(2)+' kg'):'—'),
                     h('td',null,h(StatusBadge,{s:o.status}))
                   );
