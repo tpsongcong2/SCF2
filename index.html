@@ -155,6 +155,16 @@ const DEF_PRODUCTS=[
 const DEF_CUSTOMERS=[
   {id:'KH001',name:'Khách hàng mẫu',taxCode:'',address:'Hà Nội',note:'',points:[{id:'PT001',name:'Kho chính',address:'123 Đường A, Hà Nội',contact:'Anh Tuấn',phone:'0901234567'}]},
 ];
+// Bảng khu vực độc lập — dùng chung cho nhiều KH/địa điểm
+const DEF_AREAS=[
+  {id:'AREA_KV',code:'KV',name:'Khu vực KV',note:''},
+  {id:'AREA_VP',code:'VP',name:'Khu vực VP',note:''},
+  {id:'AREA_BN',code:'BN',name:'Bắc Ninh',note:''},
+  {id:'AREA_QV',code:'QV',name:'Quang Vinh',note:''},
+  {id:'AREA_ĐT',code:'ĐT',name:'Điềm Thụy',note:''},
+  {id:'AREA_SSTN',code:'SS TN',name:'Samsung Thái Nguyên',note:''},
+  {id:'AREA_YP',code:'YP',name:'Yên Phong',note:''},
+];
 const DEF_WORKCATS=[
   {id:'CV001',code:'CV001',name:'Bốc xếp kho',dept:'Kho vận',unit:'Tấn',rate:0,note:''},
   {id:'CV002',code:'CV002',name:'Vận chuyển nội thành',dept:'Lái xe',unit:'Chuyến',rate:0,note:''},
@@ -457,14 +467,14 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
             !isKnown&&curArea&&h('option',{value:'__custom__'},curArea),
             h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Thêm khu vực mới...')
           ),
-      h('button',{className:'bi',onClick:()=>onDelete(pt.id),style:{color:'#A32D2D',flexShrink:0}},
+      h('button',{className:'bi',onClick:()=>onDelete(pt.id,pt),style:{color:'#A32D2D',flexShrink:0}},
         h('i',{className:'ti ti-trash',style:{fontSize:14}}))
     ),
     pt.address&&h('div',{style:{fontSize:11,color:'var(--tx2)',paddingLeft:22}},
       pt.address+(pt.contact?' • '+pt.contact+' '+pt.phone:''))
   );
 }
-function CustomerForm({cust,shifts,customers,orders,onSave,onClose}){
+function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
   const dedup=pts=>{const seen=new Set();return (pts||[]).filter(p=>{const k=(p.id||'')+'|'+(p.name||'').trim().toUpperCase();if(seen.has(k))return false;seen.add(k);return true;});};
   const initPoints=dedup(cust?.points||[]);
   const[f,sf]=useState(cust?{...cust,points:initPoints}:{id:'',code:'',name:'',taxCode:'',address:'',note:'',points:[]});
@@ -534,7 +544,7 @@ function CustomerForm({cust,shifts,customers,orders,onSave,onClose}){
           )
         :h('select',{value:np.area||'',onChange:e=>{if(e.target.value==='__new__')snp(p=>({...p,area:'__new__'}));else snp(p=>({...p,area:e.target.value}));}},
             h('option',{value:''},'— Chọn khu vực —'),
-            [...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')).map(a=>h('option',{key:a,value:a},a)),
+            allAreas.map(a=>h('option',{key:a,value:a},a)),
             h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Thêm khu vực mới...')
           )
       ),
@@ -610,7 +620,7 @@ function CustomerForm({cust,shifts,customers,orders,onSave,onClose}){
           )
         ),
         (()=>{
-          const allAreas=[...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+          const allAreas=(areas&&areas.length>0)?areas.map(a=>a.code).filter(Boolean).sort((a,b)=>a.localeCompare(b,'vi')):[...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
           const rows=[];
           let lastArea=null;
           // Sort points theo khu vực rồi tên
@@ -641,21 +651,20 @@ function CustomerForm({cust,shifts,customers,orders,onSave,onClose}){
               key:pt.id,pt,allAreas,
               onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
               onAreaChange:onAreaChange,
-              onDelete:id=>{
-  const pt=f.points.find(x=>x.id===id);
-  const ptName=(pt?.name||'').trim().toUpperCase();
-  const hasOrders=(orders||[]).some(o=>
-    (o.pointId===id)||(o.pointName||'').trim().toUpperCase()===ptName
-  );
-  if(hasOrders){
-    const cnt=(orders||[]).filter(o=>(o.pointId===id)||(o.pointName||'').trim().toUpperCase()===ptName).length;
-    if(!confirm('⚠ Địa điểm "'+pt?.name+'" có '+cnt+' đơn hàng liên quan!\n\nNếu xóa, các đơn hàng này vẫn còn nhưng sẽ mất thông tin địa điểm.\n\nBạn có chắc muốn xóa?'))return;
-  } else {
-    if(!confirm('Địa điểm "'+pt?.name+'" không có đơn hàng nào.\nXóa địa điểm này?'))return;
-  }
-  delete pendingAreas.current[id];
-  sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}));
-}
+              onDelete:(delId,delPt)=>{
+                const delName=(delPt?.name||'').trim().toUpperCase();
+                const hasOrders=(orders||[]).some(o=>
+                  (o.pointId===delId)||(o.pointName||'').trim().toUpperCase()===delName
+                );
+                if(hasOrders){
+                  const cnt=(orders||[]).filter(o=>(o.pointId===delId)||(o.pointName||'').trim().toUpperCase()===delName).length;
+                  if(!confirm('⚠ Địa điểm "'+delPt?.name+'" có '+cnt+' đơn hàng liên quan!\n\nNếu xóa, các đơn hàng này vẫn còn nhưng sẽ mất thông tin địa điểm.\n\nBạn có chắc muốn xóa?'))return;
+                } else {
+                  if(!confirm('Địa điểm "'+delPt?.name+'" không có đơn hàng nào.\nXóa địa điểm này?'))return;
+                }
+                delete pendingAreas.current[delId];
+                sf(p=>({...p,points:p.points.filter(x=>x.id!==delId)}));
+              }
             }));
           });
           return rows;
@@ -664,7 +673,105 @@ function CustomerForm({cust,shifts,customers,orders,onSave,onClose}){
     )
   );
 }
-function CustomersTab({customers,setCustomers,shifts,orders,cu}){
+/* ─── AREAS TAB ─── */
+function AreasTab({areas,setAreas,customers,orders}){
+  const[q,sq]=useState('');
+  const[modal,sm]=useState(null);
+  const[edit,se]=useState(null);
+  const[form,sf]=useState({code:'',name:'',note:''});
+  const openNew=()=>{sf({code:'',name:'',note:''});se(null);sm('f');};
+  const openEdit=a=>{sf({...a});se(a);sm('f');};
+  const save=()=>{
+    if(!form.code||!form.name){alert('Nhập mã và tên khu vực!');return;}
+    if(edit){
+      setAreas(p=>p.map(a=>a.id===edit.id?{...a,...form}:a));
+      // Cập nhật area string trong tất cả points của customers
+      setCustomers(prev=>prev.map(c=>({...c,points:(c.points||[]).map(pt=>
+        pt.areaId===edit.id?{...pt,area:form.code}:pt
+      )})));
+    } else {
+      const id='AREA_'+uid();
+      setAreas(p=>[...p,{id,code:form.code,name:form.name,note:form.note}]);
+    }
+    sm(null);
+  };
+  const del=a=>{
+    // Đếm điểm giao dùng khu vực này
+    const ptCount=customers.reduce((s,c)=>s+(c.points||[]).filter(p=>p.areaId===a.id||p.area===a.code).length,0);
+    const odCount=(orders||[]).filter(o=>o.area===a.code).length;
+    if(ptCount>0||odCount>0){
+      if(!confirm('Khu vực "'+a.name+'" đang có '+ptCount+' địa điểm và '+odCount+' đơn hàng.\nXóa sẽ mất thông tin khu vực. Tiếp tục?'))return;
+    } else {
+      if(!confirm('Xóa khu vực "'+a.name+'"?'))return;
+    }
+    setAreas(p=>p.filter(x=>x.id!==a.id));
+  };
+  // Migration: tự đồng bộ area string từ customers vào areas list
+  const migrate=()=>{
+    const existCodes=new Set(areas.map(a=>a.code));
+    const newAreas=[...areas];
+    let added=0;
+    customers.forEach(c=>(c.points||[]).forEach(pt=>{
+      const code=(pt.area||'').trim();
+      if(code&&!existCodes.has(code)){
+        newAreas.push({id:'AREA_'+uid(),code,name:code,note:'Tự tạo từ dữ liệu cũ'});
+        existCodes.add(code);added++;
+      }
+    }));
+    if(added>0){setAreas(newAreas);alert('Đã thêm '+added+' khu vực mới từ dữ liệu hiện có!');}
+    else alert('Dữ liệu đã đồng bộ, không có khu vực mới.');
+  };
+  const list=areas.filter(a=>!q||(a.code+a.name).toLowerCase().includes(q.toLowerCase()));
+  return h('div',null,
+    h('div',{className:'ptitle'},h('i',{className:'ti ti-map-2',style:{fontSize:20}}),'Quản lý khu vực'),
+    h('div',{style:{display:'flex',gap:8,marginBottom:'1rem',flexWrap:'wrap',alignItems:'center'}},
+      h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm khu vực...'}),
+      h('button',{onClick:migrate,style:{padding:'6px 12px',fontSize:12,border:'1px solid #856404',color:'#856404',background:'transparent',borderRadius:'var(--r)',cursor:'pointer',display:'flex',alignItems:'center',gap:4}},
+        h('i',{className:'ti ti-refresh',style:{fontSize:13}}),'Đồng bộ từ dữ liệu cũ'),
+      h(AddBtn,{onClick:openNew,label:'Thêm khu vực'})
+    ),
+    h('div',{className:'tw'},
+      h('table',null,
+        h('thead',null,h('tr',null,...['Mã','Tên khu vực','Địa điểm','Đơn hàng','Ghi chú',''].map(c=>h('th',{key:c},c)))),
+        h('tbody',null,list.length?list.map(a=>{
+          const ptCount=customers.reduce((s,c)=>s+(c.points||[]).filter(p=>p.areaId===a.id||p.area===a.code).length,0);
+          const odCount=(orders||[]).filter(o=>o.area===a.code).length;
+          // Lấy danh sách KH có địa điểm trong khu vực này
+          const custNames=[...new Set(customers.filter(c=>(c.points||[]).some(p=>p.areaId===a.id||p.area===a.code)).map(c=>c.name))];
+          return h('tr',{key:a.id},
+            h('td',null,h('span',{style:{background:'var(--pri)',color:'#fff',padding:'2px 10px',borderRadius:10,fontSize:12,fontWeight:700}},a.code)),
+            h('td',null,h('span',{style:{fontWeight:600}},a.name)),
+            h('td',null,
+              h('div',{style:{fontSize:12}},
+                h('span',{style:{fontWeight:600,color:'var(--pri)'}},ptCount+' điểm'),
+                custNames.length>0&&h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:2}},custNames.slice(0,3).join(', ')+(custNames.length>3?'...':''))
+              )
+            ),
+            h('td',null,h('span',{style:{fontSize:12,color:'var(--tx2)'}},odCount>0?odCount+' đơn':'—')),
+            h('td',null,h('span',{style:{fontSize:12,color:'var(--tx2)'}},a.note||'—')),
+            h('td',null,h('div',{style:{display:'flex',gap:4}},
+              h('button',{className:'bi',onClick:()=>openEdit(a)},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
+              h('button',{className:'bi',onClick:()=>del(a),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+            ))
+          );
+        }):h('tr',null,h('td',{colSpan:6,className:'empty-st'},'Chưa có khu vực nào.')))
+      )
+    ),
+    modal==='f'&&h(Modal,{title:edit?'Sửa khu vực':'Thêm khu vực mới',onClose:()=>sm(null)},
+      h('div',{className:'g2'},
+        h(F,{label:'Mã khu vực *'},h('input',{value:form.code,onChange:e=>sf(p=>({...p,code:e.target.value.toUpperCase()})),placeholder:'KV, VP, ĐT, BN...'})),
+        h(F,{label:'Tên khu vực *'},h('input',{value:form.name,onChange:e=>sf(p=>({...p,name:e.target.value})),placeholder:'Khu vực Kỳ Vọng...'})),
+      ),
+      h(F,{label:'Ghi chú'},h('input',{value:form.note,onChange:e=>sf(p=>({...p,note:e.target.value})),placeholder:'Mô tả thêm...'})),
+      h(Row,null,
+        h('button',{onClick:()=>sm(null)},'Hủy'),
+        h('button',{className:'bp',onClick:save,style:{padding:'8px 20px'}},'Lưu khu vực')
+      )
+    )
+  );
+}
+
+function CustomersTab({customers,setCustomers,shifts,orders,areas,cu}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);const[q,sq]=useState('');
   const save=(d,close)=>{if(edit)setCustomers(p=>p.map(x=>x.id===edit.id?d:x));else setCustomers(p=>[...p,d]);if(close!==false){sm(null);se(null);}};
   const del=id=>{if(confirm('Xóa khách hàng này?'))setCustomers(p=>p.filter(x=>x.id!==id));};
@@ -717,7 +824,7 @@ function CustomersTab({customers,setCustomers,shifts,orders,cu}){
         )):h('tr',null,h('td',{colSpan:6,className:'empty-st'},'Chưa có khách hàng nào.')))
       )
     ),
-    modal==='f'&&h(CustomerForm,{cust:edit,shifts,customers,orders,onSave:save,onClose:()=>{sm(null);se(null);}})
+    modal==='f'&&h(CustomerForm,{cust:edit,shifts,customers,orders,areas,onSave:save,onClose:()=>{sm(null);se(null);}})
   );
 }
 
@@ -4220,6 +4327,7 @@ function App(){
   const[materials,_sm]=useState(DEF_MATERIALS);
   const[prodCats,_spc]=useState(DEF_PRODCATS);
   const[products,_sp]=useState(DEF_PRODUCTS);
+  const[areas,_sar]=useState(DEF_AREAS);
   const[customers,_scu]=useState(DEF_CUSTOMERS);
   const[workcats,_swc]=useState(DEF_WORKCATS);
   const[shifts,_ssh]=useState(D_SHIFTS);
@@ -4233,6 +4341,7 @@ function App(){
   const setMaterials=mkSet('scf_materials',_sm);
   const setProdCats=mkSet('scf_prodcats',_spc);
   const setProducts=mkSet('scf_products',_sp);
+  const setAreas=mkSet('scf_areas',_sar);
   const setCustomers=mkSet('scf_customers',_scu);
   const setWorkcats=mkSet('scf_workcats',_swc);
   const setShifts=mkSet('scf_shifts',_ssh);
@@ -4251,10 +4360,11 @@ function App(){
           dbGet('scf_employees',DEF_EMPS),dbGet('scf_company',DEF_COMPANY),
           dbGet('scf_materials',DEF_MATERIALS),dbGet('scf_prodcats',DEF_PRODCATS),
           dbGet('scf_products',DEF_PRODUCTS),dbGet('scf_customers',DEF_CUSTOMERS),
+          dbGet('scf_areas',DEF_AREAS),
           dbGet('scf_workcats',DEF_WORKCATS),dbGet('scf_quotes',[]),
           dbGet('scf_orders',[]),dbGet('scf_trips',[]),
         ]);
-        _se(e);_sc(c);_sm(m);_spc(pc);_sp(p);_scu(cu);_swc(wc); const shData = await dbGet('scf_shifts',D_SHIFTS); _ssh(shData);_sq(q);_so(o);_st(t);
+        _se(e);_sc(c);_sm(m);_spc(pc);_sp(p);_scu(cu);_swc(wc); const shData=await dbGet('scf_shifts',D_SHIFTS);_ssh(shData);_sq(q);_so(o);_st(t); const arData=await dbGet('scf_areas',DEF_AREAS);_sar(arData);
       }catch(err){console.warn(err);}finally{setLoading(false);}
     })();
   },[]);
@@ -4331,7 +4441,8 @@ function App(){
         canAccess(cu.role,'backup',cu.permissions)&&page==='backup'&&h(BackupTab,{employees,materials,prodCats,products,customers,workcats}),
         canAccess(cu.role,'materials',cu.permissions)&&page==='materials'&&h(MaterialsTab,{materials,setMaterials}),
         canAccess(cu.role,'products',cu.permissions)&&page==='products'&&h(ProductsTab,{products,setProducts,prodCats,setProdCats}),
-        canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers,shifts,orders,cu}),
+        canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers,shifts,orders,areas,cu}),
+        page==='areas'&&h(AreasTab,{areas,setAreas,customers,setCustomers,orders}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats}),
         page==='shifts'&&h(ShiftsTab,{shifts,setShifts}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
