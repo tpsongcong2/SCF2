@@ -104,6 +104,7 @@ td{padding:9px 12px;border-top:.5px solid var(--bd);vertical-align:middle}
 <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js" crossorigin="anonymous"><<script>
 // Bat loi JS - hien thi thay vi trang trang
+console.log('Script started v14');
 window.onerror = function(msg, src, line) {
   document.getElementById('app').innerHTML = '<div style="padding:2rem;color:#A32D2D;background:#fff;min-height:100vh;font-family:sans-serif"><h2>Loi khoi dong SCF App</h2><p>' + msg + '</p><p style="margin-top:.5rem;color:#666;font-size:13px">Dong: ' + line + '</p></div>';
   return false;
@@ -4673,11 +4674,18 @@ const psData=await dbGet('scf_prod_shifts',DEF_PROD_SHIFTS);_sps(psData);
 
 try {
   try {
-    ReactDOM.createRoot(document.getElementById('app')).render(
+    console.log('Mounting React...');
+    const appEl = document.getElementById('app');
+    console.log('app element:', appEl);
+    ReactDOM.createRoot(appEl).render(
       h(ErrorBoundary, null, h(App))
     );
+    console.log('React mounted OK');
   } catch(e) {
-    document.getElementById('app').innerHTML='<div style="padding:2rem;font-family:monospace"><h2 style="color:#A32D2D">LOI: '+e.message+'</h2><pre style="font-size:11px;margin-top:1rem">'+e.stack+'</pre></div>';
+    console.error('React mount error:', e);
+    const el = document.getElementById('app');
+    if(el) el.innerHTML='<div style="padding:2rem;font-family:monospace;background:#fff;min-height:100vh"><h2 style="color:#A32D2D">LOI RENDER: '+e.message+'</h2><pre style="font-size:11px;margin-top:1rem;white-space:pre-wrap">'+e.stack+'</pre></div>';
+    else document.body.innerHTML='<pre style="color:red;padding:2rem">LOI: app div not found!\n'+e.stack+'</pre>';
   }
 } catch(e) {
   document.getElementById('app').innerHTML = '<div style="padding:2rem;color:#A32D2D;font-family:monospace;background:#fff;min-height:100vh"><h2>Loi render SCF App</h2><p style="margin-top:1rem">'+e.message+'</p><pre style="margin-top:1rem;font-size:11px;opacity:.6">'+e.stack+'</pre></div>';
