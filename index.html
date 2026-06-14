@@ -475,8 +475,23 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
   );
 }
 function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
-  const dedup=pts=>{const seen=new Set();return (pts||[]).filter(p=>{const k=(p.id||'')+'|'+(p.name||'').trim().toUpperCase();if(seen.has(k))return false;seen.add(k);return true;});};
-  const initPoints=dedup(cust?.points||[]);
+  const dedup=pts=>{
+    const map=new Map();
+    (pts||[]).forEach(p=>{
+      const k=(p.name||'').trim().toUpperCase();
+      if(!map.has(k)){map.set(k,p);}
+      else {
+        // Giữ bản có thông tin đầy đủ hơn (area, contact...)
+        const existing=map.get(k);
+        const score=x=>(x.area?2:0)+(x.contact?1:0)+(x.address?1:0);
+        if(score(p)>score(existing))map.set(k,p);
+      }
+    });
+    return [...map.values()];
+  };
+  // Dedup theo tên khi load - dọn sạch dữ liệu trùng từ lần trước
+  const initPoints=dedup(cust?.points||[])
+    .sort((a,b)=>{const ac=(a.area||'zzz').localeCompare(b.area||'zzz','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');});
   const[f,sf]=useState(cust?{...cust,points:initPoints}:{id:'',code:'',name:'',taxCode:'',address:'',note:'',points:[]});
   const[np,snp]=useState({name:'',address:'',contact:'',phone:'',area:''});
   const[saved,setSaved]=useState(false);
@@ -613,6 +628,22 @@ function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
               },
               style:{fontSize:11,padding:'3px 10px',display:'flex',alignItems:'center',gap:4,border:'1px solid #E06060',color:'#A32D2D',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
             },h('i',{className:'ti ti-git-merge',style:{fontSize:13}}),'Gộp địa điểm trùng'),
+            // Nút dọn trùng tên chính xác
+            h('button',{
+              onClick:()=>{
+                const before=f.points.length;
+                const cleaned=dedup(f.points);
+                if(cleaned.length===before){alert('Không có địa điểm trùng tên!');return;}
+                const removed=before-cleaned.length;
+                if(confirm('Tìm thấy '+removed+' địa điểm trùng tên.\nGiữ bản có thông tin đầy đủ hơn. Tiếp tục?')){
+                  const sorted=cleaned.sort((a,b)=>{const ac=(a.area||'zzz').localeCompare(b.area||'zzz','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');});
+                  sf(p=>({...p,points:sorted}));
+                  sorted.forEach(pt=>{pendingAreas.current[pt.id]=pt.area||'';});
+                  alert('Đã xóa '+removed+' địa điểm trùng!');
+                }
+              },
+              style:{fontSize:11,padding:'3px 10px',display:'flex',alignItems:'center',gap:4,border:'1px solid #856404',color:'#856404',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
+            },h('i',{className:'ti ti-eraser',style:{fontSize:13}}),'Dọn trùng tên'),
             // Nút sắp xếp
             h('button',{
               onClick:()=>sf(p=>({...p,points:[...p.points].sort((a,b)=>{const ac=(a.area||'').localeCompare(b.area||'','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');})})),
