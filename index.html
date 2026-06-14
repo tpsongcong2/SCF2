@@ -4569,7 +4569,7 @@ function App(){
   useEffect(()=>{
     (async()=>{
       try{
-        const[e,c,m,pc,p,cu,wc,q,o,t]=await Promise.all([
+        const[e,c,m,pc,p,cu,ar,wc,q,o,t]=await Promise.all([
           dbGet('scf_employees',DEF_EMPS),dbGet('scf_company',DEF_COMPANY),
           dbGet('scf_materials',DEF_MATERIALS),dbGet('scf_prodcats',DEF_PRODCATS),
           dbGet('scf_products',DEF_PRODUCTS),dbGet('scf_customers',DEF_CUSTOMERS),
@@ -4577,8 +4577,7 @@ function App(){
           dbGet('scf_workcats',DEF_WORKCATS),dbGet('scf_quotes',[]),
           dbGet('scf_orders',[]),dbGet('scf_trips',[]),
         ]);
-        _se(e);_sc(c);_sm(m);_spc(pc);_sp(p);_scu(cu);_swc(wc); const shData=await dbGet('scf_shifts',D_SHIFTS);_ssh(shData);_sq(q);_so(o);_st(t); const arData=await dbGet('scf_areas',DEF_AREAS);_sar(arData);
-const psData=await dbGet('scf_prod_shifts',DEF_PROD_SHIFTS);_sps(psData);
+        _se(e);_sc(c);_sm(m);_spc(pc);_sp(p);_scu(cu);_sar(ar);_swc(wc);const shData=await dbGet('scf_shifts',D_SHIFTS);_ssh(shData);_sq(q);_so(o);_st(t);const psData=await dbGet('scf_prod_shifts',DEF_PROD_SHIFTS);_sps(psData);
       }catch(err){console.warn(err);}finally{setLoading(false);}
     })();
   },[]);
