@@ -483,15 +483,21 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
   // onAreaChange: chỉ cập nhật ref, KHÔNG re-render
   const onAreaChange=(id,v)=>{pendingAreas.current[id]=v;};
   const doSave=(close)=>{
-    // Merge pendingAreas vào f.points trước khi lưu
-    const mergedPoints=f.points.map(pt=>({...pt,area:pendingAreas.current[pt.id]!==undefined?pendingAreas.current[pt.id]:pt.area}));
-    sf(p=>({...p,points:mergedPoints}));
     if(!f.name){alert('Nhập tên khách hàng!');return;}
     const code=(f.code||'').trim().toUpperCase()||'KH'+String(Date.now()).slice(-6);
     const isDup=customers&&customers.some(c=>c.id===code&&c.id!==(cust?.id||''));
     if(isDup){alert('Mã KH "'+code+'" đã tồn tại! Vui lòng dùng mã khác.');return;}
-    const pts2=f.points.map(pt=>({...pt,area:pendingAreas.current[pt.id]!==undefined?pendingAreas.current[pt.id]:pt.area}));
-    onSave({...f,id:code,code,points:pts2},close);
+    // Merge pendingAreas + dedup + sort theo khu vực → tên
+    const seen=new Set();
+    const finalPoints=f.points
+      .map(pt=>({...pt,area:pendingAreas.current[pt.id]!==undefined?pendingAreas.current[pt.id]:pt.area}))
+      .filter(pt=>{const k=pt.id+'|'+(pt.name||'').trim().toUpperCase();if(seen.has(k))return false;seen.add(k);return true;})
+      .sort((a,b)=>{const ac=(a.area||'zzz').localeCompare(b.area||'zzz','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');});
+    // Cập nhật state để UI hiện đúng (khi giữ mở)
+    sf(p=>({...p,points:finalPoints}));
+    // Cập nhật pendingAreas theo thứ tự mới
+    finalPoints.forEach(pt=>{pendingAreas.current[pt.id]=pt.area||'';});
+    onSave({...f,id:code,code,points:finalPoints},close);
     if(!close){setSaved(true);setTimeout(()=>setSaved(false),2000);}
   };
   const submit=()=>doSave(true);
