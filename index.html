@@ -464,7 +464,7 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
       pt.address+(pt.contact?' • '+pt.contact+' '+pt.phone:''))
   );
 }
-function CustomerForm({cust,shifts,customers,onSave,onClose}){
+function CustomerForm({cust,shifts,customers,orders,onSave,onClose}){
   const dedup=pts=>{const seen=new Set();return (pts||[]).filter(p=>{const k=(p.id||'')+'|'+(p.name||'').trim().toUpperCase();if(seen.has(k))return false;seen.add(k);return true;});};
   const initPoints=dedup(cust?.points||[]);
   const[f,sf]=useState(cust?{...cust,points:initPoints}:{id:'',code:'',name:'',taxCode:'',address:'',note:'',points:[]});
@@ -475,6 +475,13 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
   const set=(k,v)=>sf(p=>({...p,[k]:v}));
   const addPt=()=>{
     if(!np.name){alert('Nhập tên địa điểm!');return;}
+    // Kiểm tra trùng tên
+    const norm=s=>(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+    const isDupPt=f.points.some(pt=>norm(pt.name)===norm(np.name));
+    if(isDupPt){
+      alert('⚠ Địa điểm "'+np.name+'" đã có trong danh sách!\nVui lòng kiểm tra lại hoặc dùng tên khác.');
+      return;
+    }
     const newId='PT'+uid();
     pendingAreas.current[newId]=np.area||'';
     sf(p=>({...p,points:[...p.points,{...np,id:newId}]}));
@@ -634,7 +641,21 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
               key:pt.id,pt,allAreas,
               onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
               onAreaChange:onAreaChange,
-              onDelete:id=>{delete pendingAreas.current[id];sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}));}
+              onDelete:id=>{
+  const pt=f.points.find(x=>x.id===id);
+  const ptName=(pt?.name||'').trim().toUpperCase();
+  const hasOrders=(orders||[]).some(o=>
+    (o.pointId===id)||(o.pointName||'').trim().toUpperCase()===ptName
+  );
+  if(hasOrders){
+    const cnt=(orders||[]).filter(o=>(o.pointId===id)||(o.pointName||'').trim().toUpperCase()===ptName).length;
+    if(!confirm('⚠ Địa điểm "'+pt?.name+'" có '+cnt+' đơn hàng liên quan!\n\nNếu xóa, các đơn hàng này vẫn còn nhưng sẽ mất thông tin địa điểm.\n\nBạn có chắc muốn xóa?'))return;
+  } else {
+    if(!confirm('Địa điểm "'+pt?.name+'" không có đơn hàng nào.\nXóa địa điểm này?'))return;
+  }
+  delete pendingAreas.current[id];
+  sf(p=>({...p,points:p.points.filter(x=>x.id!==id)}));
+}
             }));
           });
           return rows;
@@ -643,7 +664,7 @@ function CustomerForm({cust,shifts,customers,onSave,onClose}){
     )
   );
 }
-function CustomersTab({customers,setCustomers,shifts,cu}){
+function CustomersTab({customers,setCustomers,shifts,orders,cu}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);const[q,sq]=useState('');
   const save=(d,close)=>{if(edit)setCustomers(p=>p.map(x=>x.id===edit.id?d:x));else setCustomers(p=>[...p,d]);if(close!==false){sm(null);se(null);}};
   const del=id=>{if(confirm('Xóa khách hàng này?'))setCustomers(p=>p.filter(x=>x.id!==id));};
@@ -696,7 +717,7 @@ function CustomersTab({customers,setCustomers,shifts,cu}){
         )):h('tr',null,h('td',{colSpan:6,className:'empty-st'},'Chưa có khách hàng nào.')))
       )
     ),
-    modal==='f'&&h(CustomerForm,{cust:edit,shifts,customers,onSave:save,onClose:()=>{sm(null);se(null);}})
+    modal==='f'&&h(CustomerForm,{cust:edit,shifts,customers,orders,onSave:save,onClose:()=>{sm(null);se(null);}})
   );
 }
 
@@ -4310,7 +4331,7 @@ function App(){
         canAccess(cu.role,'backup',cu.permissions)&&page==='backup'&&h(BackupTab,{employees,materials,prodCats,products,customers,workcats}),
         canAccess(cu.role,'materials',cu.permissions)&&page==='materials'&&h(MaterialsTab,{materials,setMaterials}),
         canAccess(cu.role,'products',cu.permissions)&&page==='products'&&h(ProductsTab,{products,setProducts,prodCats,setProdCats}),
-        canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers,shifts,cu}),
+        canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers,shifts,orders,cu}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats}),
         page==='shifts'&&h(ShiftsTab,{shifts,setShifts}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
