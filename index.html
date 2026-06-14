@@ -475,15 +475,16 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
   );
 }
 function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
+  const normalize=s=>(s||'').trim().toUpperCase().replace(/\s+/g,' ').replace(/[^A-Z0-9\u00C0-\u024F\u1E00-\u1EFF ]/g,'');
   const dedup=pts=>{
     const map=new Map();
     (pts||[]).forEach(p=>{
-      const k=(p.name||'').trim().toUpperCase();
+      const k=normalize(p.name);
+      if(!k)return; // bỏ qua bản không có tên
       if(!map.has(k)){map.set(k,p);}
       else {
-        // Giữ bản có thông tin đầy đủ hơn (area, contact...)
         const existing=map.get(k);
-        const score=x=>(x.area?2:0)+(x.contact?1:0)+(x.address?1:0);
+        const score=x=>(x.area?3:0)+(x.contact?1:0)+(x.address?1:0)+(x.phone?1:0);
         if(score(p)>score(existing))map.set(k,p);
       }
     });
@@ -598,7 +599,7 @@ function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
                 const normalize=s=>(s||'').trim().toLowerCase().replace(/\s+/g,' ');
                 const groups={};
                 f.points.forEach(pt=>{
-                  const key=normalize(pt.name);
+                  const key=norm2(pt.name);
                   if(!groups[key])groups[key]=[];
                   groups[key].push(pt);
                 });
@@ -631,15 +632,46 @@ function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
             // Nút dọn trùng tên chính xác
             h('button',{
               onClick:()=>{
-                const before=f.points.length;
-                const cleaned=dedup(f.points);
-                if(cleaned.length===before){alert('Không có địa điểm trùng tên!');return;}
-                const removed=before-cleaned.length;
-                if(confirm('Tìm thấy '+removed+' địa điểm trùng tên.\nGiữ bản có thông tin đầy đủ hơn. Tiếp tục?')){
-                  const sorted=cleaned.sort((a,b)=>{const ac=(a.area||'zzz').localeCompare(b.area||'zzz','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');});
-                  sf(p=>({...p,points:sorted}));
-                  sorted.forEach(pt=>{pendingAreas.current[pt.id]=pt.area||'';});
-                  alert('Đã xóa '+removed+' địa điểm trùng!');
+                // Debug: log tất cả điểm ra console
+                console.log('=== POINTS DEBUG ===');
+                console.log('Total:', f.points.length);
+                f.points.forEach((p,i)=>{
+                  const k=normalize(p.name);
+                  console.log(i, JSON.stringify({id:p.id,name:p.name,nameHex:[...p.name].map(c=>c.charCodeAt(0).toString(16)).join(','),norm:k,area:p.area}));
+                });
+                // Tìm trùng bằng normalize mạnh
+                const seen=new Map();
+                const dups=[];
+                const dupPairs=[];
+                f.points.forEach(p=>{
+                  const k=normalize(p.name);
+                  if(seen.has(k)){
+                    dups.push(p.name+' ('+p.area+')');
+                    dupPairs.push({keep:seen.get(k),remove:p});
+                  } else seen.set(k,p);
+                });
+                if(dups.length===0){
+                  // Thử tìm bằng exact string match
+                  const exactSeen=new Map();
+                  const exactDups=[];
+                  f.points.forEach(p=>{
+                    const k=p.name;
+                    if(exactSeen.has(k))exactDups.push(k);
+                    else exactSeen.set(k,p);
+                  });
+                  if(exactDups.length>0){
+                    alert('Tìm thấy '+exactDups.length+' trùng exact:\n'+exactDups.join('\n')+'\n\nNhưng normalize không bắt được - có thể có ký tự ẩn. Xem console để debug.');
+                    return;
+                  }
+                  alert('Không tìm thấy địa điểm trùng!\nĐã kiểm tra '+f.points.length+' địa điểm.\nXem Console (F12) để debug chi tiết.');
+                  return;
+                }
+                const msg='Tìm thấy '+dups.length+' địa điểm trùng:\n• '+dups.slice(0,10).join('\n• ')+(dups.length>10?'\n...':'')+'\n\nGiữ bản có thông tin đầy đủ hơn. Tiếp tục?';
+                if(confirm(msg)){
+                  const cleaned=dedup(f.points).sort((a,b)=>{const ac=(a.area||'zzz').localeCompare(b.area||'zzz','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');});
+                  sf(p=>({...p,points:cleaned}));
+                  cleaned.forEach(pt=>{pendingAreas.current[pt.id]=pt.area||'';});
+                  alert('Đã xóa '+dups.length+' địa điểm trùng! Còn lại '+cleaned.length+' địa điểm.');
                 }
               },
               style:{fontSize:11,padding:'3px 10px',display:'flex',alignItems:'center',gap:4,border:'1px solid #856404',color:'#856404',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
@@ -3037,7 +3069,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
   let ocurArea=null,oAreaKL=0,oAreaCount=0;
   sortedList.forEach((o,i)=>{
     const oa=getArea(o)||'';
-    const totalW=o.lines?o.lines.reduce((s,l)=>{const p=products.find(x=>x.id===l.productId);return s+(p?.weightPerUnit||0)*numFmt(l.qtyInvoice);},0):0;
+    const totalW=o.lines?o.lines.reduce((s,l)=>{const p=products?.find(x=>x.id===l.productId);const wpu=p?.weightPerUnit||numFmt(l.weightPerUnit)||0;const qty=numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||0;return s+wpu*qty;},0):0;
     if(oa!==ocurArea){
       if(ocurArea!==null)orderTableRows.push({_sub:true,area:ocurArea,kl:oAreaKL,cnt:oAreaCount});
       ocurArea=oa;oAreaKL=0;oAreaCount=0;
@@ -3254,7 +3286,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
             h('td',{colSpan:3,style:{background:'#e8f5e9'}})
           );
           const trip=trips.find(t=>t.id===o.tripId);
-          const totalW=o._totalW||0;
+          const totalW=o._totalW||(o.lines?o.lines.reduce((s,l)=>{const p=products?.find(x=>x.id===l.productId);const wpu=p?.weightPerUnit||numFmt(l.weightPerUnit)||0;return s+wpu*(numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||0);},0):0);
           return h('tr',{key:o.id},
             h('td',null,h('span',{style:{color:'var(--pri)',fontWeight:500}},o.id)),
             h('td',null,
@@ -3323,7 +3355,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
     const pt=(c?.points||[]).find(p=>p.id===o.pointId||p.name===o.pointName);
     return o.area||pt?.area||'';
   };
-  const availOrders=orders.filter(o=>o.status==='pending'||(trip&&trip.orderIds.includes(o.id)));
+  const availOrders=orders.filter(o=>o.status==='pending'||(trip&&(trip.orderIds||[]).includes(o.id)));
   // Áp dụng bộ lọc
   const filteredOrders=availOrders.filter(o=>{
     if(fDate&&o.deliveryDate!==fDate.split('-').reverse().join('/'))return false;
@@ -3333,10 +3365,10 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
     if(fTimeTo&&o.deliveryTime&&o.deliveryTime>fTimeTo)return false;
     return true;
   });
-  const toggle=id=>sf(p=>({...p,orderIds:p.orderIds.includes(id)?p.orderIds.filter(x=>x!==id):[...p.orderIds,id]}));
+  const toggle=id=>sf(p=>({...p,orderIds:(p.orderIds||[]).includes(id)?p.orderIds.filter(x=>x!==id):[...p.orderIds,id]}));
   const toggleAll=()=>{
     const ids=filteredOrders.map(o=>o.id);
-    const allChecked=ids.every(id=>f.orderIds.includes(id));
+    const allChecked=ids.every(id=>(f.orderIds||[]).includes(id));
     sf(p=>({...p,orderIds:allChecked?p.orderIds.filter(id=>!ids.includes(id)):[...new Set([...p.orderIds,...ids])]}));
   };
   const totalW=f.orderIds.reduce((sum,oid)=>{const o=orders.find(x=>x.id===oid);if(!o||!o.lines)return sum;return sum+o.lines.reduce((s,l)=>{const prod=products?.find(p=>p.id===l.productId);const wpu=prod?.weightPerUnit||numFmt(l.weightPerUnit)||0;return s+wpu*numFmt(l.qtyInvoice);},0);},0);
@@ -3348,8 +3380,8 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
   // Danh sách khu vực và KH để lọc
   const allAreas=[...new Set(availOrders.map(o=>getOArea(o)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
   const allCusts=[...new Set(availOrders.map(o=>o.customerId).filter(Boolean))].map(id=>customers?.find(c=>c.id===id)).filter(Boolean);
-  const allFilteredChecked=filteredOrders.length>0&&filteredOrders.every(o=>f.orderIds.includes(o.id));
-  const someFilteredChecked=filteredOrders.some(o=>f.orderIds.includes(o.id))&&!allFilteredChecked;
+  const allFilteredChecked=filteredOrders.length>0&&filteredOrders.every(o=>(f.orderIds||[]).includes(o.id));
+  const someFilteredChecked=filteredOrders.some(o=>(f.orderIds||[]).includes(o.id))&&!allFilteredChecked;
 
   return h(Modal,{title:trip?'Sửa chuyến '+trip.id:'Tạo chuyến giao hàng',onClose,lg:true},
     h('div',{className:'g2'},
@@ -3375,7 +3407,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
     h('div',{className:'divider'}),
     // ── PHẦN 1: ĐÃ TRONG CHUYẾN (luôn hiện trên cùng) ──
     (()=>{
-      const inTripAll=availOrders.filter(o=>f.orderIds.includes(o.id));
+      const inTripAll=availOrders.filter(o=>(f.orderIds||[]).includes(o.id));
       if(inTripAll.length===0)return null;
       return h('div',{style:{marginBottom:8}},
         h('div',{style:{padding:'5px 10px',background:'#2d6a4f',color:'#fff',fontSize:12,fontWeight:700,
@@ -3420,10 +3452,10 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
     h('div',{style:{marginBottom:6}},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}},
         h('div',{style:{fontWeight:600,fontSize:13,color:'var(--tx2)'}},'+ Thêm đơn hàng vào chuyến'),
-        filteredOrders.filter(o=>!f.orderIds.includes(o.id)).length>0&&h('button',{
+        filteredOrders.filter(o=>!(f.orderIds||[]).includes(o.id)).length>0&&h('button',{
           onClick:()=>sf(p=>({...p,orderIds:[...new Set([...p.orderIds,...filteredOrders.map(o=>o.id)])]})),
           style:{fontSize:12,padding:'3px 10px',border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
-        },'Chọn tất cả ('+filteredOrders.filter(o=>!f.orderIds.includes(o.id)).length+')')
+        },'Chọn tất cả ('+filteredOrders.filter(o=>!(f.orderIds||[]).includes(o.id)).length+')')
       ),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}},
         h('input',{type:'date',value:fDate,onChange:e=>setFDate(e.target.value),
@@ -3480,9 +3512,9 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
         );
       };
       // Đã trong chuyến: lấy từ TẤT CẢ đơn (không qua filter) để luôn hiện đủ
-      const inTrip=availOrders.filter(o=>f.orderIds.includes(o.id));
+      const inTrip=availOrders.filter(o=>(f.orderIds||[]).includes(o.id));
       // Có thể thêm: qua filter, chưa trong chuyến
-      const notInTrip=filteredOrders.filter(o=>!f.orderIds.includes(o.id));
+      const notInTrip=filteredOrders.filter(o=>!(f.orderIds||[]).includes(o.id));
       return h('div',{style:{border:'.5px solid var(--bd)',borderRadius:'var(--r)',overflow:'hidden'}},
         // Phần ĐÃ CÓ trong chuyến
         inTrip.length>0&&h('div',null,
@@ -3709,8 +3741,8 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
       const old=trips.find(t=>t.id===edit.id);
       const tripId=edit.id;
       if(old){setOrders(p=>p.map(o=>{
-        if(old.orderIds.includes(o.id)&&!d.orderIds.includes(o.id))return {...o,tripId:null,status:'pending'};
-        if(d.orderIds.includes(o.id))return {...o,tripId,status:orderStatusForTrip(d.status)};
+        if((old.orderIds||[]).includes(o.id)&&!(d.orderIds||[]).includes(o.id))return {...o,tripId:null,status:'pending'};
+        if((d.orderIds||[]).includes(o.id))return {...o,tripId,status:orderStatusForTrip(d.status)};
         return o;
       }));}
       setTrips(p=>p.map(t=>t.id===edit.id?{...edit,...d,id:tripId}:t));
@@ -3731,13 +3763,13 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
       let seq=2;
       while(trips.find(t=>t.id===id)){id=baseId+'_'+seq;seq++;}
       setTrips(p=>[...p,{...d,id,createdAt:fmtDate()}]);
-      setOrders(p=>p.map(o=>d.orderIds.includes(o.id)?{...o,tripId:id,status:orderStatusForTrip(d.status)}:o));
+      setOrders(p=>p.map(o=>(d.orderIds||[]).includes(o.id)?{...o,tripId:id,status:orderStatusForTrip(d.status)}:o));
     }
     sm(null);se(null);
   };
   const del=id=>{
     const t=trips.find(x=>x.id===id);
-    if(t)setOrders(p=>p.map(o=>t.orderIds.includes(o.id)?{...o,tripId:null,status:'pending'}:o));
+    if(t)setOrders(p=>p.map(o=>(t.orderIds||[]).includes(o.id)?{...o,tripId:null,status:'pending'}:o));
     if(confirm('Xóa chuyến giao?'))setTrips(p=>p.filter(x=>x.id!==id));
   };
   const updStatus=(id,status)=>{
@@ -3751,9 +3783,9 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
       ...(status==='completed'?{endTime:x.endTime||stamp,completedAt:x.completedAt||stamp,attendanceStatus:x.attendanceStatus||'pending'}:{})
     }:x));
     if(t){
-      if(status==='assigned')setOrders(p=>p.map(o=>t.orderIds.includes(o.id)?{...o,status:'assigned'}:o));
-      if(status==='active')setOrders(p=>p.map(o=>t.orderIds.includes(o.id)?{...o,status:'delivering'}:o));
-      if(status==='completed')setOrders(p=>p.map(o=>t.orderIds.includes(o.id)?{...o,status:'done'}:o));
+      if(status==='assigned')setOrders(p=>p.map(o=>(t.orderIds||[]).includes(o.id)?{...o,status:'assigned'}:o));
+      if(status==='active')setOrders(p=>p.map(o=>(t.orderIds||[]).includes(o.id)?{...o,status:'delivering'}:o));
+      if(status==='completed')setOrders(p=>p.map(o=>(t.orderIds||[]).includes(o.id)?{...o,status:'done'}:o));
     }
   };
   const calcTripWeight=t=>{
@@ -3835,7 +3867,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
     ),
     filteredTrips.length?h('div',{style:{display:'flex',flexDirection:'column',gap:'1rem'}},
       filteredTrips.map(trip=>{
-        const tripOrders=orders.filter(o=>trip.orderIds.includes(o.id));
+        const tripOrders=orders.filter(o=>(trip.orderIds||[]).includes(o.id));
         const isOpen=open===trip.id;
         const totalW=trip.totalWeight||tripOrders.reduce((s,o)=>s+(o.lines?o.lines.reduce((ss,l)=>{const prod=products?.find(p=>p.id===l.productId);return ss+(prod?.weightPerUnit||l.weightPerUnit||0)*numFmt(l.qtyInvoice);},0):0),0);
         return h('div',{key:trip.id,className:'card',style:{padding:0,overflow:'hidden'}},
@@ -3976,7 +4008,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
         setTrips(p=>[...p,...newTrips]);
         // Cập nhật tripId cho đơn hàng
         newTrips.forEach(t=>{
-          setOrders(p=>p.map(o=>t.orderIds.includes(o.id)?{...o,tripId:t.id,status:'assigned'}:o));
+          setOrders(p=>p.map(o=>(t.orderIds||[]).includes(o.id)?{...o,tripId:t.id,status:'assigned'}:o));
         });
         sm(null);
       },
