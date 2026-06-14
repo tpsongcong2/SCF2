@@ -1,4 +1,4 @@
-const CACHE = 'scf-v3';
+const CACHE = 'scf-v4';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -17,6 +17,7 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  // Network first - luôn lấy bản mới nhất
   e.respondWith(
     fetch(e.request)
       .then(res => {
