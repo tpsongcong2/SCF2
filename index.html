@@ -121,8 +121,19 @@ function useLS(key,init){
   useEffect(()=>{try{localStorage.setItem(key,JSON.stringify(v))}catch{}},[key,v]);
   return[v,sv];
 }
-async function dbGet(key,def){if(!sb)return def;try{const{data}=await sb.from('kv_store').select('value').eq('key',key).maybeSingle();return data?.value??def;}catch{return def;}}
-async function dbSet(key,val){if(!sb)return;try{await sb.from('kv_store').upsert({key,value:val,updated_at:new Date().toISOString()});}catch(e){console.warn(e.message);}}
+async function dbGet(key,def){
+  // Luôn thử localStorage trước (nhanh, offline-first)
+  try{const ls=localStorage.getItem('scf_'+key.replace('scf_',''));if(ls)return JSON.parse(ls);}catch{}
+  // Nếu có Supabase thì sync từ server
+  if(sb)try{const{data}=await sb.from('kv_store').select('value').eq('key',key).maybeSingle();if(data?.value){try{localStorage.setItem('scf_'+key.replace('scf_',''),JSON.stringify(data.value));}catch{}return data.value;}}catch(e){console.warn('dbGet Supabase:',e.message);}
+  return def;
+}
+async function dbSet(key,val){
+  // Lưu localStorage ngay lập tức
+  try{localStorage.setItem('scf_'+key.replace('scf_',''),JSON.stringify(val));}catch(e){console.warn('localStorage save:',e.message);}
+  // Sync lên Supabase nếu có
+  if(sb)try{await sb.from('kv_store').upsert({key,value:val,updated_at:new Date().toISOString()});}catch(e){console.warn('dbSet Supabase:',e.message);}
+}
 function mkSet(key,setter){return valOrFn=>{setter(prev=>{const next=typeof valOrFn==='function'?valOrFn(prev):valOrFn;dbSet(key,next);return next;});};}
 
 /* ─── Helpers ─── */
