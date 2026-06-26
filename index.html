@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.2.0/dist/tabler-icons.min.css"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" crossorigin="anonymous"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--pri:#2d6a4f;--pri2:#52b788;--pri3:#1b4332;--acc:#f8c30f;--bg:#f0f4f1;--bg2:#e8f0ec;--card:#fff;--tx:#1a2e22;--tx2:#4a6358;--bd:rgba(0,0,0,.1);--bd2:rgba(0,0,0,.18);--sb-w:230px;--r:8px;--rl:12px}
@@ -815,11 +816,71 @@ function ProdShiftsTab({prodShifts,setProdShifts,orders,customers}){
   const[modal,sm]=useState(null);
   const[edit,se]=useState(null);
   const empty={name:'',location:'',orderTime:'',actualProdTime:'',prodDateOffset:0,labelPrintTime:'',labelPrintDateOffset:0,color:'#FFF8E1',textColor:'#333',active:true};
+  const shiftNamePresets=[
+    {name:'Ca sáng',orderTime:'03:00',actualProdTime:'03:00',prodDateOffset:0,labelPrintTime:'04:00',labelPrintDateOffset:0,color:'#FFF8E1',textColor:'#E65100'},
+    {name:'Ca chiều',orderTime:'20:00',actualProdTime:'20:00',prodDateOffset:0,labelPrintTime:'21:00',labelPrintDateOffset:0,color:'#E8F5E9',textColor:'#1B5E20'},
+    {name:'Ca đêm',orderTime:'01:00',actualProdTime:'01:00',prodDateOffset:-1,labelPrintTime:'22:00',labelPrintDateOffset:-1,color:'#EDE7F6',textColor:'#4527A0'},
+    {name:'Ca ngày',orderTime:'07:00',actualProdTime:'07:00',prodDateOffset:0,labelPrintTime:'06:00',labelPrintDateOffset:0,color:'#E6F1FB',textColor:'#185FA5'}
+  ];
   const normalize=sh=>({...empty,...sh,orderTime:sh?.orderTime||sh?.startTime||'',actualProdTime:sh?.actualProdTime||sh?.endTime||'',prodDateOffset:Number(sh?.prodDateOffset??0),labelPrintTime:sh?.labelPrintTime||'',labelPrintDateOffset:Number(sh?.labelPrintDateOffset??0)});
   const[form,sf]=useState(empty);
   const pointOptions=[...new Set((customers||[]).flatMap(c=>(c.points||[]).map(pt=>pt.name).filter(Boolean)))].sort((a,b)=>a.localeCompare(b));
   const dateOffsetLabel=v=>Number(v)===-1?'Trước ngày đơn hàng 1 ngày (-1)':'Cùng ngày đơn hàng (0)';
+  const areaOfLocation=loc=>{
+    const name=(loc||'').trim().toUpperCase();
+    if(!name)return 'Chưa phân khu vực';
+    for(const c of customers||[]){
+      const pt=(c.points||[]).find(p=>(p.name||'').trim().toUpperCase()===name);
+      if(pt)return pt.area||'Chưa phân khu vực';
+    }
+    return 'Chưa phân khu vực';
+  };
   const open=(sh)=>{sf(sh?normalize(sh):{...empty});se(sh||null);sm('f');};
+  const presetForTime=t=>{
+    const exact=shiftNamePresets.find(x=>x.orderTime===t);
+    if(exact)return exact;
+    const m=timeToMin(t);
+    if(m<360)return shiftNamePresets.find(x=>x.name==='Ca đêm');
+    if(m>=1080)return shiftNamePresets.find(x=>x.name==='Ca chiều');
+    if(m>=360&&m<720)return shiftNamePresets.find(x=>x.name==='Ca sáng');
+    return shiftNamePresets.find(x=>x.name==='Ca ngày')||shiftNamePresets[0];
+  };
+  const autoUpdateFromOrders=()=>{
+    const map={};
+    (orders||[]).forEach(o=>{
+      const loc=(o.pointName||o.address||'').trim();
+      const time=(o.deliveryTime||'').trim();
+      if(!loc||!time)return;
+      map[(loc+'|'+time).toUpperCase()]={location:loc,orderTime:time};
+    });
+    const pairs=Object.values(map);
+    if(!pairs.length){alert('Chưa tìm thấy địa điểm có giờ giao trong danh sách đơn hàng.');return;}
+    const exists=(loc,time)=>prodShifts.some(s=>{
+      const r=normalize(s);
+      return (r.location||'').trim().toUpperCase()===loc.trim().toUpperCase()&&r.orderTime===time;
+    });
+    const added=[];
+    pairs.forEach(p=>{
+      if(exists(p.location,p.orderTime))return;
+      const sameTime=prodShifts.map(normalize).find(s=>s.orderTime===p.orderTime);
+      const preset=sameTime||presetForTime(p.orderTime)||empty;
+      added.push({
+        ...empty,
+        ...preset,
+        id:'PSH'+uid(),
+        location:p.location,
+        orderTime:p.orderTime,
+        startTime:p.orderTime,
+        endTime:p.orderTime,
+        actualProdTime:preset.actualProdTime||p.orderTime,
+        labelPrintTime:preset.labelPrintTime||p.orderTime,
+        active:true
+      });
+    });
+    if(!added.length){alert('Tất cả địa điểm + giờ giao trong đơn hàng đã có trong Ca sản xuất.');return;}
+    setProdShifts(p=>[...p,...added]);
+    alert('Đã tự động thêm '+added.length+' dòng ca sản xuất từ danh sách đơn hàng.');
+  };
   const save=()=>{
     if(!form.name||!form.orderTime||!form.actualProdTime){alert('Nhập đủ tên ca, giờ đơn hàng và giờ sản xuất thực tế!');return;}
     const data={...form,startTime:form.orderTime,endTime:form.orderTime,prodDateOffset:Number(form.prodDateOffset||0),labelPrintDateOffset:Number(form.labelPrintDateOffset||0)};
@@ -836,19 +897,33 @@ function ProdShiftsTab({prodShifts,setProdShifts,orders,customers}){
       h('br'),
       h('span',{style:{color:'var(--tx2)',fontSize:12}},'Ngày -1 là làm/in trước ngày đơn hàng 1 ngày; ngày 0 là cùng ngày với ngày đơn hàng.')
     ),
-    h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:'1rem'}},
+    h('div',{style:{display:'flex',justifyContent:'flex-end',gap:8,marginBottom:'1rem',flexWrap:'wrap'}},
+      h('button',{onClick:autoUpdateFromOrders},h('i',{className:'ti ti-refresh',style:{fontSize:14}}),'Cập nhật từ đơn hàng'),
       h(AddBtn,{onClick:()=>open(null),label:'Thêm dòng'})
     ),
     h('div',{style:{overflowX:'auto',background:'#fff',border:'1px solid var(--bd)',borderRadius:'var(--r)',marginBottom:'1.5rem'}},
       h('table',{style:{width:'100%',borderCollapse:'collapse',minWidth:860}},
         h('thead',null,h('tr',null,
-          ['Tên ca','Địa điểm','Giờ đơn hàng','Giờ sản xuất thực tế','Ngày sản xuất','Giờ in tem','Ngày in tem','Trạng thái',''].map(x=>h('th',{key:x,style:{textAlign:'left',padding:'10px 12px',borderBottom:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)',background:'var(--bg2)',whiteSpace:'nowrap'}},x))
+          ['Tên ca','Khu vực','Địa điểm','Giờ đơn hàng','Giờ sản xuất thực tế','Ngày sản xuất','Giờ in tem','Ngày in tem','Trạng thái',''].map(x=>h('th',{key:x,style:{textAlign:'left',padding:'10px 12px',borderBottom:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)',background:'var(--bg2)',whiteSpace:'nowrap'}},x))
         )),
         h('tbody',null,
-          prodShifts.map(sh=>{
-            const r=normalize(sh);
-            return h('tr',{key:sh.id,style:{borderBottom:'1px solid var(--bd)'}},
+          (()=>{let lastArea=null;const rows=[];[...prodShifts].map(normalize).sort((a,b)=>{
+            const aa=areaOfLocation(a.location),ab=areaOfLocation(b.location);
+            return aa.localeCompare(ab,'vi')||(a.location||'').localeCompare(b.location||'','vi')||timeToMin(a.orderTime)-timeToMin(b.orderTime)||(a.name||'').localeCompare(b.name||'','vi');
+          }).forEach(r=>{
+            const area=areaOfLocation(r.location);
+            if(area!==lastArea){
+              lastArea=area;
+              rows.push(h('tr',{key:'area-'+area},
+                h('td',{colSpan:10,style:{padding:'8px 12px',background:'#E6F1FB',color:'#185FA5',fontWeight:700,borderTop:'1px solid var(--bd)',borderBottom:'1px solid var(--bd)'}},
+                  h('i',{className:'ti ti-map-pin',style:{fontSize:14,marginRight:6}}),
+                  'Khu vực: '+area
+                )
+              ));
+            }
+            rows.push(h('tr',{key:r.id,style:{borderBottom:'1px solid var(--bd)'}},
               h('td',{style:{padding:'10px 12px',fontWeight:700,color:r.textColor||'#333'}},r.name),
+              h('td',{style:{padding:'10px 12px'}},h('span',{className:'badge',style:{background:area==='Chưa phân khu vực'?'#F1EFE8':'#E6F1FB',color:area==='Chưa phân khu vực'?'#5F5E5A':'#185FA5'}},area)),
               h('td',{style:{padding:'10px 12px'}},r.location||'—'),
               h('td',{style:{padding:'10px 12px',fontWeight:600}},r.orderTime||'—'),
               h('td',{style:{padding:'10px 12px'}},r.actualProdTime||'—'),
@@ -857,11 +932,11 @@ function ProdShiftsTab({prodShifts,setProdShifts,orders,customers}){
               h('td',{style:{padding:'10px 12px'}},dateOffsetLabel(r.labelPrintDateOffset)),
               h('td',{style:{padding:'10px 12px'}},h('span',{className:'badge',style:{background:r.active?'#E8F5E9':'#F1EFE8',color:r.active?'#1B5E20':'#777'}},r.active?'Đang hoạt động':'Tạm tắt')),
               h('td',{style:{padding:'8px 12px',textAlign:'right',whiteSpace:'nowrap'}},
-                h('button',{className:'bi',onClick:()=>open(sh),title:'Sửa'},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
-                h('button',{className:'bi',onClick:()=>del(sh),title:'Xóa',style:{color:'#A32D2D',marginLeft:4}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+                h('button',{className:'bi',onClick:()=>open(r),title:'Sửa'},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
+                h('button',{className:'bi',onClick:()=>del(r),title:'Xóa',style:{color:'#A32D2D',marginLeft:4}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
               )
-            );
-          })
+            ));
+          });return rows;})()
         )
       )
     ),
@@ -877,7 +952,11 @@ function ProdShiftsTab({prodShifts,setProdShifts,orders,customers}){
       )
     ),
     modal==='f'&&h(Modal,{title:edit?'Sửa ca sản xuất':'Thêm ca sản xuất',onClose:()=>sm(null)},
-      h(F,{label:'Tên ca *'},h('input',{value:form.name,onChange:e=>sf(p=>({...p,name:e.target.value})),placeholder:'Ca sáng, Ca chiều, Ca đêm...'})),
+      h(F,{label:'Tên ca *'},h('select',{value:form.name,onChange:e=>{const preset=shiftNamePresets.find(x=>x.name===e.target.value);sf(p=>preset?{...p,...preset}:({...p,name:e.target.value}));}},
+        h('option',{value:''},'— Chọn ca —'),
+        shiftNamePresets.map(x=>h('option',{key:x.name,value:x.name},x.name)),
+        form.name&&!shiftNamePresets.some(x=>x.name===form.name)&&h('option',{value:form.name},form.name)
+      )),
       h(F,{label:'Địa điểm'},h('select',{value:form.location||'',onChange:e=>sf(p=>({...p,location:e.target.value}))},
         h('option',{value:''},'— Chọn địa điểm —'),
         pointOptions.map(pt=>h('option',{key:pt,value:pt},pt))
@@ -3385,6 +3464,156 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
   );
 }
 
+function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,onClose}) {
+  const[file,setFile]=useState(null);
+  const[img,setImg]=useState('');
+  const[text,setText]=useState('');
+  const[rows,setRows]=useState([]);
+  const[busy,setBusy]=useState(false);
+  const[progress,setProgress]=useState('');
+  const inputRef=useRef(null);
+  const norm=s=>String(s||'').trim().replace(/\s+/g,' ');
+  const findPoint=line=>{
+    const src=norm(line).toUpperCase();
+    let best=null;
+    customers.forEach(c=>(c.points||[]).forEach(pt=>{
+      const pn=norm(pt.name).toUpperCase();
+      if(!pn)return;
+      if(src.includes(pn)||pn.includes(src)){
+        const score=Math.min(src.length,pn.length)/Math.max(src.length,pn.length);
+        if(!best||score>best.score)best={cust:c,pt,score};
+      }
+    }));
+    return best;
+  };
+  const findProduct=line=>{
+    const src=norm(line).toUpperCase();
+    let best=null;
+    products.forEach(p=>{
+      const pn=norm(p.name).toUpperCase();
+      if(!pn)return;
+      if(src.includes(pn)||pn.includes(src)){
+        const score=Math.min(src.length,pn.length)/Math.max(src.length,pn.length);
+        if(!best||score>best.score)best={prod:p,score};
+      }
+    });
+    return best;
+  };
+  const readDate=line=>{
+    const m=String(line||'').match(/(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?/);
+    if(!m)return '';
+    const y=m[3]?String(m[3]).padStart(4,'20'):String(new Date().getFullYear());
+    return pad2(m[1])+'/'+pad2(m[2])+'/'+y;
+  };
+  const readTime=line=>{
+    const m=String(line||'').match(/\b([01]?\d|2[0-3])[:hH.]([0-5]\d)\b/);
+    return m?pad2(m[1])+':'+pad2(m[2]):'';
+  };
+  const parseText=raw=>{
+    const clean=String(raw||'').replace(/\r/g,'\n').replace(/[|]/g,' ').split('\n').map(norm).filter(Boolean);
+    const result=[];let cur=null;let curDate='';
+    const flush=()=>{if(cur&&cur.lines.length)result.push(cur);cur=null;};
+    clean.forEach(line=>{
+      const d=readDate(line);if(d)curDate=d;
+      const t=readTime(line);
+      const ptMatch=findPoint(line);
+      if(ptMatch||t){
+        if(ptMatch||(!cur&&t)){
+          if(cur&&cur.lines.length)flush();
+          const pt=ptMatch?.pt||{};
+          const cust=ptMatch?.cust||{};
+          cur={id:'IMG'+uid(),deliveryDate:d||curDate||fmtDate(),deliveryTime:t||'08:00',pointId:pt.id||'',pointName:pt.name||line.replace(/\b([01]?\d|2[0-3])[:hH.]([0-5]\d)\b/g,'').trim(),customerId:cust.id||'',customer:cust.name||'',address:pt.address||'',status:'pending',note:'Nhập từ ảnh OCR',workOut:0,workReturn:0,prodShiftId:(getProdShift(t||'08:00',prodShifts||[])||{}).id||'',lines:[],createdAt:fmtDate(),updatedAt:fmtDT()};
+        } else if(cur&&t) cur.deliveryTime=t;
+      }
+      if(!cur)return;
+      const qtyMatch=line.match(/(\d+(?:[,.]\d+)?)\s*(kg|kgs|gói|goi|cái|cai|thùng|thung|túi|tui|hộp|hop|bao|bộ|bo|lít|lit)?\s*$/i);
+      const prodMatch=findProduct(line);
+      if(qtyMatch&&(prodMatch||!ptMatch)){
+        const qty=numFmt(qtyMatch[1]);
+        let name=line.replace(qtyMatch[0],'').replace(/\b([01]?\d|2[0-3])[:hH.]([0-5]\d)\b/g,'').trim();
+        if(prodMatch)name=prodMatch.prod.name;
+        if(name&&name.length>1){
+          const prod=prodMatch?.prod||products.find(p=>norm(p.name).toUpperCase()===name.toUpperCase())||{};
+          const unit=qtyMatch[2]||prod.unit||'Kg';
+          cur.lines.push({id:uid(),productId:prod.id||'',productName:name,unit,weightPerUnit:prod.weightPerUnit||0,qtyProd:qty,qtyInvoice:qty,shift:'day',note:''});
+        }
+      }
+    });
+    flush();
+    return result.filter(o=>o.lines.length);
+  };
+  const setImageFile=f=>{
+    if(!f)return;
+    setFile(f);setRows([]);setText('');
+    const r=new FileReader();
+    r.onload=e=>setImg(e.target.result);
+    r.readAsDataURL(f);
+  };
+  const runOcr=async()=>{
+    if(!file){alert('Chọn hoặc kéo ảnh vào trước.');return;}
+    if(!window.Tesseract){alert('Chưa tải được thư viện OCR. Kiểm tra mạng rồi thử lại.');return;}
+    setBusy(true);setProgress('Đang đọc ảnh...');
+    try{
+      const res=await Tesseract.recognize(file,'vie+eng',{logger:m=>{if(m.status)setProgress(m.status+(m.progress?(' '+Math.round(m.progress*100)+'%'):''));}});
+      const txt=res?.data?.text||'';
+      setText(txt);
+      setRows(parseText(txt));
+      setProgress('Đã đọc xong');
+    }catch(e){alert('Không đọc được ảnh: '+(e.message||e));}
+    finally{setBusy(false);}
+  };
+  const reparse=()=>setRows(parseText(text));
+  const importRows=()=>{
+    if(!rows.length){alert('Chưa có đơn nào để nhập.');return;}
+    const dup=rows.filter(o=>orders.some(ex=>ex.deliveryDate===o.deliveryDate&&ex.pointName===o.pointName&&ex.deliveryTime===o.deliveryTime));
+    const finalRows=dup.length&&confirm('Có '+dup.length+' đơn có thể bị trùng. Bỏ qua đơn trùng?')?rows.filter(o=>!dup.includes(o)):rows;
+    if(!finalRows.length){alert('Không còn đơn mới để nhập.');return;}
+    setOrders(p=>[...p,...finalRows]);
+    alert('Đã nhập '+finalRows.length+' đơn hàng từ ảnh.');
+    onClose();
+  };
+  return h(Modal,{title:'Tự động lấy đơn từ ảnh',lg:true,onClose},
+    h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,alignItems:'start'}},
+      h('div',null,
+        h('div',{
+          onDragOver:e=>{e.preventDefault();},
+          onDrop:e=>{e.preventDefault();setImageFile(e.dataTransfer.files&&e.dataTransfer.files[0]);},
+          onClick:()=>inputRef.current&&inputRef.current.click(),
+          style:{border:'1.5px dashed var(--pri)',borderRadius:'var(--rl)',padding:'1.25rem',minHeight:220,display:'flex',alignItems:'center',justifyContent:'center',textAlign:'center',cursor:'pointer',background:'#f7fbf8',overflow:'hidden'}
+        },
+          img?h('img',{src:img,style:{maxWidth:'100%',maxHeight:260,objectFit:'contain'}})
+          :h('div',null,h('i',{className:'ti ti-photo-scan',style:{fontSize:44,color:'var(--pri)',display:'block',marginBottom:8}}),'Kéo ảnh vào đây hoặc bấm để chọn ảnh')
+        ),
+        h('input',{ref:inputRef,type:'file',accept:'image/*',style:{display:'none'},onChange:e=>setImageFile(e.target.files&&e.target.files[0])}),
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}},
+          h('button',{className:'bp',onClick:runOcr,disabled:busy},h('i',{className:'ti ti-scan-text',style:{fontSize:14}}),busy?'Đang đọc...':'AI/OCR đọc ảnh'),
+          h('button',{onClick:reparse,disabled:busy||!text},h('i',{className:'ti ti-refresh',style:{fontSize:14}}),'Tách lại dữ liệu')
+        ),
+        progress&&h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:8}},progress)
+      ),
+      h('div',null,
+        h(F,{label:'Nội dung OCR'},h('textarea',{value:text,onChange:e=>setText(e.target.value),rows:12,placeholder:'Sau khi OCR, chữ đọc được sẽ hiện ở đây. Có thể sửa rồi bấm Tách lại dữ liệu.'})),
+        h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Mẹo: ảnh rõ, thẳng, đủ sáng và mỗi dòng có tên hàng + số lượng sẽ đọc tốt hơn.')
+      )
+    ),
+    h('div',{style:{marginTop:'1rem'}},
+      h('div',{style:{fontWeight:600,marginBottom:8,color:'var(--pri3)'}},'Bảng xem trước ('+rows.length+' đơn)'),
+      h('div',{className:'tw',style:{maxHeight:260}},
+        h('table',null,
+          h('thead',null,h('tr',null,...['Ngày','Giờ','Địa điểm','Khách hàng','Hàng hóa'].map(c=>h('th',{key:c},c)))),
+          h('tbody',null,rows.length?rows.map(o=>h('tr',{key:o.id},
+            h('td',null,o.deliveryDate),h('td',null,o.deliveryTime),
+            h('td',null,h('div',{style:{fontWeight:500}},o.pointName||'—'),!o.pointId&&h('div',{style:{fontSize:11,color:'#A32D2D'}},'Chưa khớp danh mục')),
+            h('td',null,o.customer||'—'),
+            h('td',null,(o.lines||[]).map(l=>h('div',{key:l.id,style:{fontSize:12}},l.productName+' - '+l.qtyInvoice+' '+l.unit)))
+          )):h('tr',null,h('td',{colSpan:5,className:'empty-st'},'Chưa có dữ liệu xem trước.')))
+        )
+      )
+    ),
+    h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:importRows,disabled:busy||!rows.length},h('i',{className:'ti ti-file-import',style:{fontSize:14}}),'Nhập đơn hàng'))
+  );
+}
+
 function PrintByCustomerModal({orders,customers,products,company,onClose}) {
   const [custId,sCust]=useState('');
   const [df,sdf]=useState('');
@@ -3684,10 +3913,15 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
         }}),
         modal==='print'&&h(PrintByCustomerModal,{orders,customers,products,company,onClose:()=>sm(null)}),
         modal==='importPreview'&&window._importData&&h(ImportPreviewModal,{data:window._importData,customers,setCustomers,orders,setOrders,onClose:()=>{sm(null);delete window._importData;}}),
+        modal==='imageImport'&&h(ImageOrderImportModal,{customers,products,orders,setOrders,prodShifts,onClose:()=>sm(null)}),
         h('button',{
           onClick:()=>sm('print'),
           style:{padding:'6px 12px',fontSize:12,display:'flex',alignItems:'center',gap:5,background:'#185FA5',color:'#fff',border:'none',borderRadius:'var(--r)',cursor:'pointer'}
         },h('i',{className:'ti ti-printer',style:{fontSize:14}}),'In phiếu KH'),
+        h('button',{
+          onClick:()=>sm('imageImport'),
+          style:{padding:'6px 12px',fontSize:12,display:'flex',alignItems:'center',gap:5,background:'#6D28D9',color:'#fff',border:'none',borderRadius:'var(--r)',cursor:'pointer'}
+        },h('i',{className:'ti ti-photo-scan',style:{fontSize:14}}),'Lấy đơn từ ảnh'),
         h('button',{
           title:'Import đơn hàng từ file Excel của khách hàng',
           style:{padding:'6px 12px',fontSize:12,display:'flex',alignItems:'center',gap:5,background:'var(--pri3)',color:'#fff',border:'none',borderRadius:'var(--r)',cursor:'pointer'},
