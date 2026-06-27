@@ -1908,7 +1908,7 @@ function SalesReportTab({orders,customers,products}) {
 }
 
 /* ─── ĐƠN HÀNG CHI TIẾT ─── */
-function OrderDetailListTab({orders, products, customers, shifts}) {
+function OrderDetailListTab({orders, setOrders, products, customers, shifts, currentUser}) {
   const [q, sq] = useState('');
   const _td3=fmtDate();const _ti3=_td3.split('/').reverse().join('-');
   const [dateF, sdf] = useState(_ti3);
@@ -1924,6 +1924,7 @@ function OrderDetailListTab({orders, products, customers, shifts}) {
       if (!l.productId) return;
       rows.push({
         orderId: o.id,
+        lineId: l.id,
         date: o.deliveryDate || '',
         point: o.pointName || '',
         customer: o.customer || '',
@@ -1931,6 +1932,7 @@ function OrderDetailListTab({orders, products, customers, shifts}) {
         unit: l.unit || '',
         qtyProd: numFmt(l.qtyProd) || 0,
         qtyInvoice: numFmt(l.qtyInvoice) || 0,
+        qtyDelivered: l.qtyDelivered,
         shift: l.shift || 'day',
         time: o.deliveryTime || '',
         note: l.note || o.note || '',
@@ -1965,6 +1967,11 @@ function OrderDetailListTab({orders, products, customers, shifts}) {
 
   const shiftLabel = s => s === 'night' ? '🌙 Ca đêm' : '☀️ Ca ngày';
   const statusColor = {pending:'#FAEEDA',delivering:'#EAF3DE',done:'#E1F5EE'};
+  const canEditDelivered=currentUser&&(currentUser.role==='admin'||currentUser.role==='manager'||currentUser.role==='driver'||currentUser.dept==='Kế toán');
+  const updateDeliveredQty=(orderId,lineId,value)=>{
+    const qty=numFmt(value);
+    setOrders&&setOrders(prev=>prev.map(o=>o.id===orderId?{...o,lines:(o.lines||[]).map(l=>l.id===lineId?{...l,qtyDelivered:qty,deliveredAt:fmtDT(),deliveredBy:currentUser?.name||''}:l)}:o));
+  };
 
   // Sort theo khu vực → địa điểm → giờ
   const sorted=[...filtered].sort((a,b)=>{
@@ -1976,16 +1983,17 @@ function OrderDetailListTab({orders, products, customers, shifts}) {
   });
   // Build rows với dòng header khu vực + dòng tổng
   const tableRows=[];
-  let curArea=null,areaSX=0,areaHD=0;
+  let curArea=null,areaSX=0,areaHD=0,areaDG=0;
   sorted.forEach((r,i)=>{
     if(r.area!==curArea){
-      if(curArea!==null) tableRows.push({_sub:true,area:curArea,sx:areaSX,hd:areaHD});
-      curArea=r.area;areaSX=0;areaHD=0;
+      if(curArea!==null) tableRows.push({_sub:true,area:curArea,sx:areaSX,hd:areaHD,dg:areaDG});
+      curArea=r.area;areaSX=0;areaHD=0;areaDG=0;
       tableRows.push({_hdr:true,area:r.area||'Chưa phân khu vực'});
     }
     areaSX+=Number(r.qtyProd||0);areaHD+=Number(r.qtyInvoice||0);
+    areaDG+=Number(r.qtyDelivered||0);
     tableRows.push(r);
-    if(i===sorted.length-1) tableRows.push({_sub:true,area:curArea,sx:areaSX,hd:areaHD});
+    if(i===sorted.length-1) tableRows.push({_sub:true,area:curArea,sx:areaSX,hd:areaHD,dg:areaDG});
   });
 
   return h('div', null,
@@ -2027,6 +2035,10 @@ function OrderDetailListTab({orders, products, customers, shifts}) {
         h('div',{style:{fontSize:11,color:'#185FA5',fontWeight:500,marginBottom:3}},'∑ TỔNG SL HĐ'),
         h('div',{style:{fontSize:22,fontWeight:700,color:'#185FA5'}},filtered.reduce((s,r)=>s+Number(r.qtyInvoice||0),0).toLocaleString())
       ),
+      h('div',{style:{background:'#FFF7E6',border:'.5px solid #E0A800',borderRadius:'var(--r)',padding:'10px 18px'}},
+        h('div',{style:{fontSize:11,color:'#8A5A00',fontWeight:500,marginBottom:3}},'∑ TỔNG SL ĐÃ GIAO'),
+        h('div',{style:{fontSize:22,fontWeight:700,color:'#8A5A00'}},filtered.reduce((s,r)=>s+Number(r.qtyDelivered||0),0).toLocaleString())
+      ),
       (()=>{const diff=filtered.reduce((s,r)=>s+Number(r.qtyProd||0),0)-filtered.reduce((s,r)=>s+Number(r.qtyInvoice||0),0);return h('div',{style:{background:diff===0?'#EAF3DE':'#FCEBEB',border:'.5px solid '+(diff===0?'#52b788':'#E06060'),borderRadius:'var(--r)',padding:'10px 18px'}},
         h('div',{style:{fontSize:11,color:diff===0?'#3B6D11':'#A32D2D',fontWeight:500,marginBottom:3}},diff===0?'✓ KHỚP':'⚠ CHÊNH LỆCH SX-HĐ'),
         h('div',{style:{fontSize:22,fontWeight:700,color:diff===0?'#2D5A0E':'#A32D2D'}},(diff>0?'+':'')+diff.toLocaleString())
@@ -2035,27 +2047,33 @@ function OrderDetailListTab({orders, products, customers, shifts}) {
     h('div', {className:'tw'},
       h('table', null,
         h('thead', null, h('tr', null,
-          ...['Ngày giao','Địa điểm','Sản phẩm','SL SX','SL HĐ','Giờ','Chú ý'].map(c=>h('th',{key:c},c))
+          ...['Ngày giao','Địa điểm','Sản phẩm','SL SX','SL HĐ','SL đã giao','Giờ','Chú ý'].map(c=>h('th',{key:c},c))
         )),
         h('tbody', null,
           sorted.length ? tableRows.map((r,i)=>{
-            if(r._hdr) return h('tr',{key:'h'+i},h('td',{colSpan:7,style:{background:'#2d6a4f',color:'#fff',fontWeight:700,fontSize:13,padding:'5px 12px'}},'📍 Khu vực: '+(r.area)));
+            if(r._hdr) return h('tr',{key:'h'+i},h('td',{colSpan:8,style:{background:'#2d6a4f',color:'#fff',fontWeight:700,fontSize:13,padding:'5px 12px'}},'📍 Khu vực: '+(r.area)));
             if(r._sub) return h('tr',{key:'s'+i},
               h('td',{colSpan:3,style:{background:'#e8f5e9',fontWeight:600,fontSize:12,padding:'4px 12px',color:'#2d6a4f',textAlign:'right'}},'Tổng '+r.area+':'),
               h('td',{style:{background:'#e8f5e9',fontWeight:700,color:'var(--pri)',fontSize:14,padding:'4px 8px'}},r.sx.toLocaleString()),
               h('td',{style:{background:'#e8f5e9',fontWeight:700,fontSize:14,padding:'4px 8px'}},r.hd.toLocaleString()),
+              h('td',{style:{background:'#e8f5e9',fontWeight:700,color:'#8A5A00',fontSize:14,padding:'4px 8px'}},r.dg.toLocaleString()),
               h('td',{colSpan:2,style:{background:'#e8f5e9'}})
             );
+            const canInput=canEditDelivered&&(r.status==='done'||r.status==='completed');
             return h('tr',{key:i,style:{background:r.prodColor||(r.shift==='night'?'rgba(83,52,131,.04)':'')}},
               h('td',null,h('span',{style:{fontWeight:500}},r.date)),
               h('td',null,h('div',{style:{fontWeight:600}},r.point||'—')),
               h('td',null,h('div',{style:{fontWeight:500}},r.product)),
               h('td',null,h('span',{style:{fontWeight:600,color:'var(--pri)',fontSize:15}},r.qtyProd.toLocaleString())),
               h('td',null,h('span',{style:{fontWeight:600,fontSize:15}},r.qtyInvoice.toLocaleString())),
+              h('td',null,canInput
+                ?h('input',{type:'number',min:0,step:'0.01',value:r.qtyDelivered??'',placeholder:String(r.qtyInvoice||0),onChange:e=>updateDeliveredQty(r.orderId,r.lineId,e.target.value),style:{fontSize:13,padding:'4px 6px',width:86,borderColor:(r.qtyDelivered!==undefined&&numFmt(r.qtyDelivered)!==numFmt(r.qtyInvoice))?'#E0A800':'var(--bd)'}})
+                :h('span',{style:{fontWeight:600,color:r.qtyDelivered!==undefined?'#8A5A00':'var(--tx2)',fontSize:15}},r.qtyDelivered!==undefined?numFmt(r.qtyDelivered).toLocaleString():'—')
+              ),
               h('td',null,r.time||'—'),
               h('td',null,h('span',{style:{fontSize:12,color:'var(--tx2)'}},r.note||'—'))
             );
-          }) : h('tr',null,h('td',{colSpan:7,className:'empty-st'},'Không có dữ liệu.'))
+          }) : h('tr',null,h('td',{colSpan:8,className:'empty-st'},'Không có dữ liệu.'))
         )
       )
     )
@@ -4496,6 +4514,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
   const allCusts=[...new Set(availOrders.map(o=>o.customerId).filter(Boolean))].map(id=>customers?.find(c=>c.id===id)).filter(Boolean);
   const allFilteredChecked=filteredOrders.length>0&&filteredOrders.every(o=>(f.orderIds||[]).includes(o.id));
   const someFilteredChecked=filteredOrders.some(o=>(f.orderIds||[]).includes(o.id))&&!allFilteredChecked;
+  const isCompleted=f.status==='completed';
 
   return h(Modal,{title:trip?'Sửa chuyến '+trip.id:'Tạo chuyến giao hàng',onClose,lg:true},
     h('div',{className:'g2'},
@@ -4527,7 +4546,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
         h('div',{style:{padding:'5px 10px',background:'#2d6a4f',color:'#fff',fontSize:12,fontWeight:700,
           borderRadius:'var(--r) var(--r) 0 0',display:'flex',justifyContent:'space-between',alignItems:'center'}},
           h('span',null,'✓ ĐÃ TRONG CHUYẾN ('+inTripAll.length+' đơn · '+totalW.toFixed(1)+' kg)'),
-          h('button',{onClick:()=>sf(p=>({...p,orderIds:[]})),
+          !isCompleted&&h('button',{onClick:()=>sf(p=>({...p,orderIds:[]})),
             style:{fontSize:11,padding:'1px 8px',background:'rgba(255,255,255,.2)',border:'1px solid rgba(255,255,255,.4)',color:'#fff',borderRadius:4,cursor:'pointer'}
           },'Bỏ tất cả')
         ),
@@ -4541,7 +4560,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
             return h('label',{key:o.id,style:{display:'flex',alignItems:'center',gap:10,padding:'6px 8px',
               borderRadius:'var(--r)',cursor:'pointer',marginBottom:2,
               background:'#f0faf0',border:'1px solid var(--pri)'}},
-              h('input',{type:'checkbox',checked:true,onChange:()=>toggle(o.id),
+              h('input',{type:'checkbox',checked:true,disabled:isCompleted,onChange:()=>toggle(o.id),
                 style:{width:'auto',flexShrink:0,accentColor:'var(--pri)'}}),
               h('div',{style:{flex:1,minWidth:0}},
                 h('div',{style:{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}},
@@ -4563,7 +4582,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
       );
     })(),
     // ── PHẦN 2: BỘ LỌC + THÊM ĐƠN ──
-    h('div',{style:{marginBottom:6}},
+    !isCompleted&&h('div',{style:{marginBottom:6}},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}},
         h('div',{style:{fontWeight:600,fontSize:13,color:'var(--tx2)'}},'+ Thêm đơn hàng vào chuyến'),
         filteredOrders.filter(o=>!(f.orderIds||[]).includes(o.id)).length>0&&h('button',{
@@ -4596,7 +4615,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
         },'✕ Xóa lọc')
       )
     ),
-    (()=>{
+    !isCompleted&&(()=>{
       // Render 1 order item
       const renderOrder=(o,checked,highlight)=>{
         const w=orderWeight(o);
@@ -4849,6 +4868,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
   const cleanName=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
   const isOwnTrip=t=>!isDriver||t.driverId===currentUser.id||cleanName(t.driverName)===cleanName(currentUser.name);
   const visibleTrips=trips.filter(isOwnTrip);
+  const canUploadProof=canManageTrips||isDriver;
   let tSeq=trips.length+1;
   const orderStatusForTrip=s=>s==='active'?'delivering':s==='completed'?'done':'assigned';
   const save=d=>{
@@ -4927,6 +4947,34 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
   }),{trips:0,orders:0,weight:0,work:0,pay:0});
   const confirmAttendance=id=>{
     setTrips(p=>p.map(t=>t.id===id?{...t,attendanceStatus:'confirmed',confirmedBy:currentUser.name,confirmedAt:fmtDT()}:t));
+  };
+  const saveOrderInvoiceImage=(order,file)=>{
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const img=new Image();
+      img.onload=()=>{
+        const max=1600,scale=Math.min(1,max/Math.max(img.width,img.height));
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));
+        const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        const data=canvas.toDataURL('image/jpeg',0.82);
+        setOrders(prev=>prev.map(x=>x.id===order.id?{...x,invoiceImage:data,invoiceImageName:file.name||'hoa-don.jpg',invoiceUploadedAt:fmtDT(),invoiceUploadedBy:currentUser?.name||''}:x));
+      };
+      img.onerror=()=>alert('Không đọc được ảnh hóa đơn.');
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  const pickOrderInvoiceImage=order=>{
+    const inp=document.createElement('input');
+    inp.type='file';inp.accept='image/*';inp.capture='environment';
+    inp.onchange=e=>saveOrderInvoiceImage(order,e.target.files&&e.target.files[0]);
+    inp.click();
+  };
+  const updateDeliveredQty=(orderId,lineId,value)=>{
+    const qty=numFmt(value);
+    setOrders(prev=>prev.map(o=>o.id===orderId?{...o,lines:(o.lines||[]).map(l=>l.id===lineId?{...l,qtyDelivered:qty,deliveredAt:fmtDT(),deliveredBy:currentUser?.name||''}:l)}:o));
   };
   const createTripForSelection=()=>{
     if(!canManageTrips){alert('Tài khoản lái xe chỉ xem chuyến được giao.');return;}
@@ -5078,7 +5126,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
             h('div',{style:{fontWeight:500,fontSize:12,color:'var(--tx2)',marginBottom:6}},'Chi tiết đơn hàng:'),
             tripOrders.length?h('div',{className:'tw'},
               h('table',null,
-                h('thead',null,h('tr',null,...['Mã đơn','Địa điểm','Khu vực','Giờ','Hàng hóa','KL (kg)','Trạng thái'].map(c=>h('th',{key:c},c)))),
+                h('thead',null,h('tr',null,...['Mã đơn','Địa điểm','Khu vực','Giờ','Hàng hóa','SL đã giao','KL (kg)','Ảnh HĐ','Trạng thái'].map(c=>h('th',{key:c},c)))),
                 h('tbody',null,tripOrders.map(o=>{
                   const w=orderWeight(o);
                   const oCust=customers?.find(c=>c.id===o.customerId);
@@ -5089,8 +5137,17 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
                     h('td',null,h('span',{style:{fontWeight:600}},o.pointName||o.customer||'—')),
                     h('td',null,oArea?h('span',{style:{background:'#e8f5e9',color:'#2d6a4f',padding:'1px 7px',borderRadius:10,fontSize:11,fontWeight:600}},oArea):'—'),
                     h('td',null,o.deliveryTime||'—'),
-                    h('td',null,h('div',{style:{fontSize:11}},(o.lines||[]).map((l,i)=>h('div',{key:i},l.productName+' · '+lineQty(l)+(l.unit?' '+l.unit:''))))),
+                    h('td',null,h('div',{style:{fontSize:11}},(o.lines||[]).map((l,i)=>h('div',{key:i,style:{minHeight:30,display:'flex',alignItems:'center'}},l.productName+' · '+lineQty(l)+(l.unit?' '+l.unit:''))))),
+                    h('td',null,h('div',{style:{display:'grid',gap:4,minWidth:92}},(o.lines||[]).map(l=>h('input',{key:l.id,type:'number',min:0,step:'0.01',value:l.qtyDelivered??'',placeholder:String(lineQty(l)||0),onChange:e=>updateDeliveredQty(o.id,l.id,e.target.value),style:{fontSize:12,padding:'4px 6px',width:86,borderColor:(l.qtyDelivered!==undefined&&numFmt(l.qtyDelivered)!==lineQty(l))?'#E0A800':'var(--bd)'}})))),
                     h('td',null,w>0?h('span',{style:{fontWeight:600,color:'var(--pri)'}},w.toFixed(2)+' kg'):'—'),
+                    h('td',null,
+                      o.invoiceImage
+                        ?h('div',{style:{display:'flex',gap:4}},
+                          h('button',{className:'bi',title:'Xem ảnh hóa đơn',onClick:()=>window.open(o.invoiceImage,'_blank')},h('i',{className:'ti ti-photo-check',style:{fontSize:15,color:'var(--pri)'}})),
+                          canUploadProof&&h('button',{className:'bi',title:'Chụp lại hóa đơn',onClick:()=>pickOrderInvoiceImage(o)},h('i',{className:'ti ti-camera-up',style:{fontSize:15}}))
+                        )
+                        :canUploadProof?h('button',{className:'bi',title:'Chụp hóa đơn đơn hàng',onClick:()=>pickOrderInvoiceImage(o)},h('i',{className:'ti ti-camera-plus',style:{fontSize:15}})):'—'
+                    ),
                     h('td',null,h(StatusBadge,{s:o.status}))
                   );
                 }))
@@ -5117,7 +5174,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,customers,pr
                 ))
               ),
               // Nút upload ảnh
-              canManageTrips&&h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 14px',
+              canUploadProof&&h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 14px',
                 border:'1px dashed var(--pri)',color:'var(--pri)',borderRadius:'var(--r)',
                 cursor:'pointer',fontSize:12,fontWeight:500}},
                 h('i',{className:'ti ti-upload',style:{fontSize:14}}),
@@ -5681,7 +5738,7 @@ function App(){
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
         canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,setCustomers,products,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts}),
         canAccess(cu.role,'trips',cu.permissions)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,customers,products,currentUser:cu}),
-        page==='orderdetail'&&h(OrderDetailListTab,{orders,products,customers,shifts}),
+        page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,currentUser:cu}),
         canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products}),
         canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,products,currentUser:cu}),
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,currentUser:cu}),
