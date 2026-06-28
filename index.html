@@ -1931,7 +1931,7 @@ function PurchaseReportTab({purchases,nccs}) {
 }
 
 /* --- Báo cáo bán hàng --- */
-function SalesReportTab({orders,customers,products,shifts}) {
+function SalesReportTab({orders,customers,products,shifts,quotes}) {
   const _td2=fmtDate();const _ti2=_td2.split('/').reverse().join('-');const [df,sdf]=useState(_ti2); const [dt,sdt]=useState(_ti2);
   const [cust,sCust]=useState(''); const [pt,sPt]=useState(''); const [prod,sProd]=useState(''); const [status,ss]=useState('all'); const [area,sa]=useState('all'); const [shift,ssh]=useState('all');
   const parseDate=s=>{if(!s)return null;const v=String(s).trim();if(/^\d{4}-\d{2}-\d{2}$/.test(v)){const[y,m,d]=v.split('-');return new Date(Number(y),Number(m)-1,Number(d));}const[d,m,y]=v.split('/');return new Date(Number(y),Number(m)-1,Number(d));};
@@ -1940,6 +1940,33 @@ function SalesReportTab({orders,customers,products,shifts}) {
   const orderArea=o=>o.area||getPoint(o).area||((shifts||[]).find(s=>s.id===o.shiftId||s.id===o.prodShiftId)||{}).area||'';
   const orderShift=o=>o.prodShiftId||o.shiftId||((shifts||[]).find(s=>s.timeStart===o.deliveryTime)||{}).id||'';
   const statusLabel={pending:'Chờ xếp chuyến',scheduled:'Đã xếp chuyến',delivering:'Đang giao',done:'Đã giao',cancelled:'Hủy'};
+  const dateKey=s=>{const d=parseDate(s);return d&&Number.isFinite(d.getTime())?d.getTime():0;};
+  const quotePrice=(o,l)=>{
+    const pInfo=getPoint(o);
+    const od=dateKey(o.deliveryDate);
+    const usable=(quotes||[]).filter(q=>{
+      if(['cancelled','expired'].includes(q.status))return false;
+      if(q.customerId&&q.customerId!==(o.customerId||o.custId||pInfo.customerId))return false;
+      if(q.customer&&o.customer&&q.customer!==o.customer)return false;
+      const pts=q.pointIds||(q.pointId?[q.pointId]:[]);
+      if(pts.length&&(o.pointId||o.ptId)&&!pts.includes(o.pointId||o.ptId))return false;
+      if(q.dateFrom&&od<dateKey(q.dateFrom))return false;
+      if(q.dateTo&&od>dateKey(q.dateTo))return false;
+      return (q.lines||[]).some(ql=>ql.productId===l.productId||(ql.productName&&ql.productName===l.productName));
+    }).sort((a,b)=>dateKey(b.dateFrom)-dateKey(a.dateFrom));
+    const q=usable[0];
+    const ql=q&&(q.lines||[]).find(x=>x.productId===l.productId||(x.productName&&x.productName===l.productName));
+    return ql?numFmt(ql.price):0;
+  };
+  const salePrice=(o,l,p2)=>{
+    const fromLine=numFmt(l.salePrice||l.sellPrice||l.unitPrice);
+    if(fromLine)return fromLine;
+    const fromQuote=quotePrice(o,l);
+    if(fromQuote)return fromQuote;
+    const fromProduct=numFmt(p2.salePrice||p2.sellPrice||p2.priceSale||p2.price||0);
+    if(fromProduct)return fromProduct;
+    return l.purchasePrice?0:numFmt(l.price||0);
+  };
   const filtered=(orders||[]).filter(o=>{
     if(!inRange(o.deliveryDate))return false;
     if(cust&&o.custId!==cust&&o.customerId!==cust)return false;
@@ -1955,7 +1982,7 @@ function SalesReportTab({orders,customers,products,shifts}) {
     const qtyProd=numFmt(l.qtyProd)||numFmt(l.qty)||numFmt(l.quantity)||0;
     const qtyInv=numFmt(l.qtyInvoice)||qtyProd;
     const qtyDelivered=l.qtyDelivered!==undefined&&l.qtyDelivered!==''?numFmt(l.qtyDelivered):'';
-    const price=numFmt(l.price||l.salePrice||p2.price||0);
+    const price=salePrice(o,l,p2);
     const unit=String(l.unit||p2.unit||'');
     const qtyForWeight=qtyInv||qtyProd;
     const unitKey=unit.trim().toLowerCase().replace(/[^a-z]/g,'');
@@ -1967,6 +1994,7 @@ function SalesReportTab({orders,customers,products,shifts}) {
   const totalDelivered=filtLines.reduce((s,l)=>s+(l.qtyDelivered===''?0:l.qtyDelivered),0);
   const totalWeight=filtLines.reduce((s,l)=>s+l.weight,0);
   const totalAmount=filtLines.reduce((s,l)=>s+l.amount,0);
+  const missingPrice=filtLines.filter(l=>!l.price).length;
   const byProd={};filtLines.forEach(l=>{const k=l.productId||l.productName;if(!byProd[k])byProd[k]={name:l.productName,unit:l.unit,qtyProd:0,qtyInv:0,qtyDelivered:0,weight:0,amount:0};byProd[k].qtyProd+=l.qtyProd;byProd[k].qtyInv+=l.qtyInv;byProd[k].qtyDelivered+=l.qtyDelivered===''?0:l.qtyDelivered;byProd[k].weight+=l.weight;byProd[k].amount+=l.amount;});
   const byCust={};active.forEach(o=>{const name=o.customer||getPoint(o).customerName||'Chưa rõ KH';if(!byCust[name])byCust[name]={orders:0,lines:0,qty:0,weight:0,amount:0};byCust[name].orders++;(o.lines||[]).forEach(l=>{if(prod&&l.productId!==prod)return;const p2=products.find(x=>x.id===l.productId)||{};const q=numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||numFmt(l.qty)||0;byCust[name].lines++;byCust[name].qty+=q;byCust[name].weight+=(String(l.unit||p2.unit||'').toLowerCase().includes('kg')?q:(numFmt(p2.weightPerUnit)||0)*q);byCust[name].amount+=q*numFmt(l.price||l.salePrice||p2.price||0);});});
   const byArea={};filtLines.forEach(l=>{const k=l.area||'Chưa có KV';if(!byArea[k])byArea[k]={orders:new Set(),qty:0,weight:0,amount:0};byArea[k].orders.add(l.orderId);byArea[k].qty+=l.qtyInv;byArea[k].weight+=l.weight;byArea[k].amount+=l.amount;});
@@ -1987,7 +2015,7 @@ function SalesReportTab({orders,customers,products,shifts}) {
         h(F,{label:'Trạng thái'},h('select',{value:status,onChange:e=>ss(e.target.value)},h('option',{value:'all'},'Tất cả trạng thái'),Object.entries(statusLabel).map(([v,l])=>h('option',{key:v,value:v},l))))
       ),
       h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'1rem',marginTop:4}},
-        [['Số đơn hàng',filtered.length+' đơn','ti-file-invoice'],['SL sản xuất',totalQtyProd.toLocaleString(),'ti-building-factory'],['SL hóa đơn',totalQtyInv.toLocaleString(),'ti-receipt'],['SL đã giao',totalDelivered.toLocaleString(),'ti-truck-delivery'],['Tổng khối lượng',totalWeight.toFixed(2)+' kg','ti-weight'],['Doanh thu',totalAmount?totalAmount.toLocaleString('vi-VN')+'đ':'—','ti-cash']].map(([l,v,ic])=>
+        [['Số đơn hàng',filtered.length+' đơn','ti-file-invoice'],['SL sản xuất',totalQtyProd.toLocaleString(),'ti-building-factory'],['SL hóa đơn',totalQtyInv.toLocaleString(),'ti-receipt'],['SL đã giao',totalDelivered.toLocaleString(),'ti-truck-delivery'],['Tổng khối lượng',totalWeight.toFixed(2)+' kg','ti-weight'],['Doanh thu',totalAmount?totalAmount.toLocaleString('vi-VN')+'đ':'—','ti-cash'],['Thiếu giá bán',missingPrice+' dòng','ti-alert-circle']].map(([l,v,ic])=>
           h('div',{key:l,style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:'12px 16px'}},
             h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4,display:'flex',alignItems:'center',gap:5}},h('i',{className:'ti '+ic,style:{fontSize:12}}),l),
             h('div',{style:{fontSize:20,fontWeight:600,color:'var(--pri)'}},v)
@@ -2019,8 +2047,8 @@ function SalesReportTab({orders,customers,products,shifts}) {
       h('tbody',null,Object.keys(byArea).length?Object.entries(byArea).map(([name,v])=>h('tr',{key:name},h('td',null,h('b',null,name)),h('td',null,v.orders.size+' đơn'),h('td',null,v.qty.toLocaleString()),h('td',null,v.weight.toFixed(2)),h('td',null,v.amount?v.amount.toLocaleString('vi-VN')+'đ':'—'))):h('tr',null,h('td',{colSpan:5,className:'empty-st'},'Chưa có dữ liệu khu vực.')))
     )),
     h('div',{className:'tw'},h('table',null,
-      h('thead',null,h('tr',null,...['Ngày','Giờ','Mã đơn','Khách hàng','Địa điểm','KV','Sản phẩm','SL SX','SL HĐ','SL giao','Kg','Trạng thái'].map(c=>h('th',{key:c},c)))),
-      h('tbody',null,detailRows.length?detailRows.map((r,i)=>h('tr',{key:r.orderId+'_'+i},h('td',null,r.date),h('td',null,r.time||'—'),h('td',null,r.orderId),h('td',null,r.customer),h('td',null,r.point),h('td',null,h('span',{className:'badge sbadge'},r.area||'—')),h('td',null,r.productName),h('td',null,r.qtyProd.toLocaleString()),h('td',null,r.qtyInvoice.toLocaleString()),h('td',null,r.qtyDelivered===''?'—':r.qtyDelivered.toLocaleString()),h('td',null,r.weight.toFixed(2)),h('td',null,r.status))):h('tr',null,h('td',{colSpan:12,className:'empty-st'},'Chưa có chi tiết bán hàng.')))
+      h('thead',null,h('tr',null,...['Ngày','Giờ','Mã đơn','Khách hàng','Địa điểm','KV','Sản phẩm','SL SX','SL HĐ','SL giao','Kg','Đơn giá','Doanh thu','Trạng thái'].map(c=>h('th',{key:c},c)))),
+      h('tbody',null,detailRows.length?detailRows.map((r,i)=>h('tr',{key:r.orderId+'_'+i},h('td',null,r.date),h('td',null,r.time||'—'),h('td',null,r.orderId),h('td',null,r.customer),h('td',null,r.point),h('td',null,h('span',{className:'badge sbadge'},r.area||'—')),h('td',null,r.productName),h('td',null,r.qtyProd.toLocaleString()),h('td',null,r.qtyInvoice.toLocaleString()),h('td',null,r.qtyDelivered===''?'—':r.qtyDelivered.toLocaleString()),h('td',null,r.weight.toFixed(2)),h('td',null,r.price?r.price.toLocaleString('vi-VN')+'đ':h('span',{style:{color:'#A32D2D'}},'Thiếu giá')),h('td',null,r.amount?r.amount.toLocaleString('vi-VN')+'đ':'—'),h('td',null,r.status))):h('tr',null,h('td',{colSpan:14,className:'empty-st'},'Chưa có chi tiết bán hàng.')))
     ))
   );
 }
@@ -5873,7 +5901,7 @@ function App(){
         canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,setCustomers,products,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts}),
         canAccess(cu.role,'trips',cu.permissions)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,customers,products,currentUser:cu}),
         page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,currentUser:cu}),
-        canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts}),
+        canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),
         canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products}),
         canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,products,currentUser:cu}),
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,currentUser:cu}),
