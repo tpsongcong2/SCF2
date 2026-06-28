@@ -1950,6 +1950,9 @@ function SalesReportTab({orders,customers,products,shifts,quotes}) {
       if(q.customer&&o.customer&&q.customer!==o.customer)return false;
       const pts=q.pointIds||(q.pointId?[q.pointId]:[]);
       if(pts.length&&(o.pointId||o.ptId)&&!pts.includes(o.pointId||o.ptId))return false;
+      const qAreas=q.areaNames||[];
+      if(qAreas.length&&!qAreas.includes(orderArea(o)))return false;
+      if(!pts.length&&!qAreas.length)return false;
       if(q.dateFrom&&od<dateKey(q.dateFrom))return false;
       if(q.dateTo&&od>dateKey(q.dateTo))return false;
       return (q.lines||[]).some(ql=>ql.productId===l.productId||(ql.productName&&ql.productName===l.productName));
@@ -3208,19 +3211,22 @@ function QuoteLineRow({line,products,onChange,onRemove}){
     h('button',{className:'bi',onClick:onRemove,style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:14}}))
   );
 }
-function PointMultiSelect({custPoints,pointIds,togglePoint,toggleAll}){
+function PointMultiSelect({custPoints,pointIds,areaNames,togglePoint,toggleArea,toggleAll}){
   const[open,setOpen]=useState(false);
-  const allChecked=custPoints.length>0&&pointIds.length===custPoints.length;
-  const someChecked=pointIds.length>0&&pointIds.length<custPoints.length;
-  const label=pointIds.length===0?'— Chọn địa điểm áp dụng —':
-    pointIds.length===custPoints.length?'Tất cả '+custPoints.length+' địa điểm':
-    pointIds.length+' địa điểm đã chọn';
+  const areaList=[...new Set(custPoints.map(p=>p.area).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const selectedByArea=custPoints.filter(p=>p.area&&areaNames.includes(p.area)).map(p=>p.id);
+  const effectivePointIds=[...new Set([...(pointIds||[]),...selectedByArea])];
+  const allChecked=custPoints.length>0&&effectivePointIds.length===custPoints.length;
+  const someChecked=effectivePointIds.length>0&&effectivePointIds.length<custPoints.length;
+  const label=effectivePointIds.length===0?'— Chọn khu vực / địa điểm áp dụng —':
+    allChecked?'Tất cả '+custPoints.length+' địa điểm':
+    (areaNames.length?areaNames.length+' khu vực, ':'')+effectivePointIds.length+' địa điểm áp dụng';
   if(custPoints.length===0) return h(F,{label:'Địa điểm áp dụng *'},
     h('div',{style:{padding:'8px 10px',fontSize:12,color:'#A32D2D',background:'#FFF0F0',borderRadius:'var(--r)',border:'1px solid #f0a0a0'}},
       '⚠ Khách hàng này chưa có địa điểm giao hàng.'
     )
   );
-  return h(F,{label:'Địa điểm áp dụng *'+(pointIds.length?' ('+pointIds.length+')':'')},
+  return h(F,{label:'Khu vực / địa điểm áp dụng *'+(effectivePointIds.length?' ('+effectivePointIds.length+')':'')},
     h('div',{style:{position:'relative'}},
       // Dropdown trigger
       h('div',{
@@ -3260,13 +3266,25 @@ function PointMultiSelect({custPoints,pointIds,togglePoint,toggleAll}){
             custPoints.forEach(pt=>{
               if((pt.area||'')!==lastArea){
                 lastArea=pt.area||'';
-                if(lastArea) rows.push(h('div',{key:'a'+lastArea,
-                  style:{padding:'3px 12px',fontSize:11,fontWeight:700,
-                    color:'var(--pri3)',background:'#f5fbf5',
-                    borderBottom:'1px solid var(--bd)',letterSpacing:.3}
-                },lastArea));
+                if(lastArea){
+                  const areaPts=custPoints.filter(x=>x.area===lastArea);
+                  const areaChecked=areaNames.includes(lastArea);
+                  rows.push(h('div',{key:'a'+lastArea,
+                    style:{display:'grid',gridTemplateColumns:'auto 1fr auto',alignItems:'center',gap:10,
+                      padding:'7px 12px',fontSize:12,fontWeight:700,
+                      color:'var(--pri3)',background:'#f5fbf5',
+                      borderBottom:'1px solid var(--bd)',letterSpacing:.3}
+                  },
+                    h('input',{type:'checkbox',checked:areaChecked,onChange:()=>toggleArea(lastArea),
+                      style:{cursor:'pointer',accentColor:'var(--pri)',width:15,height:15}
+                    }),
+                    h('span',null,'Khu vực '+lastArea),
+                    h('span',{style:{fontSize:11,color:'var(--tx2)',fontWeight:500}},areaPts.length+' điểm')
+                  ));
+                }
               }
-              const checked=pointIds.includes(pt.id);
+              const checked=effectivePointIds.includes(pt.id);
+              const disabled=pt.area&&areaNames.includes(pt.area);
               rows.push(h('div',{key:pt.id,
                 style:{display:'grid',gridTemplateColumns:'auto 1fr auto',
                   alignItems:'center',gap:10,
@@ -3275,8 +3293,8 @@ function PointMultiSelect({custPoints,pointIds,togglePoint,toggleAll}){
                   borderBottom:'1px solid var(--bd)',
                   transition:'background .12s'}
               },
-                h('input',{type:'checkbox',checked,onChange:()=>togglePoint(pt.id),
-                  style:{cursor:'pointer',accentColor:'var(--pri)',width:15,height:15,flexShrink:0}
+                h('input',{type:'checkbox',checked,disabled,onChange:()=>togglePoint(pt.id),
+                  style:{cursor:disabled?'not-allowed':'pointer',accentColor:'var(--pri)',width:15,height:15,flexShrink:0}
                 }),
                 h('span',{style:{fontSize:13,color:'var(--tx)'}},pt.name),
                 pt.area&&h('span',{style:{fontSize:11,color:'var(--tx2)',background:'var(--bg2)',
@@ -3290,7 +3308,7 @@ function PointMultiSelect({custPoints,pointIds,togglePoint,toggleAll}){
         h('div',{style:{padding:'6px 12px',background:'var(--bg2)',borderTop:'1px solid var(--bd)',
           display:'flex',justifyContent:'space-between',alignItems:'center'}},
           h('span',{style:{fontSize:12,color:'var(--tx2)'}},
-            pointIds.length?pointIds.length+'/'+custPoints.length+' đã chọn':'Chưa chọn địa điểm nào'
+            effectivePointIds.length?effectivePointIds.length+'/'+custPoints.length+' điểm áp dụng':'Chưa chọn khu vực / địa điểm nào'
           ),
           h('button',{onClick:()=>setOpen(false),
             style:{fontSize:12,padding:'3px 12px',background:'var(--pri)',color:'#fff',
@@ -3306,27 +3324,30 @@ function QuoteForm({quote,customers,products,currentUser,onSave,onClose}){
   const today=new Date().toISOString().slice(0,10);
   const toInput=s=>{if(!s)return'';const[d,m,y]=s.split('/');return y+'-'+m+'-'+d;};
   const fromInput=s=>{if(!s)return'';const[y,m,d]=s.split('-');return d+'/'+m+'/'+y;};
-  // pointIds: mảng id các địa điểm được chọn
+  // pointIds: mảng id các địa điểm được chọn, areaNames: khu vực áp dụng tự động cho điểm mới
   const initPointIds=quote?(quote.pointIds||(quote.pointId?[quote.pointId]:[])):[];
-  const[f,sf]=useState(quote?{...quote,dateFromI:toInput(quote.dateFrom),dateToI:toInput(quote.dateTo),pointIds:initPointIds}:{customerId:'',customer:'',dateFromI:today,dateToI:'',status:'draft',note:'',lines:[],pointIds:[]});
+  const[f,sf]=useState(quote?{...quote,dateFromI:toInput(quote.dateFrom),dateToI:toInput(quote.dateTo),pointIds:initPointIds,areaNames:quote.areaNames||[]}:{customerId:'',customer:'',dateFromI:today,dateToI:'',status:'draft',note:'',lines:[],pointIds:[],areaNames:[]});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
   const setCust=cid=>{const c=customers.find(x=>x.id===cid);sf(p=>({...p,customerId:cid,customer:c?c.name:'',pointIds:[]}));};
   const selCust=customers.find(x=>x.id===f.customerId);
   const custPoints=(selCust?.points||[]).sort((a,b)=>(a.area||'').localeCompare(b.area||'','vi')||(a.name||'').localeCompare(b.name||'','vi'));
   const togglePoint=id=>sf(p=>({...p,pointIds:p.pointIds.includes(id)?p.pointIds.filter(x=>x!==id):[...p.pointIds,id]}));
-  const toggleAll=()=>sf(p=>({...p,pointIds:p.pointIds.length===custPoints.length?[]:custPoints.map(x=>x.id)}));
+  const toggleArea=area=>sf(p=>({...p,areaNames:(p.areaNames||[]).includes(area)?(p.areaNames||[]).filter(x=>x!==area):[...(p.areaNames||[]),area]}));
+  const effectivePointIds=()=>[...new Set([...f.pointIds,...custPoints.filter(p=>p.area&&(f.areaNames||[]).includes(p.area)).map(p=>p.id)])];
+  const toggleAll=()=>sf(p=>({...p,pointIds:effectivePointIds().length===custPoints.length?[]:custPoints.map(x=>x.id),areaNames:effectivePointIds().length===custPoints.length?[]:(p.areaNames||[])}));
   const addLine=()=>sf(p=>({...p,lines:[...p.lines,{id:uid(),productId:'',productName:'',unit:'',price:0}]}));
   const updLine=(id,data)=>sf(p=>({...p,lines:p.lines.map(l=>l.id===id?data:l)}));
   const delLine=id=>sf(p=>({...p,lines:p.lines.filter(l=>l.id!==id)}));
   const submit=()=>{
     if(!f.customerId){alert('Chọn khách hàng!');return;}
-    if((f.pointIds||[]).length===0){alert('Chọn ít nhất 1 địa điểm áp dụng!');return;}
+    if(effectivePointIds().length===0){alert('Chọn ít nhất 1 khu vực hoặc địa điểm áp dụng!');return;}
     if(f.lines.length===0){alert('Thêm ít nhất 1 sản phẩm!');return;}
     // Tương thích ngược: lưu cả pointId (điểm đầu tiên) lẫn pointIds
     const firstPt=custPoints.find(p=>f.pointIds.includes(p.id));
     onSave({...f,
       pointId:firstPt?.id||'',pointName:firstPt?.name||'',
       pointIds:f.pointIds,
+      areaNames:f.areaNames||[],
       pointNames:custPoints.filter(p=>f.pointIds.includes(p.id)).map(p=>p.name),
       dateFrom:fromInput(f.dateFromI),dateTo:fromInput(f.dateToI),
       createdBy:quote?quote.createdBy:currentUser.name,
@@ -3343,7 +3364,7 @@ function QuoteForm({quote,customers,products,currentUser,onSave,onClose}){
         [['draft','Nháp'],['sent','Đã gửi'],['approved','Đã duyệt'],['expired','Hết hạn'],['cancelled','Hủy']].map(([v,l])=>h('option',{key:v,value:v},l))
       )),
     ),
-    f.customerId&&h(PointMultiSelect,{custPoints,pointIds:f.pointIds,togglePoint,toggleAll}),
+    f.customerId&&h(PointMultiSelect,{custPoints,pointIds:f.pointIds,areaNames:f.areaNames||[],togglePoint,toggleArea,toggleAll}),
     h('div',{className:'g2'},
       h(F,{label:'Ngày bắt đầu'},h('input',{type:'date',value:f.dateFromI,onChange:e=>s('dateFromI',e.target.value)})),
       h(F,{label:'Ngày kết thúc'},h('input',{type:'date',value:f.dateToI,onChange:e=>s('dateToI',e.target.value)})),
@@ -3378,12 +3399,13 @@ function QuotesTab({quotes,setQuotes,customers,products,currentUser}){
         h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Tạo báo giá'})
       )
     ),
-    h(TableWrap,{cols:['Mã BG','Khách hàng','Bắt đầu','Kết thúc','Số SP','Người tạo','Trạng thái',''],empty:'Chưa có báo giá nào.',
+    h(TableWrap,{cols:['Mã BG','Khách hàng','Bắt đầu','Kết thúc','Số SP','Ghi chú','Người tạo','Trạng thái',''],empty:'Chưa có báo giá nào.',
       rows:list.map(x=>h('tr',{key:x.id},
         h('td',null,h('span',{style:{color:'var(--pri)',fontWeight:500}},x.id)),
         h('td',null,h('div',{style:{fontWeight:500}},x.customer)),
         h('td',null,x.dateFrom||'—'),h('td',null,x.dateTo||'—'),
         h('td',null,x.lines?x.lines.length:0),
+        h('td',null,x.note||'—'),
         h('td',null,h('div',null,x.createdBy),h('div',{style:{fontSize:11,color:'var(--tx2)'}},x.createdAt)),
         h('td',null,h(StatusBadge,{s:x.status})),
         h('td',null,h('div',{style:{display:'flex',gap:2}},
