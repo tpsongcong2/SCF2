@@ -1949,10 +1949,11 @@ function SalesReportTab({orders,customers,products,shifts,quotes}) {
       if(q.customerId&&q.customerId!==(o.customerId||o.custId||pInfo.customerId))return false;
       if(q.customer&&o.customer&&q.customer!==o.customer)return false;
       const pts=q.pointIds||(q.pointId?[q.pointId]:[]);
-      if(pts.length&&(o.pointId||o.ptId)&&!pts.includes(o.pointId||o.ptId))return false;
       const qAreas=q.areaNames||[];
-      if(qAreas.length&&!qAreas.includes(orderArea(o)))return false;
       if(!pts.length&&!qAreas.length)return false;
+      const pointOk=pts.length&&pts.includes(o.pointId||o.ptId||pInfo.id);
+      const areaOk=qAreas.length&&qAreas.includes(orderArea(o));
+      if(!pointOk&&!areaOk)return false;
       if(q.dateFrom&&od<dateKey(q.dateFrom))return false;
       if(q.dateTo&&od>dateKey(q.dateTo))return false;
       return (q.lines||[]).some(ql=>ql.productId===l.productId||(ql.productName&&ql.productName===l.productName));
@@ -3237,7 +3238,7 @@ function PointMultiSelect({custPoints,pointIds,areaNames,togglePoint,toggleArea,
           background:'#fff',cursor:'pointer',fontSize:13,userSelect:'none',
           boxShadow:open?'0 0 0 2px rgba(45,106,79,.15)':'none',transition:'all .15s'}
       },
-        h('span',{style:{color:pointIds.length?'var(--tx)':'var(--tx2)',flex:1}},label),
+        h('span',{style:{color:effectivePointIds.length?'var(--tx)':'var(--tx2)',flex:1}},label),
         h('i',{className:'ti ti-chevron-'+(open?'up':'down'),style:{fontSize:14,color:'var(--tx2)'}})
       ),
       // Dropdown panel
@@ -3269,34 +3270,34 @@ function PointMultiSelect({custPoints,pointIds,areaNames,togglePoint,toggleArea,
                 if(lastArea){
                   const areaPts=custPoints.filter(x=>x.area===lastArea);
                   const areaChecked=areaNames.includes(lastArea);
-                  rows.push(h('div',{key:'a'+lastArea,
+                  rows.push(h('div',{key:'a'+lastArea,onClick:()=>toggleArea(lastArea),
                     style:{display:'grid',gridTemplateColumns:'auto 1fr auto',alignItems:'center',gap:10,
                       padding:'7px 12px',fontSize:12,fontWeight:700,
-                      color:'var(--pri3)',background:'#f5fbf5',
-                      borderBottom:'1px solid var(--bd)',letterSpacing:.3}
+                      color:'var(--pri3)',background:areaChecked?'#EAF3DE':'#f5fbf5',
+                      borderBottom:'1px solid var(--bd)',letterSpacing:.3,cursor:'pointer'}
                   },
-                    h('input',{type:'checkbox',checked:areaChecked,onChange:()=>toggleArea(lastArea),
+                    h('input',{type:'checkbox',checked:areaChecked,onClick:e=>e.stopPropagation(),onChange:e=>{e.stopPropagation();toggleArea(lastArea);},
                       style:{cursor:'pointer',accentColor:'var(--pri)',width:15,height:15}
                     }),
-                    h('span',null,'Khu vực '+lastArea),
+                    h('span',null,(areaChecked?'✓ ':'')+'Khu vực '+lastArea),
                     h('span',{style:{fontSize:11,color:'var(--tx2)',fontWeight:500}},areaPts.length+' điểm')
                   ));
                 }
               }
               const checked=effectivePointIds.includes(pt.id);
               const disabled=pt.area&&areaNames.includes(pt.area);
-              rows.push(h('div',{key:pt.id,
+              rows.push(h('div',{key:pt.id,onClick:disabled?undefined:()=>togglePoint(pt.id),
                 style:{display:'grid',gridTemplateColumns:'auto 1fr auto',
                   alignItems:'center',gap:10,
                   padding:'7px 12px 7px '+(lastArea?'22px':'12px'),
                   background:checked?'#f0faf0':'#fff',
                   borderBottom:'1px solid var(--bd)',
-                  transition:'background .12s'}
+                  transition:'background .12s',cursor:disabled?'default':'pointer'}
               },
-                h('input',{type:'checkbox',checked,disabled,onChange:()=>togglePoint(pt.id),
+                h('input',{type:'checkbox',checked,disabled,onClick:e=>e.stopPropagation(),onChange:e=>{e.stopPropagation();togglePoint(pt.id);},
                   style:{cursor:disabled?'not-allowed':'pointer',accentColor:'var(--pri)',width:15,height:15,flexShrink:0}
                 }),
-                h('span',{style:{fontSize:13,color:'var(--tx)'}},pt.name),
+                h('span',{style:{fontSize:13,color:'var(--tx)'}},(checked?'✓ ':'')+pt.name),
                 pt.area&&h('span',{style:{fontSize:11,color:'var(--tx2)',background:'var(--bg2)',
                   padding:'1px 7px',borderRadius:10,whiteSpace:'nowrap'}},pt.area)
               ));
@@ -3343,12 +3344,13 @@ function QuoteForm({quote,customers,products,currentUser,onSave,onClose}){
     if(effectivePointIds().length===0){alert('Chọn ít nhất 1 khu vực hoặc địa điểm áp dụng!');return;}
     if(f.lines.length===0){alert('Thêm ít nhất 1 sản phẩm!');return;}
     // Tương thích ngược: lưu cả pointId (điểm đầu tiên) lẫn pointIds
-    const firstPt=custPoints.find(p=>f.pointIds.includes(p.id));
+    const effIds=effectivePointIds();
+    const firstPt=custPoints.find(p=>effIds.includes(p.id));
     onSave({...f,
       pointId:firstPt?.id||'',pointName:firstPt?.name||'',
       pointIds:f.pointIds,
       areaNames:f.areaNames||[],
-      pointNames:custPoints.filter(p=>f.pointIds.includes(p.id)).map(p=>p.name),
+      pointNames:custPoints.filter(p=>effIds.includes(p.id)).map(p=>p.name),
       dateFrom:fromInput(f.dateFromI),dateTo:fromInput(f.dateToI),
       createdBy:quote?quote.createdBy:currentUser.name,
       createdAt:quote?quote.createdAt:fmtDate(),
