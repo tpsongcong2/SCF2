@@ -6186,12 +6186,14 @@ function App(){
     h('div',{style:{fontSize:13,color:'var(--pri2)',display:'flex',alignItems:'center',gap:6}},h('i',{className:'ti ti-loader-2 spin',style:{fontSize:16}}),'Đang tải dữ liệu...')
   );
   const cu=session?employees.find(e=>e.id===session.id):null;
+  // Warn must-change-password - useEffect phải đặt trước mọi early return (React Hook rules)
+  useEffect(()=>{
+    if(cu&&cu.mustChangePw&&!sessionStorage.getItem('scf_pw_warned_'+cu.id)){
+      sessionStorage.setItem('scf_pw_warned_'+cu.id,'1');
+      setTimeout(()=>window.showToast&&window.showToast('Vui lòng đổi mật khẩu mặc định ngay để bảo mật tài khoản!','warn',7000),1500);
+    }
+  },[cu?.id,cu?.mustChangePw]);
   if(!cu)return h(LoginPage,{employees,onLogin:u=>setSession({id:u.id})});
-  // Warn must-change-password users
-  if(cu&&cu.mustChangePw&&!cu._pwWarned){
-    setTimeout(()=>window.showToast&&window.showToast('Vui lòng đổi mật khẩu mặc định ngay để bảo mật tài khoản!','warn',7000),1000);
-    setEmployees(p=>p.map(e=>e.id===cu.id?{...e,_pwWarned:true}:e));
-  }
   const wips=['purchase'];
   return h('div',{className:'layout'},
     h(Sidebar,{page,setPage,col,setCol,company,role:cu.role,perms:cu.permissions}),
