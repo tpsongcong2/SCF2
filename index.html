@@ -4820,7 +4820,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,quo
                 const unknownPts=[...new Set(newOrders.filter(o=>!o.customerId).map(o=>o.pointName))];
                 // Store parsed data for modal
                 if(invalidDateRows.length){
-                  window.showToast('Đã bỏ qua '+invalidDateRows.length+' dòng thiếu hoặc sai ngày/năm.','warn').join(', ')+(invalidDateRows.length>20?'...':''));
+                  window.showToast('Đã bỏ qua '+invalidDateRows.length+' dòng thiếu hoặc sai ngày/năm.','warn');
                 }
                 window._importData={newOrders,dupOrders,unknownPts,invalidDateRows};
                 sm('importPreview');
