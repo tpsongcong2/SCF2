@@ -123,15 +123,22 @@ td{padding:9px 12px;border-top:.5px solid var(--bd);vertical-align:middle}
   input,select,textarea{min-height:40px;font-size:13px}
   button{min-height:38px;padding:7px 10px;font-size:13px;justify-content:center}
   .layout{display:block;min-height:100vh}
-  .sb{width:58px;box-shadow:3px 0 12px rgba(0,0,0,.12)}
-  .sb .sb-ttl,.sb .sb-sec,.sb .sb-btn span{display:none}
-  .sb .sb-btn{padding:10px 0;justify-content:center}
-  .sb-head{padding:10px 12px}.sb-logo{width:32px;height:32px}.sb-tog{display:none}
-  .main,.main.exp{margin-left:58px;min-width:0}
-  .topbar{height:auto;min-height:48px;padding:7px 10px;gap:8px;align-items:flex-start}
-  .topbar>div:first-child{font-size:14px!important;line-height:1.25;padding-top:4px;min-width:0}
-  .topbar>div:last-child{gap:6px!important;flex-wrap:wrap;justify-content:flex-end}
+  .sb{display:none}
+  .main,.main.exp{margin-left:0;min-width:0}
+  .topbar{height:auto;padding:0;display:block}
+  .topbar-main{height:auto;min-height:52px;padding:7px 10px;gap:8px}
+  .topbar-main>div:first-child{min-width:0}
+  .topbar-main>div:first-child img{width:30px!important;height:30px!important}
+  .topbar-main>div:first-child>div{min-width:0}
+  .topbar-main>div:first-child>div>div:first-child{font-size:12px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52vw}
+  .topbar-main>div:last-child{gap:6px!important;flex-shrink:0}
+  .topbar-main>div:last-child>div{display:none}
   .topbar button{padding:5px 8px;min-height:32px;font-size:12px}
+  .topnav{height:40px;padding:0 8px;gap:2px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+  .topnav-item{position:static;flex:0 0 auto}
+  .topnav-btn{height:40px;padding:0 10px;font-size:12px;border-radius:6px 6px 0 0}
+  .topnav-menu{position:fixed;top:92px;left:8px;right:8px;min-width:0;max-height:55vh;overflow:auto;border-radius:8px}
+  .topnav-link{padding:10px 12px;font-size:13px}
   .content{padding:12px;max-width:none;width:100%;overflow:hidden}
   .ptitle{font-size:17px;margin-bottom:14px;line-height:1.25}
   .card,.weather-card,.cal-card,.greet{padding:12px;border-radius:10px}
