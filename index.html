@@ -1178,33 +1178,33 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
     });
     const pairs=Object.values(map);
     if(!pairs.length){window.showToast('Chưa tìm thấy địa điểm có giờ giao trong danh sách đơn hàng.','warn');return;}
-    const exists=(loc,time)=>prodShifts.some(sh=>{
+    const hitShift=(loc,time)=>prodShifts.map(normalize).find(sh=>{
       const r=normalize(sh);
       const startMin=timeToMin(r.startTime||r.orderTime), endMin=timeToMin(r.endTime||r.orderTime), t=timeToMin(time);
       const hit=(r.startTime&&r.endTime&&r.startTime!==r.endTime)?(startMin<=endMin?t>=startMin&&t<endMin:t>=startMin||t<endMin):r.orderTime===time;
       return (r.location||'').trim().toUpperCase()===loc.trim().toUpperCase()&&hit;
     });
-    const added=[];
-    pairs.forEach(p=>{
-      if(exists(p.location,p.orderTime))return;
-      const sameTime=prodShifts.map(normalize).find(s=>s.orderTime===p.orderTime);
-      const preset=sameTime||presetForTime(p.orderTime)||empty;
-      added.push({
-        ...empty,
-        ...preset,
-        id:'PSH'+uid(),
-        location:p.location,
-        orderTime:p.orderTime,
-        startTime:p.orderTime,
-        endTime:p.orderTime,
-        actualProdTime:preset.actualProdTime||p.orderTime,
-        labelPrintTime:preset.labelPrintTime||p.orderTime,
-        active:true
-      });
+    const missing=pairs.filter(p=>!hitShift(p.location,p.orderTime));
+    if(!missing.length){window.showToast('Tất cả địa điểm và giờ giao đã có trong Ca sản xuất.','info');return;}
+    const p=missing[0];
+    const sameTime=prodShifts.map(normalize).find(s=>s.orderTime===p.orderTime||s.startTime===p.orderTime);
+    const preset=sameTime||presetForTime(p.orderTime)||empty;
+    window.showToast('Có '+missing.length+' địa điểm/giờ giao chưa có cấu hình. Đang mở dòng mới đầu tiên.','warn');
+    sf({
+      ...empty,
+      ...preset,
+      location:p.location,
+      orderTime:p.orderTime,
+      startTime:p.orderTime,
+      endTime:p.orderTime,
+      actualProdTime:preset.actualProdTime||p.orderTime,
+      labelPrintTime:preset.labelPrintTime||p.orderTime,
+      name:shiftNameFromProdTime(preset.actualProdTime||p.orderTime)||preset.name||'',
+      active:true,
+      _missingCount:missing.length
     });
-    if(!added.length){window.showToast('Tất cả địa điểm đã có trong Ca sản xuất.','info');return;}
-    setProdShifts(p=>[...p,...added]);
-    window.showToast('Đã tự động thêm '+added.length+' dòng ca sản xuất từ danh sách đơn hàng.','success');
+    se(null);
+    sm('f');
   };
   const save=()=>{
     if(!(form.startTime||form.orderTime)||!(form.endTime||form.orderTime)||!form.actualProdTime){window.showToast('Nhập đủ khoảng giờ đơn hàng và giờ sản xuất thực tế!','warn');return;}
