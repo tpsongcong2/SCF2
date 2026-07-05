@@ -419,9 +419,9 @@ function wInfo(c){return WC[c]||WC[Math.floor(c/10)*10]||WC[0];}
 const DEF_COMPANY={name:'Công ty SCF',intro:'',phone:'',email:'',address:'',website:''};
 const DEF_EMPS=[{id:'NV001',name:'Administrator',birthday:'',dept:'Ban Giám Đốc',role:'admin',username:'admin',password:'@Scf2024!',phone:'',email:'',note:'',updatedBy:'system',updatedAt:'',mustChangePw:true}];
 const DEF_MATERIALS=[
-  {id:'VT001',code:'VT001',name:'Thùng carton',unit:'Cái',price:0,note:''},
-  {id:'VT002',code:'VT002',name:'Màng PE bọc',unit:'Cuộn',price:0,note:''},
-  {id:'VT003',code:'VT003',name:'Dây đai nhựa',unit:'Cuộn',price:0,note:''},
+  {id:'VT001',code:'VT001',name:'Thùng carton',group:'',unit:'Cái',price:0,note:''},
+  {id:'VT002',code:'VT002',name:'Màng PE bọc',group:'',unit:'Cuộn',price:0,note:''},
+  {id:'VT003',code:'VT003',name:'Dây đai nhựa',group:'',unit:'Cuộn',price:0,note:''},
 ];
 const DEF_PRODCATS=[
   {id:'DM001',name:'Nhóm sản phẩm A',desc:''},
@@ -465,7 +465,7 @@ const RCLS={admin:'chip-admin',manager:'chip-manager',staff:'chip-staff',driver:
 const DEPTS=['Ban Giám Đốc','Kế toán','Kho vận','Sản xuất','Bán hàng','Mua hàng','Lái xe','Khác'];
 const deptCode=(i)=>'BP'+String(i+1).padStart(3,'0');
 const DEF_DEPTS=DEPTS.map((d,i)=>({id:'BP'+String(i+1).padStart(3,'0'),code:deptCode(i),name:d,note:''}));
-const UNITS=['Cái','Gói','Thùng','Kg','Tấn','Lít','Cuộn','Bộ','Túi','Hộp','Chai','Lọ','Bao'];
+const UNITS=['Cái','Gói','Thùng','Kg','Tấn','Lít','m3','KW','Cuộn','Bộ','Túi','Hộp','Chai','Lọ','Bao'];
 
 /* ─── UI base ─── */
 function F({label,children}){return h('div',{className:'fl'},h('label',null,label),children)}
@@ -498,8 +498,9 @@ function TableWrap({cols,rows,empty}){
 
 /* ─── EXCEL helpers ─── */
 function xlsxExport(rows,cols,filename){
-  const data=rows.map(r=>Object.fromEntries(cols.map(([k,l])=>[l,r[k]??''])));
-  const ws=XLSX.utils.json_to_sheet(data);const wb=XLSX.utils.book_new();
+  const header=cols.map(([,label])=>label);
+  const body=rows.map(r=>cols.map(([key])=>r[key]??''));
+  const ws=XLSX.utils.aoa_to_sheet([header,...body]);const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Data');
   XLSX.writeFile(wb,filename+'_'+fmtDate().replace(/\//g,'-')+'.xlsx');
 }
@@ -523,15 +524,18 @@ function ImportBtn({onFile}){
 
 /* ─── MATERIALS ─── */
 function MaterialForm({mat,onSave,onClose}){
-  const[f,sf]=useState(mat||{code:'',name:'',unit:UNITS[0],price:'',note:''});
+  const[f,sf]=useState(mat||{code:'',name:'',group:'',unit:UNITS[0],price:'',note:''});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
-  const submit=()=>{if(!f.name){window.showToast('Nhập tên vật tư!','warn');return;}onSave({...f,id:mat?.id||'VT'+uid(),price:numFmt(f.price)});};
-  return h(Modal,{title:mat?'Sửa vật tư':'Thêm vật tư',onClose},
+  const submit=()=>{if(!f.name){window.showToast('Nhập tên nguyên vật liệu!','warn');return;}onSave({...f,id:mat?.id||'VT'+uid(),price:numFmt(f.price)});};
+  return h(Modal,{title:mat?'Sửa nguyên vật liệu':'Thêm nguyên vật liệu',onClose},
     h('div',{className:'g2'},
-      h(F,{label:'Mã vật tư'},h('input',{value:f.code,onChange:e=>s('code',e.target.value),placeholder:'VT001'})),
+      h(F,{label:'Mã NVL'},h('input',{value:f.code,onChange:e=>s('code',e.target.value),placeholder:'NVL001'})),
       h(F,{label:'Đơn vị tính'},h('select',{value:f.unit,onChange:e=>s('unit',e.target.value)},UNITS.map(u=>h('option',{key:u,value:u},u)))),
     ),
-    h(F,{label:'Tên vật tư *'},h('input',{value:f.name,onChange:e=>s('name',e.target.value),placeholder:'Tên vật tư...'})),
+    h('div',{className:'g2'},
+      h(F,{label:'Tên nguyên vật liệu *'},h('input',{value:f.name,onChange:e=>s('name',e.target.value),placeholder:'Tên nguyên vật liệu...'})),
+      h(F,{label:'Nhóm NVL'},h('input',{value:f.group||'',onChange:e=>s('group',e.target.value),placeholder:'Ví dụ: Bột, gạo, bao bì...'})),
+    ),
     h('div',{className:'g2'},
       h(F,{label:'Đơn giá (đ)'},h(NumInput,{value:f.price,onChange:v=>s('price',v)})),
       h(F,{label:'Ghi chú'},h('input',{value:f.note,onChange:e=>s('note',e.target.value)})),
@@ -542,23 +546,24 @@ function MaterialForm({mat,onSave,onClose}){
 function MaterialsTab({materials,setMaterials}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[q,sq]=useState('');
   const save=d=>{if(edit)setMaterials(p=>p.map(x=>x.id===edit.id?d:x));else setMaterials(p=>[...p,d]);sm(null);se(null);};
-  const del=id=>{window.scfConfirm('Bạn có chắc muốn xóa vật tư này?','Xóa vật tư',true).then(ok=>{if(ok){setMaterials(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa vật tư','success');}});};
-  const COLS=[['id','Mã VT'],['name','Tên vật tư'],['unit','ĐVT'],['price','Đơn giá'],['note','Ghi chú']];
-  const list=materials.filter(x=>!q||x.name.toLowerCase().includes(q.toLowerCase())||x.code.toLowerCase().includes(q.toLowerCase()));
+  const del=id=>{window.scfConfirm('Bạn có chắc muốn xóa nguyên vật liệu này?','Xóa nguyên vật liệu',true).then(ok=>{if(ok){setMaterials(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa nguyên vật liệu','success');}});};
+  const COLS=[['code','Mã NVL'],['name','Tên nguyên vật liệu'],['group','Nhóm NVL'],['unit','ĐVT'],['price','Đơn giá'],['note','Ghi chú']];
+  const list=materials.filter(x=>!q||String(x.name||'').toLowerCase().includes(q.toLowerCase())||String(x.code||'').toLowerCase().includes(q.toLowerCase())||String(x.group||'').toLowerCase().includes(q.toLowerCase()));
   return h('div',null,
-    h('div',{className:'ptitle'},h('i',{className:'ti ti-tools',style:{fontSize:20}}),'Danh mục vật tư'),
+    h('div',{className:'ptitle'},h('i',{className:'ti ti-tools',style:{fontSize:20}}),'Danh mục nguyên vật liệu'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
-      h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm vật tư...'}),
+      h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm nguyên vật liệu...'}),
       h('div',{style:{display:'flex',gap:6}},
-        h(ExportBtn,{onClick:()=>xlsxExport(list,COLS,'Vat_tu')}),
-        h(ImportBtn,{onFile:rows=>{const added=rows.map(r=>({id:'VT'+uid(),code:r['Mã VT']||'',name:r['Tên vật tư']||'',unit:r['ĐVT']||'Cái',price:numFmt(r['Đơn giá']),note:r['Ghi chú']||''})).filter(r=>r.name);setMaterials(p=>[...p,...added]);window.showToast('Đã nhập '+added.length+' vật tư','success');}}),
-        h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Thêm vật tư'})
+        h(ExportBtn,{onClick:()=>xlsxExport(list,COLS,'Nguyen_vat_lieu')}),
+        h(ImportBtn,{onFile:rows=>{const added=rows.map(r=>({id:'VT'+uid(),code:r['Mã NVL']||r['Mã VT']||'',name:r['Tên nguyên vật liệu']||r['Tên vật tư']||'',group:r['Nhóm NVL']||r['Nhóm']||'',unit:r['ĐVT']||'Cái',price:numFmt(r['Đơn giá']),note:r['Ghi chú']||''})).filter(r=>r.name);setMaterials(p=>[...p,...added]);window.showToast('Đã nhập '+added.length+' nguyên vật liệu','success');}}),
+        h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Thêm NVL'})
       )
     ),
-    h(TableWrap,{cols:['Mã VT','Tên vật tư','Đơn vị','Đơn giá','Ghi chú',''],empty:'Chưa có vật tư nào.',
+    h(TableWrap,{cols:['Mã NVL','Tên nguyên vật liệu','Nhóm NVL','Đơn vị','Đơn giá','Ghi chú',''],empty:'Chưa có nguyên vật liệu nào.',
       rows:list.map(x=>h('tr',{key:x.id},
         h('td',null,h('span',{style:{color:'var(--pri)',fontWeight:500}},x.code||x.id)),
         h('td',null,h('div',{style:{fontWeight:500}},x.name)),
+        h('td',null,x.group||'—'),
         h('td',null,h('span',{className:'badge',style:{background:'var(--bg2)',color:'var(--tx2)'}},x.unit)),
         h('td',null,moneyFmt(x.price)),
         h('td',null,x.note||'—'),
@@ -2251,7 +2256,7 @@ function BackupTab({employees,materials,assets,prodCats,products,customers,workc
   const tables=[
     {name:'Nhân viên',rows:employees,cols:[['id','Mã NV'],['name','Tên'],['birthday','Ngày sinh'],['dept','Bộ phận'],['role','Quyền'],['username','Đăng nhập'],['phone','SĐT'],['email','Email']]},
     {name:'Bộ phận',rows:(depts||[]).map((d,i)=>({...d,code:d.code||deptCode(i)})),cols:[['code','Mã BP'],['name','Tên bộ phận'],['note','Ghi chú']]},
-    {name:'Vật tư',rows:materials,cols:[['code','Mã VT'],['name','Tên VT'],['unit','ĐVT'],['price','Đơn giá'],['note','Ghi chú']]},
+    {name:'Nguyên vật liệu',rows:materials,cols:[['code','Mã NVL'],['name','Tên nguyên vật liệu'],['group','Nhóm NVL'],['unit','ĐVT'],['price','Đơn giá'],['note','Ghi chú']]},
     {name:'Tài sản',rows:(assets||[]).map((a,i)=>({...a,stt:i+1})),cols:[['stt','Số TT'],['name','Tên tài sản'],['purchaseValue','Giá trị mua'],['currentValue','Giá trị hiện tại'],['replacementMaterial','Vật tư thay thế']]},
     {name:'Sản phẩm',rows:products.map(p=>({...p,catName:prodCats.find(c=>c.id===p.catId)?.name||''})),cols:[['code','Mã SP'],['name','Tên SP'],['catName','Danh mục'],['unit','ĐVT'],['weightPerUnit','KL/đv (kg)'],['note','Ghi chú']]},
     {name:'Khách hàng',rows:customers,cols:[['id','Mã KH'],['name','Tên KH'],['taxCode','MST'],['address','Địa chỉ'],['note','Ghi chú']]},
@@ -2660,9 +2665,67 @@ function NCCTab({nccs,setNCCs}) {
 }
 
 /* --- Đơn mua hàng --- */
-function PurchaseTab({purchases,setPurchases,nccs,materials,products,cu}) {
+function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,cu,setPage}) {
   const [modal,sm]=useState(null); const [edit,se]=useState(null); const [q,sq]=useState(''); const [filter,sf]=useState('all');
   let seq=purchases.length+1;
+  const numMoney=v=>Number(String(v??'').replace(/[^\d-]/g,''))||0;
+  const syncNccFromPurchases=()=>{
+    const seen=new Set();
+    const mapped=(purchases||[]).map(p=>({
+      id:p.nccId||('NCC'+uid()),
+      code:p.nccCode||p.nccId||'',
+      name:p.nccName||'',
+      taxCode:p.nccTaxCode||'',
+      phone:p.nccPhone||'',
+      email:p.nccEmail||'',
+      contact:p.nccContact||'',
+      address:p.nccAddress||'',
+      note:p.nccNote||''
+    })).filter(x=>x.name&&!seen.has((x.code||x.name).toLowerCase())&&(seen.add((x.code||x.name).toLowerCase()),true));
+    if(!mapped.length){window.showToast('Không có NCC mới để cập nhật.','warn');return;}
+    setNCCs(prev=>{
+      const next=[...prev];
+      mapped.forEach(n=>{
+        const i=next.findIndex(x=>(n.code&&x.code===n.code)||String(x.name||'').toLowerCase()===String(n.name||'').toLowerCase());
+        if(i>=0) next[i]={...next[i],...n,id:next[i].id};
+        else next.push({...n,id:n.id||('NCC'+uid())});
+      });
+      return next;
+    });
+    window.showToast('Đã cập nhật NCC từ đơn mua','success');
+  };
+  const importRows=rows=>{
+    const mapped=(rows||[]).map(r=>{
+      const nccName=r['NCC']||r['Nhà cung cấp']||r['nccName']||r['ncc']||'';
+      const itemName=r['Vật tư']||r['Mặt hàng']||r['itemName']||r['item']||'';
+      const qty=numFmt(r['Số lượng']||r['itemQty']||r['qty']||0);
+      const price=numMoney(r['Đơn giá']||r['itemPrice']||r['price']||0);
+      const total=numMoney(r['Thành tiền']||r['itemTotal']||r['total']||qty*price);
+      const orderDate=r['Ngày nhập']||r['Ngày đặt']||r['orderDate']||r['date']||'';
+      const statusRaw=String(r['Trạng thái']||r['status']||'').toLowerCase();
+      const payRaw=String(r['Thanh toán']||r['paymentStatus']||'').toLowerCase();
+      return {
+        id:'DM'+uid(),
+        status:statusRaw.includes('đã nhận')?'received':statusRaw.includes('đã đặt')?'ordered':statusRaw.includes('hủy')?'cancelled':'draft',
+        paymentStatus:payRaw.includes('đã')||payRaw.includes('paid')?'paid':payRaw.includes('một phần')?'partial':'unpaid',
+        nccId:(nccs||[]).find(n=>String(n.name||'').toLowerCase()===String(nccName).toLowerCase())?.id||'',
+        nccName,
+        orderDate,
+        deliveryDate:r['Hạn giao']||r['deliveryDate']||'',
+        receivedDate:r['Ngày nhận']||r['receivedDate']||'',
+        invoiceNo:r['Số hóa đơn']||r['invoiceNo']||'',
+        note:r['Ghi chú đơn']||r['note']||'',
+        lines:[{id:uid(),itemId:'',name:itemName,unit:r['ĐVT']||r['itemUnit']||'',qty,price,note:r['Ghi chú dòng']||r['lineNote']||''}],
+        createdAt:fmtDT(),
+        createdBy:cu.name,
+        updatedAt:fmtDT(),
+        updatedBy:cu.name
+      };
+    }).filter(x=>x.nccName||x.lines[0].name||x.orderDate);
+    if(!mapped.length){window.showToast('File chưa có dòng đơn mua hợp lệ.','warn');return;}
+    setPurchases(prev=>[...mapped,...prev]);
+    window.showToast('Đã nhập '+mapped.length+' đơn mua','success');
+  };
   function PForm({po,onSave,onClose}) {
     const [f,sf2]=useState(po||{nccId:'',nccName:'',orderDate:fmtDate(),lines:[{id:uid(),itemId:'',name:'',unit:'',qty:0,price:0,note:''}]});
     const s2=(k,v)=>sf2(p=>({...p,[k]:v}));
@@ -2705,6 +2768,9 @@ function PurchaseTab({purchases,setPurchases,nccs,materials,products,cu}) {
       h('div',{style:{display:'flex',gap:5,flexWrap:'wrap'}},sts.map(([v,l])=>h('button',{key:v,className:'pill'+(filter===v?' on':''),onClick:()=>sf(v)},l+' ('+(v==='all'?purchases.length:purchases.filter(x=>x.status===v).length)+')'))),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
         h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn mua...'}),
+        h('button',{onClick:()=>setPage('nccs'),style:{fontSize:12,padding:'6px 12px'}},h('i',{className:'ti ti-building-store',style:{fontSize:14}}),'Nhà cung cấp'),
+        h('button',{onClick:syncNccFromPurchases,style:{fontSize:12,padding:'6px 12px'}},h('i',{className:'ti ti-refresh',style:{fontSize:14}}),'Cập nhật NCC'),
+        h(ImportBtn,{onFile:importRows}),
         h(ExportBtn,{onClick:()=>xlsxExport(exportRows,[['orderDate','Ngày nhập'],['nccName','NCC'],['itemName','Vật tư'],['itemQty','Số lượng'],['itemPrice','Đơn giá'],['itemTotal','Thành tiền']],'Don_mua_hang')}),
         h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Tạo đơn mua'})
       )
@@ -2833,7 +2899,7 @@ function SupabaseUsageReportTab({employees,materials,assets,prodCats,products,cu
   const rows=[
     ['employees','Nhân viên',employees],
     ['company','Thông tin công ty',company],
-    ['materials','Vật tư',materials],
+    ['materials','Nguyên vật liệu',materials],
     ['assets','Danh mục tài sản',assets],
     ['prodCats','Danh mục SP',prodCats],
     ['products','Sản phẩm',products],
@@ -3872,7 +3938,7 @@ const NAV=[
   {key:'process_banhcuon',icon:'ti-cookie',label:'QT SX Bánh cuốn'},
   {sec:'Danh mục'},
   {key:'depts',icon:'ti-sitemap',label:'Bộ phận'},
-  {key:'materials',icon:'ti-tools',label:'Vật tư'},
+  {key:'materials',icon:'ti-tools',label:'Nguyên vật liệu'},
   {key:'assets',icon:'ti-building-warehouse',label:'Danh mục tài sản'},
   {key:'products',icon:'ti-box',label:'Sản phẩm'},
   {key:'customers',icon:'ti-users',label:'Khách hàng'},
@@ -7079,7 +7145,7 @@ function canDel(role, page, lvls)   { return getLvl(role,page,lvls)==='rwd'; }
 
 const PTITLES = {
   welcome:'Tổng quan', company:'Thông tin công ty', employees:'Nhân viên', attendance:'Chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', leaves:'Xin phép nghỉ', prodshifts:'Ca sản xuất',
-  backup:'Backup dữ liệu', materials:'Vật tư', assets:'Danh mục tài sản', products:'Sản phẩm', depts:'Bộ phận',
+  backup:'Backup dữ liệu', materials:'Nguyên vật liệu', assets:'Danh mục tài sản', products:'Sản phẩm', depts:'Bộ phận',
   customers:'Khách hàng', workcats:'Danh mục công việc', tasks:'Giao việc', shifts:'Ca giao hàng',
   workreport_vp:'CÔNG KẾ TOÁN', workreport_sx:'CÔNG SẢN XUẤT', workreport_lx:'CÔNG LÁI XE', workreport_total:'TỔNG CÔNG',
   process_accounting:'QUY TRÌNH KẾ TOÁN', process_bun:'QT SẢN XUẤT BÚN', process_pho:'QT SX PHỞ', process_banhcuon:'QT SX BÁNH CUỐN',
@@ -7286,7 +7352,7 @@ function App(){
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats,depts}),
         canAccess(cu.role,'tasks',cu.permissions)&&page==='tasks'&&h(TasksTab,{tasks,setTasks,workcats,employees,currentUser:cu}),
         canAccess(cu.role,'nccs',cu.permissions)&&page==='nccs'&&h(NCCTab,{nccs,setNCCs}),
-        canAccess(cu.role,'purchaseorders',cu.permissions)&&page==='purchaseorders'&&h(PurchaseTab,{purchases,setPurchases,nccs,materials,products,cu}),
+        canAccess(cu.role,'purchaseorders',cu.permissions)&&page==='purchaseorders'&&h(PurchaseTab,{purchases,setPurchases,nccs,setNCCs,materials,products,cu,setPage}),
         canAccess(cu.role,'purchasereport',cu.permissions)&&page==='purchasereport'&&h(PurchaseReportTab,{purchases,nccs}),
         canAccess(cu.role,'powderdebtreport',cu.permissions)&&page==='powderdebtreport'&&h(PowderDebtReportTab,{customers}),
         canAccess(cu.role,'maint_vehicle',cu.permissions)&&page==='maint_vehicle'&&h(MaintenanceTab,{title:'Bảo dưỡng xe',icon:'ti-car',assets}),
