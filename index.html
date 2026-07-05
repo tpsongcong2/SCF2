@@ -2710,7 +2710,7 @@ function NCCTab({nccs,setNCCs}) {
 
 /* --- Đơn mua hàng --- */
 function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,cu,setPage}) {
-  const [modal,sm]=useState(null); const [edit,se]=useState(null); const [q,sq]=useState(''); const [filter,sf]=useState('all');
+  const [modal,sm]=useState(null); const [edit,se]=useState(null); const [q,sq]=useState(''); const [timeFilter,stf]=useState('all');
   let seq=purchases.length+1;
   const numMoney=v=>Number(String(v??'').replace(/[^\d-]/g,''))||0;
   const fmtPurchaseDate=s=>fmtAnyDate(s);
@@ -2815,12 +2815,28 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,cu,
     }
     sm(null);se(null);
   };
-  const statusMap={draft:['#F1EFE8','#5F5E5A','Nháp'],ordered:['#E6F1FB','#185FA5','Đã đặt'],received:['#EAF3DE','#3B6D11','Đã nhận'],cancelled:['#FCEBEB','#A32D2D','Hủy']};
-  const payMap={unpaid:'Chưa TT',partial:'TT một phần',paid:'Đã TT'};
   const del=id=>{window.scfConfirm('Bạn có chắc muốn xóa đơn mua này?','Xóa đơn mua',true).then(ok=>{if(ok){setPurchases(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa đơn mua','success');}});};
-  const sts=[['all','Tất cả'],['draft','Nháp'],['ordered','Đã đặt'],['received','Đã nhận'],['cancelled','Hủy']];
+  const todayDate=new Date();
+  const startOfToday=new Date(todayDate.getFullYear(),todayDate.getMonth(),todayDate.getDate());
+  const dayStart=startOfToday.getTime();
+  const weekStartDate=new Date(startOfToday);
+  const weekDay=(weekStartDate.getDay()+6)%7;
+  weekStartDate.setDate(weekStartDate.getDate()-weekDay);
+  const weekStart=weekStartDate.getTime();
+  const monthStartDate=new Date(todayDate.getFullYear(),todayDate.getMonth(),1);
+  const monthStart=monthStartDate.getTime();
   const list=purchases
-    .filter(x=>(filter==='all'||x.status===filter)&&(!q||String(x.nccName||'').toLowerCase().includes(q.toLowerCase())||String(x.id||'').toLowerCase().includes(q.toLowerCase())||String(x.invoiceNo||'').toLowerCase().includes(q.toLowerCase())))
+    .filter(x=>{
+      if(q&&!(String(x.nccName||'').toLowerCase().includes(q.toLowerCase())||String(x.id||'').toLowerCase().includes(q.toLowerCase())||String(x.invoiceNo||'').toLowerCase().includes(q.toLowerCase()))) return false;
+      if(timeFilter==='all') return true;
+      const d=parseAnyDate(x.orderDate||x.createdAt||x.updatedAt);
+      if(!d) return false;
+      const ts=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
+      if(timeFilter==='day') return ts===dayStart;
+      if(timeFilter==='week') return ts>=weekStart;
+      if(timeFilter==='month') return ts>=monthStart;
+      return true;
+    })
     .slice()
     .sort((a,b)=>{
       const da=parseAnyDate(a.orderDate||a.createdAt||a.updatedAt);
@@ -2845,9 +2861,19 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,cu,
     source:o
   })));
   return h('div',null,
-    h('div',{className:'ptitle'},h('i',{className:'ti ti-shopping-cart',style:{fontSize:20}}),'Đơn mua hàng'),
+    h('div',{className:'ptitle',style:{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}},
+      h('div',{style:{display:'flex',alignItems:'center',gap:8}},h('i',{className:'ti ti-shopping-cart',style:{fontSize:20}}),'Đơn mua hàng'),
+      h('div',{style:{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}},
+        h('span',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500}},'Lọc thời gian'),
+        h('select',{value:timeFilter,onChange:e=>stf(e.target.value),style:{width:'auto',minWidth:120,fontSize:13,padding:'7px 10px'}},
+          h('option',{value:'all'},'Tất cả'),
+          h('option',{value:'day'},'Ngày'),
+          h('option',{value:'week'},'Tuần'),
+          h('option',{value:'month'},'Tháng')
+        )
+      )
+    ),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
-      h('div',{style:{display:'flex',gap:5,flexWrap:'wrap'}},sts.map(([v,l])=>h('button',{key:v,className:'pill'+(filter===v?' on':''),onClick:()=>sf(v)},l+' ('+(v==='all'?purchases.length:purchases.filter(x=>x.status===v).length)+')'))),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
         h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn mua...'}),
         h('button',{onClick:()=>setPage('nccs'),style:{fontSize:12,padding:'6px 12px'}},h('i',{className:'ti ti-building-store',style:{fontSize:14}}),'Nhà cung cấp'),
@@ -2855,7 +2881,8 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,cu,
         h(ImportBtn,{onFile:importRows}),
         h(ExportBtn,{onClick:()=>xlsxExport(exportRows,[['orderDate','Ngày nhập'],['nccName','NCC'],['itemName','Nguyên vật liệu'],['itemQty','Số lượng'],['itemPrice','Đơn giá'],['itemTotal','Thành tiền']],'Don_mua_hang')}),
         h(AddBtn,{onClick:openAdd,label:'Tạo đơn mua'})
-      )
+      ),
+      h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500}},'Hiển thị: '+list.length+' đơn')
     ),
     h('div',{className:'tw',style:{maxHeight:'calc(100vh - 250px)',overflow:'auto'}},h('table',null,
       h('thead',null,h('tr',null,...['Ngày nhập','NCC','Nguyên vật liệu','Số lượng','Đơn giá','Thành tiền',''].map(c=>h('th',{key:c,style:{position:'sticky',top:0,zIndex:3,background:'var(--bg2)',boxShadow:'0 1px 0 var(--bd)'}},c)))),
