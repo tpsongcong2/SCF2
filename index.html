@@ -2141,7 +2141,7 @@ function EmpForm({emp,employees,depts,cu,cu2,onSave,onClose}){
           {sec:'Cai dat', pages:[{k:'company',l:'Thong tin cong ty'},{k:'employees',l:'Nhan vien'},{k:'attendance',l:'Cham cong'},{k:'advances',l:'Ung luong'},{k:'rewards',l:'Thuong phat'},{k:'leaves',l:'Xin nghi'},{k:'backup',l:'Backup'}]},
           {sec:'Danh muc', pages:[{k:'materials',l:'Vat tu'},{k:'depts',l:'Bo phan'},{k:'products',l:'San pham'},{k:'customers',l:'Khach hang'},{k:'workcats',l:'DM Cong viec'},{k:'shifts',l:'Ca giao hang'}]},
           {sec:'Ban hang', pages:[{k:'quotes',l:'Bao gia'},{k:'delivery',l:'Don giao hang'},{k:'orderdetail',l:'Chi tiet don hang'},{k:'trips',l:'Chuyen giao hang'},{k:'salesreport',l:'Bao cao BH'},{k:'marketsales',l:'Ban hang cho'},{k:'powdersales',l:'Ban bot bun'}]},
-          {sec:'Mua hang', pages:[{k:'nccs',l:'Nha cung cap'},{k:'purchaseorders',l:'Don mua hang'},{k:'purchasereport',l:'Bao cao MH'},{k:'purchase',l:'Mua hang'}]},
+          {sec:'Mua hang', pages:[{k:'nccs',l:'Nha cung cap'},{k:'purchaseorders',l:'Don mua hang'},{k:'fuelpurchases',l:'Don mua xang dau'},{k:'purchasereport',l:'Bao cao MH'},{k:'purchase',l:'Mua hang'}]},
           {sec:'San xuat', pages:[{k:'prodsummary',l:'Tong hop SX'},{k:'prodorders',l:'Don san xuat'},{k:'stock',l:'Ton kho'}]},
         ].map(sec=>h('div',{key:sec.sec,style:{marginBottom:10}},
           h('div',{style:{fontSize:11,fontWeight:600,color:'var(--tx2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:5}},sec.sec),
@@ -2491,12 +2491,10 @@ function MaintenanceTab({title,icon,assets}){
     h('div',{className:'card',style:{marginBottom:'1rem',padding:'12px 14px',background:'linear-gradient(135deg,#f7fbf9,#eef6f1)'}},
       h('div',{style:{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap',alignItems:'center'}},
         h('div',null,
-          h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Mẫu nhập nhanh'),
           h('div',{style:{fontWeight:600}},isVehicle
             ? 'NGÀY BẢO DƯỠNG - TÊN XE/MÁY - DỊCH VỤ - TẠI KM - GARA - THÀNH TIỀN - HÓA ĐƠN'
             : 'THÁNG - NGÀY BẢO DƯỠNG - TÊN XE/MÁY - DỊCH VỤ - TẠI KM - GARA - THÀNH TIỀN - HÓA ĐƠN')
-        ),
-        h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Có thể tải file Excel lên để nhập hàng loạt.')
+        )
       )
     ),
     h('div',{className:'tw'},
@@ -2968,6 +2966,217 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,cu,
       })),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8}},'Một đơn có thể có nhiều dòng nguyên vật liệu.'),
       h(Row,null,h('button',{onClick:()=>{sm(null);se(null);}},'Hủy'),h('button',{className:'bp',onClick:saveForm,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu đơn mua'))
+    )
+  );
+}
+
+/* --- Đơn mua xăng dầu --- */
+function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
+  const [modal,setModal]=useState(false);
+  const [edit,setEdit]=useState(null);
+  const [q,sq]=useState('');
+  const [uploading,setUploading]=useState(false);
+  const normalizeText=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const deptKey=normalizeText(currentUser?.dept);
+  const isAccounting=deptKey==='ke toan';
+  const canManage=currentUser?.role==='admin'||currentUser?.role==='manager'||isAccounting;
+  const isDriver=currentUser?.role==='driver';
+  const selfOption=currentUser?{id:currentUser.id,name:currentUser.name||currentUser.id,label:(currentUser.name||currentUser.id)+(currentUser.id?' - '+currentUser.id:'')}:null;
+  const driverOptions=(employees||[])
+    .filter(e=>e.role==='driver'||normalizeText(e.dept)==='lai xe')
+    .map(e=>({id:e.id,name:e.name||e.id,label:(e.name||e.id)+(e.id?' - '+e.id:'')}))
+    .sort((a,b)=>a.label.localeCompare(b.label,'vi'));
+  const buyerOptions=(selfOption?[selfOption,...driverOptions.filter(d=>d.id!==selfOption.id)]:driverOptions);
+  const vehicleOptions=[...new Set((assets||[])
+    .map(a=>String(a.name||a.code||a.id||'').trim())
+    .filter(Boolean)
+    .filter(name=>{
+      const t=normalizeText(name);
+      const looksLikeVehicle=/^\d{4,6}$/.test(name)||t.includes('xe')||/\b\d{2}[a-z]-?\d{3,5}\b/i.test(name);
+      const looksLikeMachine=t.startsWith('may ')||t.includes('máy')||t.includes('may')||t.includes('bom')||t.includes('bơm')||t.includes('inox');
+      return looksLikeVehicle&&!looksLikeMachine;
+    }))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const blankForm=buyerId=>{
+    const d=buyerOptions.find(x=>x.id===buyerId);
+    return {
+      buyerId:buyerId||'',
+      buyerName:d?.name||'',
+      date:isoDate(),
+      vehicle:'',
+      liters:0,
+      price:0,
+      amount:0,
+      image:'',
+      imageName:'',
+      note:''
+    };
+  };
+  const defaultBuyerId=(isDriver&&currentUser?.id)||selfOption?.id||'';
+  const [form,setForm]=useState(blankForm(defaultBuyerId));
+  const setF=(k,v)=>setForm(p=>{
+    const next={...p,[k]:v};
+    next.amount=numFmt(next.liters||0)*numFmt(next.price||0);
+    return next;
+  });
+  const openAdd=()=>{
+    setEdit(null);
+    setForm(blankForm(defaultBuyerId));
+    setModal(true);
+  };
+  const openEdit=row=>{
+    setEdit(row);
+    setForm({
+      buyerId:row.buyerId||'',
+      buyerName:row.buyerName||'',
+      date:toIsoDate(row.date)||isoDate(),
+      vehicle:row.vehicle||'',
+      liters:numFmt(row.liters||0),
+      price:numFmt(row.price||0),
+      amount:numFmt(row.amount||0),
+      image:row.image||'',
+      imageName:row.imageName||'',
+      note:row.note||''
+    });
+    setModal(true);
+  };
+  const isOwn=row=>!isDriver||row.buyerId===currentUser.id||String(row.buyerName||'').trim().toLowerCase()===String(currentUser.name||'').trim().toLowerCase();
+  const canFix=row=>canManage||(isDriver&&isOwn(row)&&String(row.note||'').trim());
+  const visible=(rows||[])
+    .filter(r=>(canManage||isOwn(r))&&(!q||[r.date,r.vehicle,r.buyerName,r.note,r.imageName].join(' ').toLowerCase().includes(q.toLowerCase())))
+    .slice()
+    .sort((a,b)=>{
+      const da=parseAnyDate(a.date||a.createdAt||a.updatedAt);
+      const db=parseAnyDate(b.date||b.createdAt||b.updatedAt);
+      const ta=da?da.getTime():0;
+      const tb=db?db.getTime():0;
+      if(tb!==ta) return tb-ta;
+      return String(b.id||'').localeCompare(String(a.id||''),'vi',{numeric:true});
+    });
+  const save=()=>{
+    if(!form.buyerId||!form.date||!form.vehicle||numFmt(form.liters)<=0||numFmt(form.price)<=0){
+      window.showToast('Nhập người mua, ngày mua, xe, số lít và giá tiền.','warn');
+      return;
+    }
+    const buyer=buyerOptions.find(x=>x.id===form.buyerId);
+    const data={
+      ...form,
+      buyerId:form.buyerId,
+      buyerName:buyer?.name||form.buyerName||'',
+      date:toIsoDate(form.date)||isoDate(),
+      liters:numFmt(form.liters||0),
+      price:numFmt(form.price||0),
+      amount:numFmt(form.liters||0)*numFmt(form.price||0),
+      updatedAt:fmtDT(),
+      updatedBy:currentUser.name
+    };
+    if(edit){
+      setRows(prev=>prev.map(x=>x.id===edit.id?{...x,...data}:x));
+      window.showToast('Đã cập nhật đơn mua xăng dầu','success');
+    }else{
+      setRows(prev=>[{
+        ...data,
+        id:'XD'+uid(),
+        createdAt:fmtDT(),
+        createdBy:currentUser.name
+      },...prev]);
+      window.showToast('Đã thêm đơn mua xăng dầu','success');
+    }
+    setModal(false);
+    setEdit(null);
+  };
+  const del=id=>{
+    window.scfConfirm('Bạn có chắc muốn xóa đơn mua xăng dầu này?','Xóa đơn',true).then(ok=>{
+      if(ok){
+        setRows(prev=>prev.filter(x=>x.id!==id));
+        window.showToast('Đã xóa đơn mua xăng dầu','success');
+      }
+    });
+  };
+  const pickImage=async file=>{
+    if(!file) return;
+    try{
+      setUploading(true);
+      const url=await uploadPhoto(file,'fuel-purchases/'+(edit?.id||'new'));
+      setForm(p=>({...p,image:url,imageName:file.name||'anh-xang-dau.jpg'}));
+      window.showToast('Đã tải ảnh lên','success');
+    }catch(e){
+      window.showToast('Chưa tải được ảnh.','error');
+    }finally{
+      setUploading(false);
+    }
+  };
+  return h('div',null,
+    h('div',{className:'ptitle'},h('i',{className:'ti ti-gas-station',style:{fontSize:20}}),'Đơn mua xăng dầu'),
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
+      h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn mua xăng dầu...'}),
+      h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+        h(ExportBtn,{onClick:()=>xlsxExport(visible,[['date','Ngày mua'],['buyerName','Người mua'],['vehicle','Xe'],['liters','Số lít'],['price','Giá tiền'],['amount','Thành tiền'],['note','Chú ý'],['image','Ảnh']],'Don_mua_xang_dau')}),
+        h(AddBtn,{onClick:openAdd,label:'Thêm đơn mua xăng dầu'})
+      )
+    ),
+    h('div',{className:'card',style:{marginBottom:10,padding:'10px 14px',fontSize:12,color:'var(--tx2)'}},
+      canManage
+        ? 'Admin, quản lý và kế toán xem toàn bộ đơn. Lái xe chỉ xem đơn của mình; chỉ các đơn có phần chú ý mới cho sửa/xóa phía lái xe.'
+        : 'Tài khoản lái xe chỉ xem đơn của mình. Mặc định chỉ thêm mới; đơn nào có phần chú ý mới được sửa hoặc xóa.'
+    ),
+    h('div',{className:'tw'},h('table',null,
+      h('thead',null,h('tr',null,...['Ngày mua','Người mua','Xe','Số lít','Giá tiền','Thành tiền','Ảnh','Chú ý',''].map(c=>h('th',{key:c},c)))),
+      h('tbody',null,visible.length?visible.map(r=>h('tr',{key:r.id},
+        h('td',null,fmtAnyDate(r.date)||'—'),
+        h('td',null,h('div',{style:{fontWeight:600}},r.buyerName||'—')),
+        h('td',null,r.vehicle||'—'),
+        h('td',null,numFmt(r.liters||0)||'—'),
+        h('td',null,numFmt(r.price||0)?Number(r.price).toLocaleString('vi-VN'):'—'),
+        h('td',null,h('span',{style:{fontWeight:600,color:'var(--pri)'}},numFmt(r.amount||0)?Number(r.amount).toLocaleString('vi-VN'):'—')),
+        h('td',null,r.image?h('button',{className:'bi',title:'Xem ảnh',onClick:()=>window.open(r.image,'_blank')},h('i',{className:'ti ti-photo',style:{fontSize:15,color:'var(--pri)'}})):'—'),
+        h('td',null,r.note?h('span',{className:'badge',style:{background:'#FFF3CD',color:'#8A5A00',maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},r.note):'—'),
+        h('td',null,h('div',{style:{display:'flex',gap:2}},
+          canFix(r)&&h('button',{className:'bi',onClick:()=>openEdit(r)},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
+          canFix(r)&&h('button',{className:'bi',onClick:()=>del(r.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+        ))
+      )):h('tr',null,h('td',{colSpan:9,className:'empty-st'},'Chưa có đơn mua xăng dầu nào.')))
+    )),
+    modal&&h(Modal,{title:edit?'Sửa đơn mua xăng dầu':'Thêm đơn mua xăng dầu',lg:true,onClose:()=>{setModal(false);setEdit(null);}},
+      h('div',{className:'g2'},
+        h(F,{label:'Người mua *'},
+          canManage
+            ? h('select',{value:form.buyerId,onChange:e=>{const d=buyerOptions.find(x=>x.id===e.target.value);setForm(p=>({...p,buyerId:e.target.value,buyerName:d?.name||'',amount:numFmt(p.liters||0)*numFmt(p.price||0)}));}},
+                h('option',{value:''},'— Chọn người mua —'),
+                buyerOptions.map(d=>h('option',{key:d.id,value:d.id},d.label))
+              )
+            : h('input',{value:currentUser.name||'',readOnly:true,style:{background:'var(--bg2)'}})
+        ),
+        h(F,{label:'Ngày mua *'},h('input',{type:'date',value:toIsoDate(form.date),onChange:e=>setF('date',e.target.value)}))
+      ),
+      h('div',{className:'g2'},
+        h(F,{label:'Xe / biển số *'},
+          h('select',{value:form.vehicle,onChange:e=>setF('vehicle',e.target.value)},
+            h('option',{value:''},'— Chọn xe —'),
+            vehicleOptions.map(v=>h('option',{key:v,value:v},v))
+          )
+        ),
+        h(F,{label:'Ảnh'},
+          h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
+            form.image&&h('button',{type:'button',onClick:()=>window.open(form.image,'_blank'),style:{fontSize:12,padding:'6px 12px'}},h('i',{className:'ti ti-photo',style:{fontSize:14}}),'Xem ảnh'),
+            h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:uploading?'wait':'pointer',background:'#fff'}},
+              h('i',{className:'ti '+(uploading?'ti-loader-2 spin':'ti-camera-plus'),style:{fontSize:14}}),
+              uploading?'Đang tải ảnh...':'Chọn ảnh',
+              h('input',{type:'file',accept:'image/*',capture:'environment',style:{display:'none'},disabled:uploading,onChange:e=>pickImage(e.target.files?.[0])})
+            ),
+            form.imageName&&h('span',{style:{fontSize:12,color:'var(--tx2)'}},form.imageName)
+          )
+        )
+      ),
+      h('div',{className:'g3'},
+        h(F,{label:'Số lít *'},h('input',{type:'number',min:0,step:'0.1',value:form.liters,onChange:e=>setF('liters',e.target.value),placeholder:'0'})),
+        h(F,{label:'Giá tiền *'},h(NumInput,{value:form.price,onChange:v=>setF('price',v),placeholder:'0'})),
+        h(F,{label:'Thành tiền'},h('input',{value:numFmt(form.amount||0)?Number(form.amount).toLocaleString('vi-VN'):'0',readOnly:true,style:{background:'var(--bg2)',fontWeight:600}}))
+      ),
+      h(F,{label:'Chú ý'},h('textarea',{value:form.note,onChange:e=>setF('note',e.target.value),rows:3,placeholder:'Đơn lỗi hoặc cần sửa thì ghi chú ở đây...'})),
+      h(Row,null,
+        h('button',{onClick:()=>{setModal(false);setEdit(null);}},'Hủy'),
+        h('button',{className:'bp',onClick:save,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu đơn')
+      )
     )
   );
 }
@@ -4166,6 +4375,7 @@ const NAV=[
   {sec:'Mua hàng'},
   {key:'nccs',icon:'ti-building-store',label:'Nhà cung cấp'},
   {key:'purchaseorders',icon:'ti-shopping-cart',label:'Đơn mua hàng'},
+  {key:'fuelpurchases',icon:'ti-gas-station',label:'Đơn mua xăng dầu'},
   {sec:'Báo cáo'},
   {key:'salesreport',icon:'ti-chart-line',label:'Báo cáo BH'},
   {key:'purchasereport',icon:'ti-chart-bar',label:'Báo cáo MH'},
@@ -7323,6 +7533,7 @@ const PAGE_ACCESS = {
   purchase:     ['admin','manager'],
   nccs:         ['admin','manager'],
   purchaseorders:['admin','manager'],
+  fuelpurchases:['admin','manager','driver'],
   purchasereport:['admin','manager'],
   powderdebtreport:['admin','manager','staff'],
   dbusage:['admin','manager'],
@@ -7363,7 +7574,7 @@ const PTITLES = {
   process_accounting:'QUY TRÌNH KẾ TOÁN', process_bun:'QT SẢN XUẤT BÚN', process_pho:'QT SX PHỞ', process_banhcuon:'QT SX BÁNH CUỐN',
   quotes:'Báo giá', delivery:'Đơn giao hàng', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng',
   salesreport:'Báo cáo bán hàng', marketsales:'Bán hàng chợ', powdersales:'Bán bột bún',
-  nccs:'Nhà cung cấp', purchaseorders:'Đơn mua hàng', purchasereport:'Báo cáo mua hàng', powderdebtreport:'Báo cáo công nợ', dbusage:'Dung lượng Supabase',
+  nccs:'Nhà cung cấp', purchaseorders:'Đơn mua hàng', fuelpurchases:'Đơn mua xăng dầu', purchasereport:'Báo cáo mua hàng', powderdebtreport:'Báo cáo công nợ', dbusage:'Dung lượng Supabase',
   maint_vehicle:'Bảo dưỡng xe', maint_machine:'Bảo dưỡng máy',
   prodsummary:'Tổng hợp sản xuất', prodorders:'Đơn sản xuất', stock:'Tồn kho',
 };
@@ -7374,7 +7585,7 @@ const PICONS = {
   workreport_vp:'ti-building', workreport_sx:'ti-building-factory', workreport_lx:'ti-steering-wheel', workreport_total:'ti-report-analytics',
   process_accounting:'ti-file-invoice', process_bun:'ti-tools-kitchen-2', process_pho:'ti-bowl', process_banhcuon:'ti-cookie',
   marketsales:'ti-building-store', powdersales:'ti-bowl',
-  powderdebtreport:'ti-report-money', dbusage:'ti-database',
+  powderdebtreport:'ti-report-money', dbusage:'ti-database', fuelpurchases:'ti-gas-station',
   maint_vehicle:'ti-car', maint_machine:'ti-settings'
 };
 
@@ -7395,6 +7606,7 @@ function App(){
   const[tasks,_stasks]=useState([]);
   const[nccs,_sncc]=useState([]);
   const[purchases,_spu]=useState([]);
+  const[fuelPurchases,_sfp]=useState([]);
   const[shifts,_ssh]=useState(D_SHIFTS);
   const[quotes,_sq]=useState([]);
   const[orders,_so]=useState([]);
@@ -7420,6 +7632,7 @@ function App(){
   const setTasks=mkSet('scf_tasks',_stasks);
   const setNCCs=mkSet('scf_nccs',_sncc);
   const setPurchases=mkSet('scf_purchases',_spu);
+  const setFuelPurchases=mkSet('scf_fuelpurchases',_sfp);
   const setShifts=mkSet('scf_shifts',_ssh);
   const setQuotes=mkSet('scf_quotes',_sq);
   const setOrders=mkSet('scf_orders',_so);
@@ -7436,16 +7649,17 @@ function App(){
   useEffect(()=>{
     (async()=>{
       try{
-        const[e,c,m,assetData,pc,p,cu,ar,wc,tk,ncc,pu,q,o,t,a,adv,rw,lv,dp]=await Promise.all([
+        const[e,c,m,assetData,pc,p,cu,ar,wc,tk,ncc,pu,q,fp,o,t,a,adv,rw,lv,dp]=await Promise.all([
           dbGet('scf_employees',DEF_EMPS),dbGet('scf_company',DEF_COMPANY),
           dbGet('scf_materials',DEF_MATERIALS),dbGet('scf_assets',[]),dbGet('scf_prodcats',DEF_PRODCATS),
           dbGet('scf_products',DEF_PRODUCTS),dbGet('scf_customers',DEF_CUSTOMERS),
           dbGet('scf_areas',DEF_AREAS),
           dbGet('scf_workcats',DEF_WORKCATS),dbGet('scf_tasks',[]),dbGet('scf_nccs',[]),dbGet('scf_purchases',[]),dbGet('scf_quotes',[]),
+          dbGet('scf_fuelpurchases',[]),
           dbGet('scf_orders',[]),dbGet('scf_trips',[]),dbGet('scf_attendance',[]),
           dbGet('scf_advances',[]),dbGet('scf_rewards',[]),dbGet('scf_leaves',[]),dbGet('scf_depts',DEF_DEPTS),
         ]);
-        _se(e);_sc(c);_sm(m);_sas(assetData);_spc(pc);_sp(p);_scu(cu);_sar(ar);_swc(wc);_stasks(tk);_sncc(ncc);_spu(pu);const shData=await dbGet('scf_shifts',D_SHIFTS);_ssh(shData);_sq(q);_so(o);_st(t);_sa(a);_sadv(adv);_srw(rw);_slv(lv);_sdp(dp);const psData=await dbGet('scf_prod_shifts',DEF_PROD_SHIFTS);_sps(psData);const psrData=await dbGet('scf_prod_shift_rules',DEF_PROD_SHIFT_RULES);_spr(psrData);
+        _se(e);_sc(c);_sm(m);_sas(assetData);_spc(pc);_sp(p);_scu(cu);_sar(ar);_swc(wc);_stasks(tk);_sncc(ncc);_spu(pu);_sfp(fp);const shData=await dbGet('scf_shifts',D_SHIFTS);_ssh(shData);_sq(q);_so(o);_st(t);_sa(a);_sadv(adv);_srw(rw);_slv(lv);_sdp(dp);const psData=await dbGet('scf_prod_shifts',DEF_PROD_SHIFTS);_sps(psData);const psrData=await dbGet('scf_prod_shift_rules',DEF_PROD_SHIFT_RULES);_spr(psrData);
       }catch(err){console.warn(err);}finally{setLoading(false);}
     })();
   },[]);
@@ -7565,6 +7779,7 @@ function App(){
         canAccess(cu.role,'tasks',cu.permissions)&&page==='tasks'&&h(TasksTab,{tasks,setTasks,workcats,employees,currentUser:cu}),
         canAccess(cu.role,'nccs',cu.permissions)&&page==='nccs'&&h(NCCTab,{nccs,setNCCs,purchases}),
         canAccess(cu.role,'purchaseorders',cu.permissions)&&page==='purchaseorders'&&h(PurchaseTab,{purchases,setPurchases,nccs,setNCCs,materials,products,cu,setPage}),
+        canAccess(cu.role,'fuelpurchases',cu.permissions)&&page==='fuelpurchases'&&h(FuelPurchaseTab,{rows:fuelPurchases,setRows:setFuelPurchases,employees,assets,currentUser:cu}),
         canAccess(cu.role,'purchasereport',cu.permissions)&&page==='purchasereport'&&h(PurchaseReportTab,{purchases,nccs}),
         canAccess(cu.role,'powderdebtreport',cu.permissions)&&page==='powderdebtreport'&&h(PowderDebtReportTab,{customers}),
         canAccess(cu.role,'maint_vehicle',cu.permissions)&&page==='maint_vehicle'&&h(MaintenanceTab,{title:'Bảo dưỡng xe',icon:'ti-car',assets}),
