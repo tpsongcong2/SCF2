@@ -95,7 +95,7 @@ td{padding:9px 12px;border-top:.5px solid var(--bd);vertical-align:middle}
 .topnav-link{width:100%;border:none;background:transparent;border-radius:0;padding:7px 12px;text-align:left;font-size:13px;color:rgba(255,255,255,.88);display:flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap}
 .topnav-link:hover,.topnav-link.on{background:#236247;color:#fff}
 .topnav-link i{font-size:15px;color:#bfe7d3}
-.content{flex:1;padding:1.5rem;max-width:1200px;width:100%}
+.content{flex:1;padding:1.5rem;max-width:none;width:100%}
 .ptitle{font-size:18px;font-weight:600;color:var(--pri3);margin-bottom:1.25rem;display:flex;align-items:center;gap:8px}
 .login-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1b4332 0%,#2d6a4f 50%,#1a3a2a 100%)}
 .login-card{background:#fff;border-radius:16px;padding:2.5rem;width:380px;max-width:95vw}
@@ -1090,6 +1090,11 @@ function timeToMin(t){
   const[h,m]=(t||'00:00').split(':').map(Number);
   return h*60+(m||0);
 }
+function normalizeTimeInput(t){
+  const m=String(t||'').trim().match(/^(\d{1,2})(?::|h|H|\.)(\d{1,2})$/);
+  if(!m)return String(t||'').trim();
+  return String(Math.min(23,Number(m[1]))).padStart(2,'0')+':'+String(Math.min(59,Number(m[2]))).padStart(2,'0');
+}
 function getProdShift(deliveryTime, prodShifts, location){
   if(!deliveryTime||!prodShifts)return null;
   const tMin=timeToMin(deliveryTime);
@@ -1110,6 +1115,11 @@ function getProdShift(deliveryTime, prodShifts, location){
   if(loc){
     const exact=matches.find(sh=>String(sh.location||'').trim().toLowerCase()===loc);
     if(exact)return exact;
+    const loose=matches.find(sh=>{
+      const shLoc=String(sh.location||'').trim().toLowerCase();
+      return shLoc&&(shLoc.includes(loc)||loc.includes(shLoc));
+    });
+    if(loose)return loose;
   }
   return matches.find(sh=>!String(sh.location||'').trim())||matches[0];
 }
@@ -1126,7 +1136,8 @@ function timeInRange(t,start,end){
 }
 function getProdWorkShiftRule(prodTime,rules){
   if(!prodTime)return null;
-  return (rules||DEF_PROD_SHIFT_RULES).find(r=>r.active!==false&&timeInRange(prodTime,r.start,r.end))||null;
+  const activeRules=(rules&&rules.length)?rules:DEF_PROD_SHIFT_RULES;
+  return activeRules.find(r=>r.active!==false&&timeInRange(prodTime,r.start,r.end))||null;
 }
 function addDaysVN(dateStr,offset){
   if(!dateStr)return '';
@@ -1143,13 +1154,18 @@ function prodShiftDisplay(sh){
   }
   return sh;
 }
-function prodShiftPlan(order,prodShifts){
+function prodShiftSmallDisplay(sh,prodTime,prodShiftRules){
+  const rule=getProdWorkShiftRule(prodTime,prodShiftRules||DEF_PROD_SHIFT_RULES);
+  if(!rule)return prodShiftDisplay(sh);
+  return {...(sh||{}),name:rule.name,color:rule.color,textColor:rule.textColor,smallShiftId:rule.id,group:rule.group};
+}
+function prodShiftPlan(order,prodShifts,prodShiftRules){
   if(!order||order._hdr||order._sub)return null;
   const manualLine=(order.lines||[]).find(l=>l.shiftOverride&&(l.prodTime||l.prodDate||l.labelTime||l.labelDate));
   if(manualLine){
     const manualShift=getProdShiftByProdTime(manualLine.prodTime,prodShifts||[]);
     return {
-      shift:manualShift?prodShiftDisplay(manualShift):{name:'Ca SX tay',color:'#FFF8E1',textColor:'#8A5A00'},
+      shift:manualShift?prodShiftSmallDisplay(manualShift,manualLine.prodTime,prodShiftRules):{name:'Ca SX tay',color:'#FFF8E1',textColor:'#8A5A00'},
       prodTime:manualLine.prodTime||'',
       prodDate:manualLine.prodDate||(manualShift?addDaysVN(order.deliveryDate,manualShift.prodDateOffset||0):order.deliveryDate)||'',
       labelTime:manualLine.labelTime||manualShift?.labelPrintTime||'',
@@ -1159,17 +1175,18 @@ function prodShiftPlan(order,prodShifts){
   }
   const sh=order?.prodShiftId?(prodShifts||[]).find(s=>s.id===order.prodShiftId):getProdShift(order?.deliveryTime,prodShifts||[],order?.pointName||order?.address);
   if(!sh)return null;
+  const prodTime=sh.actualProdTime||sh.endTime||'';
   return {
-    shift:prodShiftDisplay(sh),
-    prodTime:sh.actualProdTime||sh.endTime||'',
+    shift:prodShiftSmallDisplay(sh,prodTime,prodShiftRules),
+    prodTime,
     prodDate:addDaysVN(order.deliveryDate,sh.prodDateOffset||0),
     labelTime:sh.labelPrintTime||'',
     labelDate:addDaysVN(order.deliveryDate,sh.labelPrintDateOffset||0)
   };
 }
-function prodShiftPlansForOrder(order,prodShifts){
+function prodShiftPlansForOrder(order,prodShifts,prodShiftRules){
   if(!order||order._hdr||order._sub)return [];
-  const defaultPlan=prodShiftPlan({...order,lines:(order.lines||[]).filter(l=>!l.shiftOverride)},prodShifts);
+  const defaultPlan=prodShiftPlan({...order,lines:(order.lines||[]).filter(l=>!l.shiftOverride)},prodShifts,prodShiftRules);
   return (order.lines||[]).map((l,i)=>{
     if(l.shiftOverride&&(l.prodTime||l.prodDate||l.labelTime||l.labelDate)){
       const manualShift=getProdShiftByProdTime(l.prodTime,prodShifts||[]);
@@ -1177,7 +1194,7 @@ function prodShiftPlansForOrder(order,prodShifts){
         line:l,
         index:i,
         productName:l.productName||('Sản phẩm '+(i+1)),
-        shift:manualShift?prodShiftDisplay(manualShift):{name:'Ca SX tay',color:'#FFF8E1',textColor:'#8A5A00'},
+        shift:manualShift?prodShiftSmallDisplay(manualShift,l.prodTime,prodShiftRules):{name:'Ca SX tay',color:'#FFF8E1',textColor:'#8A5A00'},
         prodTime:l.prodTime||'',
         prodDate:l.prodDate||(manualShift?addDaysVN(order.deliveryDate,manualShift.prodDateOffset||0):order.deliveryDate)||'',
         labelTime:l.labelTime||manualShift?.labelPrintTime||'',
@@ -1237,24 +1254,29 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
     const map={};
     (orders||[]).forEach(o=>{
       const loc=(o.pointName||o.address||'').trim();
-      const time=(o.deliveryTime||'').trim();
+      const time=normalizeTimeInput(o.deliveryTime||'');
       if(!loc||!time)return;
-      map[(loc+'|'+time).toUpperCase()]={location:loc,orderTime:time};
+      const key=(loc+'|'+time).toUpperCase();
+      if(!map[key])map[key]={location:loc,orderTime:time,orderIds:[],count:0};
+      map[key].count+=1;
+      if(o.id)map[key].orderIds.push(o.id);
     });
     const pairs=Object.values(map);
     if(!pairs.length){window.showToast('Chưa tìm thấy địa điểm có giờ giao trong danh sách đơn hàng.','warn');return;}
+    const sameLoc=(a,b)=>String(a||'').trim().toUpperCase()===String(b||'').trim().toUpperCase();
+    const hasLocation=loc=>prodShifts.map(normalize).some(sh=>sameLoc(sh.location,loc));
     const hitShift=(loc,time)=>prodShifts.map(normalize).find(sh=>{
       const r=normalize(sh);
       const startMin=timeToMin(r.startTime||r.orderTime), endMin=timeToMin(r.endTime||r.orderTime), t=timeToMin(time);
       const hit=(r.startTime&&r.endTime&&r.startTime!==r.endTime)?(startMin<=endMin?t>=startMin&&t<endMin:t>=startMin||t<endMin):r.orderTime===time;
-      return (r.location||'').trim().toUpperCase()===loc.trim().toUpperCase()&&hit;
+      return sameLoc(r.location,loc)&&hit;
     });
-    const missing=pairs.filter(p=>!hitShift(p.location,p.orderTime));
+    const missing=pairs.filter(p=>!hitShift(p.location,p.orderTime)).map(p=>({...p,reason:hasLocation(p.location)?'Giờ ĐH nằm ngoài khoảng đã cấu hình':'Địa điểm mới chưa có trong bảng'}));
     if(!missing.length){window.showToast('Tất cả địa điểm và giờ giao đã có trong Ca sản xuất.','info');return;}
     const p=missing[0];
     const sameTime=prodShifts.map(normalize).find(s=>s.orderTime===p.orderTime||s.startTime===p.orderTime);
     const preset=sameTime||presetForTime(p.orderTime)||empty;
-    window.showToast('Có '+missing.length+' địa điểm/giờ giao chưa có cấu hình. Đang mở dòng mới đầu tiên.','warn');
+    window.showToast('Có '+missing.length+' địa điểm/giờ giao cần kiểm tra. Đang mở dòng đầu tiên: '+p.reason+'.','warn',7000);
     sf({
       ...empty,
       ...preset,
@@ -1266,7 +1288,10 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
       labelPrintTime:preset.labelPrintTime||p.orderTime,
       name:shiftNameFromProdTime(preset.actualProdTime||p.orderTime)||preset.name||'',
       active:true,
-      _missingCount:missing.length
+      _missingCount:missing.length,
+      _missingReason:p.reason,
+      _missingOrderIds:[...new Set(p.orderIds||[])],
+      _missingSummary:missing.slice(0,8).map(x=>x.location+' '+x.orderTime+' ('+x.reason+', đơn: '+[...new Set(x.orderIds||[])].slice(0,5).join(', ')+(x.orderIds?.length>5?', ...':'')+')')
     });
     se(null);
     sm('f');
@@ -1276,7 +1301,8 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
     const autoRule=shiftRuleFromProdTime(form.actualProdTime);
     const autoName=autoRule?.name||'';
     if(!autoName){window.showToast('Giờ sản xuất chưa nằm trong khung ca SX nhỏ nào. Hãy chỉnh bảng cài đặt khung giờ SX.','warn');return;}
-    const data={...form,name:autoName,color:autoRule?.color||form.color,textColor:autoRule?.textColor||form.textColor,orderTime:form.startTime||form.orderTime,startTime:form.startTime||form.orderTime,endTime:form.endTime||form.orderTime,prodDateOffset:Number(form.prodDateOffset||0),labelPrintDateOffset:Number(form.labelPrintDateOffset||0)};
+    const {_missingCount,_missingReason,_missingOrderIds,_missingSummary,...cleanForm}=form;
+    const data={...cleanForm,name:autoName,color:autoRule?.color||form.color,textColor:autoRule?.textColor||form.textColor,orderTime:form.startTime||form.orderTime,startTime:form.startTime||form.orderTime,endTime:form.endTime||form.orderTime,prodDateOffset:Number(form.prodDateOffset||0),labelPrintDateOffset:Number(form.labelPrintDateOffset||0)};
     if(edit) setProdShifts(p=>p.map(s=>s.id===edit.id?{...s,...data}:s));
     else setProdShifts(p=>[...p,{...data,id:'PSH'+uid()}]);
     sm(null);
@@ -1361,6 +1387,15 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
       h('div',{style:{marginBottom:10,padding:'8px 12px',background:'#EAF4EF',borderRadius:'var(--r)',fontSize:13,color:'var(--pri3)'}},
         h('b',null,'Tên ca tự động: '),
         shiftNameFromProdTime(form.actualProdTime)||'Chưa xác định theo giờ SX'
+      ),
+      form._missingReason&&h('div',{style:{marginBottom:10,padding:'10px 12px',background:'#FFF8E1',border:'1px solid #F8C30F',borderRadius:'var(--r)',fontSize:12,lineHeight:1.45,color:'#6B4A00'}},
+        h('div',{style:{fontWeight:700,marginBottom:4}},form._missingReason),
+        h('div',null,'Địa điểm: ',h('b',null,form.location||'—'),' · Giờ ĐH: ',h('b',null,form.orderTime||form.startTime||'—')),
+        h('div',null,'Mã đơn liên quan: ',h('b',null,(form._missingOrderIds||[]).join(', ')||'—')),
+        (form._missingSummary||[]).length>1&&h('details',{style:{marginTop:6}},
+          h('summary',{style:{cursor:'pointer',fontWeight:600}},'Xem thêm các dòng cần kiểm tra ('+(form._missingCount||0)+')'),
+          h('div',{style:{marginTop:5,color:'#7A5A00'}},(form._missingSummary||[]).map((s,i)=>h('div',{key:i},'• '+s)))
+        )
       ),
       h(F,{label:'Địa điểm'},h('select',{value:form.location||'',onChange:e=>sf(p=>({...p,location:e.target.value}))},
         h('option',{value:''},'— Chọn địa điểm —'),
@@ -2437,7 +2472,7 @@ function SalesReportTab({orders,customers,products,shifts,quotes}) {
   const getPoint=o=>{let found=null;(customers||[]).forEach(c=>(c.points||[]).forEach(p=>{if(p.id===o.pointId||p.id===o.ptId||p.name===o.pointName)found={...p,customerName:c.name,customerId:c.id};}));return found||{};};
   const orderArea=o=>o.area||getPoint(o).area||((shifts||[]).find(s=>s.id===o.shiftId||s.id===o.prodShiftId)||{}).area||'';
   const orderShift=o=>o.prodShiftId||o.shiftId||((shifts||[]).find(s=>s.timeStart===o.deliveryTime)||{}).id||'';
-  const statusLabel={pending:'Chờ xếp chuyến',scheduled:'Đã xếp chuyến',delivering:'Đang giao',done:'Đã giao',cancelled:'Hủy'};
+  const statusLabel={pending:'Chờ xếp',scheduled:'Đã xếp',assigned:'Đã xếp',delivering:'Đang giao',done:'Đã giao',cancelled:'Hủy'};
   const dateKey=s=>{const d=parseDate(s);return d&&Number.isFinite(d.getTime())?d.getTime():0;};
   const quotePrice=(o,l)=>{
     const pInfo=getPoint(o);
@@ -3769,7 +3804,7 @@ function LeaveTab({leaves,setLeaves,employees,currentUser}) {
 
 /* ─── Status badges ─── */
 function StatusBadge({s}){
-  const map={pending:['#FAEEDA','#854F0B','Chờ xếp chuyến'],assigned:['#E6F1FB','#185FA5','Đã xếp chuyến'],delivering:['#EAF3DE','#3B6D11','Đang giao'],done:['#E1F5EE','#0F6E56','Đã giao'],failed:['#FCEBEB','#A32D2D','Giao lỗi'],cancelled:['#FCEBEB','#A32D2D','Hủy'],planning:['#E6F1FB','#185FA5','Lên kế hoạch'],active:['#EAF3DE','#3B6D11','Đang giao'],completed:['#E1F5EE','#0F6E56','Hoàn thành'],draft:['#F1EFE8','#5F5E5A','Nháp'],sent:['#E6F1FB','#185FA5','Đã gửi'],approved:['#EAF3DE','#3B6D11','Đã duyệt'],expired:['#F1EFE8','#6b6b67','Hết hạn']};
+  const map={pending:['#FAEEDA','#854F0B','Chờ xếp'],assigned:['#E6F1FB','#185FA5','Đã xếp'],delivering:['#EAF3DE','#3B6D11','Đang giao'],done:['#E1F5EE','#0F6E56','Đã giao'],failed:['#FCEBEB','#A32D2D','Giao lỗi'],cancelled:['#FCEBEB','#A32D2D','Hủy'],planning:['#E6F1FB','#185FA5','Lên kế hoạch'],active:['#EAF3DE','#3B6D11','Đang giao'],completed:['#E1F5EE','#0F6E56','Hoàn thành'],draft:['#F1EFE8','#5F5E5A','Nháp'],sent:['#E6F1FB','#185FA5','Đã gửi'],approved:['#EAF3DE','#3B6D11','Đã duyệt'],expired:['#F1EFE8','#6b6b67','Hết hạn']};
   const[bg,tx,label]=map[s]||['#F1EFE8','#5F5E5A',s];
   return h('span',{className:'badge',style:{background:bg,color:tx}},label);
 }
@@ -4036,7 +4071,7 @@ function QuotesTab({quotes,setQuotes,customers,products,currentUser}){
 }
 
 /* ─── DELIVERY ORDERS ─── */
-function OrderDetailLine({line,products,prodCats,prodShifts,deliveryDate,deliveryTime,onChange,onRemove}){
+function OrderDetailLine({line,products,prodCats,prodShifts,deliveryDate,deliveryTime,pointName,onChange,onRemove}){
   const prod=products.find(p=>p.id===line.productId)||{};
   const[productSearch,setProductSearch]=useState(line.productName||prod.name||'');
   const showPurchasePrice=isGoodsProduct(prod,prodCats||[]);
@@ -4054,7 +4089,7 @@ function OrderDetailLine({line,products,prodCats,prodShifts,deliveryDate,deliver
     else onChange({...line,productId:'',productName:v,unit:'',weightPerUnit:0});
   };
   // Tự động tính ca SX từ giờ giao
-  const autoShift=getProdShift(deliveryTime,prodShifts||[]);
+  const autoShift=getProdShift(deliveryTime,prodShifts||[],pointName);
   const dispShift=autoShift?{
     name:autoShift.name||'',
     prodTime:autoShift.actualProdTime||autoShift.endTime||'',
@@ -4234,7 +4269,7 @@ function OrderForm({order,customers,products,quotes,employees,currentUser,prodSh
     return s+(isGoodsProduct(p,prodCats||[])?lineQty(l)*numFmt(l.purchasePrice||l.price):0);
   },0);
   // Tự động lấy ca SX từ giờ giao
-  const autoShift=getProdShift(f.deliveryTime,prodShifts||[]);
+  const autoShift=getProdShift(f.deliveryTime,prodShifts||[],f.pointName||f.address);
   const submit=()=>{
     if(!f.customerId){window.showToast('Vui lòng chọn khách hàng!','warn');return;}
     const prodShiftId=autoShift?autoShift.id:(f.prodShiftId||'');
@@ -4252,7 +4287,7 @@ function OrderForm({order,customers,products,quotes,employees,currentUser,prodSh
       h(F,{label:'Ngày giao'},h('input',{value:f.deliveryDate,onChange:e=>s('deliveryDate',e.target.value),placeholder:'DD/MM/YY'})),
       h(F,{label:'Giờ giao'},h('input',{value:f.deliveryTime,onChange:e=>s('deliveryTime',e.target.value),placeholder:'08:00'})),
       h(F,{label:'Trạng thái'},h('select',{value:f.status,onChange:e=>s('status',e.target.value),style:{fontSize:12}},
-        [['pending','Chờ xếp chuyến'],['assigned','Đã xếp chuyến'],['delivering','Đang giao'],['done','Đã giao'],['failed','Giao lỗi'],['cancelled','Hủy']].map(([v,l])=>h('option',{key:v,value:v},l))
+        [['pending','Chờ xếp'],['assigned','Đã xếp'],['delivering','Đang giao'],['done','Đã giao'],['failed','Giao lỗi'],['cancelled','Hủy']].map(([v,l])=>h('option',{key:v,value:v},l))
       )),
       h(F,{label:'Công đi'},h('input',{type:'number',min:0,step:.5,value:f.workOut,onChange:e=>s('workOut',e.target.value),placeholder:'0'})),
       h(F,{label:'Công về'},h('input',{type:'number',min:0,step:.5,value:f.workReturn,onChange:e=>s('workReturn',e.target.value),placeholder:'0'})),
@@ -4275,7 +4310,7 @@ function OrderForm({order,customers,products,quotes,employees,currentUser,prodSh
         [totalWeight>0?'Tổng KL hóa đơn: '+totalWeight.toFixed(2)+' kg':'',totalPurchase>0?'Giá mua: '+moneyFmt(totalPurchase):''].filter(Boolean).join(' · ')
       )
     ),
-    f.lines.map(l=>h(OrderDetailLine,{key:l.id,line:l,products,prodCats:prodCats||[],prodShifts:prodShifts||[],deliveryDate:f.deliveryDate,deliveryTime:f.deliveryTime,onChange:data=>updLine(l.id,data),onRemove:()=>delLine(l.id)})),
+    f.lines.map(l=>h(OrderDetailLine,{key:l.id,line:l,products,prodCats:prodCats||[],prodShifts:prodShifts||[],deliveryDate:f.deliveryDate,deliveryTime:f.deliveryTime,pointName:f.pointName||f.address,onChange:data=>updLine(l.id,data),onRemove:()=>delLine(l.id)})),
     h('button',{onClick:addLine,style:{fontSize:12,padding:'5px 12px',marginBottom:8}},h('i',{className:'ti ti-plus',style:{fontSize:13,marginRight:4}}),'Thêm hàng hóa'),
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu đơn hàng'))
   );
@@ -4634,7 +4669,7 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,o
       const c=ptMatch?.cust||cust;
       const d=date||curDate||fmtDate();
       const key=(point||'')+'|'+d+'|'+time;
-      if(!resultMap[key])resultMap[key]={id:excelOrderId(d,Object.keys(resultMap).length+1),deliveryDate:d,deliveryTime:time,pointId:pt.id||'',pointName:pt.name||point,customerId:c.id||'',customer:c.name||'YOUNGSUN',address:pt.address||'',status:'pending',note:'Nhập từ ảnh Youngsun OCR',workOut:0,workReturn:0,prodShiftId:(getProdShift(time,prodShifts||[])||{}).id||'',lines:[],createdAt:fmtDate(),updatedAt:fmtDT()};
+      if(!resultMap[key])resultMap[key]={id:excelOrderId(d,Object.keys(resultMap).length+1),deliveryDate:d,deliveryTime:time,pointId:pt.id||'',pointName:pt.name||point,customerId:c.id||'',customer:c.name||'YOUNGSUN',address:pt.address||'',status:'pending',note:'Nhập từ ảnh Youngsun OCR',workOut:0,workReturn:0,prodShiftId:(getProdShift(time,prodShifts||[],pt.name||point)||{}).id||'',lines:[],createdAt:fmtDate(),updatedAt:fmtDT()};
       return resultMap[key];
     };
     lines.forEach(line=>{
@@ -4691,7 +4726,7 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,o
           const pt=ptMatch?.pt||{};
           const cust=ptMatch?.cust||{};
           const od=d||curDate||fmtDate();
-          cur={id:excelOrderId(od,result.length+1),deliveryDate:od,deliveryTime:t||'08:00',pointId:pt.id||'',pointName:pt.name||line.replace(/\b([01]?\d|2[0-3])[:hH.]([0-5]\d)\b/g,'').trim(),customerId:cust.id||'',customer:cust.name||'',address:pt.address||'',status:'pending',note:'Nhập từ ảnh OCR',workOut:0,workReturn:0,prodShiftId:(getProdShift(t||'08:00',prodShifts||[])||{}).id||'',lines:[],createdAt:fmtDate(),updatedAt:fmtDT()};
+          cur={id:excelOrderId(od,result.length+1),deliveryDate:od,deliveryTime:t||'08:00',pointId:pt.id||'',pointName:pt.name||line.replace(/\b([01]?\d|2[0-3])[:hH.]([0-5]\d)\b/g,'').trim(),customerId:cust.id||'',customer:cust.name||'',address:pt.address||'',status:'pending',note:'Nhập từ ảnh OCR',workOut:0,workReturn:0,prodShiftId:(getProdShift(t||'08:00',prodShifts||[],pt.name||line)||{}).id||'',lines:[],createdAt:fmtDate(),updatedAt:fmtDT()};
         } else if(cur&&t) cur.deliveryTime=t;
       }
       if(!cur)return;
@@ -4791,7 +4826,7 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,o
             h('td',null,
               h('div',{style:{display:'grid',gridTemplateColumns:'92px 70px',gap:5,marginBottom:5}},
                 h('input',{value:o.deliveryDate,onChange:e=>updateOrder(o.id,{deliveryDate:e.target.value}),style:{fontSize:12,padding:'5px 6px'}}),
-                h('input',{value:o.deliveryTime,onChange:e=>updateOrder(o.id,{deliveryTime:e.target.value,prodShiftId:(getProdShift(e.target.value,prodShifts||[])||{}).id||''}),style:{fontSize:12,padding:'5px 6px'}})
+                h('input',{value:o.deliveryTime,onChange:e=>updateOrder(o.id,{deliveryTime:e.target.value,prodShiftId:(getProdShift(e.target.value,prodShifts||[],o.pointName||o.address)||{}).id||''}),style:{fontSize:12,padding:'5px 6px'}})
               ),
               h('select',{value:o.pointId||'__current__',onChange:e=>e.target.value==='__current__'?null:setPointById(o.id,e.target.value),style:{width:'100%',fontSize:12,padding:'5px 6px',fontWeight:600,marginBottom:4}},
                 !o.pointId&&h('option',{value:'__current__'},(o.pointName||'— Chọn địa điểm —')+' (chưa khớp)'),
@@ -4931,7 +4966,7 @@ function PrintByCustomerModal({orders,customers,products,company,initialDate,onC
   );
 }
 
-function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser,trips,setTrips,company,prodShifts}){
+function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser,trips,setTrips,company,prodShifts,prodShiftRules}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[print,spr]=useState(null);const[invoiceView,setInvoiceView]=useState(null);const[q,sq]=useState('');const[filter,sf]=useState('all');const _td0=fmtDate();const _ti0=_td0.split('/').reverse().join('-');const[fDate,sfDate]=useState(_ti0);const[fPoint,sfPoint]=useState('');const[fTime,sfTime]=useState('');const[fArea,sfArea]=useState('');let oSeq=orders.length+1;
   const deliveryTopScroll=useRef(null);
   const deliveryTableScroll=useRef(null);
@@ -4974,7 +5009,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     if(o?.tripId)setTrips(p=>p.map(t=>t.id===o.tripId?{...t,orderIds:t.orderIds.filter(x=>x!==id)}:t));
     if(confirm('Xóa đơn hàng?'))setOrders(p=>p.filter(x=>x.id!==id));
   };
-  const sts=[['all','Tất cả'],['pending','Chờ xếp chuyến'],['assigned','Đã xếp chuyến'],['delivering','Đang giao'],['done','Đã giao'],['failed','Giao lỗi'],['cancelled','Hủy']];
+  const sts=[['all','Tất cả'],['pending','Chờ xếp'],['assigned','Đã xếp'],['delivering','Đang giao'],['done','Đã giao'],['failed','Giao lỗi'],['cancelled','Hủy']];
   const getArea=o=>{let a='';(customers||[]).forEach(c=>(c.points||[]).forEach(pt=>{if(pt.id===o.pointId||pt.name===o.pointName)a=pt.area||'';}));return a;};
   const list=orders.filter(x=>{
     if(filter!=='all'&&x.status!==filter) return false;
@@ -5036,7 +5071,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     return 10;
   };
   const labelLinesForOrder=o=>{
-    const plan=prodShiftPlan(o,prodShifts||[]);
+    const plan=prodShiftPlan(o,prodShifts||[],prodShiftRules);
     const labels=[];
     (o.lines||[]).forEach(l=>{
       const kg=orderLineWeight(l);
@@ -5157,11 +5192,11 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           const rows=[];
           list.forEach(o=>{
             if(!o.lines||o.lines.length===0){
-              const plan=prodShiftPlan(o,prodShifts||[]);
+              const plan=prodShiftPlan(o,prodShifts||[],prodShiftRules);
               rows.push({'Mã đơn':o.id,'Khách hàng':o.customer,'Ngày giao':o.deliveryDate,'Giờ giao':o.deliveryTime||'','Điểm giao':o.pointName||'','Công đi':o.workOut||0,'Công về':o.workReturn||0,'Trạng thái':o.status,'Ghi chú đơn':o.note||'','Sản phẩm':'','ĐVT':'','SL sản xuất':0,'SL hóa đơn':0,'Giá mua':0,'Thành tiền mua':0,'Ca SX':plan?.shift?.name||'','Giờ SX thực tế':plan?.prodTime||'','Ngày SX':plan?.prodDate||'','Giờ in tem':plan?.labelTime||'','Ngày in tem':plan?.labelDate||'','Ghi chú dòng':''});
             } else {
               o.lines.forEach((l,i)=>{
-                const plan=i===0?prodShiftPlan(o,prodShifts||[]):null;
+                const plan=i===0?prodShiftPlan(o,prodShifts||[],prodShiftRules):null;
                 const buy=numFmt(l.purchasePrice||l.price);
                 const qty=numFmt(l.qtyInvoice)||numFmt(l.qtyProd);
                 rows.push({'Mã đơn':i===0?o.id:'','Khách hàng':i===0?o.customer:'','Ngày giao':i===0?o.deliveryDate:'','Giờ giao':i===0?(o.deliveryTime||''):'','Điểm giao':i===0?(o.pointName||''):'','Công đi':i===0?(o.workOut||0):0,'Công về':i===0?(o.workReturn||0):0,'Trạng thái':i===0?o.status:'','Ghi chú đơn':i===0?(o.note||''):'',' Sản phẩm':l.productName||'','ĐVT':l.unit||'','SL sản xuất':l.qtyProd||0,'SL hóa đơn':l.qtyInvoice||0,'Giá mua':buy,'Thành tiền mua':buy*qty,'Ca SX':i===0?(plan?.shift?.name||''):'','Giờ SX thực tế':i===0?(plan?.prodTime||''):'','Ngày SX':i===0?(plan?.prodDate||''):'','Giờ in tem':i===0?(plan?.labelTime||''):'','Ngày in tem':i===0?(plan?.labelDate||''):'','Ghi chú dòng':l.note||''});
@@ -5186,7 +5221,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                 customer:r['Khách hàng']||'',custId:'',
                 deliveryDate:r['Ngày giao']||fmtDate(),
                 deliveryTime:r['Giờ giao']||'',
-                prodShiftId:((prodShifts||[]).find(s=>(s.name||'')===(r['Ca SX']||''))||getProdShift(r['Giờ giao']||'',prodShifts||[]))?.id||'',
+                prodShiftId:((prodShifts||[]).find(s=>(s.name||'')===(r['Ca SX']||''))||getProdShift(r['Giờ giao']||'',prodShifts||[],r['Điểm giao']||r['Địa điểm']||''))?.id||'',
                 address:r['Địa chỉ']||'',
                 pointName:r['Điểm giao']||'',ptId:'',
                 workOut:r['Công đi']||0,workReturn:r['Công về']||0,
@@ -5274,7 +5309,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                   const dateCode=yy+dd+mm;
                   const key=dStr+'|'+point+'|'+time;
                   if(!orderMap[key]){
-                    const autoProdShift=getProdShift(time,prodShifts||[]);
+                    const autoProdShift=getProdShift(time,prodShifts||[],point);
                     orderMap[key]={
                       id:'D'+dateCode+String(Object.keys(orderMap).length+1).padStart(3,'0'),
                       deliveryDate:dStr,pointName:point,pointId:'',
@@ -5335,12 +5370,23 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     ),
     h('div',null,
       h('div',{className:'tw delivery-table-wrap',ref:deliveryTableScroll},
-        h('table',{style:{minWidth:1240,width:'100%'}},
+        h('table',{style:{minWidth:1160,width:'100%',tableLayout:'fixed'}},
+        h('colgroup',null,
+          h('col',{style:{width:'16%'}}),
+          h('col',{style:{width:100}}),
+          h('col',{style:{width:70}}),
+          h('col',{style:{width:220}}),
+          h('col',{style:{width:120}}),
+          h('col',{style:{width:70}}),
+          h('col',{style:{width:105}}),
+          h('col',{style:{width:260}}),
+          h('col',{style:{width:95}})
+        ),
         h('thead',null,h('tr',null,
           h('th',null,'Địa điểm giao'),
           h('th',null,'Ngày giao'),
           h('th',null,'Giờ'),
-          h('th',{style:{width:190}},'Ca SX'),
+          h('th',null,'Ca SX'),
           h('th',null,'Hàng hóa'),
           h('th',null,'Hóa đơn'),
           h('th',null,'Trạng thái'),
@@ -5394,9 +5440,9 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
               const autoPsh=getProdShift(o.deliveryTime,prodShifts||[],o.pointName||o.address);
               const curPsh=o.prodShiftId?(prodShifts||[]).find(s=>s.id===o.prodShiftId):null;
               const dispPsh=curPsh||autoPsh;
-              const plans=prodShiftPlansForOrder(o,prodShifts||[]);
-              const firstPlan=plans[0]||prodShiftPlan(o,prodShifts||[]);
-              return h('div',{style:{minWidth:170,maxWidth:210}},
+              const plans=prodShiftPlansForOrder(o,prodShifts||[],prodShiftRules);
+              const firstPlan=plans[0]||prodShiftPlan(o,prodShifts||[],prodShiftRules);
+              return h('div',{style:{width:'100%',maxWidth:210}},
                 firstPlan
                   ?h('div',null,
                     h('span',{style:{display:'inline-block',padding:'2px 8px',borderRadius:10,fontSize:11,fontWeight:700,background:firstPlan.shift.color,color:firstPlan.shift.textColor,cursor:'pointer',border:curPsh?'2px solid '+firstPlan.shift.textColor:'1px dashed '+firstPlan.shift.textColor,title:curPsh?'Đã gán tay - click để đặt lại tự động':'Tự động - click để gán tay'},
@@ -5422,7 +5468,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                   :h('span',{style:{fontSize:11,color:'var(--tx2)'}},'—')
               );
             })()),
-            h('td',null,h('div',null,(o.lines||[]).length+' mặt hàng'),totalW>0&&h('div',{style:{fontSize:11,color:'var(--pri)'}},totalW.toFixed(2)+' kg')),
+            h('td',null,h('div',{style:{whiteSpace:'nowrap'}},(o.lines||[]).length+' mặt hàng'),totalW>0&&h('div',{style:{fontSize:11,color:'var(--pri)',whiteSpace:'nowrap'}},totalW.toFixed(2)+' kg')),
             h('td',null,
               o.invoiceImage
                 ?h('div',{style:{display:'flex',gap:4,alignItems:'center'}},
@@ -6779,7 +6825,7 @@ function App(){
         canAccess(cu.role,'purchasereport',cu.permissions)&&page==='purchasereport'&&h(PurchaseReportTab,{purchases,nccs}),
         canAccess(cu.role,'shifts',cu.permissions)&&page==='shifts'&&h(ShiftsTab,{shifts,setShifts}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
-        canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts}),
+        canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules}),
         canAccess(cu.role,'trips',cu.permissions)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,customers,products,currentUser:cu}),
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,currentUser:cu,prodShifts}),
         canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),
