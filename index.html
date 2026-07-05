@@ -2390,16 +2390,32 @@ function MaintenanceTab({title,icon,assets}){
     if(m) return `${m[3]}/${m[2]}/${m[1]}`;
     return s;
   };
-  const [items,setItems]=useLS(storageKey,[
+  const [items,_setItems]=useState(()=>{try{const s=localStorage.getItem(storageKey);return s?JSON.parse(s):[
     {id:'BD001',month:'2025-11',date:'2025-11-04',vehicle:'21748',service:'thay bơm nước rửa kính, mua nước kính 50k',km:'194.000',garage:'HẢI THẮNG LỢI',amount:'500.000',invoice:''},
     {id:'BD002',month:'2025-11',date:'2025-11-24',vehicle:'21748',service:'bảo dưỡng định kỳ',km:'194.000',garage:'HẢI THẮNG LỢI',amount:'1.320.000',invoice:''},
-  ]);
+  ]}catch{return[
+    {id:'BD001',month:'2025-11',date:'2025-11-04',vehicle:'21748',service:'thay bơm nước rửa kính, mua nước kính 50k',km:'194.000',garage:'HẢI THẮNG LỢI',amount:'500.000',invoice:''},
+    {id:'BD002',month:'2025-11',date:'2025-11-24',vehicle:'21748',service:'bảo dưỡng định kỳ',km:'194.000',garage:'HẢI THẮNG LỢI',amount:'1.320.000',invoice:''},
+  ]}});
+  const setItems=mkSet(storageKey,_setItems);
   const [modal,sm]=useState(null);
   const [edit,se]=useState(null);
   const [q,sq]=useState('');
-  const [group,setGroup]=useState('');
+  const [df,sdf]=useState('');
+  const [dt,sdt]=useState('');
   const [form,setForm]=useState({month:'',date:'',vehicle:'',service:'',km:'',garage:'',amount:'',invoice:''});
   const assetOptions=(assets||[]).map(a=>a.name||a.code||a.id).filter(Boolean).sort((a,b)=>a.localeCompare(b,'vi'));
+  useEffect(()=>{
+    let off=false;
+    dbGet(storageKey,items).then(data=>{if(!off&&data)_setItems(data);});
+    return ()=>{off=true;};
+  },[storageKey]);
+  useEffect(()=>{
+    try{
+      const hasLocal=!!localStorage.getItem(storageKey);
+      if(hasLocal&&items&&items.length) dbSet(storageKey,items);
+    }catch{}
+  },[]);
   const normalizeExcelDate=v=>{
     if(v instanceof Date && !Number.isNaN(v.getTime())) return v.toISOString().slice(0,10);
     if(typeof v==='number'&&Number.isFinite(v)){
@@ -2419,7 +2435,26 @@ function MaintenanceTab({title,icon,assets}){
   };
   const del=id=>window.scfConfirm('Bạn có chắc muốn xóa dòng bảo dưỡng này?','Xóa bảo dưỡng',true).then(ok=>{if(ok){setItems(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa dòng bảo dưỡng','success');}});
   const isVehicle=title==='Bảo dưỡng xe';
-  const filtered=items.filter(x=>!q||[x.month,x.date,x.vehicle,x.service,x.km,x.garage,x.amount,x.invoice].join(' ').toLowerCase().includes(q.toLowerCase()));
+  const filtered=(items||[])
+    .filter(x=>{
+      if(q && ![x.month,x.date,x.vehicle,x.service,x.km,x.garage,x.amount,x.invoice].join(' ').toLowerCase().includes(q.toLowerCase())) return false;
+      const d=parseAnyDate(x.date);
+      if(df){
+        const fd=parseAnyDate(df);
+        if(fd&&d&&d<fd) return false;
+      }
+      if(dt){
+        const td=parseAnyDate(dt);
+        if(td&&d&&d>td) return false;
+      }
+      return true;
+    })
+    .slice()
+    .sort((a,b)=>{
+      const da=parseAnyDate(a.date);
+      const db=parseAnyDate(b.date);
+      return (db?db.getTime():0)-(da?da.getTime():0);
+    });
   const exportCols=(isVehicle
     ?[['date','NGÀY BẢO DƯỠNG'],['vehicle','TÊN XE/MÁY'],['service','DỊCH VỤ'],['km','TẠI KM'],['garage','GARA'],['amount','THÀNH TIỀN'],['invoice','HÓA ĐƠN']]
     :[['month','THÁNG'],['date','NGÀY BẢO DƯỠNG'],['vehicle','TÊN XE/MÁY'],['service','DỊCH VỤ'],['km','TẠI KM'],['garage','GARA'],['amount','THÀNH TIỀN'],['invoice','HÓA ĐƠN']]);
@@ -2442,7 +2477,11 @@ function MaintenanceTab({title,icon,assets}){
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti '+icon,style:{fontSize:20}}),title),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}} ,
-      h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm '+title.toLowerCase()+'...'}),
+      h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}},
+        h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm '+title.toLowerCase()+'...'}),
+        h('input',{type:'date',value:df,onChange:e=>sdf(e.target.value),title:'Từ ngày',placeholder:'Từ ngày',style:{width:150}}),
+        h('input',{type:'date',value:dt,onChange:e=>sdt(e.target.value),title:'Đến ngày',placeholder:'Đến ngày',style:{width:150}})
+      ),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
         h(ExportBtn,{onClick:()=>xlsxExport(filtered,exportCols,(isVehicle?'Bao_duong_xe':'Bao_duong_may'))}),
         h(ImportBtn,{onFile:onImport}),
@@ -2453,7 +2492,9 @@ function MaintenanceTab({title,icon,assets}){
       h('div',{style:{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap',alignItems:'center'}},
         h('div',null,
           h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Mẫu nhập nhanh'),
-          h('div',{style:{fontWeight:600}},'THÁNG - NGÀY BẢO DƯỠNG - TÊN XE/MÁY - DỊCH VỤ - TẠI KM - GARA - THÀNH TIỀN - HÓA ĐƠN')
+          h('div',{style:{fontWeight:600}},isVehicle
+            ? 'NGÀY BẢO DƯỠNG - TÊN XE/MÁY - DỊCH VỤ - TẠI KM - GARA - THÀNH TIỀN - HÓA ĐƠN'
+            : 'THÁNG - NGÀY BẢO DƯỠNG - TÊN XE/MÁY - DỊCH VỤ - TẠI KM - GARA - THÀNH TIỀN - HÓA ĐƠN')
         ),
         h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Có thể tải file Excel lên để nhập hàng loạt.')
       )
