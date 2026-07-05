@@ -2141,7 +2141,7 @@ function EmpForm({emp,employees,depts,cu,cu2,onSave,onClose}){
           {sec:'Cai dat', pages:[{k:'company',l:'Thong tin cong ty'},{k:'employees',l:'Nhan vien'},{k:'attendance',l:'Cham cong'},{k:'advances',l:'Ung luong'},{k:'rewards',l:'Thuong phat'},{k:'leaves',l:'Xin nghi'},{k:'backup',l:'Backup'}]},
           {sec:'Danh muc', pages:[{k:'materials',l:'Vat tu'},{k:'depts',l:'Bo phan'},{k:'products',l:'San pham'},{k:'customers',l:'Khach hang'},{k:'workcats',l:'DM Cong viec'},{k:'shifts',l:'Ca giao hang'}]},
           {sec:'Ban hang', pages:[{k:'quotes',l:'Bao gia'},{k:'delivery',l:'Don giao hang'},{k:'orderdetail',l:'Chi tiet don hang'},{k:'trips',l:'Chuyen giao hang'},{k:'salesreport',l:'Bao cao BH'},{k:'marketsales',l:'Ban hang cho'},{k:'powdersales',l:'Ban bot bun'}]},
-          {sec:'Mua hang', pages:[{k:'nccs',l:'Nha cung cap'},{k:'purchaseorders',l:'Don mua hang'},{k:'fuelpurchases',l:'Don mua xang dau'},{k:'purchasereport',l:'Bao cao MH'},{k:'purchase',l:'Mua hang'}]},
+          {sec:'Mua hang', pages:[{k:'nccs',l:'Nha cung cap'},{k:'purchaseorders',l:'Don mua hang'},{k:'fuelpurchases',l:'Don mua xang dau'},{k:'purchasereport',l:'Bao cao MH'},{k:'materialusage',l:'Bao cao NVL ton va tieu dung'},{k:'purchase',l:'Mua hang'}]},
           {sec:'San xuat', pages:[{k:'prodsummary',l:'Tong hop SX'},{k:'prodorders',l:'Don san xuat'},{k:'stock',l:'Ton kho'}]},
         ].map(sec=>h('div',{key:sec.sec,style:{marginBottom:10}},
           h('div',{style:{fontSize:11,fontWeight:600,color:'var(--tx2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:5}},sec.sec),
@@ -3267,6 +3267,331 @@ function PurchaseReportTab({purchases,nccs}) {
   );
 }
 
+function MaterialOpeningForm({record,materials,month,onSave,onClose}){
+  const build=(rec)=>rec?{...rec,qty:numFmt(rec.qty||0)}:{month:month||isoDate().slice(0,7),materialId:'',qty:0,note:''};
+  const [f,sf]=useState(build(record));
+  const setF=(k,v)=>sf(p=>({...p,[k]:v}));
+  const save=()=>{
+    const mat=(materials||[]).find(m=>m.id===f.materialId);
+    if(!f.month){window.showToast('Chọn tháng.','warn');return;}
+    if(!mat){window.showToast('Chọn nguyên vật liệu.','warn');return;}
+    if(numFmt(f.qty)<0){window.showToast('Tồn đầu tháng không được âm.','warn');return;}
+    onSave({
+      ...f,
+      month:f.month,
+      materialId:mat.id,
+      materialCode:mat.code||mat.id||'',
+      materialName:mat.name||'',
+      group:mat.group||'',
+      unit:mat.unit||'',
+      qty:numFmt(f.qty||0),
+      note:f.note||''
+    });
+  };
+  return h(Modal,{title:record?'Sửa tồn đầu tháng':'Thêm tồn đầu tháng',onClose},
+    h('div',{className:'g2'},
+      h(F,{label:'Tháng *'},h('input',{type:'month',value:f.month,onChange:e=>setF('month',e.target.value)})),
+      h(F,{label:'Nguyên vật liệu *'},
+        h('select',{value:f.materialId,onChange:e=>setF('materialId',e.target.value)},
+          h('option',{value:''},'— Chọn nguyên vật liệu —'),
+          (materials||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi')).map(m=>h('option',{key:m.id,value:m.id},(m.code||m.id||'')+' - '+(m.name||'')))
+        )
+      )
+    ),
+    h('div',{className:'g2'},
+      h(F,{label:'Tồn đầu tháng *'},h(NumInput,{value:f.qty,onChange:v=>setF('qty',v)})),
+      h(F,{label:'Đơn vị'},h('input',{value:(materials||[]).find(m=>m.id===f.materialId)?.unit||record?.unit||'',readOnly:true,style:{background:'var(--bg2)'}}))
+    ),
+    h(F,{label:'Ghi chú'},h('textarea',{value:f.note||'',onChange:e=>setF('note',e.target.value),rows:2,placeholder:'Ghi chú nếu cần...'})),
+    h(Row,null,
+      h('button',{onClick:onClose},'Hủy'),
+      h('button',{className:'bp',onClick:save},'Lưu')
+    )
+  );
+}
+
+/* --- Báo cáo NVL tồn và tiêu dùng --- */
+function MaterialUsageReportTab({materials,purchases,monthOpenings,setMonthOpenings}){
+  const currentMonth=isoDate().slice(0,7);
+  const [month,setMonth]=useState(currentMonth);
+  const [q,sq]=useState('');
+  const [draftClosing,setDraftClosing]=useState({});
+  const normalize=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const monthLabel=ym=>{
+    if(!ym) return '';
+    const [y,m]=String(ym).split('-');
+    return 'Tháng '+Number(m)+'/'+y;
+  };
+  const shiftMonth=(ym,delta)=>{
+    const [y,m]=String(ym||currentMonth).split('-').map(Number);
+    const d=new Date(y||new Date().getFullYear(),(m||1)-1,1);
+    d.setMonth(d.getMonth()+delta);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  };
+  const prevMonth=shiftMonth(month,-1);
+  const parseMonthDate=ym=>{
+    if(!ym||!/^\d{4}-\d{2}$/.test(String(ym))) return null;
+    const [y,m]=String(ym).split('-').map(Number);
+    return new Date(y,m-1,1);
+  };
+  const matchMaterial=line=>{
+    const rawId=String(line?.itemId||'').trim().replace(/^M_/,'');
+    const nameKey=normalize(line?.name);
+    return (materials||[]).find(m=>{
+      const id=normalize(m.id);
+      const code=normalize(m.code);
+      const name=normalize(m.name);
+      return (rawId && (rawId===id||rawId===code)) || (nameKey && (nameKey===name || nameKey===code));
+    })||null;
+  };
+  const importClosings=rows=>{
+    const targetMonth=month||currentMonth;
+    const mapped=(rows||[]).map(r=>{
+      const code=String(r['Mã NVL']||r['Mã vật tư']||r['code']||'').trim();
+      const name=String(r['Tên nguyên vật liệu']||r['Tên NVL']||r['Tên vật tư']||r['name']||'').trim();
+      const found=(materials||[]).find(m=>{
+        return (code && normalize(m.code||m.id)===normalize(code)) || (name && normalize(m.name)===normalize(name));
+      });
+      if(!found) return null;
+      return {
+        id:'TCK'+uid(),
+        month:String(r['Tháng']||r['month']||targetMonth).trim()||targetMonth,
+        materialId:found.id,
+        materialCode:found.code||found.id||'',
+        materialName:found.name||'',
+        group:found.group||'',
+        unit:found.unit||'',
+        qty:numFmt(r['Tồn cuối tháng']||r['Tồn cuối']||r['Số lượng']||r['qty']||0),
+        note:r['Ghi chú']||r['note']||'',
+        createdAt:fmtDT(),
+        updatedAt:fmtDT()
+      };
+    }).filter(Boolean);
+    if(!mapped.length){window.showToast('File chưa có dòng tồn cuối tháng hợp lệ.','warn');return;}
+    setMonthOpenings(prev=>{
+      const next=[...(prev||[])];
+      mapped.forEach(rec=>{
+        const idx=next.findIndex(x=>x.month===rec.month&&x.materialId===rec.materialId);
+        if(idx>=0) next[idx]={...next[idx],...rec,id:next[idx].id};
+        else next.unshift(rec);
+      });
+      return next;
+    });
+    window.showToast('Đã nhập '+mapped.length+' dòng tồn cuối tháng','success');
+  };
+  const previousClosingMap=new Map((monthOpenings||[]).filter(x=>x.month===prevMonth).map(x=>[x.materialId,Number(x.qty)||0]));
+  const currentClosingMap=new Map((monthOpenings||[]).filter(x=>x.month===month).map(x=>[x.materialId,Number(x.qty)||0]));
+  const purchaseRows=(purchases||[]).filter(p=>p.status!=='cancelled').flatMap(p=>(p.lines||[]).map(l=>{
+    const dt=parseAnyDate(p.orderDate||p.createdAt||p.updatedAt);
+    if(!dt) return null;
+    const ym=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
+    if(ym!==month) return null;
+    const found=matchMaterial(l);
+    return {
+      materialId:found?.id||'EXT_'+normalize(l.name||l.itemId||uid()),
+      materialCode:found?.code||'',
+      materialName:found?.name||l.name||'',
+      group:found?.group||'',
+      unit:found?.unit||l.unit||'',
+      qty:Number(l.qty)||0
+    };
+  })).filter(Boolean);
+  const purchaseMap=new Map();
+  purchaseRows.forEach(r=>{
+    const cur=purchaseMap.get(r.materialId)||{qty:0,unit:r.unit||'',materialName:r.materialName||'',materialCode:r.materialCode||'',group:r.group||''};
+    cur.qty+=r.qty;
+    purchaseMap.set(r.materialId,cur);
+  });
+  const materialBase=(materials||[]).map(m=>({id:m.id,code:m.code||m.id||'',name:m.name||'',group:m.group||'',unit:m.unit||''}));
+  const activeMaterials=[...new Set([
+    ...purchaseRows.map(x=>x.materialId),
+    ...(monthOpenings||[]).filter(x=>x.month===prevMonth).map(x=>x.materialId),
+    ...(monthOpenings||[]).filter(x=>x.month===month).map(x=>x.materialId)
+  ])].map(id=>{
+    const found=materialBase.find(m=>m.id===id);
+    if(found) return found;
+    const pr=purchaseRows.find(x=>x.materialId===id);
+    return {id,code:pr?.materialCode||'',name:pr?.materialName||'',group:pr?.group||'',unit:pr?.unit||''};
+  });
+  const reportRows=activeMaterials
+    .map(m=>{
+      const opening=Number(previousClosingMap.get(m.id)||0);
+      const incoming=Number(purchaseMap.get(m.id)?.qty||0);
+      const ending=currentClosingMap.has(m.id)?Number(currentClosingMap.get(m.id)||0):null;
+      const consumed=ending===null?null:(opening+incoming-ending);
+      return {
+        id:m.id,
+        code:m.code||m.id||'',
+        name:m.name||'',
+        group:m.group||'',
+        unit:m.unit||purchaseMap.get(m.id)?.unit||'',
+        opening,
+        incoming,
+        ending,
+        consumed,
+        note:ending===null?'Chưa nhập tồn cuối '+monthLabel(month):''
+      };
+    })
+    .filter(r=>!q||[r.code,r.name,r.group].some(v=>normalize(v).includes(normalize(q))))
+    .sort((a,b)=>{
+      const ai=Number(a.incoming)||0;
+      const bi=Number(b.incoming)||0;
+      if(bi!==ai) return bi-ai;
+      return String(a.name||'').localeCompare(String(b.name||''),'vi');
+    });
+  useEffect(()=>{
+    const next={};
+    reportRows.forEach(r=>{ next[r.id]=r.ending===null?'':String(r.ending); });
+    setDraftClosing(next);
+  },[month,reportRows.map(r=>r.id+':'+(r.ending===null?'':r.ending)).join('|')]);
+  const setClosing=(id,v)=>setDraftClosing(prev=>({...prev,[id]:v}));
+  const saveClosings=()=>{
+    if(!reportRows.length){window.showToast('Tháng này chưa có nguyên vật liệu phát sinh để nhập tồn cuối.','warn');return;}
+    const now=fmtDT();
+    setMonthOpenings(prev=>{
+      const next=[...(prev||[])];
+      reportRows.forEach(r=>{
+        const raw=draftClosing[r.id];
+        if(raw===''||raw===null||typeof raw==='undefined') return;
+        const qty=Math.max(0,numFmt(raw||0));
+        const idx=next.findIndex(x=>x.month===month&&x.materialId===r.id);
+        const payload={
+          month,
+          materialId:r.id,
+          materialCode:r.code||r.id||'',
+          materialName:r.name||'',
+          group:r.group||'',
+          unit:r.unit||'',
+          qty,
+          note:'',
+          updatedAt:now
+        };
+        if(idx>=0) next[idx]={...next[idx],...payload};
+        else next.unshift({...payload,id:'TCK'+uid(),createdAt:now});
+      });
+      return next;
+    });
+    window.showToast('Đã lưu tồn cuối tháng','success');
+  };
+  const summary={
+    opening:reportRows.reduce((s,r)=>s+r.opening,0),
+    incoming:reportRows.reduce((s,r)=>s+r.incoming,0),
+    ending:reportRows.reduce((s,r)=>s+(r.ending===null?0:r.ending),0),
+    consumed:reportRows.reduce((s,r)=>s+(r.consumed===null?0:r.consumed),0),
+    missing:reportRows.filter(r=>r.ending===null).length
+  };
+  const chartMaterialOptions=materialBase.filter(m=>m.name).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi'));
+  const availableYears=[...new Set([
+    ...(monthOpenings||[]).map(x=>String(x.month||'').slice(0,4)).filter(Boolean),
+    ...(purchases||[]).map(p=>{const d=parseAnyDate(p.orderDate||p.createdAt||p.updatedAt);return d?String(d.getFullYear()):'';}).filter(Boolean)
+  ])].sort();
+  const [chartMaterial,setChartMaterial]=useState('');
+  const [chartYear,setChartYear]=useState(String((parseMonthDate(month)||new Date()).getFullYear()));
+  const chartMonths=Array.from({length:12},(_,i)=>{
+    const ym=chartYear+'-'+String(i+1).padStart(2,'0');
+    const pm=shiftMonth(ym,-1);
+    const matFilter=chartMaterial||'';
+    const opening=(monthOpenings||[]).filter(x=>x.month===pm&&(!matFilter||x.materialId===matFilter)).reduce((s,x)=>s+(Number(x.qty)||0),0);
+    const ending=(monthOpenings||[]).filter(x=>x.month===ym&&(!matFilter||x.materialId===matFilter)).reduce((s,x)=>s+(Number(x.qty)||0),0);
+    const endingExists=(monthOpenings||[]).some(x=>x.month===ym&&(!matFilter||x.materialId===matFilter));
+    const incoming=(purchases||[]).filter(p=>p.status!=='cancelled').flatMap(p=>(p.lines||[]).map(l=>({p,l}))).reduce((sum,item)=>{
+      const d=parseAnyDate(item.p.orderDate||item.p.createdAt||item.p.updatedAt);
+      if(!d) return sum;
+      const ym2=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      if(ym2!==ym) return sum;
+      const found=matchMaterial(item.l);
+      if(matFilter && found?.id!==matFilter) return sum;
+      if(matFilter && !found && matFilter) return sum;
+      return sum+(Number(item.l.qty)||0);
+    },0);
+    const consumed=endingExists?(opening+incoming-ending):0;
+    const unit=matFilter?(chartMaterialOptions.find(m=>m.id===matFilter)?.unit||''):'';
+    return {month:i+1,label:'T'+String(i+1),opening,incoming,ending:endingExists?ending:null,consumed,unit};
+  });
+  const chartMax=Math.max(...chartMonths.map(m=>m.consumed||0),0);
+  const exportRows=reportRows.map(r=>({
+    month:monthLabel(month),
+    previousMonth:monthLabel(prevMonth),
+    code:r.code,
+    name:r.name,
+    group:r.group,
+    unit:r.unit,
+    opening:r.opening,
+    incoming:r.incoming,
+    ending:r.ending===null?'':r.ending,
+    consumed:r.consumed===null?'':r.consumed,
+    note:r.note||''
+  }));
+  return h('div',null,
+    h('div',{className:'ptitle'},h('i',{className:'ti ti-chart-histogram',style:{fontSize:20}}),'Báo cáo NVL tồn và tiêu dùng'),
+    h('div',{className:'card',style:{marginBottom:'1rem'}},
+      h('div',{style:{display:'grid',gridTemplateColumns:'1.2fr 1fr 1fr auto',gap:'0.75rem 1rem',alignItems:'end'}},
+        h(F,{label:'Tìm nguyên vật liệu'},h('input',{value:q,onChange:e=>sq(e.target.value),placeholder:'Tên, mã, nhóm NVL...'})),
+        h(F,{label:'Tháng báo cáo'},h('input',{type:'month',value:month,onChange:e=>setMonth(e.target.value||currentMonth)})),
+        h('div',{style:{fontSize:12,color:'var(--tx2)',paddingBottom:8}},'Tiêu dùng tháng = Tồn cuối '+monthLabel(prevMonth)+' + Nhập tháng - Tồn cuối '+monthLabel(month)),
+        h('div',{style:{display:'flex',gap:6,justifyContent:'flex-end',flexWrap:'wrap'}},
+          h(ExportBtn,{onClick:()=>xlsxExport(exportRows,[['month','Tháng báo cáo'],['previousMonth','Tháng lấy tồn đầu'],['code','Mã NVL'],['name','Tên nguyên vật liệu'],['group','Nhóm NVL'],['unit','ĐVT'],['opening','Tồn đầu tháng'],['incoming','Nhập trong tháng'],['ending','Tồn cuối tháng'],['consumed','Tiêu dùng tháng'],['note','Ghi chú']],'Bao_cao_NVL_ton_va_tieu_dung')}),
+          h(ImportBtn,{onFile:importClosings}),
+          h('button',{className:'bp',onClick:saveClosings},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu tồn cuối tháng')
+        )
+      )
+    ),
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'1rem',marginBottom:'1rem'}},
+      h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:'12px 16px'}},h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4}},'Tổng tồn đầu tháng'),h('div',{style:{fontSize:24,fontWeight:600,color:'var(--pri)'}},summary.opening.toLocaleString('vi-VN'))),
+      h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:'12px 16px'}},h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4}},'Tổng nhập trong tháng'),h('div',{style:{fontSize:24,fontWeight:600,color:'var(--pri)'}},summary.incoming.toLocaleString('vi-VN'))),
+      h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:'12px 16px'}},h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4}},'Tổng tiêu dùng tháng'),h('div',{style:{fontSize:24,fontWeight:600,color:'var(--pri)'}},summary.consumed.toLocaleString('vi-VN'))),
+      h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:'12px 16px'}},h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4}},'Dòng chưa nhập tồn cuối'),h('div',{style:{fontSize:24,fontWeight:600,color:summary.missing?'#C77D00':'var(--pri)'}},summary.missing))
+    ),
+    h('div',{className:'report-grid-2',style:{marginBottom:'1rem'}},
+      h('div',{className:'tw'},h('table',null,
+        h('thead',null,h('tr',null,...['Mã NVL','Tên nguyên vật liệu','Tồn đầu tháng','Nhập trong tháng','Tồn cuối tháng','ĐVT'].map(c=>h('th',{key:c},c)))),
+        h('tbody',null,reportRows.length?reportRows.map(r=>h('tr',{key:r.id},
+          h('td',null,h('span',{style:{fontWeight:500,color:'var(--pri)'}},r.code||r.id)),
+          h('td',null,h('div',{style:{fontWeight:500}},r.name||'—')),
+          h('td',null,r.opening.toLocaleString('vi-VN')),
+          h('td',null,r.incoming.toLocaleString('vi-VN')),
+          h('td',null,h('input',{type:'number',min:0,step:'0.01',value:draftClosing[r.id]??'',onChange:e=>setClosing(r.id,e.target.value),placeholder:'Nhập tồn cuối...',style:{maxWidth:140}})),
+          h('td',null,r.unit||'—')
+        )):h('tr',null,h('td',{colSpan:6,className:'empty-st'},'Tháng này chưa có nguyên vật liệu phát sinh hoặc tồn chuyển sang.')))
+      )),
+      h('div',{className:'card'},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:10}},
+          h('div',{style:{fontWeight:600,color:'var(--pri3)'}},'Đồ thị tiêu dùng NVL theo tháng'),
+          h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'0 1rem',flex:'1 1 420px'}},
+            h(F,{label:'Nguyên vật liệu'},h('select',{value:chartMaterial,onChange:e=>setChartMaterial(e.target.value)},h('option',{value:''},'Tất cả nguyên vật liệu'),chartMaterialOptions.map(x=>h('option',{key:x.id,value:x.id},x.name)))),
+            h(F,{label:'Năm'},h('select',{value:chartYear,onChange:e=>setChartYear(e.target.value)},(availableYears.length?availableYears:[String(new Date().getFullYear())]).map(y=>h('option',{key:y,value:y},y))))
+          )
+        ),
+        h('div',{style:{display:'grid',gridTemplateColumns:'repeat(12,minmax(52px,1fr))',gap:8,alignItems:'end',minHeight:240,paddingTop:10}},
+          chartMonths.map(m=>h('div',{key:m.month,style:{display:'flex',flexDirection:'column',alignItems:'center',gap:6}},
+            h('div',{style:{fontSize:11,color:'var(--tx2)',minHeight:30,textAlign:'center'}},(m.consumed||0).toLocaleString('vi-VN')),
+            h('div',{style:{height:160,width:'100%',display:'flex',alignItems:'flex-end',justifyContent:'center',background:'linear-gradient(180deg,#f8fbf9,transparent)',borderRadius:8}},
+              h('div',{style:{width:'78%',height:(chartMax?Math.max(10,Math.round((m.consumed/chartMax)*150)):4),background:'linear-gradient(180deg,#8fcf6d,#2d6a4f)',borderRadius:'8px 8px 2px 2px',transition:'height .2s ease'}})
+            ),
+            h('div',{style:{fontSize:12,fontWeight:600,color:'var(--pri3)'}},m.label),
+            h('div',{style:{fontSize:11,color:'var(--tx2)',textAlign:'center'}},(m.unit||''))
+          ))
+        ),
+        h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:10}},'Bảng bên trái hiện sẵn các nguyên vật liệu phát sinh trong tháng để nhập tồn cuối trực tiếp.')
+      )
+    ),
+    h('div',{className:'tw'},h('table',null,
+      h('thead',null,h('tr',null,...['Mã NVL','Tên nguyên vật liệu','Nhóm NVL','ĐVT','Tồn đầu tháng','Nhập trong tháng','Tồn cuối tháng','Tiêu dùng tháng','Ghi chú'].map(c=>h('th',{key:c},c)))),
+      h('tbody',null,reportRows.length?reportRows.map(r=>h('tr',{key:r.id},
+        h('td',null,h('span',{style:{fontWeight:500,color:'var(--pri)'}},r.code||r.id)),
+        h('td',null,h('div',{style:{fontWeight:500}},r.name||'—')),
+        h('td',null,r.group||'—'),
+        h('td',null,r.unit||'—'),
+        h('td',null,r.opening.toLocaleString('vi-VN')),
+        h('td',null,r.incoming.toLocaleString('vi-VN')),
+        h('td',null,r.ending===null?'—':r.ending.toLocaleString('vi-VN')),
+        h('td',null,h('span',{style:{fontWeight:600,color:r.consumed===null?'#C77D00':'var(--pri)'}},r.consumed===null?'Chưa nhập tồn cuối':r.consumed.toLocaleString('vi-VN'))),
+        h('td',null,r.note||'—')
+      )):h('tr',null,h('td',{colSpan:9,className:'empty-st'},'Chưa có dữ liệu NVL theo tháng đã chọn.')))
+    ))
+  );
+}
+
 function PowderDebtReportTab({customers}){
   const storageKey='scf_powdersales';
   const [rows]=useLS(storageKey,[]);
@@ -4379,6 +4704,7 @@ const NAV=[
   {sec:'Báo cáo'},
   {key:'salesreport',icon:'ti-chart-line',label:'Báo cáo BH'},
   {key:'purchasereport',icon:'ti-chart-bar',label:'Báo cáo MH'},
+  {key:'materialusage',icon:'ti-chart-histogram',label:'Báo cáo NVL tồn và tiêu dùng'},
   {key:'dbusage',icon:'ti-database',label:'Dung lượng Supabase'},
   {sec:'Bảo dưỡng'},
   {key:'maint_vehicle',icon:'ti-car',label:'Bảo dưỡng xe'},
@@ -7535,6 +7861,7 @@ const PAGE_ACCESS = {
   purchaseorders:['admin','manager'],
   fuelpurchases:['admin','manager','driver'],
   purchasereport:['admin','manager'],
+  materialusage:['admin','manager','staff'],
   powderdebtreport:['admin','manager','staff'],
   dbusage:['admin','manager'],
   maint_vehicle:['admin','manager','staff'],
@@ -7574,7 +7901,7 @@ const PTITLES = {
   process_accounting:'QUY TRÌNH KẾ TOÁN', process_bun:'QT SẢN XUẤT BÚN', process_pho:'QT SX PHỞ', process_banhcuon:'QT SX BÁNH CUỐN',
   quotes:'Báo giá', delivery:'Đơn giao hàng', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng',
   salesreport:'Báo cáo bán hàng', marketsales:'Bán hàng chợ', powdersales:'Bán bột bún',
-  nccs:'Nhà cung cấp', purchaseorders:'Đơn mua hàng', fuelpurchases:'Đơn mua xăng dầu', purchasereport:'Báo cáo mua hàng', powderdebtreport:'Báo cáo công nợ', dbusage:'Dung lượng Supabase',
+  nccs:'Nhà cung cấp', purchaseorders:'Đơn mua hàng', fuelpurchases:'Đơn mua xăng dầu', purchasereport:'Báo cáo mua hàng', materialusage:'Báo cáo NVL tồn và tiêu dùng', powderdebtreport:'Báo cáo công nợ', dbusage:'Dung lượng Supabase',
   maint_vehicle:'Bảo dưỡng xe', maint_machine:'Bảo dưỡng máy',
   prodsummary:'Tổng hợp sản xuất', prodorders:'Đơn sản xuất', stock:'Tồn kho',
 };
@@ -7585,7 +7912,7 @@ const PICONS = {
   workreport_vp:'ti-building', workreport_sx:'ti-building-factory', workreport_lx:'ti-steering-wheel', workreport_total:'ti-report-analytics',
   process_accounting:'ti-file-invoice', process_bun:'ti-tools-kitchen-2', process_pho:'ti-bowl', process_banhcuon:'ti-cookie',
   marketsales:'ti-building-store', powdersales:'ti-bowl',
-  powderdebtreport:'ti-report-money', dbusage:'ti-database', fuelpurchases:'ti-gas-station',
+  powderdebtreport:'ti-report-money', dbusage:'ti-database', fuelpurchases:'ti-gas-station', materialusage:'ti-chart-histogram',
   maint_vehicle:'ti-car', maint_machine:'ti-settings'
 };
 
@@ -7607,6 +7934,7 @@ function App(){
   const[nccs,_sncc]=useState([]);
   const[purchases,_spu]=useState([]);
   const[fuelPurchases,_sfp]=useState([]);
+  const[materialMonthOpenings,_smo]=useState([]);
   const[shifts,_ssh]=useState(D_SHIFTS);
   const[quotes,_sq]=useState([]);
   const[orders,_so]=useState([]);
@@ -7633,6 +7961,7 @@ function App(){
   const setNCCs=mkSet('scf_nccs',_sncc);
   const setPurchases=mkSet('scf_purchases',_spu);
   const setFuelPurchases=mkSet('scf_fuelpurchases',_sfp);
+  const setMaterialMonthOpenings=mkSet('scf_material_month_openings',_smo);
   const setShifts=mkSet('scf_shifts',_ssh);
   const setQuotes=mkSet('scf_quotes',_sq);
   const setOrders=mkSet('scf_orders',_so);
@@ -7649,17 +7978,18 @@ function App(){
   useEffect(()=>{
     (async()=>{
       try{
-        const[e,c,m,assetData,pc,p,cu,ar,wc,tk,ncc,pu,q,fp,o,t,a,adv,rw,lv,dp]=await Promise.all([
+        const[e,c,m,assetData,pc,p,cu,ar,wc,tk,ncc,pu,q,fp,mo,o,t,a,adv,rw,lv,dp]=await Promise.all([
           dbGet('scf_employees',DEF_EMPS),dbGet('scf_company',DEF_COMPANY),
           dbGet('scf_materials',DEF_MATERIALS),dbGet('scf_assets',[]),dbGet('scf_prodcats',DEF_PRODCATS),
           dbGet('scf_products',DEF_PRODUCTS),dbGet('scf_customers',DEF_CUSTOMERS),
           dbGet('scf_areas',DEF_AREAS),
           dbGet('scf_workcats',DEF_WORKCATS),dbGet('scf_tasks',[]),dbGet('scf_nccs',[]),dbGet('scf_purchases',[]),dbGet('scf_quotes',[]),
           dbGet('scf_fuelpurchases',[]),
+          dbGet('scf_material_month_openings',[]),
           dbGet('scf_orders',[]),dbGet('scf_trips',[]),dbGet('scf_attendance',[]),
           dbGet('scf_advances',[]),dbGet('scf_rewards',[]),dbGet('scf_leaves',[]),dbGet('scf_depts',DEF_DEPTS),
         ]);
-        _se(e);_sc(c);_sm(m);_sas(assetData);_spc(pc);_sp(p);_scu(cu);_sar(ar);_swc(wc);_stasks(tk);_sncc(ncc);_spu(pu);_sfp(fp);const shData=await dbGet('scf_shifts',D_SHIFTS);_ssh(shData);_sq(q);_so(o);_st(t);_sa(a);_sadv(adv);_srw(rw);_slv(lv);_sdp(dp);const psData=await dbGet('scf_prod_shifts',DEF_PROD_SHIFTS);_sps(psData);const psrData=await dbGet('scf_prod_shift_rules',DEF_PROD_SHIFT_RULES);_spr(psrData);
+        _se(e);_sc(c);_sm(m);_sas(assetData);_spc(pc);_sp(p);_scu(cu);_sar(ar);_swc(wc);_stasks(tk);_sncc(ncc);_spu(pu);_sfp(fp);_smo(mo);const shData=await dbGet('scf_shifts',D_SHIFTS);_ssh(shData);_sq(q);_so(o);_st(t);_sa(a);_sadv(adv);_srw(rw);_slv(lv);_sdp(dp);const psData=await dbGet('scf_prod_shifts',DEF_PROD_SHIFTS);_sps(psData);const psrData=await dbGet('scf_prod_shift_rules',DEF_PROD_SHIFT_RULES);_spr(psrData);
       }catch(err){console.warn(err);}finally{setLoading(false);}
     })();
   },[]);
@@ -7781,6 +8111,7 @@ function App(){
         canAccess(cu.role,'purchaseorders',cu.permissions)&&page==='purchaseorders'&&h(PurchaseTab,{purchases,setPurchases,nccs,setNCCs,materials,products,cu,setPage}),
         canAccess(cu.role,'fuelpurchases',cu.permissions)&&page==='fuelpurchases'&&h(FuelPurchaseTab,{rows:fuelPurchases,setRows:setFuelPurchases,employees,assets,currentUser:cu}),
         canAccess(cu.role,'purchasereport',cu.permissions)&&page==='purchasereport'&&h(PurchaseReportTab,{purchases,nccs}),
+        canAccess(cu.role,'materialusage',cu.permissions)&&page==='materialusage'&&h(MaterialUsageReportTab,{materials,purchases,monthOpenings:materialMonthOpenings,setMonthOpenings:setMaterialMonthOpenings}),
         canAccess(cu.role,'powderdebtreport',cu.permissions)&&page==='powderdebtreport'&&h(PowderDebtReportTab,{customers}),
         canAccess(cu.role,'maint_vehicle',cu.permissions)&&page==='maint_vehicle'&&h(MaintenanceTab,{title:'Bảo dưỡng xe',icon:'ti-car',assets}),
         canAccess(cu.role,'maint_machine',cu.permissions)&&page==='maint_machine'&&h(MaintenanceTab,{title:'Bảo dưỡng máy',icon:'ti-settings',assets}),
