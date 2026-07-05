@@ -2688,8 +2688,9 @@ function PowderSalesTab({customers,trips,employees,setPage}){
 /* ═══════ COLLAPSIBLE SIDEBAR + MUA HÀNG + BÁO CÁO ═══════ */
 
 /* --- NCC (Nhà cung cấp) --- */
-function NCCTab({nccs,setNCCs}) {
+function NCCTab({nccs,setNCCs,purchases}) {
   const [modal,sm]=useState(null); const [edit,se]=useState(null); const [q,sq]=useState('');
+  const norm=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   function NCCForm({ncc,onSave,onClose}) {
     const [f,sf]=useState(ncc||{code:'',name:'',taxCode:'',address:'',phone:'',email:'',contact:'',note:''});
     const s=(k,v)=>sf(p=>({...p,[k]:v}));
@@ -2703,7 +2704,25 @@ function NCCTab({nccs,setNCCs}) {
     );
   }
   const save=d=>{if(edit)setNCCs(p=>p.map(x=>x.id===edit.id?d:x));else setNCCs(p=>[...p,d]);sm(null);se(null);};
-  const del=id=>{window.scfConfirm('Bạn có chắc muốn xóa nhà cung cấp này?','Xóa NCC',true).then(ok=>{if(ok){setNCCs(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa NCC','success');}});};
+  const del=id=>{
+    const target=(nccs||[]).find(x=>x.id===id);
+    const linked=(purchases||[]).filter(p=>{
+      const byId=String(p.nccId||'')===String(id);
+      const byName=target && norm(p.nccName)===norm(target.name);
+      const byCode=target?.code && norm(p.nccName)===norm(target.code);
+      return byId||byName||byCode;
+    });
+    const msg=linked.length
+      ? `NCC này đang có ${linked.length} đơn mua liên quan. Nếu xóa, các đơn cũ sẽ mất liên kết NCC. Bạn vẫn muốn xóa chứ?`
+      : 'Bạn có chắc muốn xóa nhà cung cấp này?';
+    const title=linked.length?'Cảnh báo NCC đang có đơn':'Xóa NCC';
+    window.scfConfirm(msg,title,true).then(ok=>{
+      if(ok){
+        setNCCs(p=>p.filter(x=>x.id!==id));
+        window.showToast('Đã xóa NCC','success');
+      }
+    });
+  };
   const importNcc=rows=>{
     const mapped=rows.map(r=>({
       id:'NCC'+uid(),
@@ -2975,6 +2994,10 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
   const [modal,setModal]=useState(false);
   const [edit,setEdit]=useState(null);
   const [q,sq]=useState('');
+  const [df,sdf]=useState('');
+  const [dt,sdt]=useState('');
+  const [buyerFilter,setBuyerFilter]=useState('');
+  const [vehicleFilter,setVehicleFilter]=useState('');
   const [uploading,setUploading]=useState(false);
   const normalizeText=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const deptKey=normalizeText(currentUser?.dept);
@@ -3041,8 +3064,21 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
   };
   const isOwn=row=>!isDriver||row.buyerId===currentUser.id||String(row.buyerName||'').trim().toLowerCase()===String(currentUser.name||'').trim().toLowerCase();
   const canFix=row=>canManage||(isDriver&&isOwn(row)&&String(row.note||'').trim());
+  const inRange=dateValue=>{
+    const d=parseAnyDate(dateValue);
+    if(!d) return !df&&!dt;
+    const from=df?parseAnyDate(df):null;
+    const to=dt?parseAnyDate(dt):null;
+    if(from&&d<from) return false;
+    if(to&&d>to) return false;
+    return true;
+  };
   const visible=(rows||[])
-    .filter(r=>(canManage||isOwn(r))&&(!q||[r.date,r.vehicle,r.buyerName,r.note,r.imageName].join(' ').toLowerCase().includes(q.toLowerCase())))
+    .filter(r=>(canManage||isOwn(r))
+      && inRange(r.date||r.createdAt||r.updatedAt)
+      && (!buyerFilter||String(r.buyerId||'')===String(buyerFilter))
+      && (!vehicleFilter||String(r.vehicle||'')===String(vehicleFilter))
+      && (!q||[r.date,r.vehicle,r.buyerName,r.note,r.imageName].join(' ').toLowerCase().includes(q.toLowerCase())))
     .slice()
     .sort((a,b)=>{
       const da=parseAnyDate(a.date||a.createdAt||a.updatedAt);
@@ -3108,16 +3144,27 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-gas-station',style:{fontSize:20}}),'Đơn mua xăng dầu'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
-      h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn mua xăng dầu...'}),
+      h('div'),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
         h(ExportBtn,{onClick:()=>xlsxExport(visible,[['date','Ngày mua'],['buyerName','Người mua'],['vehicle','Xe'],['liters','Số lít'],['price','Giá tiền'],['amount','Thành tiền'],['note','Chú ý'],['image','Ảnh']],'Don_mua_xang_dau')}),
         h(AddBtn,{onClick:openAdd,label:'Thêm đơn mua xăng dầu'})
       )
     ),
-    h('div',{className:'card',style:{marginBottom:10,padding:'10px 14px',fontSize:12,color:'var(--tx2)'}},
-      canManage
-        ? 'Admin, quản lý và kế toán xem toàn bộ đơn. Lái xe chỉ xem đơn của mình; chỉ các đơn có phần chú ý mới cho sửa/xóa phía lái xe.'
-        : 'Tài khoản lái xe chỉ xem đơn của mình. Mặc định chỉ thêm mới; đơn nào có phần chú ý mới được sửa hoặc xóa.'
+    h('div',{className:'card',style:{marginBottom:'1rem',padding:'12px 14px'}},
+      h('div',{style:{display:'grid',gridTemplateColumns:'1.2fr 1fr 1fr 1fr 1fr auto',gap:8,alignItems:'end'}},
+        h(F,{label:'Tìm nhanh'},h(SearchBar,{value:q,onChange:sq,placeholder:'Tên, xe, ghi chú...'})),
+        h(F,{label:'Từ ngày'},h('input',{type:'date',value:df,onChange:e=>sdf(e.target.value)})),
+        h(F,{label:'Đến ngày'},h('input',{type:'date',value:dt,onChange:e=>sdt(e.target.value)})),
+        h(F,{label:'Người mua'},h('select',{value:buyerFilter,onChange:e=>setBuyerFilter(e.target.value)},
+          h('option',{value:''},'Tất cả'),
+          buyerOptions.map(b=>h('option',{key:b.id,value:b.id},b.name||b.label))
+        )),
+        h(F,{label:'Xe'},h('select',{value:vehicleFilter,onChange:e=>setVehicleFilter(e.target.value)},
+          h('option',{value:''},'Tất cả'),
+          vehicleOptions.map(v=>h('option',{key:v,value:v},v))
+        )),
+        h('button',{type:'button',onClick:()=>{sq('');sdf('');sdt('');setBuyerFilter('');setVehicleFilter('');'},style:{height:38,alignSelf:'end'}},h('i',{className:'ti ti-filter-off',style:{fontSize:14}}),'Xóa lọc')
+      )
     ),
     h('div',{className:'tw'},h('table',null,
       h('thead',null,h('tr',null,...['Ngày mua','Người mua','Xe','Số lít','Giá tiền','Thành tiền','Ảnh','Chú ý',''].map(c=>h('th',{key:c},c)))),
@@ -3136,7 +3183,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
         ))
       )):h('tr',null,h('td',{colSpan:9,className:'empty-st'},'Chưa có đơn mua xăng dầu nào.')))
     )),
-    modal&&h(Modal,{title:edit?'Sửa đơn mua xăng dầu':'Thêm đơn mua xăng dầu',lg:true,onClose:()=>{setModal(false);setEdit(null);}},
+    modal&&h(Modal,{title:edit?'Sửa đơn mua xăng dầu':'Thêm đơn mua xăng dầu',onClose:()=>{setModal(false);setEdit(null);}},
       h('div',{className:'g2'},
         h(F,{label:'Người mua *'},
           canManage
@@ -3167,9 +3214,11 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
           )
         )
       ),
-      h('div',{className:'g3'},
+      h('div',{className:'g2'},
         h(F,{label:'Số lít *'},h('input',{type:'number',min:0,step:'0.1',value:form.liters,onChange:e=>setF('liters',e.target.value),placeholder:'0'})),
-        h(F,{label:'Giá tiền *'},h(NumInput,{value:form.price,onChange:v=>setF('price',v),placeholder:'0'})),
+        h(F,{label:'Giá tiền *'},h(NumInput,{value:form.price,onChange:v=>setF('price',v),placeholder:'0'}))
+      ),
+      h('div',{className:'g2'},
         h(F,{label:'Thành tiền'},h('input',{value:numFmt(form.amount||0)?Number(form.amount).toLocaleString('vi-VN'):'0',readOnly:true,style:{background:'var(--bg2)',fontWeight:600}}))
       ),
       h(F,{label:'Chú ý'},h('textarea',{value:form.note,onChange:e=>setF('note',e.target.value),rows:3,placeholder:'Đơn lỗi hoặc cần sửa thì ghi chú ở đây...'})),
@@ -3403,22 +3452,26 @@ function MaterialUsageReportTab({materials,purchases,monthOpenings,setMonthOpeni
     purchaseMap.set(r.materialId,cur);
   });
   const materialBase=(materials||[]).map(m=>({id:m.id,code:m.code||m.id||'',name:m.name||'',group:m.group||'',unit:m.unit||''}));
-  const activeMaterials=[...new Set([
+  const extraMaterials=[...new Set([
     ...purchaseRows.map(x=>x.materialId),
     ...(monthOpenings||[]).filter(x=>x.month===prevMonth).map(x=>x.materialId),
     ...(monthOpenings||[]).filter(x=>x.month===month).map(x=>x.materialId)
-  ])].map(id=>{
+  ])].filter(id=>!materialBase.some(m=>m.id===id)).map(id=>{
     const found=materialBase.find(m=>m.id===id);
     if(found) return found;
     const pr=purchaseRows.find(x=>x.materialId===id);
     return {id,code:pr?.materialCode||'',name:pr?.materialName||'',group:pr?.group||'',unit:pr?.unit||''};
   });
+  const activeMaterials=[...materialBase,...extraMaterials];
   const reportRows=activeMaterials
     .map(m=>{
       const opening=Number(previousClosingMap.get(m.id)||0);
       const incoming=Number(purchaseMap.get(m.id)?.qty||0);
       const ending=currentClosingMap.has(m.id)?Number(currentClosingMap.get(m.id)||0):null;
       const consumed=ending===null?null:(opening+incoming-ending);
+      const flags=[];
+      if(ending!==null&&consumed!==null&&consumed<0) flags.push('Tiêu dùng âm');
+      if(ending!==null&&ending>(opening+incoming)) flags.push('Tồn cuối lớn hơn số có thể có');
       return {
         id:m.id,
         code:m.code||m.id||'',
@@ -3429,11 +3482,15 @@ function MaterialUsageReportTab({materials,purchases,monthOpenings,setMonthOpeni
         incoming,
         ending,
         consumed,
-        note:ending===null?'Chưa nhập tồn cuối '+monthLabel(month):''
+        flags,
+        note:ending===null?'Chưa nhập tồn cuối '+monthLabel(month):flags.join(' • ')
       };
     })
     .filter(r=>!q||[r.code,r.name,r.group].some(v=>normalize(v).includes(normalize(q))))
     .sort((a,b)=>{
+      const af=a.flags?.length?1:0;
+      const bf=b.flags?.length?1:0;
+      if(bf!==af) return bf-af;
       const ai=Number(a.incoming)||0;
       const bi=Number(b.incoming)||0;
       if(bi!==ai) return bi-ai;
@@ -3545,12 +3602,15 @@ function MaterialUsageReportTab({materials,purchases,monthOpenings,setMonthOpeni
     h('div',{className:'report-grid-2',style:{marginBottom:'1rem'}},
       h('div',{className:'tw'},h('table',null,
         h('thead',null,h('tr',null,...['Mã NVL','Tên nguyên vật liệu','Tồn đầu tháng','Nhập trong tháng','Tồn cuối tháng','ĐVT'].map(c=>h('th',{key:c},c)))),
-        h('tbody',null,reportRows.length?reportRows.map(r=>h('tr',{key:r.id},
+        h('tbody',null,reportRows.length?reportRows.map(r=>h('tr',{key:r.id,style:r.flags?.length?{background:'#FFF8E7'}:{}},
           h('td',null,h('span',{style:{fontWeight:500,color:'var(--pri)'}},r.code||r.id)),
-          h('td',null,h('div',{style:{fontWeight:500}},r.name||'—')),
+          h('td',null,
+            h('div',{style:{fontWeight:500}},r.name||'—'),
+            !!r.flags?.length&&h('div',{style:{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}},r.flags.map(flag=>h('span',{key:flag,className:'badge',style:{background:'#FFF3CD',color:'#8A5A00'}},flag)))
+          ),
           h('td',null,r.opening.toLocaleString('vi-VN')),
           h('td',null,r.incoming.toLocaleString('vi-VN')),
-          h('td',null,h('input',{type:'number',min:0,step:'0.01',value:draftClosing[r.id]??'',onChange:e=>setClosing(r.id,e.target.value),placeholder:'Nhập tồn cuối...',style:{maxWidth:140}})),
+          h('td',null,h('input',{type:'number',min:0,step:'0.01',value:draftClosing[r.id]??'',onChange:e=>setClosing(r.id,e.target.value),placeholder:'Nhập tồn cuối...',style:{maxWidth:140,borderColor:r.flags?.length?'#C77D00':''}})),
           h('td',null,r.unit||'—')
         )):h('tr',null,h('td',{colSpan:6,className:'empty-st'},'Tháng này chưa có nguyên vật liệu phát sinh hoặc tồn chuyển sang.')))
       )),
@@ -3577,9 +3637,12 @@ function MaterialUsageReportTab({materials,purchases,monthOpenings,setMonthOpeni
     ),
     h('div',{className:'tw'},h('table',null,
       h('thead',null,h('tr',null,...['Mã NVL','Tên nguyên vật liệu','Nhóm NVL','ĐVT','Tồn đầu tháng','Nhập trong tháng','Tồn cuối tháng','Tiêu dùng tháng','Ghi chú'].map(c=>h('th',{key:c},c)))),
-      h('tbody',null,reportRows.length?reportRows.map(r=>h('tr',{key:r.id},
+      h('tbody',null,reportRows.length?reportRows.map(r=>h('tr',{key:r.id,style:r.flags?.length?{background:'#FFF8E7'}:{}},
         h('td',null,h('span',{style:{fontWeight:500,color:'var(--pri)'}},r.code||r.id)),
-        h('td',null,h('div',{style:{fontWeight:500}},r.name||'—')),
+        h('td',null,
+          h('div',{style:{fontWeight:500}},r.name||'—'),
+          !!r.flags?.length&&h('div',{style:{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}},r.flags.map(flag=>h('span',{key:flag,className:'badge',style:{background:'#FFF3CD',color:'#8A5A00'}},flag)))
+        ),
         h('td',null,r.group||'—'),
         h('td',null,r.unit||'—'),
         h('td',null,r.opening.toLocaleString('vi-VN')),
