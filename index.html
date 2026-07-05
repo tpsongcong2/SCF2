@@ -2788,7 +2788,7 @@ function PowderDebtReportTab({customers}){
   const [dt,sdt]=useState(today);
   const [customer,scustomer]=useState('');
   const customerOptions=[...new Set((customers||[]).map(c=>c.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
-  const numMoney=v=>Number(String(v??'').replace(/[^\d.-]/g,''))||0;
+  const numMoney=v=>Number(String(v??'').replace(/[^\d-]/g,''))||0;
   const parseDate=s=>{if(!s)return null;const v=String(s).trim();if(/^\d{4}-\d{2}-\d{2}$/.test(v)){const[y,m,d]=v.split('-');return new Date(Number(y),Number(m)-1,Number(d));}const[d,m,y]=v.split('/');return new Date(Number(y),Number(m)-1,Number(d));};
   const inRange=d=>{const dt2=parseDate(d);if(!dt2||Number.isNaN(dt2.getTime()))return false;const f2=df?parseDate(df):null;const t=dt?parseDate(dt):null;if(f2&&dt2<f2)return false;if(t&&dt2>t)return false;return true;};
   const list=(rows||[]).filter(r=>inRange(r.date)&&(!customer||r.customer===customer)).slice().sort((a,b)=>parseVNDateKey(a.date)-parseVNDateKey(b.date));
