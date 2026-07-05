@@ -2461,36 +2461,49 @@ function computeWeightFromText(text,qtyQua){
   const total=parseQtyText(text).reduce((s,n)=>s+n,0);
   return Math.max(0,total-(Number(qtyQua)||0));
 }
+function parseVNDateKey(v){
+  if(!v) return 0;
+  const s=String(v).trim();
+  let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m) return new Date(Number(m[3]),Number(m[2])-1,Number(m[1])).getTime();
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m) return new Date(Number(m[1]),Number(m[2])-1,Number(m[3])).getTime();
+  const d=new Date(s);
+  return Number.isNaN(d.getTime())?0:d.getTime();
+}
 
-function PowderSalesTab({customers,trips}){
+function PowderSalesTab({customers,trips,employees,setPage}){
   const storageKey='scf_powdersales';
   const [rows,setRows]=useLS(storageKey,[
-    {id:'PB001',date:'01/05/2026',customer:'ANH NAM PY',qtyQua:10,qtyText:'81+75+86+78+88+89+89+90+...',weight:'846',price:'11.000',amount:'9.306.000',invoice:'',tripId:'ANH NAM PY-2.026-5-0'},
+    {id:'PB001',date:'01/05/2026',customer:'ANH NAM PY',qtyQua:10,qtyText:'81+75+86+78+88+89+89+90+...',weight:'846',price:'11.000',amount:'9.306.000',invoice:'',driverId:'',driverName:'ANH NAM PY-2.026-5-0',status:'unpaid'},
   ]);
   const [modal,sm]=useState(null);
   const [edit,se]=useState(null);
   const [q,sq]=useState('');
-  const [form,setForm]=useState({date:'',customer:'',qtyQua:'',qtyText:'',weight:'',price:'',amount:'',invoice:'',tripId:''});
+  const [form,setForm]=useState({date:'',customer:'',qtyQua:'',qtyText:'',weight:'',price:'',amount:'',invoice:'',driverId:'',driverName:'',status:'unpaid'});
   const customerOptions=[...new Set((customers||[]).map(c=>c.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
-  const tripOptions=(trips||[]).map(t=>({id:t.id||t.code||t.name||'',label:(t.id||t.code||t.name||'')+' - '+(t.name||t.customer||'')}));
+  const driverOptions=(employees||[]).filter(e=>e.role==='driver'||e.dept==='Lái xe').map(e=>({id:e.id,label:(e.id||'')+' - '+(e.name||'')})).sort((a,b)=>a.label.localeCompare(b.label,'vi'));
   const normalizeMoney=v=>String(v||'').replace(/[^\d]/g,'');
   const fmtMoney=v=>{
     const n=Number(String(v||'').replace(/[^\d.-]/g,''))||0;
     return n?n.toLocaleString('vi-VN'):'';
   };
-  const openAdd=()=>{se(null);setForm({date:fmtDate(),customer:'',qtyQua:'',qtyText:'',weight:'',price:'',amount:'',invoice:'',tripId:''});sm('f');};
+  const openAdd=()=>{se(null);setForm({date:fmtDate(),customer:'',qtyQua:'',qtyText:'',weight:'',price:'',amount:'',invoice:'',driverId:'',driverName:'',status:'unpaid'});sm('f');};
   const openEdit=r=>{se(r);setForm({...r});sm('f');};
   const save=()=>{
     if(!form.date||!form.customer){window.showToast('Nhập ngày và khách hàng.','warn');return;}
     const weight=computeWeightFromText(form.qtyText,form.qtyQua);
     const price=normalizeMoney(form.price);
     const amount=weight&&price?String(weight*Number(price)):normalizeMoney(form.amount);
-    const row={...form,weight:String(weight),price:fmtMoney(price),amount:fmtMoney(amount),id:edit?.id||('PB'+uid())};
+    const row={...form,status:form.status||'unpaid',weight:String(weight),price:fmtMoney(price),amount:fmtMoney(amount),id:edit?.id||('PB'+uid())};
     setRows(prev=>edit?prev.map(x=>x.id===edit.id?row:x):[row,...prev]);
     sm(null);se(null);window.showToast('Đã lưu bột bán','success');
   };
   const del=id=>window.scfConfirm('Bạn có chắc muốn xóa dòng bột bán này?','Xóa bột bán',true).then(ok=>{if(ok){setRows(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa dòng','success');}});
-  const filtered=rows.filter(r=>!q||[r.date,r.customer,r.qtyText,r.weight,r.price,r.amount,r.invoice,r.tripId].join(' ').toLowerCase().includes(q.toLowerCase()));
+  const filtered=rows
+    .filter(r=>!q||[r.date,r.customer,r.qtyText,r.weight,r.price,r.amount,r.invoice,r.driverName||r.tripId].join(' ').toLowerCase().includes(q.toLowerCase()))
+    .slice()
+    .sort((a,b)=>parseVNDateKey(b.date)-parseVNDateKey(a.date));
   const importRows=items=>{
     const mapped=items.map(r=>{
       const qtyText=r['Số lượng text']||r['so_luong_text']||r['Số lượng']||'';
@@ -2508,11 +2521,13 @@ function PowderSalesTab({customers,trips}){
         price:fmtMoney(price),
         amount:fmtMoney(amount),
         invoice:r['Hóa đơn']||r['update']||'',
-        tripId:r['Gán chuyến']||r['nguoi_gh']||''
+        driverId:r['Lái xe']||r['driverId']||'',
+        driverName:r['Lái xe']||r['driverName']||r['nguoi_gh']||'',
+        status:(String(r['Tình trạng']||r['tinh_trang']||'').toLowerCase().includes('đã')||String(r['Tình trạng']||r['tinh_trang']||'').toLowerCase().includes('paid'))?'paid':'unpaid'
       };
     }).filter(x=>x.date||x.customer||x.qtyText);
     if(!mapped.length){window.showToast('Không có dòng hợp lệ để nhập.','warn');return;}
-    setRows(prev=>[...mapped,...prev]);
+    setRows(prev=>[...mapped,...prev].sort((a,b)=>parseVNDateKey(b.date)-parseVNDateKey(a.date)));
     window.showToast('Đã nhập '+mapped.length+' dòng bột bán','success');
   };
   return h('div',null,
@@ -2520,8 +2535,9 @@ function PowderSalesTab({customers,trips}){
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm bột bán...'}),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+        h('button',{onClick:()=>setPage('powderdebtreport'),style:{fontSize:12,padding:'6px 12px'}},h('i',{className:'ti ti-report-money',style:{fontSize:14}}),'Báo cáo công nợ'),
         h(ImportBtn,{onFile:importRows}),
-        h(ExportBtn,{onClick:()=>xlsxExport(filtered,[['date','Ngày'],['customer','Khách hàng'],['qtyQua','Số quả'],['qtyText','Số lượng text'],['weight','Khối lượng'],['price','Đơn giá'],['amount','Thành Tiền'],['invoice','Hóa đơn'],['tripId','Gán chuyến']],'Bot_ban')}),
+        h(ExportBtn,{onClick:()=>xlsxExport(filtered,[['date','Ngày'],['customer','Khách hàng'],['qtyQua','Số quả'],['qtyText','Số lượng text'],['weight','Khối lượng'],['price','Đơn giá'],['amount','Thành Tiền'],['status','Tình trạng'],['invoice','Hóa đơn'],['driverName','Lái xe']],'Bot_ban')}),
         h(AddBtn,{onClick:openAdd,label:'Thêm bột bán'})
       )
     ),
@@ -2530,7 +2546,7 @@ function PowderSalesTab({customers,trips}){
     ),
     h('div',{className:'tw'},
       h('table',null,
-        h('thead',null,h('tr',null,...['Ngày','Khách hàng','Số quả','Số lượng text','Khối lượng','Đơn giá','Thành Tiền','Hóa đơn','Gán chuyến',''].map(c=>h('th',{key:c},c)))),
+        h('thead',null,h('tr',null,...['Ngày','Khách hàng','Số quả','Số lượng text','Khối lượng','Đơn giá','Thành Tiền','Tình trạng','Hóa đơn','Lái xe',''].map(c=>h('th',{key:c},c)))),
         h('tbody',null,filtered.length?filtered.map(r=>h('tr',{key:r.id},
           h('td',null,r.date||'—'),
           h('td',null,h('div',{style:{fontWeight:500}},r.customer||'—')),
@@ -2539,13 +2555,14 @@ function PowderSalesTab({customers,trips}){
           h('td',null,r.weight||'—'),
           h('td',null,r.price||'—'),
           h('td',null,r.amount||'—'),
+          h('td',null,h('span',{className:'badge',style:{background:r.status==='paid'?'#EAF3DE':'#F1EFE8',color:r.status==='paid'?'#3B6D11':'#5F5E5A'}},r.status==='paid'?'Đã thanh toán':'Chưa thanh toán')),
           h('td',null,r.invoice||'—'),
-          h('td',null,r.tripId||'—'),
+          h('td',null,r.driverName||'—'),
           h('td',null,h('div',{style:{display:'flex',gap:2}},
             h('button',{className:'bi',onClick:()=>openEdit(r)},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
             h('button',{className:'bi',onClick:()=>del(r.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
           ))
-        )):h('tr',null,h('td',{colSpan:10,className:'empty-st'},'Chưa có dữ liệu bột bán nào.')))
+        )):h('tr',null,h('td',{colSpan:11,className:'empty-st'},'Chưa có dữ liệu bột bán nào.')))
       )
     ),
     modal==='f'&&h(Modal,{title:edit?'Sửa bột bán':'Thêm bột bán',lg:true,onClose:()=>sm(null)},
@@ -2557,19 +2574,23 @@ function PowderSalesTab({customers,trips}){
       ),
       h('div',{className:'g2'},
         h(F,{label:'Số quả'},h('input',{value:form.qtyQua,onChange:e=>setForm(p=>({...p,qtyQua:e.target.value})),placeholder:'10'})),
-        h(F,{label:'Gán chuyến'},h('select',{value:form.tripId,onChange:e=>setForm(p=>({...p,tripId:e.target.value}))},
-          h('option',{value:''},'— Chọn chuyến —'),tripOptions.map(t=>h('option',{key:t.id,value:t.id},t.label))
+        h(F,{label:'Lái xe'},h('select',{value:form.driverId||'',onChange:e=>{const d=driverOptions.find(x=>x.id===e.target.value);setForm(p=>({...p,driverId:e.target.value,driverName:d?d.label:''}));}},
+          h('option',{value:''},'— Chọn lái xe —'),driverOptions.map(d=>h('option',{key:d.id,value:d.id},d.label))
         ))
       ),
       h(F,{label:'Số lượng text'},h('textarea',{value:form.qtyText,onChange:e=>setForm(p=>({...p,qtyText:e.target.value})),rows:3,placeholder:'81+75+86+78+88...'})),
       h('div',{className:'g2'},
-      h(F,{label:'Khối lượng'},h('input',{value:computeWeightFromText(form.qtyText,form.qtyQua),readOnly:true,tabIndex:-1,style:{background:'var(--bg2)',cursor:'default'},placeholder:'Tự tính từ text - số quả'})),
+        h(F,{label:'Khối lượng'},h('input',{value:computeWeightFromText(form.qtyText,form.qtyQua),readOnly:true,tabIndex:-1,style:{background:'var(--bg2)',cursor:'default'},placeholder:'Tự tính từ text - số quả'})),
         h(F,{label:'Đơn giá'},h('input',{value:form.price,onChange:e=>setForm(p=>({...p,price:e.target.value})),placeholder:'11.000'}))
       ),
       h('div',{className:'g2'},
         h(F,{label:'Thành Tiền'},h('input',{value:fmtMoney(computeWeightFromText(form.qtyText,form.qtyQua)*Number(normalizeMoney(form.price)||0)),readOnly:true,tabIndex:-1,style:{background:'var(--bg2)',cursor:'default'},placeholder:'Tự tính từ khối lượng × đơn giá'})),
         h(F,{label:'Hóa đơn'},h('input',{value:form.invoice,onChange:e=>setForm(p=>({...p,invoice:e.target.value})),placeholder:'Số hóa đơn / ghi chú'}))
       ),
+      h(F,{label:'Tình trạng'},h('select',{value:form.status||'unpaid',onChange:e=>setForm(p=>({...p,status:e.target.value}))},
+        h('option',{value:'unpaid'},'Chưa thanh toán'),
+        h('option',{value:'paid'},'Đã thanh toán')
+      )),
       h(Row,null,h('button',{onClick:()=>sm(null)},'Hủy'),h('button',{className:'bp',onClick:save,style:{padding:'8px 20px'}},'Lưu'))
     )
   );
@@ -2756,6 +2777,54 @@ function PurchaseReportTab({purchases,nccs}) {
       h('thead',null,h('tr',null,...['Mã đơn','Ngày đặt','NCC','Mặt hàng','SL','Đơn giá','Thành tiền'].map(c=>h('th',{key:c},c)))),
       h('tbody',null,detailRows.length?detailRows.map((r,i)=>h('tr',{key:r.id+'_'+i},h('td',null,r.id),h('td',null,r.orderDate),h('td',null,r.nccName),h('td',null,r.itemName),h('td',null,r.qty.toLocaleString()+' '+(r.unit||'')),h('td',null,r.price?r.price.toLocaleString('vi-VN')+'đ':'—'),h('td',null,h('span',{style:{fontWeight:500,color:'var(--pri)'}},r.total.toLocaleString('vi-VN')+'đ')))):h('tr',null,h('td',{colSpan:7,className:'empty-st'},'Chưa có chi tiết mua hàng.')))
     ))
+  );
+}
+
+function PowderDebtReportTab({customers}){
+  const storageKey='scf_powdersales';
+  const [rows]=useLS(storageKey,[]);
+  const today=fmtDate().split('/').reverse().join('-');
+  const [df,sdf]=useState(today);
+  const [dt,sdt]=useState(today);
+  const [customer,scustomer]=useState('');
+  const customerOptions=[...new Set((customers||[]).map(c=>c.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const numMoney=v=>Number(String(v??'').replace(/[^\d.-]/g,''))||0;
+  const parseDate=s=>{if(!s)return null;const v=String(s).trim();if(/^\d{4}-\d{2}-\d{2}$/.test(v)){const[y,m,d]=v.split('-');return new Date(Number(y),Number(m)-1,Number(d));}const[d,m,y]=v.split('/');return new Date(Number(y),Number(m)-1,Number(d));};
+  const inRange=d=>{const dt2=parseDate(d);if(!dt2||Number.isNaN(dt2.getTime()))return false;const f2=df?parseDate(df):null;const t=dt?parseDate(dt):null;if(f2&&dt2<f2)return false;if(t&&dt2>t)return false;return true;};
+  const list=(rows||[]).filter(r=>inRange(r.date)&&(!customer||r.customer===customer)).slice().sort((a,b)=>parseVNDateKey(a.date)-parseVNDateKey(b.date));
+  const total=list.reduce((s,r)=>s+numMoney(r.amount),0);
+  const fmtMoney=n=>numMoney(n).toLocaleString('vi-VN');
+  return h('div',null,
+    h('div',{className:'ptitle'},h('i',{className:'ti ti-report-money',style:{fontSize:20}}),'Báo cáo công nợ'),
+    h('div',{className:'card',style:{marginBottom:'1rem'}} ,
+      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'0.75rem 1rem'}} ,
+        h(F,{label:'Từ ngày'},h('input',{type:'date',value:df,onChange:e=>sdf(e.target.value)})),
+        h(F,{label:'Đến ngày'},h('input',{type:'date',value:dt,onChange:e=>sdt(e.target.value)})),
+        h(F,{label:'Khách hàng'},h('select',{value:customer,onChange:e=>scustomer(e.target.value)},h('option',{value:''},'Tất cả khách hàng'),customerOptions.map(c=>h('option',{key:c,value:c},c))))
+      ),
+      h('div',{style:{display:'flex',justifyContent:'flex-end',marginTop:10}},
+        h(ExportBtn,{onClick:()=>xlsxExport(list,[['date','Ngày'],['qtyQua','SL'],['weight','Khối lượng'],['price','Đơn giá'],['amount','Thành tiền'],['status','Tình trạng'],['customer','Khách hàng'],['driverName','Lái xe']],'Bao_cao_cong_no')})
+      )
+    ),
+    h('div',{className:'tw',style:{overflowX:'auto'}},
+      h('table',null,
+        h('thead',null,h('tr',null,...['Ngày','SL','Đơn vị','Đơn giá','Thành tiền'].map(c=>h('th',{key:c},c)))),
+        h('tbody',null,list.length?list.map(r=>h('tr',{key:r.id},
+          h('td',null,r.date||'—'),
+          h('td',null,Number(r.weight)||0),
+          h('td',null,'kg'),
+          h('td',null,fmtMoney(r.price)),
+          h('td',null,h('span',{style:{fontWeight:500,color:'var(--pri)'}},fmtMoney(r.amount)))
+        )):h('tr',null,h('td',{colSpan:5,className:'empty-st'},'Chưa có dữ liệu công nợ.'))),
+        h('tfoot',null,h('tr',null,
+          h('td',{style:{fontWeight:700,background:'#fff200'}},'TỔNG'),
+          h('td',{style:{background:'#fff200'}},''),
+          h('td',{style:{background:'#fff200'}},''),
+          h('td',{style:{background:'#fff200'}},''),
+          h('td',{style:{fontWeight:700,background:'#fff200'}},fmtMoney(total))
+        ))
+      )
+    )
   );
 }
 
@@ -6977,6 +7046,7 @@ const PAGE_ACCESS = {
   nccs:         ['admin','manager'],
   purchaseorders:['admin','manager'],
   purchasereport:['admin','manager'],
+  powderdebtreport:['admin','manager','staff'],
   dbusage:['admin','manager'],
   maint_vehicle:['admin','manager','staff'],
   maint_machine:['admin','manager','staff'],
@@ -7015,7 +7085,7 @@ const PTITLES = {
   process_accounting:'QUY TRÌNH KẾ TOÁN', process_bun:'QT SẢN XUẤT BÚN', process_pho:'QT SX PHỞ', process_banhcuon:'QT SX BÁNH CUỐN',
   quotes:'Báo giá', delivery:'Đơn giao hàng', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng',
   salesreport:'Báo cáo bán hàng', marketsales:'Bán hàng chợ', powdersales:'Bán bột bún',
-  nccs:'Nhà cung cấp', purchaseorders:'Đơn mua hàng', purchasereport:'Báo cáo mua hàng', dbusage:'Dung lượng Supabase',
+  nccs:'Nhà cung cấp', purchaseorders:'Đơn mua hàng', purchasereport:'Báo cáo mua hàng', powderdebtreport:'Báo cáo công nợ', dbusage:'Dung lượng Supabase',
   maint_vehicle:'Bảo dưỡng xe', maint_machine:'Bảo dưỡng máy',
   prodsummary:'Tổng hợp sản xuất', prodorders:'Đơn sản xuất', stock:'Tồn kho',
 };
@@ -7026,7 +7096,7 @@ const PICONS = {
   workreport_vp:'ti-building', workreport_sx:'ti-building-factory', workreport_lx:'ti-steering-wheel', workreport_total:'ti-report-analytics',
   process_accounting:'ti-file-invoice', process_bun:'ti-tools-kitchen-2', process_pho:'ti-bowl', process_banhcuon:'ti-cookie',
   marketsales:'ti-building-store', powdersales:'ti-bowl',
-  dbusage:'ti-database',
+  powderdebtreport:'ti-report-money', dbusage:'ti-database',
   maint_vehicle:'ti-car', maint_machine:'ti-settings'
 };
 
@@ -7218,6 +7288,7 @@ function App(){
         canAccess(cu.role,'nccs',cu.permissions)&&page==='nccs'&&h(NCCTab,{nccs,setNCCs}),
         canAccess(cu.role,'purchaseorders',cu.permissions)&&page==='purchaseorders'&&h(PurchaseTab,{purchases,setPurchases,nccs,materials,products,cu}),
         canAccess(cu.role,'purchasereport',cu.permissions)&&page==='purchasereport'&&h(PurchaseReportTab,{purchases,nccs}),
+        canAccess(cu.role,'powderdebtreport',cu.permissions)&&page==='powderdebtreport'&&h(PowderDebtReportTab,{customers}),
         canAccess(cu.role,'maint_vehicle',cu.permissions)&&page==='maint_vehicle'&&h(MaintenanceTab,{title:'Bảo dưỡng xe',icon:'ti-car',assets}),
         canAccess(cu.role,'maint_machine',cu.permissions)&&page==='maint_machine'&&h(MaintenanceTab,{title:'Bảo dưỡng máy',icon:'ti-settings',assets}),
         canAccess(cu.role,'shifts',cu.permissions)&&page==='shifts'&&h(ShiftsTab,{shifts,setShifts}),
@@ -7226,7 +7297,7 @@ function App(){
         canAccess(cu.role,'trips',cu.permissions)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,customers,products,currentUser:cu}),
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,currentUser:cu,prodShifts}),
         canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),
-        canAccess(cu.role,'powdersales',cu.permissions)&&page==='powdersales'&&h(PowderSalesTab,{customers,trips}),
+        canAccess(cu.role,'powdersales',cu.permissions)&&page==='powdersales'&&h(PowderSalesTab,{customers,trips,employees,setPage}),
         canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products,prodShifts,prodShiftRules}),
         canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,products,currentUser:cu}),
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,currentUser:cu}),
