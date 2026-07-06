@@ -134,6 +134,20 @@ td{padding:9px 12px;border-top:.5px solid var(--bd);vertical-align:middle}
 .search-wrap{position:relative;display:inline-block}
 .search-wrap i{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--tx2);pointer-events:none}
 .search-wrap input{padding-left:30px;width:200px}
+.form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:1rem}
+.mobile-only{display:none!important}
+.fuel-mobile-list{display:none}
+.fuel-mobile-card{background:#fff;border:.5px solid var(--bd);border-radius:12px;padding:12px 12px 10px;display:grid;gap:8px;box-shadow:0 2px 8px rgba(18,60,45,.04)}
+.fuel-mobile-card-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.fuel-mobile-card-title{font-size:15px;font-weight:700;color:var(--pri3);line-height:1.25}
+.fuel-mobile-card-date{font-size:12px;color:var(--tx2);white-space:nowrap}
+.fuel-mobile-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fuel-mobile-meta-item{background:var(--bg2);border-radius:10px;padding:8px 10px}
+.fuel-mobile-meta-item b{display:block;font-size:11px;color:var(--tx2);font-weight:500;margin-bottom:3px}
+.fuel-mobile-meta-item span{font-size:14px;font-weight:600;color:var(--tx)}
+.fuel-mobile-note{font-size:12px;color:#8A5A00;background:#FFF8E1;border:1px solid #F5DE9D;border-radius:10px;padding:8px 10px}
+.fuel-mobile-actions{display:flex;justify-content:flex-end;gap:6px}
+.responsive-filter-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1fr auto;gap:8px;align-items:end}
 .report-grid-2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1rem;margin-bottom:1rem}
 .mobile-scroll-hint{display:none;font-size:11px;color:var(--tx2);margin:6px 0}
 .att-grid{display:grid;grid-template-columns:360px 1fr;gap:1rem;align-items:start}
@@ -173,6 +187,13 @@ td{padding:9px 12px;border-top:.5px solid var(--bd);vertical-align:middle}
   .pill{padding:6px 10px;min-height:34px}
   .tw{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:10px}
   .tw table{min-width:760px;font-size:12px}
+  .desktop-only{display:none!important}
+  .mobile-only{display:block!important}
+  .fuel-mobile-list{display:grid;gap:10px}
+  .responsive-filter-grid{grid-template-columns:1fr!important}
+  .form-actions{position:sticky;bottom:-14px;left:0;right:0;background:linear-gradient(180deg,rgba(255,255,255,.92),#fff 28%);padding-top:10px;padding-bottom:2px;margin-top:12px;z-index:3}
+  .form-actions button{flex:1 1 0}
+  .form-actions .bp{min-width:0}
   .detail-filter-card{position:static}
   .detail-filter-grid{grid-template-columns:1fr 1fr}
   .detail-count-badge{margin-left:0}
@@ -199,6 +220,7 @@ td{padding:9px 12px;border-top:.5px solid var(--bd);vertical-align:middle}
   .tw table{min-width:680px}
   button{width:auto}
   .bp{white-space:nowrap}
+  .fuel-mobile-meta{grid-template-columns:1fr}
 }
 @media(max-width:900px){.att-grid,.att-stat{grid-template-columns:1fr}}
 
@@ -494,7 +516,7 @@ const UNITS=['Cái','Gói','Thùng','Kg','Tấn','Lít','m3','KW','Cuộn','Bộ
 
 /* ─── UI base ─── */
 function F({label,children}){return h('div',{className:'fl'},h('label',null,label),children)}
-function Row({children}){return h('div',{style:{display:'flex',gap:8,justifyContent:'flex-end',marginTop:'1rem'}},children)}
+function Row({children}){return h('div',{className:'form-actions'},children)}
 function Modal({title,lg,onClose,children}){
   return h('div',{className:'overlay',onClick:e=>{if(e.target===e.currentTarget)onClose()}},
     h('div',{className:'modal'+(lg==='xl'?' xl':lg?' wide':''),style:{},onClick:e=>e.stopPropagation()},
@@ -3144,14 +3166,14 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-gas-station',style:{fontSize:20}}),'Đơn mua xăng dầu'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
-      h('div'),
+      h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Lọc theo ngày, người mua và xe để xem nhanh trên điện thoại.'),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
         h(ExportBtn,{onClick:()=>xlsxExport(visible,[['date','Ngày mua'],['buyerName','Người mua'],['vehicle','Xe'],['liters','Số lít'],['price','Giá tiền'],['amount','Thành tiền'],['note','Chú ý'],['image','Ảnh']],'Don_mua_xang_dau')}),
         h(AddBtn,{onClick:openAdd,label:'Thêm đơn mua xăng dầu'})
       )
     ),
     h('div',{className:'card',style:{marginBottom:'1rem',padding:'12px 14px'}},
-      h('div',{style:{display:'grid',gridTemplateColumns:'1.2fr 1fr 1fr 1fr 1fr auto',gap:8,alignItems:'end'}},
+      h('div',{className:'responsive-filter-grid'},
         h(F,{label:'Tìm nhanh'},h(SearchBar,{value:q,onChange:sq,placeholder:'Tên, xe, ghi chú...'})),
         h(F,{label:'Từ ngày'},h('input',{type:'date',value:df,onChange:e=>sdf(e.target.value)})),
         h(F,{label:'Đến ngày'},h('input',{type:'date',value:dt,onChange:e=>sdt(e.target.value)})),
@@ -3166,7 +3188,30 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
         h('button',{type:'button',onClick:()=>{sq('');sdf('');sdt('');setBuyerFilter('');setVehicleFilter('');'},style:{height:38,alignSelf:'end'}},h('i',{className:'ti ti-filter-off',style:{fontSize:14}}),'Xóa lọc')
       )
     ),
-    h('div',{className:'tw'},h('table',null,
+    h('div',{className:'mobile-only fuel-mobile-list'},
+      visible.length?visible.map(r=>h('div',{key:'m_'+r.id,className:'fuel-mobile-card'},
+        h('div',{className:'fuel-mobile-card-head'},
+          h('div',null,
+            h('div',{className:'fuel-mobile-card-title'},r.vehicle||'—'),
+            h('div',{style:{fontSize:13,fontWeight:600,color:'var(--pri)'}},r.buyerName||'—')
+          ),
+          h('div',{className:'fuel-mobile-card-date'},fmtAnyDate(r.date)||'—')
+        ),
+        h('div',{className:'fuel-mobile-meta'},
+          h('div',{className:'fuel-mobile-meta-item'},h('b',null,'Số lít'),h('span',null,numFmt(r.liters||0)||'—')),
+          h('div',{className:'fuel-mobile-meta-item'},h('b',null,'Giá tiền'),h('span',null,numFmt(r.price||0)?Number(r.price).toLocaleString('vi-VN'):'—')),
+          h('div',{className:'fuel-mobile-meta-item'},h('b',null,'Thành tiền'),h('span',null,numFmt(r.amount||0)?Number(r.amount).toLocaleString('vi-VN'):'—')),
+          h('div',{className:'fuel-mobile-meta-item'},h('b',null,'Ảnh'),h('span',null,r.image?'Đã có ảnh':'Chưa có ảnh'))
+        ),
+        r.note&&h('div',{className:'fuel-mobile-note'},r.note),
+        h('div',{className:'fuel-mobile-actions'},
+          r.image&&h('button',{className:'bi',title:'Xem ảnh',onClick:()=>window.open(r.image,'_blank')},h('i',{className:'ti ti-photo',style:{fontSize:15,color:'var(--pri)'}})),
+          canFix(r)&&h('button',{className:'bi',onClick:()=>openEdit(r)},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
+          canFix(r)&&h('button',{className:'bi',onClick:()=>del(r.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+        )
+      )):h('div',{className:'card',style:{textAlign:'center',color:'var(--tx2)'}},'Chưa có đơn mua xăng dầu nào.')
+    ),
+    h('div',{className:'tw desktop-only'},h('table',null,
       h('thead',null,h('tr',null,...['Ngày mua','Người mua','Xe','Số lít','Giá tiền','Thành tiền','Ảnh','Chú ý',''].map(c=>h('th',{key:c},c)))),
       h('tbody',null,visible.length?visible.map(r=>h('tr',{key:r.id},
         h('td',null,fmtAnyDate(r.date)||'—'),
