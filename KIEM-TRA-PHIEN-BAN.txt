@@ -1,0 +1,9 @@
+Ban local moi nhat duoc dong goi ngay 07/07/2026.
+
+Trong index.html hien co cac muc moi:
+- Ca giao hang
+- Ngay chuyen
+- Gio san xuat thuc te
+- Giao dien mobile cho Ca san xuat va Don giao hang
+
+Neu web GitHub chua co cac muc nay thi repo dang deploy chua dung ban moi.

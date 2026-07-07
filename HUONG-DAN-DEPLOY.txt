@@ -1,0 +1,36 @@
+BO FILE DEPLOY GITHUB PAGES - NGAY 07/07/2026
+
+Thu muc nay la ban tach rieng tu file local moi nhat:
+- index.html
+- manifest.json
+- sw.js
+- icon-192.png
+- icon-512.png
+
+DAU HIEU DE KIEM TRA DUNG BAN MOI TREN GITHUB:
+1. Mo file index.html tren GitHub
+2. Tim cac cum tu sau:
+   - Ca giao hang
+   - Ngay chuyen
+   - Gio san xuat thuc te
+3. Neu thay cac cum tu tren trong file index.html thi dung la ban moi
+
+KIEM TRA GITHUB PAGES:
+1. Vao Settings > Pages
+2. Xem dang publish tu branch nao
+3. Xem dang publish tu folder nao:
+   - /(root)
+   - /docs
+4. Thu muc publish phai chua file index.html nay
+
+NEU BAN DEPLOY TU ROOT:
+- Upload de file trong thu muc nay len dung root cua repo
+
+NEU BAN DEPLOY TU DOCS:
+- Copy toan bo file trong thu muc nay vao thu muc docs cua repo
+
+SAU KHI UPLOAD:
+1. Cho GitHub Pages build xong
+2. Mo web
+3. Bam Ctrl + F5 de tai lai manh
+
