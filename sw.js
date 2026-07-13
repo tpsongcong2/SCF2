@@ -1,5 +1,16 @@
-const CACHE = 'scf-v5';
-const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+const CACHE = 'scf-v8';
+const ASSETS = [
+  './',
+  './index.html',
+  './styles.css',
+  './permissions.js',
+  './storage.js',
+  './app.js',
+  './bootstrap.js',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
+];
 
 self.addEventListener('install', e => {
   e.waitUntil(
