@@ -6,6 +6,8 @@ const PAGE_ACCESS = {
   printtemplates:['admin','manager'],
   employees:    ['admin','manager'],
   attendance:   ['admin','manager','staff','driver'],
+  attendance_settings:['admin'],
+  attendance_report:['admin','manager','staff','driver'],
   advances:     ['admin','manager','staff','driver'],
   rewards:      ['admin','manager','staff','driver'],
   leaves:       ['admin','manager','staff','driver'],
@@ -15,6 +17,9 @@ const PAGE_ACCESS = {
   depts:        ['admin','manager'],
   products:     ['admin','manager','staff'],
   customers:    ['admin','manager','staff'],
+  areas:        ['admin','manager','staff'],
+  prodshifts:   ['admin','manager','staff'],
+  deliveryrules:['admin','manager','staff','driver'],
   workcats:     ['admin','manager'],
   tasks:        ['admin','manager','staff','driver'],
   workreport_vp:['admin','manager','staff'],
@@ -35,18 +40,22 @@ const PAGE_ACCESS = {
   prodorders:   ['admin','manager','staff'],
   stock:        ['admin','manager','staff'],
   purchase:     ['admin','manager'],
-  nccs:         ['admin','manager'],
-  purchaseorders:['admin','manager'],
+  nccs:         ['admin'],
+  nccgoods:     ['admin'],
+  purchaseorders:['admin'],
+  purchasegoods:['admin','manager'],
   fuelpurchases:['admin','manager','driver'],
   fuelreport:['admin','manager'],
-  purchasereport:['admin','manager'],
+  purchasereport:['admin'],
   maintreport:['admin','manager'],
   materialusage:['admin','manager','staff'],
   powderdebtreport:['admin','manager','staff'],
+  syncreport:['admin','manager'],
   dbusage:['admin','manager'],
   maint_vehicle:['admin','manager','staff'],
   maint_machine:['admin','manager','staff'],
   salesreport:  ['admin','manager','staff'],
+  cashflowreport:['admin','manager'],
   marketsales:  ['admin','manager','staff'],
   powdersales:  ['admin','manager','staff'],
 };
@@ -55,13 +64,28 @@ function roleDefaults(role) {
   return Object.keys(PAGE_ACCESS).filter(p => PAGE_ACCESS[p].includes(role));
 }
 // canAccess checks employee's custom permissions first, else falls back to role
-function canAccess(role, page, perms) {
-  if (perms && perms.length > 0) return perms.includes(page);
+function canAccess(role, page, perms, dept='') {
+  const isAccounting=String(dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('ke toan');
+  if(page==='deliveryrules') return true;
+  if(page==='trips'&&(role==='admin'||isAccounting)) return true;
+  if(['nccgoods','purchasegoods'].includes(page)&&(role==='admin'||isAccounting)) return true;
+  if(['nccs','purchaseorders','purchasereport'].includes(page)&&role!=='admin') return false;
   const allowed = PAGE_ACCESS[page];
-  return !allowed || allowed.includes(role);
+  if (!allowed) return false;
+  if (perms && perms.length > 0) {
+    if(page==='purchasegoods'&&perms.includes('purchaseorders')) return true;
+    if(page==='nccgoods'&&perms.includes('nccs')) return true;
+    if(page==='attendance_report'&&perms.includes('attendance')) return true;
+    if(page==='attendance_settings'&&role==='admin'&&perms.includes('attendance')) return true;
+    return perms.includes(page);
+  }
+  return allowed.includes(role);
 }
 // Mức quyền: 'r'=chỉ xem, 'rw'=xem+sửa, 'rwd'=xem+sửa+xóa
 function getLvl(role, page, lvls) {
+  // Lái xe được tạo và cập nhật đơn xăng dầu của chính mình, nhưng không được xóa.
+  if (role === 'driver' && page === 'fuelpurchases') return 'rw';
+  if (role === 'driver' && page === 'trips') return 'rw';
   if (lvls && lvls[page]) return lvls[page];
   // Mặc định theo role
   if (role === 'admin') return 'rwd';
@@ -80,6 +104,7 @@ function scfControlAction(control){
   const cls=String(control.className||'');
   const iconCls=Array.from(control.querySelectorAll?.('i')||[]).map(i=>i.className||'').join(' ');
   const text=normalizePlainText(control.textContent||'');
+  if(text==='xoa loc'||text.includes('xoa bo loc')||text==='bo loc')return'view';
   if(cls.includes('bdel')||iconCls.includes('ti-trash')||iconCls.includes('ti-delete')||text.includes('xoa ' )||text==='xoa'||text.includes('huy don'))return'delete';
   if(iconCls.includes('ti-edit')||iconCls.includes('ti-pencil')||iconCls.includes('ti-device-floppy')||iconCls.includes('ti-upload')||iconCls.includes('ti-file-import'))return'write';
   const writeWords=['them ','tao don','tao chuyen','giao viec','luu','sua ','cap nhat','doi mat khau','gui bao cao','gui webhook','xac nhan duyet','nhap excel','nhap don','upload'];
@@ -93,6 +118,4 @@ function guardPermissionAction(e,role,page,lvls){
   const blocked=(action==='delete'&&!canDel(role,page,lvls))||(action==='write'&&!canWrite(role,page,lvls));
   if(!blocked)return;
   e.preventDefault();e.stopPropagation();
-  window.showToast&&window.showToast(action==='delete'?'Bạn không có quyền xóa dữ liệu ở mục này.':'Bạn đang ở chế độ Chỉ xem, không thể thay đổi dữ liệu.','warn');
 }
-

@@ -13,7 +13,7 @@ document.addEventListener('keydown',function(e){
   }
 },true);
 
-if('serviceWorker' in navigator){
+if('serviceWorker' in navigator&&location.protocol!=='file:'){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('./sw.js')
       .then(function(r){})
