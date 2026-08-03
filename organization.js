@@ -367,11 +367,25 @@ function TaskApproveModal({task,currentUser,onSave,onClose}){
   );
 }
 
-function TasksTab({tasks,setTasks,workcats,employees,currentUser}){
+function TasksTab({tasks,setTasks,workcats,employees,currentUser,notify}){
   const canManage=currentUser.role==='admin'||currentUser.role==='manager';
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[report,sr]=useState(null);const[approveItem,sa]=useState(null);const[q,sq]=useState('');const[status,ss]=useState('all');const[deptFilter,setDeptFilter]=useState('all');const[empFilter,setEmpFilter]=useState('all');
   let seq=tasks.length+1;
-  const save=d=>{if(edit)setTasks(p=>p.map(x=>x.id===edit.id?{...x,...d}:x));else{const id='GV'+String(seq++).padStart(4,'0');setTasks(p=>[{...d,id,createdBy:currentUser.name,createdAt:fmtDT()},...p]);}sm(null);se(null);};
+  const save=d=>{
+    if(edit){
+      const updated={...edit,...d};
+      setTasks(p=>p.map(x=>x.id===edit.id?updated:x));
+      if(updated.empId&&updated.empId!==edit.empId)notify?.({recipientId:updated.empId,title:'Bạn được giao một công việc',message:(updated.workCatName||'Công việc')+' - ngày '+(updated.date||''),icon:'ti-clipboard-check',sourceType:'task',sourceId:updated.id,targetPage:'tasks'});
+      else if(updated.empId)notify?.({recipientId:updated.empId,title:'Công việc đã được cập nhật',message:(updated.workCatName||'Công việc')+' - '+(updated.workDesc||'Nội dung đã thay đổi'),icon:'ti-clipboard-check',sourceType:'task',sourceId:updated.id,targetPage:'tasks'});
+      if(edit.empId&&updated.empId!==edit.empId)notify?.({recipientId:edit.empId,title:'Công việc đã chuyển người thực hiện',message:(edit.workCatName||'Công việc')+' không còn được giao cho bạn.',icon:'ti-user-share',sourceType:'task',sourceId:edit.id,targetPage:'tasks'});
+    }else{
+      const id='GV'+String(seq++).padStart(4,'0');
+      const created={...d,id,createdBy:currentUser.name,createdAt:fmtDT()};
+      setTasks(p=>[created,...p]);
+      if(created.empId)notify?.({recipientId:created.empId,title:'Bạn được giao một công việc mới',message:(created.workCatName||'Công việc')+' - ngày '+(created.date||''),icon:'ti-clipboard-check',sourceType:'task',sourceId:id,targetPage:'tasks'});
+    }
+    sm(null);se(null);
+  };
   const saveReport=d=>{setTasks(p=>p.map(x=>x.id===d.id?d:x));sr(null);};
   const del=id=>{window.scfConfirm('Bạn có chắc muốn xóa phiếu giao việc này?','Xóa phiếu giao việc',true).then(ok=>{if(ok){setTasks(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa phiếu giao việc','success');}});};
   const setStatus=(id,data)=>setTasks(p=>p.map(x=>x.id===id?{...x,...data,updatedBy:currentUser.name,updatedAt:fmtDT()}:x));
@@ -457,4 +471,3 @@ function TasksTab({tasks,setTasks,workcats,employees,currentUser}){
     approveItem&&h(TaskApproveModal,{task:approveItem,currentUser,onSave:d=>{setTasks(p=>p.map(x=>x.id===d.id?d:x));sa(null);},onClose:()=>sa(null)})
   );
 }
-

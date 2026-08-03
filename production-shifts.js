@@ -132,7 +132,7 @@ function resolveOrderPointAliases(order,customers){
 function getProdShiftForOrder(order,prodShifts,customers){
   if(!order||!prodShifts)return null;
   const tMin=timeToMin(order.deliveryTime);
-  const {aliases}=resolveOrderPointAliases(order,customers||[]);
+  const {resolved,pt,aliases}=resolveOrderPointAliases(order,customers||[]);
   const matches=(prodShifts||[]).filter(sh=>{
     if(sh.active===false)return false;
     const from=sh.orderTimeFrom||sh.startTime||sh.orderTime;
@@ -140,6 +140,14 @@ function getProdShiftForOrder(order,prodShifts,customers){
     return (from&&to&&from!==to)?timeInRange(order.deliveryTime,from,to):(sh.orderTime&&tMin===timeToMin(sh.orderTime));
   });
   if(!matches.length)return null;
+  // Ưu tiên định danh cụ thể: điểm giao > địa chỉ > khách hàng > khu vực.
+  // Tránh trường hợp khu vực cũ (ví dụ BN/SS TN) có điểm bằng tên điểm giao và thắng do thứ tự ID.
+  const aliasGroups=[
+    {values:[order.pointName,pt.name],exact:10000,partial:6000},
+    {values:[order.address,pt.address],exact:8000,partial:4800},
+    {values:[order.customer,resolved?.customer?.name],exact:4000,partial:2400},
+    {values:[order.area,pt.area],exact:1000,partial:600}
+  ].map(group=>({...group,values:[...new Set(group.values.map(normalizeLookupText).filter(Boolean))]}));
   const scored=matches.map(sh=>{
     const shLoc=normalizeLookupText(sh.location||'');
     if(!aliases.length){
@@ -147,10 +155,11 @@ function getProdShiftForOrder(order,prodShifts,customers){
     }
     let score=0;
     if(!shLoc)return {sh,score:0};
-    aliases.forEach(alias=>{
-      if(!alias)return;
-      if(shLoc===alias)score+=1000;
-      else if(shLoc.includes(alias)||alias.includes(shLoc))score+=600;
+    aliasGroups.forEach(group=>{
+      group.values.forEach(alias=>{
+        if(shLoc===alias)score=Math.max(score,group.exact);
+        else if(shLoc.includes(alias)||alias.includes(shLoc))score=Math.max(score,group.partial);
+      });
     });
     if(score===0)return {sh,score:0};
     return {sh,score};
@@ -193,9 +202,8 @@ function addDaysVN(dateStr,offset){
 }
 function getOrderTripDateOffset(order,prodShifts){
   const manualShift=order?.prodShiftAssignMode==='manual'&&order?.prodShiftId?(prodShifts||[]).find(s=>s.id===order.prodShiftId):null;
-  const storedAutoShift=order?.prodShiftAssignMode!=='manual'&&order?.prodShiftId?(prodShifts||[]).find(s=>s.id===order.prodShiftId&&s.active!==false):null;
   const autoShift=getProdShiftForOrder(order,prodShifts||[],window.__SCF_CUSTOMERS||[]);
-  const shift=manualShift||storedAutoShift||autoShift;
+  const shift=manualShift||autoShift;
   return shift==null?null:Number(shift.tripDateOffset??0);
 }
 function getOrderTripDate(order,prodShifts){
@@ -206,15 +214,13 @@ function getOrderTripDate(order,prodShifts){
 }
 function getOrderTripShiftId(order,prodShifts){
   const manualShift=order?.prodShiftAssignMode==='manual'&&order?.prodShiftId?(prodShifts||[]).find(s=>s.id===order.prodShiftId):null;
-  const storedAutoShift=order?.prodShiftAssignMode!=='manual'&&order?.prodShiftId?(prodShifts||[]).find(s=>s.id===order.prodShiftId&&s.active!==false):null;
   const autoShift=getProdShiftForOrder(order,prodShifts||[],window.__SCF_CUSTOMERS||[]);
-  return String((manualShift||storedAutoShift||autoShift)?.tripShiftId||'');
+  return String((manualShift||autoShift)?.tripShiftId||'');
 }
 function getOrderTripShiftName(order,prodShifts){
   const manualShift=order?.prodShiftAssignMode==='manual'&&order?.prodShiftId?(prodShifts||[]).find(s=>s.id===order.prodShiftId):null;
-  const storedAutoShift=order?.prodShiftAssignMode!=='manual'&&order?.prodShiftId?(prodShifts||[]).find(s=>s.id===order.prodShiftId&&s.active!==false):null;
   const autoShift=getProdShiftForOrder(order,prodShifts||[],window.__SCF_CUSTOMERS||[]);
-  return String((manualShift||storedAutoShift||autoShift)?.tripShiftName||'');
+  return String((manualShift||autoShift)?.tripShiftName||'');
 }
 function prodShiftDisplay(sh){
   if(!sh)return sh;

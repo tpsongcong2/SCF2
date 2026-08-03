@@ -22,6 +22,8 @@ const PAGE_ACCESS = {
   deliveryrules:['admin','manager','staff','driver'],
   workcats:     ['admin','manager'],
   tasks:        ['admin','manager','staff','driver'],
+  notifications:['admin','manager','staff','driver'],
+  userguide:     ['admin','manager','staff','driver'],
   workreport_vp:['admin','manager','staff'],
   workreport_sx:['admin','manager','staff'],
   workreport_lx:['admin','manager','staff','driver'],
@@ -67,6 +69,8 @@ function roleDefaults(role) {
 function canAccess(role, page, perms, dept='') {
   const isAccounting=String(dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('ke toan');
   if(page==='deliveryrules') return true;
+  if(page==='notifications') return ['admin','manager','staff','driver'].includes(role);
+  if(page==='userguide') return ['admin','manager','staff','driver'].includes(role);
   if(page==='trips'&&(role==='admin'||isAccounting)) return true;
   if(['nccgoods','purchasegoods'].includes(page)&&(role==='admin'||isAccounting)) return true;
   if(['nccs','purchaseorders','purchasereport'].includes(page)&&role!=='admin') return false;

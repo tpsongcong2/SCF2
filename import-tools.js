@@ -514,6 +514,8 @@ function PrintTemplateModal({order, company, onClose}) {
 
 const NAV=[
   {key:'welcome',icon:'ti-cloud-sun',label:'Thời tiết'},
+  {key:'notifications',icon:'ti-bell',label:'Thông báo'},
+  {key:'userguide',icon:'ti-book-2',label:'HDSD SCFOOD'},
   {sec:'Cài đặt'},
   {key:'company',icon:'ti-building',label:'Thông tin công ty'},
   {key:'appearance',icon:'ti-typography',label:'Cài đặt giao diện'},

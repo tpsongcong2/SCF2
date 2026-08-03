@@ -2,7 +2,7 @@
 const PTITLES = {
   welcome:'Thời tiết', company:'Thông tin công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
   backup:'Backup dữ liệu', materials:'Nguyên vật liệu', assets:'Danh mục tài sản', products:'Sản phẩm', depts:'Bộ phận',
-  customers:'Khách hàng', workcats:'Danh mục công việc', tasks:'Giao việc', shifts:'Ca giao hàng',
+  customers:'Khách hàng', workcats:'Danh mục công việc', tasks:'Giao việc', notifications:'Thông báo', userguide:'HDSD SCFOOD', shifts:'Ca giao hàng',
   workreport_vp:'Công kế toán', workreport_sx:'Công sản xuất', workreport_lx:'Công lái xe', workreport_total:'Tổng công',
   process_accounting:'QUY TRÌNH KẾ TOÁN', process_bun:'QT SẢN XUẤT BÚN', process_pho:'QT SX PHỞ', process_banhcuon:'QT SX BÁNH CUỐN',
   quotes:'Báo giá', delivery:'Đơn giao hàng', intem:'Intem', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng',
@@ -13,7 +13,7 @@ const PTITLES = {
 };
 
 const PICONS = {
-  purchase:'ti-shopping-cart', tasks:'ti-clipboard-check', prodsummary:'ti-clipboard-list',
+  purchase:'ti-shopping-cart', tasks:'ti-clipboard-check', notifications:'ti-bell', userguide:'ti-book-2', prodsummary:'ti-clipboard-list',
   prodorders:'ti-building-factory', stock:'ti-package', attendance:'ti-face-id', attendance_settings:'ti-settings', attendance_report:'ti-report-analytics', advances:'ti-cash-banknote', rewards:'ti-scale', leaves:'ti-calendar-minus', assets:'ti-building-warehouse', appearance:'ti-typography', printtemplates:'ti-file-spreadsheet',
   workreport_vp:'ti-building', workreport_sx:'ti-building-factory', workreport_lx:'ti-steering-wheel', workreport_total:'ti-report-analytics',
   process_accounting:'ti-file-invoice', process_bun:'ti-tools-kitchen-2', process_pho:'ti-bowl', process_banhcuon:'ti-cookie',
@@ -80,6 +80,7 @@ function App(){
   const[financeOpenings,_sfo]=useState([]);
   const[companyNews,_snews]=useState([]);
   const[internalMessages,_sim]=useState([]);
+  const[notifications,_snotifications]=useState([]);
   const[deliveryRules,_sdr]=useState([]);
   window.__SCF_CUSTOMERS=customers||[];
   window.__SCF_PROD_SHIFTS=prodShifts||[];
@@ -125,14 +126,17 @@ function App(){
   });
   const setCompanyNews=mkCommunitySet('scf_company_news',_snews);
   const setInternalMessages=mkCommunitySet('scf_internal_messages',_sim);
+  const setNotifications=mkCommunitySet('scf_notifications',_snotifications);
   const setDeliveryRules=mkCommunitySet('scf_delivery_rules',_sdr);
   const refreshCommunityData=React.useCallback(async()=>{
-    const[newsData,messageData]=await Promise.all([
+    const[newsData,messageData,notificationData]=await Promise.all([
       dbGet('scf_company_news',[]),
-      dbGet('scf_internal_messages',[])
+      dbGet('scf_internal_messages',[]),
+      dbGet('scf_notifications',[])
     ]);
     _snews(newsData||[]);
     _sim(messageData||[]);
+    _snotifications(notificationData||[]);
   },[]);
   const[loading,setLoading]=useState(true);
   const[col,setCol]=useState(false);
@@ -178,7 +182,7 @@ function App(){
     const loadingGuard=setTimeout(()=>setLoading(false),8000);
     (async()=>{
       try{
-        const[e,c,m,assetData,pc,p,cu,ar,wc,tk,ncc,nccg,pu,pg,q,fp,mo,o,t,a,adv,rw,lv,dp,ui,pts,pa,shData,psData,psrData,fe,fd,fo,newsData,messageData,deliveryRulesData]=await Promise.all([
+        const[e,c,m,assetData,pc,p,cu,ar,wc,tk,ncc,nccg,pu,pg,q,fp,mo,o,t,a,adv,rw,lv,dp,ui,pts,pa,shData,psData,psrData,fe,fd,fo,newsData,messageData,notificationData,deliveryRulesData]=await Promise.all([
           dbGet('scf_employees',DEF_EMPS),dbGet('scf_company',DEF_COMPANY),
           dbGet('scf_materials',DEF_MATERIALS),dbGet('scf_assets',[]),dbGet('scf_prodcats',DEF_PRODCATS),
           dbGet('scf_products',DEF_PRODUCTS),dbGet('scf_customers',DEF_CUSTOMERS),
@@ -190,11 +194,11 @@ function App(){
           dbGet('scf_advances',[]),dbGet('scf_rewards',[]),dbGet('scf_leaves',[]),dbGet('scf_depts',DEF_DEPTS),dbGet('scf_ui_settings',DEF_UI_SETTINGS),dbGet('scf_print_template_settings',DEF_PRINT_TEMPLATE_SETTINGS),dbGet('scf_prod_actuals',{}),
           dbGet('scf_shifts',D_SHIFTS),dbGet('scf_prod_shifts',DEF_PROD_SHIFTS),dbGet('scf_prod_shift_rules',DEF_PROD_SHIFT_RULES),
           dbGet('scf_finance_entries',[]),dbGet('scf_finance_debts',[]),dbGet('scf_finance_openings',[]),
-          dbGet('scf_company_news',[]),dbGet('scf_internal_messages',[]),dbGet('scf_delivery_rules',[]),
+          dbGet('scf_company_news',[]),dbGet('scf_internal_messages',[]),dbGet('scf_notifications',[]),dbGet('scf_delivery_rules',[]),
         ]);
         const normalizedOrders=normalizeOrdersForStorage(o||[]);
         const normalizedProducts=(p||[]).map(normalizeProductWeight);
-        _se(e||DEF_EMPS);_sc(c);_sm(m);_sas(assetData);_spc(pc);_sp(normalizedProducts);_scu(cu);_sar(ar);_swc(wc);_stasks(tk);_sncc(ncc);_snccg(nccg);_spu(pu);_spg(pg);_sfp(fp);_smo(mo);_ssh(shData);_sq(q);_so(normalizedOrders);_st(t);_sa(a);_sadv(adv);_srw(rw);_slv(lv);_sdp(dp);_sui(normalizeUiSettings(ui));_spt(normalizePrintTemplateSettings(pts));_spa(pa||{});_sps(psData);_spr(psrData);_sfe(fe||[]);_sfd(fd||[]);_sfo(fo||[]);_snews(newsData||[]);_sim(messageData||[]);_sdr(deliveryRulesData||[]);
+        _se(e||DEF_EMPS);_sc(c);_sm(m);_sas(assetData);_spc(pc);_sp(normalizedProducts);_scu(cu);_sar(ar);_swc(wc);_stasks(tk);_sncc(ncc);_snccg(nccg);_spu(pu);_spg(pg);_sfp(fp);_smo(mo);_ssh(shData);_sq(q);_so(normalizedOrders);_st(t);_sa(a);_sadv(adv);_srw(rw);_slv(lv);_sdp(dp);_sui(normalizeUiSettings(ui));_spt(normalizePrintTemplateSettings(pts));_spa(pa||{});_sps(psData);_spr(psrData);_sfe(fe||[]);_sfd(fd||[]);_sfo(fo||[]);_snews(newsData||[]);_sim(messageData||[]);_snotifications(notificationData||[]);_sdr(deliveryRulesData||[]);
         if(ordersNeedTimeNormalization(o||[]))dbSet('scf_orders',normalizedOrders);
         if((p||[]).some((item,index)=>Number(item?.weightPerUnit||0)!==Number(normalizedProducts[index]?.weightPerUnit||0)))dbSet('scf_products',normalizedProducts);
       }catch(err){console.warn(err);}finally{clearTimeout(loadingGuard);setLoading(false);}
@@ -220,8 +224,8 @@ function App(){
     if(loading||!sb)return;
     const refresh=async()=>{
       try{
-        const[o,t]=await Promise.all([dbGet('scf_orders',orders),dbGet('scf_trips',trips)]);
-        _so(normalizeOrdersForStorage(o||[]));_st(t||[]);
+        const[o,t,n]=await Promise.all([dbGet('scf_orders',orders),dbGet('scf_trips',trips),dbGet('scf_notifications',notifications)]);
+        _so(normalizeOrdersForStorage(o||[]));_st(t||[]);_snotifications(n||[]);
       }catch(e){console.warn('Auto sync:',e.message||e);}
     };
     const tm=setInterval(refresh,15000);
@@ -265,6 +269,31 @@ function App(){
   },[loading,shifts]);
 
   const cu=session?employees.find(e=>e.id===session.id):null;
+  const addNotification=React.useCallback(data=>{
+    const recipientIds=[...new Set((data?.recipientIds||[data?.recipientId]).filter(Boolean).map(String))];
+    if(!recipientIds.length)return;
+    const nowIso=new Date().toISOString(),stamp=fmtDT();
+    const rows=recipientIds.map(recipientId=>({
+      id:'TB'+uid(),recipientId,title:data.title||'Thông báo',message:data.message||'',
+      type:data.type||'info',icon:data.icon||'ti-bell',sourceType:data.sourceType||'',sourceId:data.sourceId||'',
+      targetPage:data.targetPage||'notifications',createdAt:stamp,createdAtIso:nowIso,createdBy:cu?.name||'Hệ thống',readAt:''
+    }));
+    setNotifications(prev=>[...rows,...(prev||[])].slice(0,2000));
+  },[cu?.id,cu?.name]);
+  const notificationReadyRef=React.useRef(false);
+  useEffect(()=>{
+    if(loading||!cu)return;
+    const mine=(notifications||[]).filter(n=>String(n.recipientId||'')===String(cu.id)&&!n.readAt);
+    if(!notificationReadyRef.current){notificationReadyRef.current=true;return;}
+    if(!('Notification' in window)||Notification.permission!=='granted')return;
+    mine.slice(0,5).forEach(n=>{
+      const key='scf_notification_shown_'+n.id;
+      if(sessionStorage.getItem(key))return;
+      sessionStorage.setItem(key,'1');
+      try{new Notification(n.title||'SCF - Thông báo',{body:n.message||'',icon:'./icon-192.png',tag:n.id});}catch{}
+    });
+  },[notifications,cu?.id,loading]);
+  const unreadNotificationCount=cu?(notifications||[]).filter(n=>String(n.recipientId||'')===String(cu.id)&&!n.readAt).length:0;
   useEffect(()=>{
     if(cu&&cu.mustChangePw&&!sessionStorage.getItem('scf_pw_warned_'+cu.id)){
       sessionStorage.setItem('scf_pw_warned_'+cu.id,'1');
@@ -320,6 +349,9 @@ function App(){
             )
           ),
           h('div',{className:'topbar-actions'},
+            h('button',{className:'topbar-notification',onClick:()=>setPage('notifications'),title:'Thông báo','aria-label':'Thông báo'},
+              h('i',{className:'ti ti-bell'}),unreadNotificationCount>0&&h('span',{className:'notification-count'},unreadNotificationCount>99?'99+':unreadNotificationCount)
+            ),
             h('div',{className:'topbar-user'},
               h('div',{className:'topbar-user-name'},cu.name),
               h('div',{className:'topbar-user-dept'},
@@ -363,7 +395,9 @@ function App(){
         canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts}),
         canAccess(cu.role,'deliveryrules',cu.permissions)&&page==='deliveryrules'&&h(DeliveryRulesTab,{items:deliveryRules,setItems:setDeliveryRules,currentUser:cu}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats,depts}),
-        canAccess(cu.role,'tasks',cu.permissions)&&page==='tasks'&&h(TasksTab,{tasks,setTasks,workcats,employees,currentUser:cu}),
+        canAccess(cu.role,'tasks',cu.permissions)&&page==='tasks'&&h(TasksTab,{tasks,setTasks,workcats,employees,currentUser:cu,notify:addNotification}),
+        canAccess(cu.role,'notifications',cu.permissions)&&page==='notifications'&&h(NotificationsTab,{notifications,setNotifications,currentUser:cu,setPage}),
+        canAccess(cu.role,'userguide',cu.permissions)&&page==='userguide'&&h(UserGuideTab,{currentUser:cu}),
         canAccess(cu.role,'nccs',cu.permissions)&&page==='nccs'&&h(NCCTab,{nccs,setNCCs,purchases,setPurchases,title:'Nhà CC NVL',fileName:'Nha_CC_NVL'}),
         canAccess(cu.role,'nccgoods',cu.permissions,cu.dept)&&page==='nccgoods'&&h(NCCTab,{nccs:nccGoods,setNCCs:setNccGoods,purchases:goodsPurchases,setPurchases:setGoodsPurchases,title:'Nhà CC Hàng hóa',fileName:'Nha_CC_Hang_hoa',readOnly:cu.role!=='admin'&&!isAccounting}),
         canAccess(cu.role,'purchaseorders',cu.permissions)&&page==='purchaseorders'&&h(PurchaseTab,{purchases,setPurchases,nccs,setNCCs,materials,products,cu,setPage,mode:'material'}),
@@ -378,9 +412,9 @@ function App(){
         canAccess(cu.role,'maint_machine',cu.permissions)&&page==='maint_machine'&&h(MaintenanceTab,{title:'Bảo dưỡng máy',icon:'ti-settings',assets,employees}),
         canAccess(cu.role,'shifts',cu.permissions)&&page==='shifts'&&h(ShiftsTab,{shifts,setShifts,employees,trips,setTrips}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
-        canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings}),
+        canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify:addNotification}),
         canAccess(cu.role,'intem',cu.permissions)&&page==='intem'&&h(IntemTab,{products,company}),
-        canAccess(cu.role,'trips',cu.permissions,cu.dept)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,customers,products,quotes,financeDebts,setFinanceDebts,currentUser:cu}),
+        canAccess(cu.role,'trips',cu.permissions,cu.dept)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,quotes,financeDebts,setFinanceDebts,currentUser:cu,notify:addNotification}),
         canAccess(cu.role,'workreport_lx',cu.permissions,cu.dept)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,orders,products,customers,currentUser:cu}),
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,trips,currentUser:cu,prodShifts,quotes,financeDebts,setFinanceDebts,menuHidden,setMenuHidden}),
         canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),

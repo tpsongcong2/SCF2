@@ -1,4 +1,4 @@
-const CACHE = 'scf-v172';
+const CACHE = 'scf-v187';
 const ASSETS = [
   './',
   './index.html',
@@ -15,6 +15,8 @@ const ASSETS = [
   './catalogs.js',
   './production-shifts.js',
   './organization.js',
+  './notifications.js',
+  './user-guide.js',
   './operations.js',
   './navigation-reports.js',
   './order-detail.js',
@@ -31,7 +33,9 @@ const ASSETS = [
   './bootstrap.js',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './icon-maskable-192.png',
+  './icon-maskable-512.png'
 ];
 
 self.addEventListener('install', e => {
