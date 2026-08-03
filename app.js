@@ -228,7 +228,7 @@ function App(){
         _so(normalizeOrdersForStorage(o||[]));_st(t||[]);_snotifications(n||[]);
       }catch(e){console.warn('Auto sync:',e.message||e);}
     };
-    const tm=setInterval(refresh,15000);
+    const tm=setInterval(refresh,5000);
     window.scfSyncNow=refresh;
     return()=>clearInterval(tm);
   },[loading]);
@@ -279,6 +279,8 @@ function App(){
       targetPage:data.targetPage||'notifications',createdAt:stamp,createdAtIso:nowIso,createdBy:cu?.name||'Hệ thống',readAt:''
     }));
     setNotifications(prev=>[...rows,...(prev||[])].slice(0,2000));
+    setTimeout(()=>window.scfFlushPendingWrites&&window.scfFlushPendingWrites(),900);
+    return rows.length;
   },[cu?.id,cu?.name]);
   const notificationReadyRef=React.useRef(false);
   useEffect(()=>{

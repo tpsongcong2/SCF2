@@ -475,11 +475,20 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
   const isAccounting=deptKey.includes('ke toan');
   const canReviewTrips=currentUser?.role==='admin'||isAccounting;
   const canEditDeliveryOrder=canManageTrips||isAccounting;
-  const cleanName=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
-  const driverRecipientId=trip=>trip?.driverId||(employees||[]).find(e=>cleanName(e.name)===cleanName(trip?.driverName))?.id||'';
+  const cleanName=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+  const driverRecipient=trip=>{
+    const byId=(employees||[]).find(e=>String(e.id||'')===String(trip?.driverId||''));
+    const nameKey=cleanName(trip?.driverName);
+    if(byId&&(!nameKey||cleanName(byId.name)===nameKey))return byId;
+    const byName=nameKey?(employees||[]).find(e=>cleanName(e.name)===nameKey):null;
+    return byName||null;
+  };
+  const driverRecipientId=trip=>driverRecipient(trip)?.id||'';
   const notifyTrip=(trip,title,message,icon='ti-truck-delivery')=>{
     const recipientId=driverRecipientId(trip);
-    if(recipientId)notify?.({recipientId,title,message,icon,sourceType:'trip',sourceId:trip.id,targetPage:'trips'});
+    if(!recipientId)return false;
+    notify?.({recipientId,title,message,icon,sourceType:'trip',sourceId:trip.id,targetPage:'trips'});
+    return true;
   };
   const accountingRecipientIds=(employees||[]).filter(e=>e.role==='admin'||String(e.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('ke toan')).map(e=>e.id).filter(Boolean);
   const additionalOrderForTrip=trip=>(orders||[]).find(o=>o.additionalSourceTripId===trip.id||((trip.orderIds||[]).includes(o.id)&&o.isAdditionalTripOrder));
@@ -582,17 +591,32 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     if(!canReviewTrips)return;
     if(!trip?.driverName&&!trip?.driverId){window.showToast('Hãy chọn lái xe trước khi giao chuyến.','warn');return;}
     if(!['planning','assigned'].includes(trip.status)){window.showToast('Chuyến này không còn ở trạng thái có thể giao cho lái xe.','warn');return;}
+    const recipient=driverRecipient(trip);
+    if(!recipient){window.showToast('Không tìm thấy tài khoản lái xe “'+(trip.driverName||trip.driverId)+'”. Hãy mở Sửa chuyến và chọn lại lái xe từ danh sách.','error',7000);return;}
     const stamp=fmtDT();
     setTrips(prev=>prev.map(t=>t.id===trip.id?{
       ...t,
+      driverId:recipient.id,
+      driverName:recipient.name,
       status:'assigned',
       assignedAt:t.assignedAt||stamp,
       driverDispatchedAt:stamp,
-      driverDispatchedBy:currentUser?.name||''
+      driverDispatchedBy:currentUser?.name||'',
+      driverNotificationSentAt:stamp,
+      driverNotificationRecipientId:recipient.id
     }:t));
     setOrders(prev=>prev.map(o=>(trip.orderIds||[]).includes(o.id)?{...o,status:'assigned'}:o));
-    notifyTrip(trip,'Chuyến đã sẵn sàng giao',(trip.shiftName||trip.id)+' - '+trip.deliveryDate+' - '+(trip.orderIds||[]).length+' đơn','ti-bell-ringing');
-    window.showToast('Đã giao chuyến cho '+(trip.driverName||'lái xe')+'. Lái xe đã có thể nhìn thấy và bấm Bắt đầu giao.','success');
+    notifyTrip({...trip,driverId:recipient.id,driverName:recipient.name},'Chuyến đã sẵn sàng giao',(trip.shiftName||trip.id)+' - '+trip.deliveryDate+' - '+(trip.orderIds||[]).length+' đơn','ti-bell-ringing');
+    window.showToast('Đã giao chuyến và gửi thông báo cho '+recipient.name+'.','success');
+  };
+  const resendTripNotification=trip=>{
+    if(!canReviewTrips)return;
+    const recipient=driverRecipient(trip);
+    if(!recipient){window.showToast('Không tìm thấy tài khoản tương ứng với lái xe '+(trip.driverName||'')+'.','error');return;}
+    const stamp=fmtDT();
+    notifyTrip({...trip,driverId:recipient.id,driverName:recipient.name},'Nhắc lại: bạn có chuyến cần giao',(trip.shiftName||trip.id)+' - '+trip.deliveryDate+' - '+(trip.orderIds||[]).length+' đơn','ti-bell-ringing');
+    setTrips(prev=>prev.map(t=>t.id===trip.id?{...t,driverId:recipient.id,driverName:recipient.name,driverNotificationSentAt:stamp,driverNotificationRecipientId:recipient.id}:t));
+    window.showToast('Đã gửi lại thông báo cho '+recipient.name+'.','success');
   };
   const cancelDispatchToDriver=trip=>{
     if(!canReviewTrips)return;
@@ -951,6 +975,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
             ),
             h('div',{className:'trip-card-actions',style:{display:'flex',gap:4},onClick:e=>e.stopPropagation()},
               canReviewTrips&&['planning','assigned'].includes(trip.status)&&!trip.driverDispatchedAt&&h('button',{onClick:()=>dispatchTripToDriver(trip),style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},'Giao lái xe'),
+              canReviewTrips&&trip.status==='assigned'&&trip.driverDispatchedAt&&h('button',{onClick:()=>resendTripNotification(trip),title:trip.driverNotificationSentAt?'Đã gửi gần nhất: '+trip.driverNotificationSentAt:'Gửi lại thông báo cho lái xe',style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},h('i',{className:'ti ti-bell-ringing'}),' Gửi lại TB'),
               canReviewTrips&&trip.status==='assigned'&&trip.driverDispatchedAt&&h('button',{'data-scf-action':'write',onClick:()=>cancelDispatchToDriver(trip),style:{fontSize:11,padding:'4px 10px',background:'#FCEBEB',color:'#A32D2D',border:'none',borderRadius:4}},'Hủy giao LX'),
               isDriver&&isOwnTrip(trip)&&trip.status==='assigned'&&!completionLocked&&h('button',{onClick:()=>acknowledgeTrip(trip),style:{fontSize:11,padding:'4px 10px',background:'#EAF3DE',color:'#3B6D11',border:'none',borderRadius:4}},'Bắt đầu giao'),
               isDriver&&isOwnTrip(trip)&&trip.status==='active'&&!completionLocked&&h('button',{onClick:()=>openAdditionalOrder(trip),disabled:!!additionalOrderForTrip(trip),style:{fontSize:11,padding:'4px 10px',background:additionalOrderForTrip(trip)?'#E5E7EB':'#FFF3CD',color:additionalOrderForTrip(trip)?'#64748B':'#8A5A00',border:'none',borderRadius:4}},additionalOrderForTrip(trip)?'Đã có đơn PS':'+ Đơn phát sinh'),
