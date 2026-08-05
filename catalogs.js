@@ -131,6 +131,111 @@ function AssetsTab({assets,setAssets}){
   );
 }
 
+
+/* --- GARAGES --- */
+function GarageForm({garage,onSave,onClose}){
+  const[f,sf]=useState(garage||{code:'',name:'',phone:'',contact:'',address:'',taxCode:'',note:'',active:true});
+  const s=(key,value)=>sf(prev=>({...prev,[key]:value}));
+  const submit=()=>{
+    const name=String(f.name||'').trim();
+    if(!name){window.showToast('Nhập tên gara!','warn');return;}
+    onSave({...f,name,id:garage?.id||'GR'+uid(),active:f.active!==false});
+  };
+  return h(Modal,{title:garage?'Sửa gara ô tô':'Thêm gara ô tô',onClose},
+    h('div',{className:'g2'},
+      h(F,{label:'Mã gara'},h('input',{value:f.code||'',onChange:e=>s('code',e.target.value),placeholder:'GR001'})),
+      h(F,{label:'Tên gara *'},h('input',{value:f.name||'',onChange:e=>s('name',e.target.value),placeholder:'Gara Hải Thắng Lợi'}))
+    ),
+    h('div',{className:'g2'},
+      h(F,{label:'Người liên hệ'},h('input',{value:f.contact||'',onChange:e=>s('contact',e.target.value),placeholder:'Tên người liên hệ'})),
+      h(F,{label:'Số điện thoại'},h('input',{value:f.phone||'',onChange:e=>s('phone',e.target.value),placeholder:'09xx xxx xxx'}))
+    ),
+    h(F,{label:'Địa chỉ'},h('input',{value:f.address||'',onChange:e=>s('address',e.target.value),placeholder:'Địa chỉ gara'})),
+    h('div',{className:'g2'},
+      h(F,{label:'Mã số thuế'},h('input',{value:f.taxCode||'',onChange:e=>s('taxCode',e.target.value)})),
+      h(F,{label:'Trạng thái'},h('select',{value:f.active===false?'inactive':'active',onChange:e=>s('active',e.target.value==='active')},
+        h('option',{value:'active'},'Đang sử dụng'),h('option',{value:'inactive'},'Ngừng sử dụng')
+      ))
+    ),
+    h(F,{label:'Ghi chú'},h('textarea',{value:f.note||'',onChange:e=>s('note',e.target.value),rows:2})),
+    h(Row,null,
+      h('button',{type:'button',onClick:onClose},'Hủy'),
+      h('button',{type:'button',className:'bp',onClick:submit,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu gara')
+    )
+  );
+}
+function GaragesTab({garages,setGarages}){
+  const[modal,sm]=useState(null);const[edit,se]=useState(null);const[q,sq]=useState('');
+  const[syncing,setSyncing]=useState(false);
+  const normalize=v=>normalizePlainText(String(v||''));
+  const save=data=>{
+    const duplicate=(garages||[]).some(x=>x.id!==data.id&&normalize(x.name)===normalize(data.name));
+    if(duplicate){window.showToast('Tên gara này đã có trong danh mục.','warn');return;}
+    setGarages(prev=>edit?prev.map(x=>x.id===edit.id?data:x):[data,...prev]);
+    sm(null);se(null);window.showToast('Đã lưu gara','success');
+  };
+  const del=id=>window.scfConfirm('Xóa gara khỏi danh mục? Dữ liệu bảo dưỡng cũ vẫn giữ nguyên tên gara.','Xóa gara',true).then(ok=>{
+    if(!ok)return;
+    setGarages(prev=>prev.filter(x=>x.id!==id));window.showToast('Đã xóa gara khỏi danh mục','success');
+  });
+  const syncExistingGarages=async()=>{
+    if(syncing)return;
+    setSyncing(true);
+    try{
+      let localRows=[];
+      try{localRows=JSON.parse(localStorage.getItem('scf_maint_vehicle')||'[]');}catch{}
+      const maintenanceRows=await dbGet('scf_maint_vehicle',localRows);
+      const existing=new Set((garages||[]).map(x=>normalize(x.name)).filter(Boolean));
+      const found=new Set();
+      const added=[];
+      (Array.isArray(maintenanceRows)?maintenanceRows:[]).forEach(row=>{
+        const name=String(row?.garage||'').trim();
+        const key=normalize(name);
+        if(!name||!key||existing.has(key)||found.has(key))return;
+        found.add(key);
+        added.push({id:'GR'+uid(),code:'',name,contact:'',phone:'',address:'',taxCode:'',note:'Lấy từ dữ liệu Bảo dưỡng xe',active:true});
+      });
+      if(!added.length){window.showToast('Không có gara mới cần cập nhật.','info');return;}
+      setGarages(prev=>[...added,...prev]);
+      window.showToast('Đã cập nhật '+added.length+' gara hiện tại vào danh mục','success');
+    }catch(error){
+      console.error(error);
+      window.showToast('Chưa cập nhật được gara từ dữ liệu Bảo dưỡng xe.','error');
+    }finally{setSyncing(false);}
+  };  const list=(garages||[]).filter(x=>!q||[x.code,x.name,x.contact,x.phone,x.address,x.taxCode,x.note].some(v=>normalize(v).includes(normalize(q))));
+  const cols=[['code','MÃ GARA'],['name','TÊN GARA'],['contact','NGƯỜI LIÊN HỆ'],['phone','SỐ ĐIỆN THOẠI'],['address','ĐỊA CHỈ'],['taxCode','MÃ SỐ THUẾ'],['statusText','TRẠNG THÁI'],['note','GHI CHÚ']];
+  const exportRows=list.map(x=>({...x,statusText:x.active===false?'Ngừng sử dụng':'Đang sử dụng'}));
+  return h('div',null,
+    h('div',{className:'ptitle'},h('i',{className:'ti ti-building-store',style:{fontSize:20}}),'Danh mục Gara ô tô'),
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
+      h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm tên gara, số điện thoại, địa chỉ...'}),
+      h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+        h('button',{type:'button',disabled:syncing,onClick:syncExistingGarages},h('i',{className:'ti '+(syncing?'ti-loader-2 spin':'ti-refresh'),style:{fontSize:14}}),syncing?'Đang cập nhật...':'Cập nhật gara hiện tại'),
+        h(ExportBtn,{onClick:()=>xlsxExport(exportRows,cols,'Danh_muc_Gara_o_to')}),
+        h(ImportBtn,{onFile:rows=>{
+          const existing=new Set((garages||[]).map(x=>normalize(x.name)));
+          const added=rows.map(r=>({id:'GR'+uid(),code:r['MÃ GARA']||r['Mã gara']||'',name:String(r['TÊN GARA']||r['Tên gara']||'').trim(),contact:r['NGƯỜI LIÊN HỆ']||r['Người liên hệ']||'',phone:r['SỐ ĐIỆN THOẠI']||r['Số điện thoại']||'',address:r['ĐỊA CHỈ']||r['Địa chỉ']||'',taxCode:r['MÃ SỐ THUẾ']||r['Mã số thuế']||'',note:r['GHI CHÚ']||r['Ghi chú']||'',active:normalize(r['TRẠNG THÁI']||r['Trạng thái'])!=='ngung su dung'})).filter(x=>x.name&&!existing.has(normalize(x.name)));
+          setGarages(prev=>[...added,...prev]);window.showToast('Đã nhập '+added.length+' gara','success');
+        }}),
+        h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Thêm gara'})
+      )
+    ),
+    h(TableWrap,{cols:['Mã gara','Tên gara','Liên hệ','Số điện thoại','Địa chỉ','Trạng thái',''],empty:'Chưa có gara nào trong danh mục.',
+      rows:list.map(x=>h('tr',{key:x.id},
+        h('td',null,h('span',{style:{color:'var(--pri)',fontWeight:600}},x.code||x.id)),
+        h('td',null,h('div',{style:{fontWeight:600}},x.name)),
+        h('td',null,x.contact||'—'),h('td',null,x.phone||'—'),h('td',null,x.address||'—'),
+        h('td',null,h('span',{className:'badge',style:{background:x.active===false?'#F3F4F6':'#EAF7EF',color:x.active===false?'#6B7280':'#166534'}},x.active===false?'Ngừng sử dụng':'Đang sử dụng')),
+        h('td',null,h('div',{style:{display:'flex',gap:2}},
+          h('button',{className:'bi',title:'Sửa gara',onClick:()=>{se(x);sm('f')}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
+          h('button',{className:'bi',title:'Xóa gara',onClick:()=>del(x.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+        ))
+      ))
+    }),
+    modal==='f'&&h(GarageForm,{garage:edit,onSave:save,onClose:()=>{sm(null);se(null);}})
+  );
+}
+
 /* ─── PRODUCT CATEGORIES ─── */
 function ProdCatForm({cat,onSave,onClose}){
   const[f,sf]=useState(cat||{name:'',desc:''});

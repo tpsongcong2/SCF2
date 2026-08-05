@@ -137,7 +137,8 @@ function NCCTab({nccs,setNCCs,purchases,setPurchases,title='Nhà cung cấp',fil
 
 /* --- Đơn mua hàng --- */
 function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,cu,setPage,mode='material'}) {
-  const [modal,sm]=useState(null); const [edit,se]=useState(null); const [q,sq]=useState(''); const [timeFilter,stf]=useState('all');
+  const [modal,sm]=useState(null); const [edit,se]=useState(null); const [q,sq]=useState('');
+  const [filterDay,setFilterDay]=useState(''); const [filterMonth,setFilterMonth]=useState(''); const [filterNcc,setFilterNcc]=useState('');
   const isGoods=mode==='goods';
   const itemLabel=isGoods?'Hàng hóa':'Nguyên vật liệu';
   const itemLabelLower=isGoods?'hàng hóa':'nguyên vật liệu';
@@ -258,25 +259,15 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,cu,
     sm(null);se(null);
   };
   const del=id=>{window.scfConfirm('Bạn có chắc muốn xóa đơn mua này?','Xóa đơn mua',true).then(ok=>{if(ok){setPurchases(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa đơn mua','success');}});};
-  const todayDate=new Date();
-  const startOfToday=new Date(todayDate.getFullYear(),todayDate.getMonth(),todayDate.getDate());
-  const dayStart=startOfToday.getTime();
-  const weekStartDate=new Date(startOfToday);
-  const weekDay=(weekStartDate.getDay()+6)%7;
-  weekStartDate.setDate(weekStartDate.getDate()-weekDay);
-  const weekStart=weekStartDate.getTime();
-  const monthStartDate=new Date(todayDate.getFullYear(),todayDate.getMonth(),1);
-  const monthStart=monthStartDate.getTime();
+  const normalizeFilterText=value=>String(value||'').trim().toLowerCase();
+  const nccOptions=[...new Set([...(nccs||[]).map(n=>n.name),...(purchases||[]).map(p=>p.nccName)].filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'vi'));
   const list=purchases
     .filter(x=>{
       if(q&&!(String(x.nccName||'').toLowerCase().includes(q.toLowerCase())||String(x.id||'').toLowerCase().includes(q.toLowerCase())||String(x.invoiceNo||'').toLowerCase().includes(q.toLowerCase()))) return false;
-      if(timeFilter==='all') return true;
-      const d=parseAnyDate(x.orderDate||x.createdAt||x.updatedAt);
-      if(!d) return false;
-      const ts=new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
-      if(timeFilter==='day') return ts===dayStart;
-      if(timeFilter==='week') return ts>=weekStart;
-      if(timeFilter==='month') return ts>=monthStart;
+      const dateIso=toIsoDate(x.orderDate||x.createdAt||x.updatedAt)||'';
+      if(filterDay&&dateIso!==filterDay)return false;
+      if(filterMonth&&!dateIso.startsWith(filterMonth))return false;
+      if(filterNcc&&normalizeFilterText(x.nccName)!==normalizeFilterText(filterNcc))return false;
       return true;
     })
     .slice()
@@ -316,10 +307,12 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,cu,
       h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500}},'Hiển thị: '+list.length+' đơn')
     ),
     h('div',{className:'card',style:{marginBottom:'1rem',padding:'12px 14px'}},
-      h('div',{className:'responsive-filter-grid',style:{gridTemplateColumns:'1.4fr auto auto'}},
+      h('div',{className:'responsive-filter-grid',style:{gridTemplateColumns:'1.35fr repeat(3,minmax(150px,1fr)) auto'}},
         h(F,{label:'Tìm nhanh'},h(SearchBar,{value:q,onChange:sq,placeholder:'Mã đơn, NCC, hóa đơn...'})),
-        h(F,{label:'Lọc thời gian'},h('select',{value:timeFilter,onChange:e=>stf(e.target.value)},h('option',{value:'all'},'Tất cả'),h('option',{value:'day'},'Ngày'),h('option',{value:'week'},'Tuần'),h('option',{value:'month'},'Tháng'))),
-        h('button',{type:'button',onClick:()=>{sq('');stf('all');},style:{height:38,alignSelf:'end'}},h('i',{className:'ti ti-filter-off',style:{fontSize:14}}),'Xóa lọc')
+        h(F,{label:'Theo ngày'},h('input',{type:'date',value:filterDay,onChange:e=>{setFilterDay(e.target.value);if(e.target.value)setFilterMonth('');}})),
+        h(F,{label:'Theo tháng'},h('input',{type:'month',value:filterMonth,onChange:e=>{setFilterMonth(e.target.value);if(e.target.value)setFilterDay('');}})),
+        h(F,{label:'Nhà cung cấp'},h('select',{value:filterNcc,onChange:e=>setFilterNcc(e.target.value)},h('option',{value:''},'Tất cả NCC'),nccOptions.map(name=>h('option',{key:name,value:name},name)))),
+        h('button',{type:'button',onClick:()=>{sq('');setFilterDay('');setFilterMonth('');setFilterNcc('');},style:{height:38,alignSelf:'end'}},h('i',{className:'ti ti-filter-off',style:{fontSize:14}}),'Xóa lọc')
       )
     ),
     h('div',{className:'mobile-only mobile-card-list'},

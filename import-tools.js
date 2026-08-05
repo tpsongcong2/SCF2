@@ -545,6 +545,7 @@ const NAV=[
   {key:'depts',icon:'ti-sitemap',label:'Bộ phận'},
   {key:'materials',icon:'ti-tools',label:'Nguyên vật liệu'},
   {key:'assets',icon:'ti-building-warehouse',label:'Danh mục tài sản'},
+  {key:'garages',icon:'ti-building-store',label:'Gara ô tô'},
   {key:'products',icon:'ti-box',label:'Sản phẩm'},
   {key:'customers',icon:'ti-users',label:'Khách hàng'},
   {key:'workcats',icon:'ti-checklist',label:'Danh mục công việc'},
