@@ -1037,6 +1037,7 @@ function PasswordField({value,onChange,placeholder}){
     )
   );
 }
+const FACEMASK_ONLY_PERMISSION_PAGES=new Set(['workreport_total','nccs','purchaseorders','cashflowreport','salesreport','fuelreport','purchasereport','maintreport','materialusage','syncreport','dbusage']);
 function normalizeEmployeeDept(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');}
 function isPrivilegedEmployeeRecord(employee){
   const role=String(employee?.role||'').trim().toLowerCase();
@@ -1062,7 +1063,9 @@ function isPrivilegedEmployeeRecord(employee){
     const gender=normalizeGenderValue(f.gender,f.female);
     try{
       const password=f.password?await hashPassword(f.password):'';
-      onSave({...f,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
+      const permissions=(f.permissions||[]).filter(page=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page));
+      const permLevels=Object.fromEntries(Object.entries(f.permLevels||{}).filter(([page])=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page)));
+      onSave({...f,permissions,permLevels,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
     }catch(e){window.showToast(e.message||'Không thể lưu mật khẩu.','error');}
     finally{setBusy(false);}
   };
@@ -1127,7 +1130,7 @@ function isPrivilegedEmployeeRecord(employee){
           {sec:'San xuat', pages:[{k:'prodsummary',l:'Tong hop SX'},{k:'prodorders',l:'Don san xuat'},{k:'stock',l:'Ton kho'}]},
         ].map(sec=>h('div',{key:sec.sec,style:{marginBottom:10}},
           h('div',{style:{fontSize:11,fontWeight:600,color:'var(--tx2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:5}},sec.sec),
-          sec.pages.map(pg=>{
+          sec.pages.filter(pg=>!FACEMASK_ONLY_PERMISSION_PAGES.has(pg.k)).map(pg=>{
             const active = f.permissions&&f.permissions.length>0
               ? f.permissions.includes(pg.k)
               : canAccess(f.role, pg.k);
