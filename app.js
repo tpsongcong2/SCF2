@@ -41,6 +41,8 @@ function SyncStatus(){
 }
 
 function App(){
+  const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
+  const homePage=isFaceMask?'workreport_total':'welcome';
   const[session,setSession]=useLS('scf_session',null);
   const[menuHidden,setMenuHidden]=useLS('scf_topnav_hidden',false);
   const[employees,_se]=useState(DEF_EMPS);
@@ -140,22 +142,22 @@ function App(){
   },[]);
   const[loading,setLoading]=useState(true);
   const[col,setCol]=useState(false);
-  const[page,setPage]=useLS('scf_last_page','welcome');
+  const[page,setPage]=useLS(isFaceMask?'facemask_last_page':'scf_last_page',homePage);
   const browserNavReadyRef=React.useRef(false);
   const browserPopRef=React.useRef(false);
   const[serverAuthReady,setServerAuthReady]=useState(!SCF_SERVER_AUTH_ENABLED);
   useEffect(()=>{
     const onPopState=e=>{
       browserPopRef.current=true;
-      setPage(e.state?.scfPage||'welcome');
+      setPage(e.state?.scfPage||homePage);
     };
     window.addEventListener('popstate',onPopState);
     return()=>window.removeEventListener('popstate',onPopState);
   },[]);
   useEffect(()=>{
     if(!browserNavReadyRef.current){
-      history.replaceState({...history.state,scfPage:'welcome'},'');
-      if(page!=='welcome')history.pushState({...history.state,scfPage:page},'');
+      history.replaceState({...history.state,scfPage:homePage},'');
+      if(page!==homePage)history.pushState({...history.state,scfPage:page},'');
       browserNavReadyRef.current=true;
       return;
     }
@@ -166,9 +168,9 @@ function App(){
     history.pushState({...history.state,scfPage:page},'');
   },[page]);
   const goBackPage=()=>{
-    if(page==='welcome')return;
+    if(page===homePage)return;
     if(history.state?.scfPage===page)history.back();
-    else setPage('welcome');
+    else setPage(homePage);
   };
   useEffect(()=>{
     if(!SCF_SERVER_AUTH_ENABLED)return;
@@ -303,13 +305,13 @@ function App(){
     }
   },[cu?.id,cu?.mustChangePw]);
   useEffect(()=>{
-    if(cu&&!canAccess(cu.role,page,cu.permissions,cu.dept))setPage('welcome');
+    if(cu&&!canAccess(cu.role,page,cu.permissions,cu.dept))setPage(homePage);
   },[cu?.id,cu?.role,cu?.dept,page]);
   if(loading)return h('div',{className:'load-screen'},
-    h('div',{className:'load-logo-shell'},
+    isFaceMask?h('div',{className:'face-mask-load-icon'},h('i',{className:'ti ti-mask'})):h('div',{className:'load-logo-shell'},
       h('img',{src:'icon-192.png',className:'load-logo',alt:'Logo Thực Phẩm Sông Công'})
     ),
-    h('div',{style:{fontSize:17,fontWeight:600,color:'var(--pri3)',marginBottom:4}},'Thực Phẩm Sông Công'),
+    h('div',{style:{fontSize:17,fontWeight:600,color:'var(--pri3)',marginBottom:4}},isFaceMask?'FACE MASK':'Thực Phẩm Sông Công'),
     h('div',{style:{fontSize:13,color:'var(--pri2)',display:'flex',alignItems:'center',gap:6}},h('i',{className:'ti ti-loader-2 spin',style:{fontSize:16}}),'Đang tải dữ liệu...')
   );
   const hasConfiguredAdmin=employees.some(employee=>employee.role==='admin'&&String(employee.username||'').trim()&&String(employee.password||'').length>0);
@@ -330,6 +332,14 @@ function App(){
     window.showToast&&window.showToast('Đã tạo tài khoản Admin. Hãy đăng nhập để tiếp tục.','success');
   }});
   if(!cu)return h(LoginPage,{employees,onLogin:u=>{setSession({id:u.id});if(SCF_SERVER_AUTH_ENABLED)setTimeout(()=>location.reload(),50);}});
+  if(isFaceMask&&!['admin','administrator'].includes(String(cu.role||'').toLowerCase()))return h('div',{className:'login-bg'},
+    h('div',{className:'login-card',style:{textAlign:'center'}},
+      h('div',{className:'face-mask-login-icon',style:{margin:'0 auto 12px'}},h('i',{className:'ti ti-shield-lock'})),
+      h('h1',{style:{fontSize:21,color:'var(--pri3)',marginBottom:8}},'Không có quyền truy cập'),
+      h('p',{style:{fontSize:13,color:'var(--tx2)',lineHeight:1.6,marginBottom:18}},'FACE MASK chỉ dành cho tài khoản Admin.'),
+      h('button',{className:'bp',style:{width:'100%',justifyContent:'center'},onClick:async()=>{await serverLogout();window.scfClearSensitiveLocalData&&window.scfClearSensitiveLocalData();setSession(null);}},h('i',{className:'ti ti-logout'}),'Đăng xuất')
+    )
+  );
   const isAccounting=String(cu.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('ke toan');
   const activeLevel=getLvl(cu.role,page,cu.permLevels);
   const readOnly=activeLevel==='r';
@@ -341,9 +351,9 @@ function App(){
       !menuHidden&&h('div',{className:'topbar'+(page!=='welcome'?' mobile-subpage-topbar':'')},
         h('div',{className:'topbar-main'},
           h('div',{className:'topbar-brand'},
-            h('img',{src:LOGO_SRC,className:'topbar-logo'}),
+            isFaceMask?h('span',{className:'face-mask-brand-icon'},h('i',{className:'ti ti-mask'})):h('img',{src:LOGO_SRC,className:'topbar-logo'}),
             h('div',{className:'topbar-title'},
-              h('div',{className:'topbar-company'},company?.name||'SCF'),
+              h('div',{className:'topbar-company'},isFaceMask?'FACE MASK':(company?.name||'SCF')),
               h('div',{className:'topbar-meta'},
                 h('span',null,'Menu'),
                 sb&&h(SyncStatus)
@@ -351,7 +361,7 @@ function App(){
             )
           ),
           h('div',{className:'topbar-actions'},
-            h('button',{className:'topbar-notification',onClick:()=>setPage('notifications'),title:'Thông báo','aria-label':'Thông báo'},
+            !isFaceMask&&h('button',{className:'topbar-notification',onClick:()=>setPage('notifications'),title:'Thông báo','aria-label':'Thông báo'},
               h('i',{className:'ti ti-bell'}),unreadNotificationCount>0&&h('span',{className:'notification-count'},unreadNotificationCount>99?'99+':unreadNotificationCount)
             ),
             h('div',{className:'topbar-user'},
@@ -370,7 +380,7 @@ function App(){
         h('button',{className:'mobile-page-back',onClick:goBackPage,'aria-label':'Quay lại trang trước'},
           h('i',{className:'ti ti-arrow-left'}),h('span',null,'Quay lại')
         ),
-        h('div',{className:'mobile-page-title'},PTITLES[page]||'SCF')
+        h('div',{className:'mobile-page-title'},PTITLES[page]||(isFaceMask?'FACE MASK':'SCF'))
       ),
       h('div',{
         className:'content'+(menuHidden?' compact-top':'')+(page!=='welcome'?' mobile-subpage-content':'')+(readOnly?' scf-readonly':'')+(activeLevel!=='rwd'?' scf-no-delete':''),
@@ -429,7 +439,7 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         canAccess(cu.role,'dbusage',cu.permissions)&&page==='dbusage'&&h(SupabaseUsageReportTab,{employees,materials,assets,prodCats,products,customers,areas,workcats,tasks,nccs,purchases,goodsPurchases,quotes,orders,trips,attendance,advances,rewards,leaves,depts,shifts,prodShifts,prodShiftRules,prodOrders,stock,company}),
         wips.includes(page)&&h(PlaceholderTab,{title:PTITLES[page],icon:PICONS[page]||'ti-clock'})
       ),
-      page==='welcome'&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cu.dept,onLogout:logout})
+      (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cu.dept,onLogout:logout})
     ),
     cu.mustChangePw&&h(CpwModal,{
       emp:cu,cu,forced:true,onClose:()=>{},

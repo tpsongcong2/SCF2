@@ -1,6 +1,6 @@
 /* Supabase server authentication rollout.
    Keep disabled until the Edge Function and RLS migration are deployed. */
-const SCF_SERVER_AUTH_ENABLED=false;
+const SCF_SERVER_AUTH_ENABLED=true;
 
 async function serverUsernameLogin(username,password){
   if(!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');

@@ -9,7 +9,11 @@ function NotificationsTab({notifications,setNotifications,currentUser,setPage}){
   const rows=filter==='unread'?unread:mine;
   const markRead=id=>setNotifications(prev=>(prev||[]).map(n=>n.id===id?{...n,readAt:n.readAt||fmtDT()}:n));
   const markAll=()=>setNotifications(prev=>(prev||[]).map(n=>String(n.recipientId||'')===userId&&!n.readAt?{...n,readAt:fmtDT()}:n));
-  const openItem=n=>{markRead(n.id);if(n.targetPage)setPage(n.targetPage);};
+  const openItem=n=>{
+    markRead(n.id);
+    if(n.targetPage==='trips'&&n.sourceId)try{sessionStorage.setItem('scf_notification_target',JSON.stringify({sourceType:n.sourceType||'',sourceId:n.sourceId,targetPage:n.targetPage||'',notificationId:n.id}));}catch{}
+    if(n.targetPage)setPage(n.targetPage);
+  };
   const enableDevice=async()=>{
     if(!('Notification' in window)){window.showToast('Trình duyệt này không hỗ trợ thông báo trên thiết bị.','warn');return;}
     const result=await Notification.requestPermission();

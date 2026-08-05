@@ -519,6 +519,22 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
   const isOwnTrip=t=>!isDriver||t.driverId===currentUser.id||cleanName(t.driverName)===cleanName(currentUser.name);
   const isDispatchedToDriver=trip=>!!trip?.driverDispatchedAt||['active','completion_pending','completed'].includes(trip?.status);
   const visibleTrips=trips.filter(t=>isOwnTrip(t)&&(!isDriver||isDispatchedToDriver(t)));
+  useEffect(()=>{
+    let target=null;
+    try{target=JSON.parse(sessionStorage.getItem('scf_notification_target')||'null');}catch{}
+    if(!target?.sourceId)return;
+    let targetTrip=target.sourceType==='trip'?(trips||[]).find(t=>String(t.id)===String(target.sourceId)):null;
+    if(!targetTrip&&target.sourceType==='order'){
+      const targetOrder=(orders||[]).find(o=>String(o.id)===String(target.sourceId));
+      targetTrip=(trips||[]).find(t=>String(t.id)===String(targetOrder?.tripId)||(t.orderIds||[]).includes(targetOrder?.id));
+    }
+    if(!targetTrip||!isOwnTrip(targetTrip))return;
+    try{sessionStorage.removeItem('scf_notification_target');}catch{}
+    const parts=String(targetTrip.deliveryDate||'').split('/');
+    const isoDate=parts.length===3?parts[2]+'-'+parts[1].padStart(2,'0')+'-'+parts[0].padStart(2,'0'):'';
+    sfPeriod('day');sfDate(isoDate);sfMonth('');sfShift('');sfDriver('');so(targetTrip.id);
+    setTimeout(()=>document.getElementById('trip-card-'+targetTrip.id)?.scrollIntoView({behavior:'smooth',block:'start'}),250);
+  },[trips.length,orders.length]);
   let tSeq=trips.length+1;
   const orderStatusForTrip=s=>s==='planning'?'pending':s==='assigned'?'assigned':s==='active'?'delivering':['completion_pending','completed'].includes(s)?'done':'pending';
   const save=d=>{
@@ -957,7 +973,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
         const completionLocked=isDriverCompletionLocked(trip);
         const canEditTripQty=canEditQtyForTrip(trip);
         const canUploadTripProof=canUploadProofForTrip(trip);
-        return h('div',{key:trip.id,className:'card',style:{padding:0,overflow:'hidden'}},
+        return h('div',{key:trip.id,id:'trip-card-'+trip.id,className:'card notification-trip-target',style:{padding:0,overflow:'hidden',scrollMarginTop:120}},
           h('div',{className:'trip-card-head',style:{display:'flex',alignItems:'center',gap:12,padding:'1rem 1.25rem',cursor:'pointer'},onClick:()=>so(isOpen?null:trip.id)},
             h('i',{className:'ti ti-chevron-'+(isOpen?'up':'down'),style:{fontSize:16,color:'var(--tx2)',flexShrink:0}}),
             h('div',{className:'trip-card-main',style:{flex:1}},

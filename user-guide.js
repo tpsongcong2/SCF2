@@ -13,6 +13,15 @@ const SCF_GUIDES={
     {title:'Gửi yêu cầu nghỉ phép',steps:['Vào Quản lý nhân sự → Xin nghỉ.','Chọn ngày bắt đầu, ngày kết thúc và loại nghỉ.','Nhập lý do đầy đủ rồi gửi yêu cầu.','Theo dõi trạng thái Chờ duyệt, Đã duyệt hoặc Từ chối.'],note:'Nên gửi yêu cầu trước ngày nghỉ, trừ trường hợp đột xuất.'},
     {title:'Nhận và báo cáo công việc',steps:['Vào Giao việc hoặc mở thông báo mới.','Đọc nội dung, thời hạn và yêu cầu chất lượng.','Cập nhật tiến độ theo đúng trạng thái thực tế.','Khi hoàn thành, gửi báo cáo và minh chứng nếu công việc yêu cầu.']}
   ]},
+  production:{label:'Nhân viên sản xuất',icon:'ti-building-factory-2',intro:'Theo dõi kế hoạch sản xuất, thực hiện đúng ca, cập nhật sản lượng và xử lý thay đổi đơn hàng.',sections:[
+    {title:'Xem kế hoạch sản xuất trong ca',steps:['Đăng nhập đúng tài khoản cá nhân và vào Sản xuất → Đơn sản xuất hoặc Tổng hợp sản xuất.','Chọn đúng ngày sản xuất và ca làm việc.','Kiểm tra từng sản phẩm, tổng số lượng cần sản xuất, giờ hoàn thành và giờ in tem.','Ưu tiên các đơn có giờ giao sớm; đối chiếu lại khi có thông báo thay đổi đơn.'],note:'Ngày sản xuất có thể khác ngày giao hàng. Luôn làm theo Ngày SX và Giờ SX hiển thị trên kế hoạch.'},
+    {title:'Kiểm tra nguyên liệu và chuẩn bị sản xuất',steps:['Xem danh sách sản phẩm và sản lượng của ca.','Đối chiếu định mức hoặc quy trình sản xuất tương ứng: bún, phở, bánh cuốn hoặc sản phẩm khác.','Kiểm tra nguyên liệu, bao bì, tem và thiết bị trước khi bắt đầu.','Nếu thiếu nguyên liệu hoặc thiết bị có sự cố, báo quản lý ngay trước khi sản xuất.'],note:'Không tự ý thay đổi định mức, sản phẩm hoặc số lượng đơn hàng trên kế hoạch.'},
+    {title:'Thực hiện và cập nhật sản lượng',steps:['Mở đúng đơn sản xuất đang thực hiện.','Nhập sản lượng thực tế sau mỗi mẻ hoặc sau khi hoàn thành theo quy định của bộ phận.','Ghi chú rõ hàng lỗi, hao hụt, sản xuất bổ sung hoặc nguyên nhân chênh lệch.','Kiểm tra lại tổng thực tế trước khi xác nhận hoàn thành.'],note:'Sản lượng thực tế phải phản ánh đúng số lượng đạt chất lượng, không tính hàng lỗi.'},
+    {title:'In tem và bàn giao hàng',steps:['Kiểm tra tên sản phẩm, địa điểm, ngày sản xuất và số lượng trước khi in tem.','In tem theo thời gian hiển thị trên kế hoạch; dán đúng sản phẩm và đúng khách hàng.','Sắp xếp hàng theo khu vực/chuyến giao để tránh giao nhầm.','Bàn giao cho kho hoặc lái xe và xác nhận số lượng thực tế bàn giao.']},
+    {title:'Xử lý đơn thay đổi hoặc phát sinh',steps:['Khi kế toán sửa đơn hoặc thêm đơn vào chuyến, kiểm tra thông báo và tải lại kế hoạch.','Đối chiếu phần số lượng, sản phẩm, giờ giao và ca sản xuất đã thay đổi.','Chỉ sản xuất bổ sung sau khi đơn đã được kế toán xác nhận.','Nếu không đủ thời gian hoàn thành, báo ngay cho quản lý và kế toán để điều chỉnh phương án giao.'],note:'Không sản xuất theo tin nhắn miệng nếu đơn chưa xuất hiện hoặc chưa được duyệt trên hệ thống.'},
+    {title:'Kết thúc ca và báo cáo',steps:['Kiểm tra tất cả đơn trong ca đã được cập nhật sản lượng.','Ghi nhận hàng tồn, hàng lỗi, nguyên liệu còn lại và các sự cố trong ca.','Hoàn thành công việc được giao và gửi báo cáo nếu có.','Chấm công ra sau khi đã bàn giao công việc cho ca tiếp theo hoặc quản lý.']},
+    {title:'Các lỗi thường gặp',steps:['Không thấy kế hoạch: kiểm tra đúng ngày, đúng ca và tải lại trang.','Số lượng không khớp: kiểm tra đơn vừa được kế toán thay đổi hay chưa đồng bộ.','Tên sản phẩm cũ: báo Admin thực hiện Cập nhật tên SP.','Không lưu được sản lượng: kiểm tra quyền tài khoản và trạng thái đồng bộ ở đầu màn hình.']}
+  ]},
   driver:{label:'Lái xe',icon:'ti-steering-wheel',intro:'Nhận chuyến, giao hàng, cập nhật số thực giao, hóa đơn và đơn phát sinh.',sections:[
     {title:'Nhận và bắt đầu chuyến',steps:['Mở Thông báo hoặc Bán hàng → Chuyến giao hàng.','Bạn chỉ nhìn thấy chuyến đã được giao đúng cho tài khoản của mình.','Mở chi tiết, kiểm tra ngày, ca giao, danh sách điểm và thứ tự giao.','Bấm Bắt đầu giao trước khi nhập kết quả giao hàng.'],note:'Nếu chuyến, địa điểm hoặc hàng hóa không đúng, báo kế toán trước khi xuất phát.'},
     {title:'Giao hàng và nhập số thực giao',steps:['Mở từng đơn trong chi tiết chuyến.','Nhập SL Giao đúng với số khách hàng thực nhận.','Chụp hoặc tải ảnh hóa đơn của từng đơn.','Theo dõi trạng thái kế toán duyệt; nếu bị trả lại, đọc lý do và tải ảnh mới.']},
@@ -24,13 +33,17 @@ const SCF_GUIDES={
 
 function UserGuideTab({currentUser}){
   const dept=String(currentUser?.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const defaultRole=currentUser?.role==='driver'?'driver':dept.includes('ke toan')?'accounting':'attendance';
+  const isProduction=dept.includes('san xuat')||dept.includes('bep')||dept.includes('dong goi')||dept.includes('che bien');
+  const defaultRole=currentUser?.role==='driver'?'driver':dept.includes('ke toan')?'accounting':isProduction?'production':'attendance';
+  const canViewAll=currentUser?.role==='admin';
+  const allowedRoles=canViewAll?Object.keys(SCF_GUIDES):[defaultRole];
   const[role,setRole]=useState(defaultRole);const[q,setQ]=useState('');
+  useEffect(()=>{if(!allowedRoles.includes(role)){setRole(defaultRole);setQ('');}},[defaultRole,currentUser?.id]);
   const guide=SCF_GUIDES[role];const query=String(q||'').trim().toLowerCase();
   const sections=guide.sections.filter(s=>!query||[s.title,s.note,...s.steps].some(v=>String(v||'').toLowerCase().includes(query)));
   return h('div',{className:'guide-page'},
     h('div',{className:'guide-hero'},h('div',null,h('div',{className:'ptitle'},h('i',{className:'ti ti-book-2'}),'HDSD SCFOOD'),h('p',null,'Hướng dẫn thao tác theo từng vị trí công việc trong hệ thống.')),h('div',{className:'guide-search'},h('i',{className:'ti ti-search'}),h('input',{value:q,onChange:e=>setQ(e.target.value),placeholder:'Tìm nội dung hướng dẫn...'}))),
-    h('div',{className:'guide-role-tabs'},Object.entries(SCF_GUIDES).map(([key,item])=>h('button',{key,className:role===key?'on':'',onClick:()=>{setRole(key);setQ('');}},h('i',{className:'ti '+item.icon}),item.label))),
+    canViewAll&&h('div',{className:'guide-role-tabs'},allowedRoles.map(key=>{const item=SCF_GUIDES[key];return h('button',{key,className:role===key?'on':'',onClick:()=>{setRole(key);setQ('');}},h('i',{className:'ti '+item.icon}),item.label);})),
     h('div',{className:'guide-intro'},h('i',{className:'ti '+guide.icon}),h('div',null,h('b',null,'Hướng dẫn dành cho '+guide.label),h('span',null,guide.intro))),
     h('div',{className:'guide-sections'},sections.length?sections.map((section,index)=>h('details',{key:section.title,className:'guide-section',open:index===0},h('summary',null,h('span',{className:'guide-number'},index+1),h('b',null,section.title),h('i',{className:'ti ti-chevron-down'})),h('div',{className:'guide-section-body'},h('ol',null,section.steps.map((step,i)=>h('li',{key:i},step))),section.note&&h('div',{className:'guide-note'},h('i',{className:'ti ti-alert-circle'}),h('span',null,h('b',null,'Lưu ý: '),section.note))))):h('div',{className:'empty-st',style:{padding:45}},'Không tìm thấy nội dung hướng dẫn phù hợp.'))
   );

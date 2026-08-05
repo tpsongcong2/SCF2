@@ -39,6 +39,7 @@ function InitialAdminSetup({onSetup}){
 
 /* ─── LOGIN ─── */
 function LoginPage({employees,onLogin}){
+  const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
   const[un,su]=useState('');const[pw,sp]=useState('');const[show,ss]=useState(false);const[err,se]=useState('');const[busy,setBusy]=useState(false);
   const[resetOpen,setResetOpen]=useState(false);
   const submit=async()=>{
@@ -47,11 +48,18 @@ function LoginPage({employees,onLogin}){
     try{
       if(SCF_SERVER_AUTH_ENABLED){
         const user=await serverUsernameLogin(un,pw);
+        if(isFaceMask&&!['admin','administrator'].includes(String(user?.role||'').toLowerCase())){
+          await serverLogout();
+          throw new Error('FACE MASK chỉ cho phép tài khoản Admin đăng nhập.');
+        }
         onLogin(user);
         return;
       }
       const u=employees.find(e=>e.username===un);
-      if(u&&await verifyPassword(pw,u.password))onLogin(u);
+      if(u&&await verifyPassword(pw,u.password)){
+        if(isFaceMask&&!['admin','administrator'].includes(String(u.role||'').toLowerCase()))throw new Error('FACE MASK chỉ cho phép tài khoản Admin đăng nhập.');
+        onLogin(u);
+      }
       else se('Tên đăng nhập hoặc mật khẩu không đúng!');
     }catch(e){se(e.message||'Không thể kiểm tra mật khẩu.');}
     finally{setBusy(false);}
@@ -59,8 +67,8 @@ function LoginPage({employees,onLogin}){
   return h('div',{className:'login-bg'},
     h('div',{className:'login-card'},
       h('div',{style:{display:'flex',flexDirection:'column',alignItems:'center',marginBottom:'1.5rem'}},
-        h('img',{src:LOGO_SRC,style:{width:78,height:78,marginBottom:10}}),
-        h('h1',{style:{fontSize:22,fontWeight:700,color:'var(--pri3)'}},'Thực Phẩm Sông Công')
+        isFaceMask?h('div',{className:'face-mask-login-icon'},h('i',{className:'ti ti-mask'})):h('img',{src:LOGO_SRC,style:{width:78,height:78,marginBottom:10}}),
+        h('h1',{style:{fontSize:22,fontWeight:700,color:'var(--pri3)'}},isFaceMask?'FACE MASK':'Thực Phẩm Sông Công')
       ),
       err&&h('div',{style:{background:'#FCEBEB',color:'#A32D2D',padding:'8px 12px',borderRadius:6,fontSize:13,marginBottom:'1rem',textAlign:'center'}},err),
       h(F,{label:'Tên đăng nhập'},h('input',{value:un,onChange:e=>{su(e.target.value);se('');},onKeyDown:e=>e.key==='Enter'&&submit()})),
