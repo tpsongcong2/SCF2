@@ -27,14 +27,15 @@ async function serverLogout(){
 
 async function serverLoadEmployees(){
   if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'load_employees'}});
+  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'load_employees',appVariant:window.SCF_APP_VARIANT||'scfood'}});
   if(error||!Array.isArray(data?.employees))throw new Error(data?.error||error?.message||'Không tải được danh sách nhân viên.');
+  window.__SCF_CURRENT_EMPLOYEE=data.currentEmployee||null;
   return data.employees;
 }
 
 async function serverSaveEmployees(employees){
   if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'save_employees',employees}});
+  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'save_employees',employees,appVariant:window.SCF_APP_VARIANT||'scfood'}});
   if(error||!data?.ok)throw new Error(data?.error||error?.message||'Không lưu được danh sách nhân viên.');
   return data.employees||employees;
 }

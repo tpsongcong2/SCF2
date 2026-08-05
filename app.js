@@ -280,7 +280,7 @@ function App(){
     });
   },[loading,shifts]);
 
-  const cu=session?employees.find(e=>e.id===session.id):null;
+  const cu=session?(employees.find(e=>e.id===session.id)||(String(window.__SCF_CURRENT_EMPLOYEE?.id||'')===String(session.id)?window.__SCF_CURRENT_EMPLOYEE:null)):null;
   const addNotification=React.useCallback(data=>{
     const recipientIds=[...new Set((data?.recipientIds||[data?.recipientId]).filter(Boolean).map(String))];
     if(!recipientIds.length)return;

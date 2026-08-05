@@ -67,9 +67,10 @@ function roleDefaults(role) {
 }
 // canAccess checks employee's custom permissions first, else falls back to role
 function canAccess(role, page, perms, dept='') {
-  const faceMaskPages=['employees','workreport_total','nccs','purchaseorders','cashflowreport','salesreport','fuelreport','purchasereport','maintreport','materialusage','syncreport','dbusage'];
+  const faceMaskPages=['workreport_total','nccs','purchaseorders','cashflowreport','salesreport','fuelreport','purchasereport','maintreport','materialusage','syncreport','dbusage'];
+  const sharedVariantPages=['employees'];
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
-  if(isFaceMask&&!faceMaskPages.includes(page))return false;
+  if(isFaceMask&&!faceMaskPages.includes(page)&&!sharedVariantPages.includes(page))return false;
   if(!isFaceMask&&faceMaskPages.includes(page))return false;
   const isAccounting=String(dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('ke toan');
   if(page==='deliveryrules') return true;

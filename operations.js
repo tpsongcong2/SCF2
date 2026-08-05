@@ -1037,16 +1037,24 @@ function PasswordField({value,onChange,placeholder}){
     )
   );
 }
-function EmpForm({emp,employees,depts,cu,cu2,onSave,onClose}){
+function normalizeEmployeeDept(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');}
+function isPrivilegedEmployeeRecord(employee){
+  const role=String(employee?.role||'').trim().toLowerCase();
+  return ['admin','administrator'].includes(role)||normalizeEmployeeDept(employee?.dept)==='ban giam doc';
+}function EmpForm({emp,employees,depts,cu,cu2,onSave,onClose}){
   const deptNames=(depts&&depts.length?depts.map(d=>d.name):DEPTS);
+  const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
+  const scopedDeptNames=isFaceMask?[...new Set([...deptNames.filter(d=>normalizeEmployeeDept(d)==='ban giam doc'),'Ban Giám Đốc'])]:deptNames.filter(d=>normalizeEmployeeDept(d)!=='ban giam doc');
+  const roleOptions=Object.entries(ROLES).filter(([role])=>isFaceMask||!['admin','administrator'].includes(role));
   const[busy,setBusy]=useState(false);
   const[f,sf]=useState(emp
     ?{...emp,password:isPasswordHash(emp.password)?'':String(emp.password||''),gender:normalizeGenderValue(emp?.gender,emp?.female),female:isFemaleGender(emp?.gender,emp?.female)}
-    :{id:'NV'+String(Date.now()).slice(-4),name:'',birthday:'',gender:'male',female:false,dept:deptNames[0],role:'staff',username:'',password:'',phone:'',email:'',note:'',startDate:'',bhxh:false}
+    :{id:'NV'+String(Date.now()).slice(-4),name:'',birthday:'',gender:'male',female:false,dept:scopedDeptNames[0]||(isFaceMask?'Ban Giám Đốc':''),role:isFaceMask?'manager':'staff',username:'',password:'',phone:'',email:'',note:'',startDate:'',bhxh:false}
   );
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
   const submit=async()=>{
     if(!f.name||!f.username){window.showToast('Nhập tên và tên đăng nhập!','warn');return;}
+    if(isPrivilegedEmployeeRecord(f)!==isFaceMask){window.showToast(isFaceMask?'FACE MASK chỉ lưu Admin hoặc người thuộc Ban Giám Đốc.':'Tài khoản Admin/Ban Giám Đốc phải được quản lý trên FACE MASK.','error');return;}
     if(!emp&&employees.some(e=>e.username===f.username)){window.showToast('Tên đăng nhập đã tồn tại!','error');return;}
     if(!emp&&!f.password){window.showToast('Nhập mật khẩu!','warn');return;}
     if(f.password&&f.password.length<PASSWORD_MIN_LENGTH){window.showToast('Mật khẩu phải có ít nhất '+PASSWORD_MIN_LENGTH+' ký tự!','warn');return;}
@@ -1065,8 +1073,8 @@ function EmpForm({emp,employees,depts,cu,cu2,onSave,onClose}){
       h(F,{label:'Ngày sinh (DD/MM/YYYY)'},h('input',{value:f.birthday,onChange:e=>s('birthday',e.target.value),placeholder:'15/03/1990'})),
     ),
     h('div',{className:'g3'},
-      h(F,{label:'Bộ phận'},h('select',{value:f.dept,onChange:e=>s('dept',e.target.value)},deptNames.map(d=>h('option',{key:d,value:d},d)))),
-      h(F,{label:'Phân quyền'},h('select',{value:f.role,onChange:e=>s('role',e.target.value)},Object.entries(ROLES).map(([v,l])=>h('option',{key:v,value:v},l)))),
+      h(F,{label:'Bộ phận'},h('select',{value:f.dept,onChange:e=>s('dept',e.target.value)},scopedDeptNames.map(d=>h('option',{key:d,value:d},d)))),
+      h(F,{label:'Phân quyền'},h('select',{value:f.role,onChange:e=>s('role',e.target.value)},roleOptions.map(([v,l])=>h('option',{key:v,value:v},l)))),
       h(F,{label:'Ngày vào làm (DD/MM/YYYY)'},h('input',{value:f.startDate||'',onChange:e=>s('startDate',e.target.value),placeholder:'01/01/2024'})),
     ),
     h('div',{style:{display:'flex',alignItems:'flex-end',gap:16,marginBottom:8,flexWrap:'wrap'}},
@@ -1206,6 +1214,7 @@ function CpwModal({emp,cu,onSave,onClose,forced=false}){
   );
 }
 function EmployeeTab({employees,setEmployees,cu,depts}){
+  const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[cpw,scp]=useState(null);const[q,sq]=useState('');
   const[sortBy,setSortBy]=useState('id'); // id | role | dept
   const[fRole,setFRole]=useState('');
@@ -1220,7 +1229,7 @@ function EmployeeTab({employees,setEmployees,cu,depts}){
     const femaleFlag=['1','true','yes','y','co','có','nu','nữ','female','x'].includes(legacyFemale);
     return normalizeGenderValue(v,femaleFlag);
   };
-  const save=d=>{if(edit)setEmployees(p=>p.map(e=>e.id===edit.id?{...e,...d,...(!d.password?{password:edit.password}:{})}:e));else setEmployees(p=>[...p,d]);sm(null);se(null);};
+  const save=d=>{if(isPrivilegedEmployeeRecord(d)!==isFaceMask){window.showToast(isFaceMask?'Chỉ lưu Admin/Ban Giám Đốc trên FACE MASK.':'Admin/Ban Giám Đốc phải quản lý trên FACE MASK.','error');return;}if(edit)setEmployees(p=>p.map(e=>e.id===edit.id?{...e,...d,...(!d.password?{password:edit.password}:{})}:e));else setEmployees(p=>[...p,d]);sm(null);se(null);};
   const del=id=>{if(id===cu.id){window.showToast('Không thể xóa tài khoản đang đăng nhập!','error');return;}window.scfConfirm('Bạn có chắc muốn xóa nhân viên này?','Xóa nhân viên',true).then(ok=>{if(ok){setEmployees(p=>p.filter(e=>e.id!==id));window.showToast('Đã xóa nhân viên','success');}});};
   const savePw=(id,pw,options={})=>{setEmployees(p=>p.map(e=>e.id===id?{...e,password:pw,mustChangePw:!!options.mustChangePw,updatedBy:cu.name,updatedAt:fmtDT()}:e));scp(null);};
   const list=employees
@@ -1236,7 +1245,7 @@ function EmployeeTab({employees,setEmployees,cu,depts}){
       return (a.id||'').localeCompare(b.id||'','vi',{numeric:true});
     });
   return h('div',null,
-    h('div',{className:'ptitle'},h('i',{className:'ti ti-users',style:{fontSize:20}}),'Danh sách nhân viên'),
+    h('div',{className:'ptitle'},h('i',{className:'ti ti-users',style:{fontSize:20}}),isFaceMask?'Tài khoản Admin & Ban Giám Đốc':'Danh sách nhân viên SCFOOD'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',flex:1}},
         h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm nhân viên...'}),
@@ -1265,7 +1274,7 @@ function EmployeeTab({employees,setEmployees,cu,depts}){
         }}),
         canEdit&&h(ImportBtn,{onFile:async rows=>{
           const ROLE_MAP={'Admin':'admin','Quản lý':'manager','Nhân viên':'staff','Lái xe':'driver','admin':'admin','manager':'manager','staff':'staff','driver':'driver'};
-          const added=rows.map(r=>({
+          const imported=rows.map(r=>({
             id:(r['Mã NV']||'NV'+uid()).toString().trim(),
             name:r['Họ tên']||'',
             birthday:r['Ngày sinh']||'',
@@ -1280,12 +1289,14 @@ function EmployeeTab({employees,setEmployees,cu,depts}){
             note:r['Ghi chú']||'',
             updatedBy:cu.name,updatedAt:fmtDT()
           })).filter(r=>r.name&&r.username);
+          const added=imported.filter(r=>isPrivilegedEmployeeRecord(r)===isFaceMask);
+          const rejected=imported.length-added.length;
           setEmployees(p=>{
             const map={};p.forEach(x=>{map[x.id]=x;});
             added.forEach(x=>{map[x.id]=map[x.id]?{...map[x.id],...x,password:map[x.id].password}:x;});
             return Object.values(map);
           });
-          window.showToast('Đã nhập/cập nhật '+added.length+' nhân viên. Dòng không có mật khẩu đã được tạo mật khẩu tạm ngẫu nhiên; Admin có thể xem trong hồ sơ nhân viên.','success',7000);
+          window.showToast('Đã nhập/cập nhật '+added.length+' nhân viên.'+(rejected?' Bỏ qua '+rejected+' dòng không thuộc đúng vùng dữ liệu.':'')+' Dòng không có mật khẩu đã được tạo mật khẩu tạm ngẫu nhiên; Admin có thể xem trong hồ sơ nhân viên.','success',7000);
         }}),
         canEdit&&h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Thêm nhân viên'})
       )
