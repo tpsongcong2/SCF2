@@ -12,6 +12,8 @@ const PTITLES = {
   prodsummary:'Tổng hợp sản xuất', prodorders:'Đơn sản xuất', stock:'Tồn kho',
 };
 
+const PROCESS_POST_KEYS={process_accounting:'scf_process_posts_accounting',process_bun:'scf_process_posts_bun',process_pho:'scf_process_posts_pho',process_banhcuon:'scf_process_posts_banhcuon'};
+
 const PICONS = {
   purchase:'ti-shopping-cart', tasks:'ti-clipboard-check', notifications:'ti-bell', userguide:'ti-book-2', prodsummary:'ti-clipboard-list',
   prodorders:'ti-building-factory', stock:'ti-package', attendance:'ti-face-id', attendance_settings:'ti-settings', attendance_report:'ti-report-analytics', advances:'ti-cash-banknote', rewards:'ti-scale', leaves:'ti-calendar-minus', assets:'ti-building-warehouse', appearance:'ti-typography', printtemplates:'ti-file-spreadsheet',
@@ -84,6 +86,7 @@ function App(){
   const[internalMessages,_sim]=useState([]);
   const[notifications,_snotifications]=useState([]);
   const[deliveryRules,_sdr]=useState([]);
+  const[processPosts,_spp]=useState({});
   window.__SCF_CUSTOMERS=customers||[];
   window.__SCF_PROD_SHIFTS=prodShifts||[];
   const setEmployees=mkSet('scf_employees',_se);
@@ -130,6 +133,12 @@ function App(){
   const setInternalMessages=mkCommunitySet('scf_internal_messages',_sim);
   const setNotifications=mkCommunitySet('scf_notifications',_snotifications);
   const setDeliveryRules=mkCommunitySet('scf_delivery_rules',_sdr);
+  const setProcessPosts=processPage=>valOrFn=>_spp(prev=>{
+    const current=prev?.[processPage]||[];
+    const next=typeof valOrFn==='function'?valOrFn(current):valOrFn;
+    dbSet(PROCESS_POST_KEYS[processPage],next);
+    return {...(prev||{}),[processPage]:next};
+  });
   const refreshCommunityData=React.useCallback(async()=>{
     const[newsData,messageData,notificationData]=await Promise.all([
       dbGet('scf_company_news',[]),
@@ -184,7 +193,7 @@ function App(){
     const loadingGuard=setTimeout(()=>setLoading(false),8000);
     (async()=>{
       try{
-        const[e,c,m,assetData,pc,p,cu,ar,wc,tk,ncc,nccg,pu,pg,q,fp,mo,o,t,a,adv,rw,lv,dp,ui,pts,pa,shData,psData,psrData,fe,fd,fo,newsData,messageData,notificationData,deliveryRulesData]=await Promise.all([
+        const[e,c,m,assetData,pc,p,cu,ar,wc,tk,ncc,nccg,pu,pg,q,fp,mo,o,t,a,adv,rw,lv,dp,ui,pts,pa,shData,psData,psrData,fe,fd,fo,newsData,messageData,notificationData,deliveryRulesData,processAccountingPosts,processBunPosts,processPhoPosts,processBanhCuonPosts]=await Promise.all([
           dbGet('scf_employees',DEF_EMPS),dbGet('scf_company',DEF_COMPANY),
           dbGet('scf_materials',DEF_MATERIALS),dbGet('scf_assets',[]),dbGet('scf_prodcats',DEF_PRODCATS),
           dbGet('scf_products',DEF_PRODUCTS),dbGet('scf_customers',DEF_CUSTOMERS),
@@ -197,10 +206,11 @@ function App(){
           dbGet('scf_shifts',D_SHIFTS),dbGet('scf_prod_shifts',DEF_PROD_SHIFTS),dbGet('scf_prod_shift_rules',DEF_PROD_SHIFT_RULES),
           dbGet('scf_finance_entries',[]),dbGet('scf_finance_debts',[]),dbGet('scf_finance_openings',[]),
           dbGet('scf_company_news',[]),dbGet('scf_internal_messages',[]),dbGet('scf_notifications',[]),dbGet('scf_delivery_rules',[]),
+          dbGet(PROCESS_POST_KEYS.process_accounting,[]),dbGet(PROCESS_POST_KEYS.process_bun,[]),dbGet(PROCESS_POST_KEYS.process_pho,[]),dbGet(PROCESS_POST_KEYS.process_banhcuon,[]),
         ]);
         const normalizedOrders=normalizeOrdersForStorage(o||[]);
         const normalizedProducts=(p||[]).map(normalizeProductWeight);
-        _se(e||DEF_EMPS);_sc(c);_sm(m);_sas(assetData);_spc(pc);_sp(normalizedProducts);_scu(cu);_sar(ar);_swc(wc);_stasks(tk);_sncc(ncc);_snccg(nccg);_spu(pu);_spg(pg);_sfp(fp);_smo(mo);_ssh(shData);_sq(q);_so(normalizedOrders);_st(t);_sa(a);_sadv(adv);_srw(rw);_slv(lv);_sdp(dp);_sui(normalizeUiSettings(ui));_spt(normalizePrintTemplateSettings(pts));_spa(pa||{});_sps(psData);_spr(psrData);_sfe(fe||[]);_sfd(fd||[]);_sfo(fo||[]);_snews(newsData||[]);_sim(messageData||[]);_snotifications(notificationData||[]);_sdr(deliveryRulesData||[]);
+        _se(e||DEF_EMPS);_sc(c);_sm(m);_sas(assetData);_spc(pc);_sp(normalizedProducts);_scu(cu);_sar(ar);_swc(wc);_stasks(tk);_sncc(ncc);_snccg(nccg);_spu(pu);_spg(pg);_sfp(fp);_smo(mo);_ssh(shData);_sq(q);_so(normalizedOrders);_st(t);_sa(a);_sadv(adv);_srw(rw);_slv(lv);_sdp(dp);_sui(normalizeUiSettings(ui));_spt(normalizePrintTemplateSettings(pts));_spa(pa||{});_sps(psData);_spr(psrData);_sfe(fe||[]);_sfd(fd||[]);_sfo(fo||[]);_snews(newsData||[]);_sim(messageData||[]);_snotifications(notificationData||[]);_sdr(deliveryRulesData||[]);_spp({process_accounting:processAccountingPosts||[],process_bun:processBunPosts||[],process_pho:processPhoPosts||[],process_banhcuon:processBanhCuonPosts||[]});
         if(ordersNeedTimeNormalization(o||[]))dbSet('scf_orders',normalizedOrders);
         if((p||[]).some((item,index)=>Number(item?.weightPerUnit||0)!==Number(normalizedProducts[index]?.weightPerUnit||0)))dbSet('scf_products',normalizedProducts);
       }catch(err){console.warn(err);}finally{clearTimeout(loadingGuard);setLoading(false);}
@@ -263,7 +273,7 @@ function App(){
       });
       if(news.length>0){
         localStorage.setItem(todayKey,'1');
-        setTimeout(()=>window.showToast&&window.showToast('Đã tự động tạo '+news.length+' chuyến giao hàng cho ngày '+tStr,'info',6000),1500);
+        if(!isFaceMask)setTimeout(()=>window.showToast&&window.showToast('Đã tự động tạo '+news.length+' chuyến giao hàng cho ngày '+tStr,'info',6000),1500);
         return[...prev,...news];
       }
       return prev;
@@ -344,7 +354,7 @@ function App(){
   const activeLevel=getLvl(cu.role,page,cu.permLevels);
   const readOnly=activeLevel==='r';
   window.__SCF_ACCESS_CONTEXT={role:cu.role,page,level:activeLevel,readOnly};
-  const wips=['purchase','workreport_vp','workreport_sx','workreport_total','process_accounting','process_bun','process_pho','process_banhcuon','marketsales'];
+  const wips=['purchase','workreport_vp','workreport_sx','workreport_total','marketsales'];
   const logout=async()=>{await serverLogout();window.scfClearSensitiveLocalData&&window.scfClearSensitiveLocalData();setSession(null);if(SCF_SERVER_AUTH_ENABLED)location.reload();};
   return h('div',{className:'layout'},
     h('div',{className:'main'},
@@ -437,6 +447,7 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,currentUser:cu}),
         canAccess(cu.role,'syncreport',cu.permissions)&&page==='syncreport'&&h(SyncDataReportTab),
         canAccess(cu.role,'dbusage',cu.permissions)&&page==='dbusage'&&h(SupabaseUsageReportTab,{employees,materials,assets,prodCats,products,customers,areas,workcats,tasks,nccs,purchases,goodsPurchases,quotes,orders,trips,attendance,advances,rewards,leaves,depts,shifts,prodShifts,prodShiftRules,prodOrders,stock,company}),
+        ['process_accounting','process_bun','process_pho','process_banhcuon'].includes(page)&&h(ProcessPostsTab,{page,title:PTITLES[page],icon:PICONS[page],items:processPosts[page]||[],setItems:setProcessPosts(page),currentUser:cu}),
         wips.includes(page)&&h(PlaceholderTab,{title:PTITLES[page],icon:PICONS[page]||'ti-clock'})
       ),
       (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cu.dept,onLogout:logout})
