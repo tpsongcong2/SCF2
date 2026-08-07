@@ -267,6 +267,7 @@ th{font-family:var(--ui-header-family)!important}
 .mobile-data-item span{font-size:14px;font-weight:600;color:var(--tx)}
 .mobile-data-text{font-size:13px;color:var(--tx);line-height:1.45}
 .mobile-data-actions{display:flex;justify-content:flex-end;gap:6px}
+.maintenance-money,.maintenance-km{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:650}`r`n.maintenance-money{color:var(--pri)}
 .delivery-secondary-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .delivery-mobile-filter-head{display:none}
 .delivery-mobile-more{position:relative}
@@ -705,3 +706,12 @@ tbody tr:hover td{background:var(--bg)}
 
 /* HDSD SCFOOD */
 .guide-page{max-width:1050px;margin:0 auto}.guide-hero{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px 20px;margin-bottom:12px;border-radius:16px;background:linear-gradient(135deg,#174b38,#2d7658);color:#fff}.guide-hero .ptitle{margin:0;color:#fff}.guide-hero p{margin:5px 0 0;color:rgba(255,255,255,.82);font-size:13px}.guide-search{min-width:290px;display:flex;align-items:center;gap:7px;padding:9px 11px;border-radius:10px;background:#fff;color:#64748b}.guide-search input{min-width:0;width:100%;padding:0;border:0;outline:0}.guide-role-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}.guide-role-tabs button{display:flex;justify-content:center;align-items:center;gap:7px;padding:11px;border:1px solid #cfdcd5;border-radius:11px;background:#fff;color:#365348;font-weight:700}.guide-role-tabs button.on{background:#e3f2ea;border-color:#2d7658;color:#174b38;box-shadow:inset 0 -3px #2d7658}.guide-intro{display:flex;align-items:center;gap:12px;padding:13px 15px;margin-bottom:12px;border:1px solid #cfe2d8;border-radius:12px;background:#f1f8f4}.guide-intro>i{font-size:27px;color:#2d7658}.guide-intro div{display:grid;gap:2px}.guide-intro span{font-size:12px;color:#52675f}.guide-sections{display:grid;gap:9px}.guide-section{overflow:hidden;border:1px solid #d9e3de;border-radius:12px;background:#fff}.guide-section summary{display:grid;grid-template-columns:32px minmax(0,1fr) 20px;align-items:center;gap:9px;padding:12px 14px;cursor:pointer;list-style:none}.guide-section summary::-webkit-details-marker{display:none}.guide-section[open] summary{background:#f1f8f4;color:#174b38;border-bottom:1px solid #d9e3de}.guide-section summary>i{transition:transform .2s}.guide-section[open] summary>i{transform:rotate(180deg)}.guide-number{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#dcefe5;color:#1f6c4d;font-size:12px;font-weight:800}.guide-section-body{padding:12px 18px 15px 54px}.guide-section-body ol{display:grid;gap:8px;margin:0;padding-left:20px}.guide-section-body li{padding-left:3px;font-size:13px;line-height:1.45;color:#334b42}.guide-note{display:flex;align-items:flex-start;gap:7px;margin-top:12px;padding:9px 11px;border-radius:9px;background:#fff7df;color:#795600;font-size:12px}.guide-note i{margin-top:1px;flex:0 0 auto}@media(max-width:768px){.guide-hero{align-items:stretch;flex-direction:column;padding:14px}.guide-search{min-width:0}.guide-role-tabs{grid-template-columns:1fr}.guide-role-tabs button{justify-content:flex-start;padding:10px 13px}.guide-intro{align-items:flex-start}.guide-section summary{padding:10px}.guide-section-body{padding:11px 12px 13px 43px}.guide-section-body li{font-size:12px}}
+@media (orientation:landscape) and (max-height:650px) and (max-width:1400px){
+  .maintenance-page .maintenance-mobile-list{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .maintenance-page .maintenance-desktop-table{display:none!important}
+  .maintenance-page .responsive-filter-grid{grid-template-columns:minmax(180px,1.4fr) minmax(130px,1fr) minmax(130px,1fr) auto!important}
+  .maintenance-page .mobile-data-card{min-width:0;padding:10px;gap:7px}
+  .maintenance-page .mobile-data-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .maintenance-page .mobile-data-head>*,.maintenance-page .mobile-data-item{min-width:0}
+  .maintenance-page .mobile-data-text,.maintenance-page .mobile-data-item span{overflow-wrap:anywhere}
+}
