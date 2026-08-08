@@ -82,23 +82,37 @@ function financeParseTransferOcr(rawText){
   const text=String(rawText||'').replace(/\r/g,'');
   const lines=text.split('\n').map(x=>x.trim()).filter(Boolean);
   const normalized=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').toLowerCase();
+  const normalizedLines=lines.map((value,index)=>({value,index,plain:normalized(value).replace(/\s+/g,' ').trim()}));
+  const flat=normalized(text).replace(/\s+/g,' ').trim();
+  const cleanFieldText=value=>String(value||'').replace(/^(?:tên\s+người\s+)?thụ\s+hưởng\s*/iu,'').replace(/^(?:ten\s+nguoi\s+)?thu\s+huong\s*/i,'').replace(/^[\s:：\-–]+/,'').replace(/\s+/g,' ').trim();
+  const fieldBlock=(starts,stops,maxLines=5)=>{
+    const start=normalizedLines.findIndex(row=>starts.some(key=>row.plain.includes(key)));
+    if(start<0)return'';
+    const values=[];
+    for(let i=start;i<normalizedLines.length&&i<=start+maxLines;i++){
+      const row=normalizedLines[i];
+      if(i>start&&stops.some(key=>row.plain.includes(key)))break;
+      let value=row.value;
+      starts.forEach(key=>{value=value.replace(new RegExp(key.split(' ').filter(Boolean).join('\\s+'),'iu'),' ');});
+      value=value.replace(/\b(?:tên người|ten nguoi|tài khoản|tai khoan|ngân hàng|ngan hang|nội dung|noi dung)\b/giu,' ').replace(/\b(?:thụ hưởng|thu huong|giao dịch|giao dich|chuyển tiền|chuyen tien)\b/giu,' ');
+      value=cleanFieldText(value);
+      if(value)values.push(value);
+    }
+    return values.join(' ').replace(/\s+/g,' ').trim();
+  };
   const amountCandidates=[];
   lines.forEach((line,index)=>{
-    const plain=normalized(line);
-    const positive=/so tien|amount|chuyen tien|thanh toan|giao dich|transaction/.test(plain);
-    const negative=/so du|tai khoan|account|ma giao dich|tham chieu|reference|ngay|gio/.test(plain);
-    const currency=/vnd|vnđ|₫|\bđ\b/i.test(line);
-    const matches=line.match(/\d[\d\s.,]{2,}/g)||[];
-    matches.forEach(value=>{
-      const digits=value.replace(/\D/g,'');
-      const amount=Number(digits);
+    const plain=normalized(line),positive=/so tien|amount|chuyen tien|thanh toan/.test(plain),negative=/so du|tai khoan|account|ma giao dich|mgd|tham chieu|reference|ngay|gio|thoi gian/.test(plain),currency=/vnd|vnđ|₫|\bđ\b/i.test(line);
+    (line.match(/\d[\d\s.,]{2,}/g)||[]).forEach(value=>{
+      const digits=value.replace(/\D/g,''),amount=Number(digits);
       if(!amount||digits.length<4)return;
-      amountCandidates.push({amount,score:(positive?8:0)+(currency?5:0)-(negative?7:0)+Math.min(digits.length,7)/10-index/1000});
+      amountCandidates.push({amount,score:(positive?8:0)+(currency?12:0)-(negative?7:0)+Math.min(digits.length,7)/10-index/1000});
     });
   });
   amountCandidates.sort((a,b)=>b.score-a.score||b.amount-a.amount);
-  const dateMatch=text.match(/\b([0-3]?\d)[\/.\-]([01]?\d)[\/.\-](20\d{2})\b/);
-  const timeMatch=text.match(/\b([01]?\d|2[0-3])[:h.]([0-5]\d)\b/i);
+  const compact=text.replace(/\s+/g,' ');
+  const dateMatch=compact.match(/\b([0-3]?\d)\s*[\/.\-]\s*([01]?\d)[^\d]{0,30}[\/.\-]\s*(20\d{2})\b/);
+  const timeMatch=compact.match(/\b([01]?\d|2[0-3])\s*[:h.]\s*([0-5]\d)(?:\s*:\s*([0-5]\d))?\b/i);
   const fieldValue=keys=>{
     const line=lines.find(x=>keys.some(key=>normalized(x).includes(key)));
     if(!line)return'';
@@ -106,19 +120,26 @@ function financeParseTransferOcr(rawText){
     return parts.length>1?parts.slice(1).join(':').trim():'';
   };
   const bankNames=[
-    ['vietcombank','Vietcombank'],['bidv','BIDV'],['vietinbank','VietinBank'],['agribank','Agribank'],
-    ['techcombank','Techcombank'],['mb bank','MB Bank'],['mbbank','MB Bank'],['vpbank','VPBank'],
+    ['vietcombank','Vietcombank'],['bidv','BIDV'],['vietinbank','VietinBank'],['agribank','Agribank'],['techcombank','Techcombank'],
+    ['ngan hang tmcp quan doi','MB Bank'],['mb - ngan hang','MB Bank'],['mb bank','MB Bank'],['mbbank','MB Bank'],['vpbank','VPBank'],
     ['tpbank','TPBank'],['sacombank','Sacombank'],['acb','ACB'],['vib','VIB'],['shb','SHB'],['ocb','OCB'],['msb','MSB']
   ];
-  const flat=normalized(text);
-  const bank=bankNames.find(([key])=>flat.includes(key))?.[1]||'';
+  const recipientRaw=fieldBlock(['ten nguoi thu huong','ten nguoi','thu huong'],['tai khoan','ngan hang','phi giao dich','thoi gian','noi dung'],4);
+  const recipientName=recipientRaw.replace(/\b\d{7,20}\b/g,'').replace(/\s+/g,' ').trim();
+  const accountSection=fieldBlock(['tai khoan thu huong','tai khoan'],['ngan hang','phi giao dich','thoi gian','noi dung'],3);
+  const recipientAccount=(accountSection.match(/\b\d[\d\s.-]{5,22}\d\b/)?.[0]||'').replace(/\D/g,'');
+  const bankSection=fieldBlock(['ngan hang thu huong','ngan hang'],['phi giao dich','thoi gian','noi dung'],6);
+  const recipientBank=bankNames.find(([key])=>normalized(bankSection).includes(key))?.[1]||(/\bmb\b/i.test(bankSection)?'MB Bank':'');
+  const bank=recipientBank||bankNames.find(([key])=>flat.includes(key))?.[1]||'';
+  const contentBlock=fieldBlock(['noi dung chuyen tien','noi dung'],['tien gui sinh loi','agribank plus'],6);
+  const content=contentBlock||fieldValue(['noi dung chuyen tien','noi dung','description','remark','message']);
+  const senderSuggestion=content.replace(/\b(?:chuyển|chuyen)\s*tiền\b.*$/iu,'').replace(/\b(?:ck|transfer|thanh toán|thanh toan)\b.*$/iu,'').replace(/[^\p{L}\s]/gu,' ').replace(/\s+/g,' ').trim();
+  const reference=fieldValue(['mgd','ma giao dich','ma tham chieu','transaction id','reference'])||(text.match(/\bMGD\s*[:：\-]?\s*([A-Z0-9.-]{5,})/i)?.[1]||'');
   return{
     amount:amountCandidates[0]?.amount||0,
     date:dateMatch?dateMatch[3]+'-'+dateMatch[2].padStart(2,'0')+'-'+dateMatch[1].padStart(2,'0'):'',
-    time:timeMatch?timeMatch[1].padStart(2,'0')+':'+timeMatch[2]:'',
-    reference:fieldValue(['ma giao dich','ma tham chieu','transaction id','reference']),
-    content:fieldValue(['noi dung','description','remark','message']),
-    bank
+    time:timeMatch?timeMatch[1].padStart(2,'0')+':'+timeMatch[2]+(timeMatch[3]?':'+timeMatch[3]:''):'',
+    reference,content,bank,recipientName,recipientAccount,recipientBank,senderSuggestion,senderNeedsConfirmation:Boolean(senderSuggestion)
   };
 }
 
@@ -154,8 +175,15 @@ function FinanceEntryForm({entry,direction,customers,nccs,currentUser,onSave,onC
         date:parsed.date||previous.date,
         reference:parsed.reference||previous.reference,
         note:parsed.content||previous.note,
-        transferBank:parsed.bank||previous.transferBank||'',
+        partnerType:previous.partnerType==='other'&&parsed.recipientName?'other':previous.partnerType,
+        partnerId:previous.partnerType==='other'&&parsed.recipientName?'':previous.partnerId,
+        partnerName:previous.partnerType==='other'&&parsed.recipientName?parsed.recipientName:previous.partnerName,
+        transferRecipientName:parsed.recipientName||previous.transferRecipientName||'',
+        transferRecipientAccount:parsed.recipientAccount||previous.transferRecipientAccount||'',
+        transferBank:parsed.recipientBank||parsed.bank||previous.transferBank||'',
         transferTime:parsed.time||previous.transferTime||'',
+        transferSenderSuggestion:parsed.senderSuggestion||previous.transferSenderSuggestion||'',
+        transferSenderNeedsConfirmation:parsed.senderNeedsConfirmation||previous.transferSenderNeedsConfirmation||false,
         transferOcrText:result?.data?.text||''
       }));
       window.showToast(parsed.amount?'Đã đọc ảnh. Vui lòng kiểm tra lại thông tin trước khi lưu.':'Đã đọc ảnh nhưng chưa nhận ra số tiền. Bạn hãy nhập lại thủ công.','success');
@@ -207,8 +235,14 @@ function FinanceEntryForm({entry,direction,customers,nccs,currentUser,onSave,onC
           ),
           transferPreview&&h('button',{type:'button',className:'bdel',disabled:ocrBusy||saving,onClick:()=>{setTransferFile(null);setTransferPreview('');sf(p=>({...p,transferImage:'',transferImageName:''}));},style:{marginLeft:8}},h('i',{className:'ti ti-trash'}),' Xóa ảnh'),
           ocrProgress&&h('div',{style:{marginTop:8,color:'var(--pri3)',fontSize:13}},ocrProgress),
-          (f.transferBank||f.transferTime)&&h('div',{style:{marginTop:8,fontSize:13}},f.transferBank&&h('span',null,'Ngân hàng: ',h('b',null,f.transferBank)),f.transferBank&&f.transferTime?' · ':'',f.transferTime&&h('span',null,'Giờ giao dịch: ',h('b',null,f.transferTime))),
-          h('div',{style:{marginTop:8,fontSize:12,color:'var(--tx2)'}},'App sẽ gợi ý số tiền, ngày, mã giao dịch và nội dung. Hãy kiểm tra lại trước khi lưu vì ảnh mờ có thể đọc sai.')
+          (f.transferRecipientName||f.transferRecipientAccount||f.transferBank||f.transferTime||f.transferSenderSuggestion)&&h('div',{style:{marginTop:10,padding:10,border:'1px solid #d9e7de',borderRadius:8,background:'#fff',fontSize:13,display:'grid',gap:5}},
+            f.transferRecipientName&&h('div',null,'Người thụ hưởng: ',h('b',null,f.transferRecipientName)),
+            f.transferRecipientAccount&&h('div',null,'Tài khoản nhận: ',h('b',null,f.transferRecipientAccount)),
+            f.transferBank&&h('div',null,'Ngân hàng nhận: ',h('b',null,f.transferBank)),
+            f.transferTime&&h('div',null,'Giờ giao dịch: ',h('b',null,f.transferTime)),
+            f.transferSenderSuggestion&&h('div',null,'Gợi ý người gửi: ',h('b',null,f.transferSenderSuggestion),' ',h('span',{className:'badge',style:{background:'#FAEEDA',color:'#854F0B'}},'Cần xác nhận'))
+          ),
+          h('div',{style:{marginTop:8,fontSize:12,color:'var(--tx2)'}},'App sẽ gợi ý số tiền, ngày, mã giao dịch, người thụ hưởng, tài khoản, ngân hàng và nội dung. Tên người gửi lấy từ nội dung chuyển tiền luôn cần xác nhận trước khi lưu.')
         )
       )
     ),
