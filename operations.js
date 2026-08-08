@@ -1531,6 +1531,9 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
   const [edit,se]=useState(null);
   const [imageView,setImageView]=useState(null);
   const [q,sq]=useState('');
+  const [vehicleFilter,setVehicleFilter]=useState('');
+  const [garageFilter,setGarageFilter]=useState('');
+  const [serviceFilter,setServiceFilter]=useState('');
   const [df,sdf]=useState('');
   const [dt,sdt]=useState('');
   const [form,setForm]=useState(makeEmptyForm());
@@ -1631,7 +1634,11 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
         ? [x.month,x.date,x.vehicle,x.service,x.km,x.garage,x.amount,x.invoice,x.invoiceImageName,x.repairImageName,...getRepairImages(x).map(img=>img.name||'')]
         : [x.month,x.date,x.vehicle,x.service,getRepairerText(x),x.amount,x.invoice,x.invoiceImageName,x.repairImageName,...getRepairImages(x).map(img=>img.name||'')]
       ).join(' ').toLowerCase();
-      if(q && !searchText.includes(q.toLowerCase())) return false;
+      if(isVehicle){
+        if(vehicleFilter&&!String(x.vehicle||'').toLowerCase().includes(vehicleFilter.toLowerCase())) return false;
+        if(garageFilter&&!String(x.garage||'').toLowerCase().includes(garageFilter.toLowerCase())) return false;
+        if(serviceFilter&&!String(x.service||'').toLowerCase().includes(serviceFilter.toLowerCase())) return false;
+      }else if(q&&!searchText.includes(q.toLowerCase())) return false;
       const d=parseAnyDate(x.date);
       if(df){
         const fd=parseAnyDate(df);
@@ -1650,8 +1657,8 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
       return (db?db.getTime():0)-(da?da.getTime():0);
     });
   const exportCols=(isVehicle
-    ?[['date','NGÀY BẢO DƯỠNG'],['vehicle','TÊN XE/MÁY'],['service','DỊCH VỤ'],['km','TẠI KM'],['garage','GARA'],['amount','THÀNH TIỀN'],['invoice','HÓA ĐƠN']]
-    :[['month','THÁNG'],['date','NGÀY BẢO DƯỠNG'],['vehicle','TÊN XE/MÁY'],['service','DỊCH VỤ'],['repairerText','NGƯỜI SỬA'],['amount','THÀNH TIỀN'],['invoice','HÓA ĐƠN']]);
+    ?[['date','NGÀY'],['vehicle','TÊN XE/MÁY'],['service','DỊCH VỤ'],['km','TẠI KM'],['garage','GARA'],['amount','THÀNH TIỀN'],['invoice','HÓA ĐƠN']]
+    :[['month','THÁNG'],['date','NGÀY'],['vehicle','TÊN XE/MÁY'],['service','DỊCH VỤ'],['repairerText','NGƯỜI SỬA'],['amount','THÀNH TIỀN'],['invoice','HÓA ĐƠN']]);
   const maintenanceInvoiceLabel=r=>{
     const repairCount=getRepairImages(r).length;
     if(r.invoiceImage&&repairCount) return repairCount>1?('Ảnh hóa đơn + '+repairCount+' ảnh sửa chữa'):'Ảnh hóa đơn + ảnh sửa chữa';
@@ -1781,7 +1788,7 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
     const mapped=rows.map(r=>({
       id:'BD'+uid(),
       month:isVehicle?'':(r['THÁNG']||r['Month']||''),
-      date:normalizeExcelDate(r['NGÀY BẢO DƯỠNG']||r['Ngày bảo dưỡng']||r['DATE']||r['Date']||r['date']||''),
+      date:normalizeExcelDate(r['NGÀY']||r['Ngày']||r['NGÀY BẢO DƯỠNG']||r['Ngày bảo dưỡng']||r['DATE']||r['Date']||r['date']||''),
       vehicle:r['TÊN XE/MÁY']||r['Tên xe']||r['Tên máy']||'',
       service:r['DỊCH VỤ']||r['Dịch vụ']||r['Nội dung']||'',
       km:isVehicle?maintenanceKmDigits(r['TẠI KM']||r['KM']||r['Odometer']||''):'',
@@ -1814,11 +1821,15 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
       )
     ),
     h('div',{className:'card',style:{marginBottom:'1rem',padding:'12px 14px'}},
-      h('div',{className:'responsive-filter-grid',style:{gridTemplateColumns:'1.4fr 1fr 1fr auto'}},
-        h(F,{label:'Tìm nhanh'},h(SearchBar,{value:q,onChange:sq,placeholder:isVehicle?'Xe, dịch vụ, gara...':'Máy, dịch vụ, người sửa...'})),
+      h('div',{className:'responsive-filter-grid maintenance-filter-grid',style:{gridTemplateColumns:isVehicle?'1fr 1fr 1.4fr 1fr 1fr auto':'1.4fr 1fr 1fr auto'}},
+        ...(isVehicle?[
+          h(F,{key:'vehicle-filter',label:'Xe'},h(SearchBar,{value:vehicleFilter,onChange:setVehicleFilter,placeholder:'Mã hoặc tên xe...'})),
+          h(F,{key:'garage-filter',label:'Gara'},h(SearchBar,{value:garageFilter,onChange:setGarageFilter,placeholder:'Tên gara...'})),
+          h(F,{key:'service-filter',label:'Dịch vụ'},h(SearchBar,{value:serviceFilter,onChange:setServiceFilter,placeholder:'Nội dung dịch vụ...'}))
+        ]:[h(F,{key:'quick-filter',label:'Tìm nhanh'},h(SearchBar,{value:q,onChange:sq,placeholder:'Máy, dịch vụ, người sửa...'}))]),
         h(F,{label:'Từ ngày'},h('input',{type:'date',value:df,onChange:e=>sdf(e.target.value)})),
         h(F,{label:'Đến ngày'},h('input',{type:'date',value:dt,onChange:e=>sdt(e.target.value)})),
-        h('button',{type:'button',onClick:()=>{sq('');sdf('');sdt('');},style:{height:38,alignSelf:'end'}},h('i',{className:'ti ti-filter-off',style:{fontSize:14}}),'Xóa lọc')
+        h('button',{type:'button',onClick:()=>{sq('');setVehicleFilter('');setGarageFilter('');setServiceFilter('');sdf('');sdt('');},style:{height:38,alignSelf:'end'}},h('i',{className:'ti ti-filter-off',style:{fontSize:14}}),'Xóa lọc')
       )
     ),
     h('div',{className:'mobile-only mobile-card-list maintenance-mobile-list'},
@@ -1851,7 +1862,7 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
     ),
     h('div',{className:'tw desktop-only maintenance-desktop-table'},
       h('table',null,
-          h('thead',null,h('tr',null,...(isVehicle?['NGÀY BẢO DƯỠNG','TÊN XE/MÁY','DỊCH VỤ','TẠI KM','GARA','THÀNH TIỀN','ẢNH CHỨNG TỪ','']:['THÁNG','NGÀY BẢO DƯỠNG','TÊN XE/MÁY','DỊCH VỤ','NGƯỜI SỬA','THÀNH TIỀN','ẢNH CHỨNG TỪ','']).map(c=>h('th',{key:c},c)))),
+          h('thead',null,h('tr',null,...(isVehicle?['NGÀY','TÊN XE/MÁY','DỊCH VỤ','TẠI KM','GARA','THÀNH TIỀN','ẢNH CHỨNG TỪ','']:['THÁNG','NGÀY','TÊN XE/MÁY','DỊCH VỤ','NGƯỜI SỬA','THÀNH TIỀN','ẢNH CHỨNG TỪ','']).map(c=>h('th',{key:c},c)))),
         h('tbody',null,filtered.length?filtered.map(x=>isVehicle
           ?h('tr',{key:x.id},
               h('td',null,fmtDateText(x.date)||'—'),
