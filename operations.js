@@ -1603,29 +1603,14 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
       repairImageName:repairImages[0]?.name||''
     };
   };
-  const openAdd=()=>{se(null);setForm({...makeEmptyForm(),date:isoDate(),month:isVehicle?'':isoDate().slice(0,7)});sm('f');};
+  const openAdd=()=>{se(null);setForm({...makeEmptyForm(),id:'BD'+uid(),date:isoDate(),month:isVehicle?'':isoDate().slice(0,7)});sm('f');};
   const openEdit=item=>{se(item);setForm({...normalizeMaintenanceItem(item),date:toIsoDate(item.date)});sm('f');};
-  const save=()=>{if(!form.date||!form.vehicle||!form.service){window.showToast('Nhập ngày, xe/máy và dịch vụ.','warn');return;}
-    const repairImages=getRepairImages(form);
-    const repairerIds=isVehicle?[]:getRepairerIds(form);
-    const repairerNames=isVehicle?[]:getRepairerNames(form);
-    const row={
-      ...form,
-      date:toIsoDate(form.date)||form.date,
-      id:edit?.id||('BD'+uid()),
-      repairerIds,
-      repairerNames,
-      repairerText:repairerNames.join(', '),
-      km:isVehicle?maintenanceKmDigits(form.km):'',
-      garageId:isVehicle?(form.garageId||''):'',
-      garage:isVehicle?form.garage:'',
-      repairImages,
-      repairImage:repairImages[0]?.url||'',
-      repairImageName:repairImages[0]?.name||''
-    };
-    setItems(prev=>edit?prev.map(x=>x.id===edit.id?row:x):[row,...prev]);
-    sm(null);se(null);window.showToast('Đã lưu bảo dưỡng','success');
+  const makeMaintenanceRow=(source,id=edit?.id||source.id||('BD'+uid()))=>{
+    const repairImages=getRepairImages(source),repairerIds=isVehicle?[]:getRepairerIds(source),repairerNames=isVehicle?[]:getRepairerNames(source);
+    return{...source,date:toIsoDate(source.date)||source.date,id,repairerIds,repairerNames,repairerText:repairerNames.join(', '),km:isVehicle?maintenanceKmDigits(source.km):'',garageId:isVehicle?(source.garageId||''):'',garage:isVehicle?source.garage:'',repairImages,repairImage:repairImages[0]?.url||'',repairImageName:repairImages[0]?.name||''};
   };
+  const upsertMaintenanceRow=row=>setItems(prev=>prev.some(x=>x.id===row.id)?prev.map(x=>x.id===row.id?row:x):[row,...prev]);
+  const save=()=>{if(!form.date||!form.vehicle||!form.service){window.showToast('Nhập ngày, xe/máy và dịch vụ.','warn');return;}const row=makeMaintenanceRow(form);upsertMaintenanceRow(row);sm(null);se(null);window.showToast('Đã lưu bảo dưỡng','success');};
   const del=id=>window.scfConfirm('Bạn có chắc muốn xóa dòng bảo dưỡng này?','Xóa bảo dưỡng',true).then(ok=>{if(ok){setItems(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa dòng bảo dưỡng','success');}});
   const filtered=(items||[])
     .map(normalizeMaintenanceItem)
@@ -1672,32 +1657,12 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
     setImageView({title,images:list,index:Math.max(0,Math.min(startIndex,list.length-1)),kind});
   };
   const pickMaintenanceImage=async(kind,files)=>{
-    const picked=Array.from(files||[]).filter(Boolean);
-    if(!picked.length)return;
-    try{
-      setUploading(kind);
-      const folderBase=kind==='invoice'
-        ?'maintenance/invoices/'+(edit?.id||'new')
-        :'maintenance/repairs/'+(edit?.id||'new');
-      if(kind==='invoice'){
-        const file=picked[0];
-        const url=await uploadPhoto(file,folderBase,{max:1000,quality:.65});
-        const next={...form,invoiceImage:url,invoiceImageName:file.name||'hoa-don-bao-duong.jpg'};
-        setForm(next);
-        if(edit)setItems(prev=>prev.map(x=>x.id===edit.id?{...x,invoiceImage:next.invoiceImage,invoiceImageName:next.invoiceImageName}:x));
-      }else{
-        const uploaded=[];
-        for(const file of picked){
-          const url=await uploadPhoto(file,folderBase,{max:1000,quality:.65});
-          uploaded.push({url,name:file.name||'anh-sua-chua.jpg'});
-        }
-        const prevImages=getRepairImages(form);
-        const repairImages=[...prevImages,...uploaded];
-        const next={...form,repairImages,repairImage:repairImages[0]?.url||'',repairImageName:repairImages[0]?.name||''};
-        setForm(next);
-        if(edit)setItems(prev=>prev.map(x=>x.id===edit.id?{...x,repairImages:next.repairImages,repairImage:next.repairImage,repairImageName:next.repairImageName}:x));
-      }
-      window.showToast(kind==='invoice'?'Đã lưu ảnh hóa đơn':('Đã lưu '+picked.length+' ảnh sửa chữa'),'success');
+    const picked=Array.from(files||[]).filter(Boolean);if(!picked.length)return;
+    if(!form.date||!form.vehicle||!form.service){window.showToast('Nhập ngày, xe/máy và dịch vụ trước khi chụp ảnh.','warn');return;}
+    try{setUploading(kind);const rowId=edit?.id||form.id||('BD'+uid());const folderBase=(kind==='invoice'?'maintenance/invoices/':'maintenance/repairs/')+rowId;let next;
+      if(kind==='invoice'){const file=picked[0],url=await uploadPhoto(file,folderBase,{max:1000,quality:.65});next={...form,id:rowId,invoiceImage:url,invoiceImageName:file.name||'hoa-don-bao-duong.jpg'};}
+      else{const uploaded=[];for(const file of picked){const url=await uploadPhoto(file,folderBase,{max:1000,quality:.65});uploaded.push({url,name:file.name||'anh-sua-chua.jpg'});}const repairImages=[...getRepairImages(form),...uploaded];next={...form,id:rowId,repairImages,repairImage:repairImages[0]?.url||'',repairImageName:repairImages[0]?.name||''};}
+      const row=makeMaintenanceRow(next,rowId);setForm(row);se(row);upsertMaintenanceRow(row);window.showToast(kind==='invoice'?'Đã tải và tự lưu ảnh hóa đơn lên hệ thống':('Đã tải và tự lưu '+picked.length+' ảnh sửa chữa lên hệ thống'),'success');
     }catch(e){
       window.showToast(kind==='invoice'?'Chưa tải được ảnh hóa đơn.':'Chưa tải được ảnh sửa chữa.','error');
     }finally{

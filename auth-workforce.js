@@ -268,7 +268,7 @@ function CameraBox({onCapture,preview,setPreview,template,setTemplate,autoOpenSi
   );
 }
 
-function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,currentUser,company}) {
+function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,currentUser,company,reportTitle='Báo cáo chấm công'}) {
   const settingsKey='scf_att_settings';
   const defaultWorkShifts=[
     {id:'night',name:'Ca đêm',start:'22:00',end:'03:00',color:'#EDE7F6',textColor:'#4527A0'},
@@ -752,13 +752,13 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   if(section==='report'){
     if(!canManage){
       return h('div',{className:'attendance-personal-report'},
-        h('div',{className:'ptitle'},h('i',{className:'ti ti-report-analytics'}),'Báo cáo chấm công'),
+        h('div',{className:'ptitle'},h('i',{className:'ti ti-report-analytics'}),reportTitle),
         renderMonthlyReport()
       );
     }
     const pendingRows=attendance.filter(r=>(isAdmin||managerEmployeeIds.has(r.empId))&&r.status!=='valid').sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
     return h('div',{className:'attendance-manager-page'},
-      h('div',{className:'ptitle'},h('i',{className:'ti ti-report-analytics'}),'Báo cáo chấm công'),
+      h('div',{className:'ptitle'},h('i',{className:'ti ti-report-analytics'}),reportTitle),
       pendingRows.length>0&&h('div',{className:'card'},
         h('div',{className:'attendance-manager-title'},'Bản ghi cần duyệt'),
         h('div',{className:'attendance-manager-approvals'},pendingRows.map(r=>h('div',{className:'attendance-approval-row',key:r.id},

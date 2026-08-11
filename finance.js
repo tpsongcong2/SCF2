@@ -2,6 +2,10 @@
 const FIN_IN_CATS=['Doanh thu bán hàng','Thu công nợ khách hàng','Vốn góp','Vay nhận về','Thu khác'];
 const FIN_OUT_CATS=['Mua nguyên vật liệu','Mua hàng hóa','Chi phí Lương LX','Chi phí Lương SX','Chi phí Lương KT','Chi phí Điện nước','Chi bếp','Chi phí Bảo dưỡng xe','Chi phí Bảo dưỡng máy','Lương và nhân sự','Xăng dầu','Sửa chữa, bảo dưỡng','Thuế và phí','Trả công nợ nhà cung cấp','Trả nợ vay','Chi khác'];
 const finMoney=v=>(Number(v)||0).toLocaleString('vi-VN')+'đ';
+const finMoneyInput=v=>{
+  const digits=String(v??'').replace(/[^\d]/g,'');
+  return digits?Number(digits).toLocaleString('en-US'):'';
+};
 const finStatusLabel=s=>s==='paid'?'Đã thanh toán':s==='partial'?'Thanh toán một phần':'Chưa thanh toán';
 const finDefaultPnl=(direction,category)=>direction==='in'?(category==='Doanh thu bán hàng'||category==='Thu khác'?'revenue':'none'):(category==='Trả công nợ nhà cung cấp'||category==='Trả nợ vay'?'none':'expense');
 
@@ -71,7 +75,7 @@ function financeTripReceivableDrafts(trip,orders,products,quotes,customers,curre
   const rows=[...groups.entries()].map(([key,group])=>({
     id:'CN-'+String(trip?.id||'CHUYEN')+'-'+String(group.customerId||key).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,28),
     kind:'receivable',date:isoDateValue(trip?.deliveryDate),dueDate:'',partnerId:group.customerId,partnerName:group.customerName,
-    invoiceNo:trip?.id||'',amount:group.amount,paidAmount:0,status:'unpaid',sourceTripId:trip?.id||'',sourceOrderIds:group.orderIds,
+    invoiceNo:trip?.id||'',amount:group.amount,vatPercent:0,vatAmount:0,amountAfterTax:group.amount,paidAmount:0,status:'unpaid',sourceTripId:trip?.id||'',sourceOrderIds:group.orderIds,
     note:'Tự động từ chuyến '+(trip?.id||'')+' · Công nợ theo SL HĐ'+(group.missingPrice?' · Thiếu đơn giá '+group.missingPrice+' dòng':''),
     createdBy:currentUser?.name||'',createdAt:stamp,updatedBy:currentUser?.name||'',updatedAt:stamp
   }));
@@ -221,7 +225,7 @@ function FinanceEntryForm({entry,direction,customers,nccs,currentUser,onSave,onC
       f.partnerType==='other'?h(F,{label:'Tên đối tượng'},h('input',{value:f.partnerName,onChange:e=>set('partnerName',e.target.value),placeholder:'Người nộp / người nhận...'})):h(F,{label:f.partnerType==='customer'?'Khách hàng':'Nhà cung cấp'},h('select',{value:f.partnerId,onChange:e=>set('partnerId',e.target.value)},h('option',{value:''},'— Chọn —'),partners.map(x=>h('option',{key:x.id,value:x.id},x.name||x.id))))
     ),
     h('div',{className:'g2'},
-      h(F,{label:'Số tiền *'},h('input',{type:'number',min:0,value:f.amount,onChange:e=>set('amount',e.target.value)})),
+      h(F,{label:'Số tiền *'},h('input',{type:'text',inputMode:'numeric',value:finMoneyInput(f.amount),onChange:e=>set('amount',String(e.target.value||'').replace(/[^\d]/g,'')),placeholder:'1,781,000'})),
       h(F,{label:'Số chứng từ'},h('input',{value:f.reference,onChange:e=>set('reference',e.target.value),placeholder:'Phiếu thu, phiếu chi, hóa đơn...'}))
     ),
     f.direction==='out'&&f.method==='bank'&&h('div',{style:{margin:'10px 0',padding:12,border:'1px solid #cde4d3',borderRadius:10,background:'#f3f9f5'}},
@@ -253,19 +257,24 @@ function FinanceEntryForm({entry,direction,customers,nccs,currentUser,onSave,onC
 
 function FinanceDebtForm({debt,kind,customers,nccs,currentUser,onSave,onClose}){
   const initialKind=debt?.kind||kind||'receivable';
-  const[f,sf]=useState(debt?{...debt}:{kind:initialKind,date:isoDate(),dueDate:'',partnerId:'',partnerName:'',invoiceNo:'',amount:0,paidAmount:0,note:''});
+  const[f,sf]=useState(debt?{vatPercent:0,vatAmount:0,amountAfterTax:Number(debt.amount)||0,...debt}:{kind:initialKind,date:isoDate(),dueDate:'',partnerId:'',partnerName:'',invoiceNo:'',amount:0,vatPercent:0,vatAmount:0,amountAfterTax:0,paidAmount:0,note:''});
   const set=(k,v)=>sf(p=>({...p,[k]:v}));
+  const changeKind=value=>sf(p=>({...p,kind:value,partnerId:'',partnerName:'',vatPercent:value==='receivable'?(Number(p.vatPercent)||0):0}));
   const partners=f.kind==='receivable'?customers:nccs;
+  const amount=Number(f.amount)||0;
+  const vatPercent=f.kind==='receivable'?Math.max(0,Number(f.vatPercent)||0):0;
+  const vatAmount=f.kind==='receivable'?Math.round(amount*vatPercent/100):0;
+  const amountAfterTax=amount+vatAmount;
   const submit=()=>{
     const partner=partners.find(x=>x.id===f.partnerId);
     if(!partner){window.showToast('Chọn '+(f.kind==='receivable'?'khách hàng.':'nhà cung cấp.'),'warn');return;}
-    const amount=Number(f.amount)||0,paid=Math.min(amount,Math.max(0,Number(f.paidAmount)||0));
+    const paid=Math.min(amountAfterTax,Math.max(0,Number(f.paidAmount)||0));
     if(amount<=0){window.showToast('Nhập giá trị công nợ.','warn');return;}
-    onSave({...f,amount,paidAmount:paid,partnerName:partner.name||partner.id,status:paid>=amount?'paid':paid>0?'partial':'unpaid',updatedBy:currentUser.name,updatedAt:fmtDT(),createdBy:debt?.createdBy||currentUser.name,createdAt:debt?.createdAt||fmtDT()});
+    onSave({...f,amount,vatPercent,vatAmount,amountAfterTax,paidAmount:paid,partnerName:partner.name||partner.id,status:paid>=amountAfterTax?'paid':paid>0?'partial':'unpaid',updatedBy:currentUser.name,updatedAt:fmtDT(),createdBy:debt?.createdBy||currentUser.name,createdAt:debt?.createdAt||fmtDT()});
   };
   return h(Modal,{title:debt?'Sửa công nợ':(initialKind==='receivable'?'Thêm công nợ khách hàng':'Thêm công nợ nhà cung cấp'),onClose,lg:true},
     h('div',{className:'g3'},
-      h(F,{label:'Loại công nợ'},h('select',{value:f.kind,onChange:e=>sf(p=>({...p,kind:e.target.value,partnerId:'',partnerName:''}))},h('option',{value:'receivable'},'Phải thu khách hàng'),h('option',{value:'payable'},'Phải trả nhà cung cấp'))),
+      h(F,{label:'Loại công nợ'},h('select',{value:f.kind,onChange:e=>changeKind(e.target.value)},h('option',{value:'receivable'},'Phải thu khách hàng'),h('option',{value:'payable'},'Phải trả nhà cung cấp'))),
       h(F,{label:'Ngày ghi nhận'},h('input',{type:'date',value:f.date,onChange:e=>set('date',e.target.value)})),
       h(F,{label:'Hạn thanh toán'},h('input',{type:'date',value:f.dueDate,onChange:e=>set('dueDate',e.target.value)}))
     ),
@@ -273,10 +282,22 @@ function FinanceDebtForm({debt,kind,customers,nccs,currentUser,onSave,onClose}){
       h(F,{label:f.kind==='receivable'?'Khách hàng *':'Nhà cung cấp *'},h('select',{value:f.partnerId,onChange:e=>set('partnerId',e.target.value)},h('option',{value:''},'— Chọn —'),partners.map(x=>h('option',{key:x.id,value:x.id},x.name||x.id)))),
       h(F,{label:'Hóa đơn / chứng từ'},h('input',{value:f.invoiceNo,onChange:e=>set('invoiceNo',e.target.value)}))
     ),
-    h('div',{className:'g2'},
-      h(F,{label:'Giá trị công nợ *'},h('input',{type:'number',min:0,value:f.amount,onChange:e=>set('amount',e.target.value)})),
-      h(F,{label:'Đã thanh toán'},h('input',{type:'number',min:0,max:Number(f.amount)||0,value:f.paidAmount,onChange:e=>set('paidAmount',e.target.value)}))
-    ),
+    f.kind==='receivable'
+      ?h(React.Fragment,null,
+        h('div',{className:'g3'},
+          h(F,{label:'Giá trị trước thuế *'},h('input',{type:'text',inputMode:'numeric',value:finMoneyInput(f.amount),onChange:e=>set('amount',String(e.target.value||'').replace(/[^\d]/g,'')),placeholder:'1,000,000'})),
+          h(F,{label:'% VAT'},h('input',{type:'number',min:0,max:100,step:'0.1',value:f.vatPercent,onChange:e=>set('vatPercent',e.target.value),placeholder:'0'})),
+          h(F,{label:'Tiền VAT'},h('input',{type:'text',value:finMoneyInput(vatAmount),readOnly:true,tabIndex:-1}))
+        ),
+        h('div',{className:'g2'},
+          h(F,{label:'Thành tiền sau thuế'},h('input',{type:'text',value:finMoneyInput(amountAfterTax),readOnly:true,tabIndex:-1,style:{fontWeight:700,color:'var(--pri3)'}})),
+          h(F,{label:'Đã thanh toán'},h('input',{type:'text',inputMode:'numeric',value:finMoneyInput(f.paidAmount),onChange:e=>set('paidAmount',String(e.target.value||'').replace(/[^\d]/g,'')),placeholder:'0'}))
+        )
+      )
+      :h('div',{className:'g2'},
+        h(F,{label:'Giá trị công nợ *'},h('input',{type:'text',inputMode:'numeric',value:finMoneyInput(f.amount),onChange:e=>set('amount',String(e.target.value||'').replace(/[^\d]/g,'')),placeholder:'1,000,000'})),
+        h(F,{label:'Đã thanh toán'},h('input',{type:'text',inputMode:'numeric',value:finMoneyInput(f.paidAmount),onChange:e=>set('paidAmount',String(e.target.value||'').replace(/[^\d]/g,'')),placeholder:'0'}))
+      ),
     h(F,{label:'Ghi chú'},h('textarea',{rows:2,value:f.note,onChange:e=>set('note',e.target.value)})),
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit},h('i',{className:'ti ti-device-floppy'}),' Lưu công nợ'))
   );
@@ -365,9 +386,179 @@ function financeMaintenanceExpense(records,month){
   return(records||[]).filter(record=>monthOf(record.date||record.month)===month).reduce((total,record)=>total+moneyValue(record.amount),0);
 }
 
+function financeDebtOcrText(input){
+  if(typeof input==='string')return input;
+  const data=input||{},tsv=String(data.tsv||'').trim();
+  if(!tsv)return String(data.text||'');
+  const lines=tsv.split(/\r?\n/).filter(Boolean);
+  if(lines.length<2)return String(data.text||'');
+  const header=lines[0].split('\t');
+  const at=name=>header.indexOf(name);
+  const levelIndex=at('level'),leftIndex=at('left'),topIndex=at('top'),widthIndex=at('width'),heightIndex=at('height'),confidenceIndex=at('conf'),textIndex=at('text');
+  if([leftIndex,topIndex,widthIndex,heightIndex,textIndex].some(index=>index<0))return String(data.text||'');
+  const words=lines.slice(1).map(line=>{
+    const cells=line.split('\t');
+    return{level:Number(cells[levelIndex]),left:Number(cells[leftIndex])||0,top:Number(cells[topIndex])||0,width:Number(cells[widthIndex])||0,height:Number(cells[heightIndex])||0,confidence:Number(cells[confidenceIndex]),text:String(cells.slice(textIndex).join('\t')||'').trim()};
+  }).filter(word=>word.text&&(levelIndex<0||word.level===5)&&(Number.isNaN(word.confidence)||word.confidence>=15));
+  if(!words.length)return String(data.text||'');
+  const medianHeight=words.map(word=>word.height).filter(Boolean).sort((a,b)=>a-b)[Math.floor(words.length/2)]||12;
+  const tolerance=Math.max(5,medianHeight*.65),rows=[];
+  words.sort((a,b)=>(a.top+a.height/2)-(b.top+b.height/2)||a.left-b.left).forEach(word=>{
+    const center=word.top+word.height/2;
+    let row=rows.find(item=>Math.abs(item.center-center)<=tolerance);
+    if(!row){row={center,words:[]};rows.push(row);}
+    row.words.push(word);row.center=(row.center*(row.words.length-1)+center)/row.words.length;
+  });
+  const reconstructed=rows.sort((a,b)=>a.center-b.center).map(row=>row.words.sort((a,b)=>a.left-b.left).map(word=>word.text).join(' ')).join('\n');
+  return reconstructed||String(data.text||'');
+}
+function financeNormalizeCustomerName(value){
+  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toLowerCase()
+    .replace(/\b(?:cong ty|cty|tnhh|co phan|cp|mot thanh vien|mtv|hkd)\b/g,' ')
+    .replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
+}
+function financeNameSimilarity(a,b){
+  const left=financeNormalizeCustomerName(a),right=financeNormalizeCustomerName(b);
+  if(!left||!right)return 0;
+  const compactLeft=left.replace(/\s/g,''),compactRight=right.replace(/\s/g,'');
+  if(compactLeft===compactRight)return 1;
+  if(compactLeft.includes(compactRight)||compactRight.includes(compactLeft))return .88;
+  const distance=(x,y)=>{
+    const row=Array.from({length:y.length+1},(_,i)=>i);
+    for(let i=1;i<=x.length;i++){
+      let previous=row[0];row[0]=i;
+      for(let j=1;j<=y.length;j++){
+        const old=row[j];
+        row[j]=Math.min(row[j]+1,row[j-1]+1,previous+(x[i-1]===y[j-1]?0:1));
+        previous=old;
+      }
+    }
+    return row[y.length];
+  };
+  const edit=1-distance(compactLeft,compactRight)/Math.max(compactLeft.length,compactRight.length);
+  const aTokens=new Set(left.split(' ')),bTokens=new Set(right.split(' '));
+  const common=[...aTokens].filter(token=>bTokens.has(token)).length;
+  const tokenScore=common/Math.max(1,new Set([...aTokens,...bTokens]).size);
+  return Math.max(0,edit*.72+tokenScore*.28);
+}
+function financeRankCustomers(name,customers){
+  return (customers||[]).map(customer=>({customer,score:financeNameSimilarity(name,customer.name||customer.id)}))
+    .sort((a,b)=>b.score-a.score||String(a.customer.name||'').localeCompare(String(b.customer.name||''),'vi'));
+}
+function financeParseCustomerDebtImage(rawText,customers,date){
+  const text=financeDebtOcrText(rawText).replace(/\r/g,'');
+  const vatMatch=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').match(/(?:thue|vat|gtgt)[^\n%]{0,20}(\d+(?:[.,]\d+)?)\s*%/i);
+  const defaultVat=vatMatch?Number(vatMatch[1].replace(',','.'))||0:8;
+  const moneyPattern=/\d{1,3}(?:[.,]\s?\d{3})+|\d{4,}/g;
+  return text.split('\n').map(line=>line.replace(/\s+/g,' ').trim()).filter(Boolean).map((line,index)=>{
+    const plain=financeNormalizeCustomerName(line);
+    if(/tong cong|doanh thu|ten cty|chua thue|sau thue|xuat khac/.test(plain))return null;
+    const matches=[...line.matchAll(moneyPattern)];
+    if(matches.length<3)return null;
+    const values=matches.slice(-3);
+    const amount=Number(values[0][0].replace(/\D/g,''))||0;
+    const vatAmountOcr=Number(values[1][0].replace(/\D/g,''))||0;
+    const amountAfterTaxOcr=Number(values[2][0].replace(/\D/g,''))||0;
+    if(!amount||!amountAfterTaxOcr)return null;
+    let ocrName=line.slice(0,values[0].index).replace(/^\s*\d+\s*[.)-]?\s*/,'').replace(/[|:]+$/,'').trim();
+    if(!ocrName||/^tong/i.test(financeNormalizeCustomerName(ocrName)))return null;
+    const calculatedPercent=amount?vatAmountOcr*100/amount:defaultVat;
+    const vatPercent=Math.abs(calculatedPercent-defaultVat)<=.3?defaultVat:Number(calculatedPercent.toFixed(2));
+    const ranked=financeRankCustomers(ocrName,customers);
+    const best=ranked[0];
+    return{id:'ocr-'+index,enabled:true,ocrName,customerId:best&&best.score>=.34?best.customer.id:'',matchScore:best?.score||0,date,amount,vatPercent,vatAmountOcr,amountAfterTaxOcr};
+  }).filter(Boolean);
+}
+function financeMapAiCustomerDebts(aiRows,customers,date){
+  return (Array.isArray(aiRows)?aiRows:[]).map((item,index)=>{
+    const ocrName=String(item?.customer_name||'').trim();
+    const amount=Math.max(0,Math.round(Number(item?.amount_before_tax)||0));
+    const vatPercent=Math.max(0,Number(item?.vat_percent)||0);
+    const vatAmountOcr=Math.max(0,Math.round(Number(item?.vat_amount)||amount*vatPercent/100));
+    const amountAfterTaxOcr=Math.max(0,Math.round(Number(item?.amount_after_tax)||amount+vatAmountOcr));
+    if(!ocrName||!amount)return null;
+    const ranked=financeRankCustomers(ocrName,customers);
+    const best=ranked[0];
+    return{id:'ai-'+index,enabled:true,ocrName,customerId:best&&best.score>=.34?best.customer.id:'',matchScore:best?.score||0,date,amount,vatPercent,vatAmountOcr,amountAfterTaxOcr};
+  }).filter(Boolean);
+}function FinanceDebtImageImport({customers,currentUser,defaultMonth,onImport,onClose}){
+  const[date,setDate]=useState((defaultMonth||isoDate().slice(0,7))+'-01');
+  const[rows,setRows]=useState([]);
+  const[busy,setBusy]=useState(false);
+  const[progress,setProgress]=useState('');
+  const[fileName,setFileName]=useState('');
+  const update=(id,patch)=>setRows(previous=>previous.map(row=>row.id===id?{...row,...patch}:row));
+  const readImage=async file=>{
+    if(!file)return;
+    if(!String(file.type||'').startsWith('image/')){window.showToast('Vui lòng chọn một tệp ảnh.','warn');return;}
+    setFileName(file.name||'Ảnh công nợ');setBusy(true);setRows([]);setProgress('Đang gửi ảnh cho AI phân tích...');
+    try{
+      if(!sb)throw new Error('Chưa kết nối Supabase.');
+      const prepared=await resizeImageFile(file,2200,.9);
+      const{data,error}=await sb.functions.invoke('scf-finance-vision',{body:{imageDataUrl:prepared.dataUrl}});
+      if(error)throw error;
+      if(!data?.ok)throw new Error(data?.error||'AI không trả về kết quả hợp lệ.');
+      const parsed=financeMapAiCustomerDebts(data.rows,customers,date);
+      setRows(parsed);
+      window.showToast(parsed.length?'AI đã nhận ra '+parsed.length+' dòng. Hãy kiểm tra khách hàng trước khi nhập.':'AI chưa nhận ra dòng công nợ nào trong ảnh.',''+(parsed.length?'success':'warn'));
+    }catch(error){
+      console.warn('Customer debt image AI:',error);
+      window.showToast(error?.message||'AI không đọc được ảnh. Hãy thử ảnh rõ hơn hoặc ảnh chụp thẳng bảng.','error');
+    }finally{setBusy(false);setProgress('');}
+  };
+  const changeDate=value=>{setDate(value);setRows(previous=>previous.map(row=>({...row,date:value})));};
+  const submit=()=>{
+    const selected=rows.filter(row=>row.enabled);
+    if(!selected.length){window.showToast('Chưa chọn dòng nào để nhập.','warn');return;}
+    const unmatched=selected.filter(row=>!row.customerId);
+    if(unmatched.length){window.showToast('Còn '+unmatched.length+' dòng chưa chọn khách hàng.','warn');return;}
+    const stamp=fmtDT();
+    const result=selected.map(row=>{
+      const customer=(customers||[]).find(item=>String(item.id)===String(row.customerId))||{};
+      const amount=Number(row.amount)||0,vatPercent=Math.max(0,Number(row.vatPercent)||0),vatAmount=Math.round(amount*vatPercent/100),amountAfterTax=amount+vatAmount;
+      return{id:'CN'+uid(),kind:'receivable',date:row.date||date,dueDate:'',partnerId:customer.id||row.customerId,partnerName:customer.name||row.ocrName,invoiceNo:'Nhập từ ảnh '+(defaultMonth||''),amount,vatPercent,vatAmount,amountAfterTax,paidAmount:0,status:'unpaid',note:'Tên trên ảnh: '+row.ocrName,source:'customer-debt-image',createdBy:currentUser.name,createdAt:stamp,updatedBy:currentUser.name,updatedAt:stamp};
+    });
+    onImport(result);
+  };
+  return h(Modal,{title:'Nhập công nợ khách hàng từ ảnh',onClose,lg:true},
+    h('div',{className:'g2'},
+      h(F,{label:'Ngày ghi nhận'},h('input',{type:'date',value:date,onChange:e=>changeDate(e.target.value)})),
+      h(F,{label:'Ảnh bảng doanh thu / công nợ'},h('label',{className:'btn',style:{display:'flex',alignItems:'center',justifyContent:'center',gap:7,cursor:busy?'wait':'pointer',minHeight:40}},
+        h('i',{className:'ti ti-photo-scan'}),busy?'AI đang đọc ảnh...':(fileName||'Chọn ảnh'),
+        h('input',{type:'file',accept:'image/*',disabled:busy,onChange:e=>readImage(e.target.files?.[0]),style:{display:'none'}})
+      ))
+    ),
+    progress&&h('div',{style:{margin:'8px 0',color:'var(--pri3)',fontSize:13}},progress),
+    rows.length>0&&h('div',{style:{margin:'8px 0',fontSize:12,color:'var(--tx2)'}},'AI đã đọc số liệu; app xếp khách hàng gần giống lên đầu danh sách. Bạn cần kiểm tra lại trước khi nhập.'),
+    rows.length>0&&h('div',{className:'tw',style:{maxHeight:'55vh',overflow:'auto'}},
+      h('table',null,
+        h('thead',null,h('tr',null,...['Nhập','Tên đọc từ ảnh','Khách hàng trong danh mục','Trước thuế','% VAT','Tiền VAT','Sau thuế'].map(label=>h('th',{key:label},label)))),
+        h('tbody',null,rows.map(row=>{
+          const ranked=financeRankCustomers(row.ocrName,customers);
+          const vatAmount=Math.round((Number(row.amount)||0)*(Number(row.vatPercent)||0)/100);
+          return h('tr',{key:row.id,style:row.customerId?null:{background:'#FFF8E1'}},
+            h('td',null,h('input',{type:'checkbox',checked:row.enabled,onChange:e=>update(row.id,{enabled:e.target.checked})})),
+            h('td',null,h('b',null,row.ocrName),row.matchScore>0&&h('div',{style:{fontSize:10,color:'var(--tx2)'}},'Độ gần đúng '+Math.round(row.matchScore*100)+'%')),
+            h('td',null,h('select',{value:row.customerId,onChange:e=>update(row.id,{customerId:e.target.value})},
+              h('option',{value:''},'— Chọn khách hàng —'),
+              ranked.map(item=>h('option',{key:item.customer.id,value:item.customer.id},(item.customer.name||item.customer.id)+' · '+Math.round(item.score*100)+'%'))
+            )),
+            h('td',null,h('input',{type:'text',inputMode:'numeric',value:finMoneyInput(row.amount),onChange:e=>update(row.id,{amount:String(e.target.value||'').replace(/[^\d]/g,'')})})),
+            h('td',null,h('input',{type:'number',min:0,max:100,step:'.1',value:row.vatPercent,onChange:e=>update(row.id,{vatPercent:e.target.value}),style:{minWidth:72}})),
+            h('td',null,finMoney(vatAmount)),
+            h('td',null,h('b',null,finMoney((Number(row.amount)||0)+vatAmount)))
+          );
+        }))
+      )
+    ),
+    !busy&&!rows.length&&h('div',{className:'empty-st',style:{padding:'26px 12px'}},'Chọn ảnh bảng doanh thu có các cột khách hàng, trước thuế, VAT và sau thuế. AI sẽ đọc bảng để bạn kiểm tra trước khi nhập.'),
+    h(Row,null,h('button',{onClick:onClose,disabled:busy},'Hủy'),h('button',{className:'bp',onClick:submit,disabled:busy||!rows.length},h('i',{className:'ti ti-file-import'}),' Nhập '+rows.filter(row=>row.enabled).length+' dòng'))
+  );
+}
+
 function FinanceReportTab({entries,setEntries,debts,setDebts,openings,setOpenings,customers,nccs,currentUser,orders,products,quotes,purchases,goodsPurchases}){
   const currentMonth=isoDate().slice(0,7);
-  const[month,setMonth]=useState(currentMonth);const[tab,setTab]=useState('overview');const[entryModal,setEntryModal]=useState(null);const[debtModal,setDebtModal]=useState(null);
+  const[month,setMonth]=useState(currentMonth);const[tab,setTab]=useState('overview');const[entryModal,setEntryModal]=useState(null);const[debtModal,setDebtModal]=useState(null);const[debtImageModal,setDebtImageModal]=useState(false);
   const[editEntry,setEditEntry]=useState(null);const[editDebt,setEditDebt]=useState(null);
   const[vehicleMaintenance,setVehicleMaintenance]=useState([]);const[machineMaintenance,setMachineMaintenance]=useState([]);
   useEffect(()=>{
@@ -429,10 +620,14 @@ function FinanceReportTab({entries,setEntries,debts,setDebts,openings,setOpening
   const revenueDelivered=salesSummary.amount,revenueInvoice=salesSummary.invoiceAmount,profitDelivered=revenueDelivered-expense,profitInvoice=revenueInvoice-expense;
   const monthEnd=month+'-31';
   const debtRows=debts.filter(x=>!x.date||x.date<=monthEnd);
-  const outstanding=x=>Math.max(0,(Number(x.amount)||0)-(Number(x.paidAmount)||0));
+  const debtVatPercent=x=>x.kind==='receivable'?Math.max(0,Number(x.vatPercent)||0):0;
+  const debtVatAmount=x=>x.kind==='receivable'?Math.round((Number(x.amount)||0)*debtVatPercent(x)/100):0;
+  const debtAfterTax=x=>(Number(x.amount)||0)+debtVatAmount(x);
+  const outstanding=x=>Math.max(0,debtAfterTax(x)-(Number(x.paidAmount)||0));
   const receivable=sum(debtRows,x=>x.kind==='receivable'?outstanding(x):0),payable=sum(debtRows,x=>x.kind==='payable'?outstanding(x):0);
   const saveEntry=data=>{const item={...data,id:editEntry?.id||'TC'+uid()};setEntries(p=>editEntry?p.map(x=>x.id===editEntry.id?item:x):[item,...p]);setEntryModal(null);setEditEntry(null);};
   const saveDebt=data=>{const item={...data,id:editDebt?.id||'CN'+uid()};setDebts(p=>editDebt?p.map(x=>x.id===editDebt.id?item:x):[item,...p]);setDebtModal(null);setEditDebt(null);};
+  const importCustomerDebts=items=>{setDebts(previous=>[...items,...previous]);setDebtImageModal(false);window.showToast('Đã nhập '+items.length+' dòng công nợ khách hàng.','success');};
   const saveOpening=()=>{const item={month,cash:Number(openingEdit.cash)||0,bank:Number(openingEdit.bank)||0,updatedBy:currentUser.name,updatedAt:fmtDT()};setOpenings(p=>{const i=p.findIndex(x=>x.month===month);return i>=0?p.map((x,j)=>j===i?item:x):[...p,item];});window.showToast('Đã lưu tiền đầu tháng.','success');};
   const delEntry=id=>window.scfConfirm('Xóa khoản thu/chi này?','Xóa dữ liệu',true).then(ok=>ok&&setEntries(p=>p.filter(x=>x.id!==id)));
   const delDebt=id=>window.scfConfirm('Xóa khoản công nợ này?','Xóa dữ liệu',true).then(ok=>ok&&setDebts(p=>p.filter(x=>x.id!==id)));
@@ -444,9 +639,9 @@ function FinanceReportTab({entries,setEntries,debts,setDebts,openings,setOpening
     return{month:ym,opening:(Number(op.cash)||0)+(Number(op.bank)||0),inflow:inc,outflow:out,ending:(Number(op.cash)||0)+(Number(op.bank)||0)+inc-out,revenueInvoice:revInvoice,revenueDelivered:revDelivered,expense:exp,profitInvoice:revInvoice-exp,profitDelivered:revDelivered-exp};
   });
   const debtStatus=x=>outstanding(x)<=0?'paid':Number(x.paidAmount)>0?'partial':'unpaid';
-  const exportDebts=debtRows.map(x=>({kind:x.kind==='receivable'?'Phải thu khách hàng':'Phải trả nhà cung cấp',partner:x.partnerName,date:x.date,dueDate:x.dueDate,invoiceNo:x.invoiceNo,amount:x.amount,paidAmount:x.paidAmount,remaining:outstanding(x),status:finStatusLabel(debtStatus(x)),note:x.note}));
+  const exportDebts=debtRows.map(x=>({kind:x.kind==='receivable'?'Phải thu khách hàng':'Phải trả nhà cung cấp',partner:x.partnerName,date:x.date,dueDate:x.dueDate,invoiceNo:x.invoiceNo,amount:x.amount,vatPercent:x.kind==='receivable'?debtVatPercent(x):'',vatAmount:x.kind==='receivable'?debtVatAmount(x):'',amountAfterTax:debtAfterTax(x),paidAmount:x.paidAmount,remaining:outstanding(x),status:finStatusLabel(debtStatus(x)),note:x.note}));
   const exportCurrent=()=>{
-    if(tab==='debt')return xlsxExport(exportDebts,[['kind','Loại công nợ'],['partner','Đối tượng'],['date','Ngày ghi nhận'],['dueDate','Hạn thanh toán'],['invoiceNo','Chứng từ'],['amount','Giá trị'],['paidAmount','Đã thanh toán'],['remaining','Còn lại'],['status','Trạng thái'],['note','Ghi chú']],'Cong_no_'+month);
+    if(tab==='debt')return xlsxExport(exportDebts,[['kind','Loại công nợ'],['partner','Đối tượng'],['date','Ngày ghi nhận'],['dueDate','Hạn thanh toán'],['invoiceNo','Chứng từ'],['amount','Giá trị trước thuế'],['vatPercent','% VAT'],['vatAmount','Tiền VAT'],['amountAfterTax','Thành tiền sau thuế'],['paidAmount','Đã thanh toán'],['remaining','Còn lại'],['status','Trạng thái'],['note','Ghi chú']],'Cong_no_'+month);
     if(tab==='year')return xlsxExport(yearRows,[['month','Tháng'],['opening','Tiền đầu kỳ'],['inflow','Tiền vào'],['outflow','Tiền ra'],['ending','Tiền cuối kỳ'],['revenueInvoice','Doanh thu theo SL HĐ'],['revenueDelivered','Doanh thu theo SL giao'],['expense','Chi phí'],['profitInvoice','Lợi nhuận theo SL HĐ'],['profitDelivered','Lợi nhuận theo SL giao']],'Tong_hop_tai_chinh_'+year);
     return xlsxExport(exportEntries,[['date','Ngày'],['direction','Dòng tiền'],['category','Nhóm thu/chi'],['partner','Đối tượng'],['method','Phương thức'],['amount','Số tiền'],['pnl','KQ kinh doanh'],['reference','Chứng từ'],['bank','Ngân hàng'],['transactionTime','Giờ giao dịch'],['transferImage','Ảnh chuyển khoản'],['note','Ghi chú']],'So_thu_chi_'+month);
   };
@@ -488,11 +683,44 @@ function FinanceReportTab({entries,setEntries,debts,setDebts,openings,setOpening
     ),
     tab==='cash'&&h('div',{className:'card'},h('div',{className:'finance-card-title'},'Sổ thu / chi tháng '+month),h('div',{className:'tw'},h('table',null,h('thead',null,h('tr',null,...['Ngày','Dòng tiền','Nhóm','Đối tượng','Phương thức','Số tiền','KQKD','Chứng từ','Ảnh CK','Ghi chú',''].map(x=>h('th',{key:x},x)))),h('tbody',null,monthEntries.length?monthEntries.map(x=>h('tr',{key:x.id},h('td',null,vnDateFromISO(x.date)),h('td',null,h('span',{className:'badge',style:{background:x.direction==='in'?'#EAF3DE':'#FCEBEB',color:x.direction==='in'?'#3B6D11':'#A32D2D'}},x.direction==='in'?'Tiền vào':'Tiền ra')),h('td',null,x.category),h('td',null,x.partnerName||'—'),h('td',null,x.method==='cash'?'Tiền mặt':'Ngân hàng'),h('td',null,h('b',null,finMoney(x.amount))),h('td',null,x.pnlType==='revenue'?'Doanh thu':x.pnlType==='expense'?'Chi phí':'Không tính'),h('td',null,x.reference||'—'),h('td',null,x.transferImage?h('a',{href:x.transferImage,target:'_blank',rel:'noopener',className:'btn',style:{whiteSpace:'nowrap'}},h('i',{className:'ti ti-photo'}),' Xem ảnh'):'—'),h('td',null,x.note||'—'),h('td',null,h('button',{className:'bi',onClick:()=>{setEditEntry(x);setEntryModal(x.direction);}},h('i',{className:'ti ti-edit'})),currentUser.role==='admin'&&h('button',{className:'bi bdel',onClick:()=>delEntry(x.id)},h('i',{className:'ti ti-trash'}))))):h('tr',null,h('td',{colSpan:11,className:'empty-st'},'Tháng này chưa có khoản thu/chi')))))),
     tab==='debt'&&h('div',null,
-      h('div',{className:'finance-debt-actions'},h('button',{className:'bp',onClick:()=>{setEditDebt(null);setDebtModal('receivable');}},'+ Công nợ khách hàng'),h('button',{onClick:()=>{setEditDebt(null);setDebtModal('payable');}},'+ Công nợ nhà cung cấp')),
-      h('div',{className:'card'},h('div',{className:'finance-card-title'},'Theo dõi công nợ'),h('div',{className:'tw'},h('table',null,h('thead',null,h('tr',null,...['Loại','Đối tượng','Ngày','Hạn trả','Chứng từ','Giá trị','Đã trả','Còn lại','Trạng thái',''].map(x=>h('th',{key:x},x)))),h('tbody',null,debtRows.length?debtRows.map(x=>{const status=debtStatus(x),overdue=status!=='paid'&&x.dueDate&&x.dueDate<isoDate();return h('tr',{key:x.id,style:overdue?{background:'#FFF5F5'}:null},h('td',null,x.kind==='receivable'?'Phải thu KH':'Phải trả NCC'),h('td',null,h('b',null,x.partnerName)),h('td',null,vnDateFromISO(x.date)),h('td',null,x.dueDate?vnDateFromISO(x.dueDate):'—'),h('td',null,x.invoiceNo||'—'),h('td',null,finMoney(x.amount)),h('td',null,finMoney(x.paidAmount)),h('td',null,h('b',null,finMoney(outstanding(x)))),h('td',null,h('span',{className:'badge',style:{background:status==='paid'?'#EAF3DE':overdue?'#FCEBEB':'#FAEEDA',color:status==='paid'?'#3B6D11':overdue?'#A32D2D':'#854F0B'}},overdue?'Quá hạn':finStatusLabel(status))),h('td',null,h('button',{className:'bi',onClick:()=>{setEditDebt(x);setDebtModal(x.kind);}},h('i',{className:'ti ti-edit'})),currentUser.role==='admin'&&h('button',{className:'bi bdel',onClick:()=>delDebt(x.id)},h('i',{className:'ti ti-trash'}))))}):h('tr',null,h('td',{colSpan:10,className:'empty-st'},'Chưa có công nợ'))))))
+      h('div',{className:'finance-debt-actions'},
+        h('button',{className:'bp',onClick:()=>{setEditDebt(null);setDebtModal('receivable');}},'+ Công nợ khách hàng'),
+        h('button',{onClick:()=>{setEditDebt(null);setDebtModal('payable');}},'+ Công nợ nhà cung cấp'),
+        h('button',{onClick:()=>setDebtImageModal(true)},h('i',{className:'ti ti-photo-scan'}),' Nhập công nợ KH từ ảnh')
+      ),
+      h('div',{className:'card'},
+        h('div',{className:'finance-card-title'},'Theo dõi công nợ'),
+        h('div',{className:'tw'},
+          h('table',null,
+            h('thead',null,h('tr',null,...['Loại','Đối tượng','Ngày','Hạn trả','Chứng từ','Trước thuế','% VAT','Tiền VAT','Sau thuế','Đã trả','Còn lại','Trạng thái',''].map(x=>h('th',{key:x},x)))),
+            h('tbody',null,debtRows.length?debtRows.map(x=>{
+              const status=debtStatus(x),overdue=status!=='paid'&&x.dueDate&&x.dueDate<isoDate(),isReceivable=x.kind==='receivable';
+              return h('tr',{key:x.id,style:overdue?{background:'#FFF5F5'}:null},
+                h('td',null,isReceivable?'Phải thu KH':'Phải trả NCC'),
+                h('td',null,h('b',null,x.partnerName)),
+                h('td',null,vnDateFromISO(x.date)),
+                h('td',null,x.dueDate?vnDateFromISO(x.dueDate):'—'),
+                h('td',null,x.invoiceNo||'—'),
+                h('td',null,finMoney(x.amount)),
+                h('td',null,isReceivable?(debtVatPercent(x).toLocaleString('vi-VN')+'%'):'—'),
+                h('td',null,isReceivable?finMoney(debtVatAmount(x)):'—'),
+                h('td',null,h('b',null,finMoney(debtAfterTax(x)))),
+                h('td',null,finMoney(x.paidAmount)),
+                h('td',null,h('b',null,finMoney(outstanding(x)))),
+                h('td',null,h('span',{className:'badge',style:{background:status==='paid'?'#EAF3DE':overdue?'#FCEBEB':'#FAEEDA',color:status==='paid'?'#3B6D11':overdue?'#A32D2D':'#854F0B'}},overdue?'Quá hạn':finStatusLabel(status))),
+                h('td',null,
+                  h('button',{className:'bi',onClick:()=>{setEditDebt(x);setDebtModal(x.kind);}},h('i',{className:'ti ti-edit'})),
+                  currentUser.role==='admin'&&h('button',{className:'bi bdel',onClick:()=>delDebt(x.id)},h('i',{className:'ti ti-trash'}))
+                )
+              );
+            }):h('tr',null,h('td',{colSpan:13,className:'empty-st'},'Chưa có công nợ')))
+          )
+        )
+      )
     ),
     tab==='year'&&h('div',{className:'card'},h('div',{className:'finance-card-title'},'Tổng hợp doanh thu, chi phí và lợi nhuận năm '+year),h('div',{className:'tw'},h('table',null,h('thead',null,h('tr',null,...['Tháng','Đầu kỳ','Tiền vào','Tiền ra','Cuối kỳ','DT theo SL HĐ','DT theo SL giao','Chi phí','LN theo SL HĐ','LN theo SL giao'].map(x=>h('th',{key:x},x)))),h('tbody',null,yearRows.map(x=>h('tr',{key:x.month},h('td',null,x.month),h('td',null,finMoney(x.opening)),h('td',null,finMoney(x.inflow)),h('td',null,finMoney(x.outflow)),h('td',null,h('b',null,finMoney(x.ending))),h('td',null,finMoney(x.revenueInvoice)),h('td',null,finMoney(x.revenueDelivered)),h('td',null,finMoney(x.expense)),h('td',null,h('b',{style:x.profitInvoice<0?{color:'#A32D2D'}:null},finMoney(x.profitInvoice))),h('td',null,h('b',{style:x.profitDelivered<0?{color:'#A32D2D'}:null},finMoney(x.profitDelivered))))))))),
     entryModal&&h(FinanceEntryForm,{entry:editEntry,direction:entryModal,customers,nccs,currentUser,onSave:saveEntry,onClose:()=>{setEntryModal(null);setEditEntry(null);}}),
-    debtModal&&h(FinanceDebtForm,{debt:editDebt,kind:debtModal,customers,nccs,currentUser,onSave:saveDebt,onClose:()=>{setDebtModal(null);setEditDebt(null);}})
+    debtModal&&h(FinanceDebtForm,{debt:editDebt,kind:debtModal,customers,nccs,currentUser,onSave:saveDebt,onClose:()=>{setDebtModal(null);setEditDebt(null);}}),
+    debtImageModal&&h(FinanceDebtImageImport,{customers,currentUser,defaultMonth:month,onImport:importCustomerDebts,onClose:()=>setDebtImageModal(false)})
   );
 }
