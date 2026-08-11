@@ -815,14 +815,15 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
           h('div',{style:{display:'grid',gap:8}},
             h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
               form.plateImage&&h('button',{type:'button',onClick:()=>window.open(form.plateImage,'_blank'),style:{fontSize:12,padding:'6px 12px'}},h('i',{className:'ti ti-photo',style:{fontSize:14}}),'Xem ảnh'),
-              h('button',{type:'button',disabled:!!uploading,onClick:captureBothFuelImages,style:{fontSize:12,padding:'6px 12px',background:quickCaptureStep==='plate'?'#EAF3DE':'#fff',color:quickCaptureStep==='plate'?'#27500A':'inherit'}},
-                h('i',{className:'ti '+(uploading?'ti-loader-2 spin':quickCaptureStep==='meter'?'ti-gas-station':'ti-id'),style:{fontSize:14}}),
-                uploading?'Đang xử lý ảnh...':quickCaptureStep==='meter'?'Chụp Cây Xăng':'Chụp biển số'
-              ),
               h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:busyPlate?'wait':'pointer',background:'#fff'}},
                 h('i',{className:'ti '+(busyPlate?'ti-loader-2 spin':'ti-id'),style:{fontSize:14}}),
                 busyPlate?'Đang đọc biển số...':'Chụp biển số',
-                h('input',{type:'file',accept:'image/*',capture:'environment',style:{display:'none'},disabled:!!uploading,onChange:e=>pickPlateImage(e.target.files?.[0])})
+                h('input',{type:'file',accept:'image/*',capture:'environment',style:{display:'none'},disabled:!!uploading,onChange:e=>{const file=e.target.files?.[0];pickPlateImage(file);e.target.value='';}})
+              ),
+              h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:busyPlate?'wait':'pointer',background:'#fff'}},
+                h('i',{className:'ti ti-photo-plus',style:{fontSize:14}}),
+                'Chọn ảnh có sẵn',
+                h('input',{type:'file',accept:'image/*',style:{display:'none'},disabled:!!uploading,onChange:e=>{const file=e.target.files?.[0];pickPlateImage(file);e.target.value='';}})
               )
             ),
             form.plateImageName&&h('span',{style:{fontSize:12,color:'var(--tx2)'}},form.plateImageName)
@@ -840,8 +841,8 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
             ),
             h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:busyMeter?'wait':'pointer',background:'#fff'}},
               h('i',{className:'ti '+(busyMeter?'ti-loader-2 spin':'ti-camera-plus'),style:{fontSize:14}}),
-              busyMeter?'Đang tải ảnh...':'Chọn ảnh cũ',
-              h('input',{type:'file',accept:'image/*',style:{display:'none'},disabled:!!uploading,onChange:e=>pickMeterImage(e.target.files?.[0])})
+              busyMeter?'Đang tải ảnh...':'Chọn ảnh có sẵn',
+              h('input',{type:'file',accept:'image/*',style:{display:'none'},disabled:!!uploading,onChange:e=>{const file=e.target.files?.[0];pickMeterImage(file);e.target.value='';}})
             )
           ),
           (form.meterImageName||form.imageName)&&h('span',{style:{fontSize:12,color:'var(--tx2)'}},form.meterImageName||form.imageName),

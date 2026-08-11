@@ -1722,9 +1722,14 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
             h('i',{className:'ti ti-photo',style:{fontSize:14}}),isRepair?('Xem '+repairImages.length+' ảnh'):'Xem ảnh'
           ),
           h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:uploading?'wait':'pointer',background:'#fff'}},
-            h('i',{className:'ti '+(uploading===kind?'ti-loader-2 spin':'ti-camera-plus'),style:{fontSize:14}}),
-            uploading===kind?'Đang tải ảnh...':(isRepair?'Chụp / thêm ảnh':'Chụp / tải ảnh'),
-            h('input',{type:'file',accept:'image/*',capture:'environment',multiple:isRepair,style:{display:'none'},disabled:!!uploading,onChange:e=>pickMaintenanceImage(kind,e.target.files)})
+            h('i',{className:'ti '+(uploading===kind?'ti-loader-2 spin':'ti-camera'),style:{fontSize:14}}),
+            uploading===kind?'Đang tải ảnh...':'Chụp ảnh',
+            h('input',{type:'file',accept:'image/*',capture:'environment',style:{display:'none'},disabled:!!uploading,onChange:e=>{const files=e.target.files;pickMaintenanceImage(kind,files);e.target.value='';}})
+          ),
+          h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:uploading?'wait':'pointer',background:'#fff'}},
+            h('i',{className:'ti ti-photo-plus',style:{fontSize:14}}),
+            'Chọn ảnh có sẵn',
+            h('input',{type:'file',accept:'image/*',multiple:isRepair,style:{display:'none'},disabled:!!uploading,onChange:e=>{const files=e.target.files;pickMaintenanceImage(kind,files);e.target.value='';}})
           )
         ),
         isRepair
