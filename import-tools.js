@@ -530,6 +530,7 @@ const NAV=[
   {key:'advances',icon:'ti-cash-banknote',label:'Ứng lương'},
   {key:'rewards',icon:'ti-scale',label:'Thưởng phạt'},
   {key:'employee_errors',icon:'ti-alert-triangle',label:'Ghi lỗi nhân viên'},
+  {key:'employee_uniforms',icon:'ti-shirt',label:'Cấp đồng phục nhân viên'},
   {key:'leaves',icon:'ti-calendar-minus',label:'Xin nghỉ'},
   {key:'tasks',icon:'ti-clipboard-check',label:'Giao việc'},
   {sec:'Báo công'},

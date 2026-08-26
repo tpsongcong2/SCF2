@@ -12,6 +12,7 @@ const PAGE_ACCESS = {
   advances:     ['admin','manager','staff','driver'],
   rewards:      ['admin','manager','staff','driver'],
   employee_errors:['admin','manager'],
+  employee_uniforms:['admin','manager'],
   leaves:       ['admin','manager','staff','driver'],
   backup:       ['admin'],
   materials:    ['admin','manager','staff'],
@@ -80,6 +81,7 @@ function canAccess(role, page, perms, dept='') {
   if(page==='garages'&&role==='admin') return true;
   if(page==='deliveryrules') return true;
   if(page==='employee_errors'&&(role==='admin'||role==='manager')) return true;
+  if(page==='employee_uniforms'&&(role==='admin'||role==='manager')) return true;
   if(page==='notifications') return ['admin','manager','staff','driver'].includes(role);
   if(page==='userguide') return ['admin','manager','staff','driver'].includes(role);
   if(page==='company') return ['admin','manager','staff','driver'].includes(role);

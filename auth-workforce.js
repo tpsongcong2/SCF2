@@ -1228,6 +1228,86 @@ function EmployeeErrorsTab({records,setRecords,employees,currentUser}){
     )
   );
 }
+function EmployeeUniformForm({record,employees,currentUser,onSave,onClose}){
+  const[f,sf]=useState(record?{...record}:{date:isoDate(),empId:'',uniformType:''});
+  const staff=(employees||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi'));
+  const uniformTypes=['Bộ đồng phục','Áo đồng phục','Quần đồng phục','Mũ','Tạp dề','Giày / Ủng','Áo khoác'];
+  const submit=()=>{
+    const emp=staff.find(e=>String(e.id)===String(f.empId));
+    if(!f.date){window.showToast('Chọn ngày phát đồng phục.','warn');return;}
+    if(!emp){window.showToast('Chọn nhân viên nhận đồng phục.','warn');return;}
+    const uniformType=String(f.uniformType||'').trim();
+    if(!uniformType){window.showToast('Nhập loại đồng phục.','warn');return;}
+    onSave({...f,date:f.date,empId:emp.id,empName:emp.name||emp.id,dept:emp.dept||'',uniformType,
+      createdBy:record?.createdBy||currentUser.name,createdAt:record?.createdAt||fmtDT(),updatedBy:currentUser.name,updatedAt:fmtDT()});
+  };
+  return h(Modal,{title:record?'Sửa thông tin cấp đồng phục':'Cấp đồng phục nhân viên',onClose},
+    h('div',{className:'g2'},
+      h(F,{label:'Ngày phát'},h('input',{type:'date',value:f.date||'',onChange:e=>sf(p=>({...p,date:e.target.value}))})),
+      h(F,{label:'Nhân viên'},h('select',{value:f.empId||'',onChange:e=>sf(p=>({...p,empId:e.target.value}))},
+        h('option',{value:''},'— Chọn nhân viên —'),
+        staff.map(e=>h('option',{key:e.id,value:e.id},(e.name||e.id)+(e.dept?' · '+e.dept:'')))
+      ))
+    ),
+    h(F,{label:'Loại đồng phục'},h('input',{list:'employee-uniform-type-options',value:f.uniformType||'',onChange:e=>sf(p=>({...p,uniformType:e.target.value})),placeholder:'Ví dụ: Bộ đồng phục, áo, mũ...'}),
+      h('datalist',{id:'employee-uniform-type-options'},uniformTypes.map(type=>h('option',{key:type,value:type})))
+    ),
+    h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit},'Lưu'))
+  );
+}
+
+function EmployeeUniformsTab({records,setRecords,employees,currentUser,canEdit=true,canDelete=true}){
+  const[modal,setModal]=useState(false);const[edit,setEdit]=useState(null);const[q,setQ]=useState('');const[month,setMonth]=useState(isoDate().slice(0,7));const[empFilter,setEmpFilter]=useState('all');
+  const employeeOptions=(employees||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi'));
+  const rows=(records||[]).filter(r=>(!month||String(r.date||'').startsWith(month))&&(empFilter==='all'||String(r.empId)===String(empFilter))&&(!q||[r.empName,r.empId,r.dept,r.uniformType,r.updatedBy].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+  const save=data=>{
+    if(edit)setRecords(prev=>(prev||[]).map(row=>row.id===edit.id?{...row,...data}:row));
+    else setRecords(prev=>[{...data,id:'DP'+uid()},...(prev||[])]);
+    setModal(false);setEdit(null);window.showToast(edit?'Đã cập nhật thông tin cấp đồng phục.':'Đã ghi nhận cấp đồng phục.','success');
+  };
+  const remove=async row=>{
+    const ok=await window.scfConfirm('Xóa lần cấp '+(row.uniformType||'đồng phục')+' cho '+(row.empName||'nhân viên')+'?','Xóa lịch sử cấp đồng phục',true);
+    if(!ok)return;
+    setRecords(prev=>(prev||[]).filter(item=>item.id!==row.id));window.showToast('Đã xóa lịch sử cấp đồng phục.','success');
+  };
+  const exportCols=[['date','Ngày phát'],['empId','Mã NV'],['empName','Tên nhân viên'],['dept','Bộ phận'],['uniformType','Loại đồng phục'],['updatedBy','Người cập nhật'],['updatedAt','Thời gian cập nhật']];
+  const hasActions=canEdit||canDelete;
+  return h('div',null,
+    h('div',{className:'ptitle'},h('i',{className:'ti ti-shirt',style:{fontSize:20}}),'Cấp đồng phục nhân viên'),
+    h('div',{className:'att-stat'},
+      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Số lần cấp'),h('div',{style:{fontSize:24,fontWeight:650,color:'var(--pri3)'}},rows.length))
+    ),
+    h('div',{className:'card'},
+      h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:10}},
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+          h(SearchBar,{value:q,onChange:setQ,placeholder:'Tìm nhân viên, loại đồng phục...'}),
+          h('input',{type:'month',value:month,onChange:e=>setMonth(e.target.value),style:{width:145}}),
+          h('select',{value:empFilter,onChange:e=>setEmpFilter(e.target.value),style:{minWidth:190}},
+            h('option',{value:'all'},'Tất cả nhân viên'),employeeOptions.map(e=>h('option',{key:e.id,value:e.id},e.name||e.id))
+          )
+        ),
+        h('div',{style:{display:'flex',gap:6}},
+          h(ExportBtn,{onClick:()=>xlsxExport(rows,exportCols,'Cap_dong_phuc_nhan_vien')}),
+          canEdit&&h(AddBtn,{onClick:()=>{setEdit(null);setModal(true);},label:'Cấp đồng phục'})
+        )
+      ),
+      h('div',{className:'tw'},h('table',null,
+        h('thead',null,h('tr',null,...['Ngày phát','Tên nhân viên','Loại đồng phục','Người cập nhật',hasActions?'':''].map((c,index)=>h('th',{key:c+'-'+index},c)))),
+        h('tbody',null,rows.length?rows.map(r=>h('tr',{key:r.id},
+          h('td',null,vnDateFromISO(r.date||'')),
+          h('td',null,h('div',{style:{fontWeight:600}},r.empName||'—'),h('div',{style:{fontSize:11,color:'var(--tx2)'}},[r.empId,r.dept].filter(Boolean).join(' · '))),
+          h('td',{style:{minWidth:220,fontWeight:600}},r.uniformType||'—'),
+          h('td',null,h('div',null,r.updatedBy||r.createdBy||'—'),r.updatedAt&&h('div',{style:{fontSize:11,color:'var(--tx2)'}},r.updatedAt)),
+          hasActions&&h('td',null,h('div',{style:{display:'flex',gap:4}},
+            canEdit&&h('button',{className:'bi',title:'Sửa',onClick:()=>{setEdit(r);setModal(true);}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
+            canDelete&&h('button',{className:'bdel',title:'Xóa',onClick:()=>remove(r)},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+          ))
+        )):h('tr',null,h('td',{colSpan:hasActions?5:4,className:'empty-st'},'Chưa có lịch sử cấp đồng phục.')))
+      )),
+      modal&&h(EmployeeUniformForm,{record:edit,employees,currentUser,onSave:save,onClose:()=>{setModal(false);setEdit(null);}})
+    )
+  );
+}
 function calcLeaveDays(fromDate,toDate){
   const from=parseAnyDate(fromDate);
   const to=parseAnyDate(toDate);
