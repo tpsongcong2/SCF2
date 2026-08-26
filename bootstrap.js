@@ -15,7 +15,7 @@ document.addEventListener('keydown',function(e){
 
 if('serviceWorker' in navigator&&location.protocol!=='file:'){
   window.addEventListener('load',function(){
-    navigator.serviceWorker.register('./sw.js?v=222')
+    navigator.serviceWorker.register('./sw.js?v=223')
       .then(function(r){})
       .catch(function(e){console.log('SW err:',e);});
   });

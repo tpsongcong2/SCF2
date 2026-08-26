@@ -13,7 +13,7 @@ const SCF_SYNC_QUEUE_KEY='scf_sync_queue_v1';
 let scfMemorySyncQueue={};
 let scfMemorySyncQueueReady=false;
 const SCF_SENSITIVE_KEYS=new Set([
-  'scf_employees','scf_privileged_employees','scf_orders','scf_trips','scf_attendance','scf_advances','scf_rewards','scf_employee_errors','scf_employee_uniforms','scf_leaves',
+  'scf_employees','scf_privileged_employees','scf_orders','scf_trips','scf_attendance','scf_advances','scf_rewards','scf_employee_errors','scf_leaves',
   'scf_finance_entries','scf_finance_debts','scf_finance_openings','scf_internal_messages','scf_tasks','scf_notifications'
 ]);
 function serverAuthEnabled(){return typeof SCF_SERVER_AUTH_ENABLED!=='undefined'&&SCF_SERVER_AUTH_ENABLED;}

@@ -81,7 +81,6 @@ function canAccess(role, page, perms, dept='') {
   if(page==='garages'&&role==='admin') return true;
   if(page==='deliveryrules') return true;
   if(page==='employee_errors'&&(role==='admin'||role==='manager')) return true;
-  if(page==='employee_uniforms'&&(role==='admin'||role==='manager')) return true;
   if(page==='notifications') return ['admin','manager','staff','driver'].includes(role);
   if(page==='userguide') return ['admin','manager','staff','driver'].includes(role);
   if(page==='company') return ['admin','manager','staff','driver'].includes(role);
