@@ -1121,6 +1121,87 @@ function MoneyTab({mode,records,setRecords,employees,currentUser}) {
   );
 }
 
+function EmployeeErrorForm({record,employees,currentUser,onSave,onClose}){
+  const[f,sf]=useState(record?{...record}:{date:isoDate(),empId:'',error:'',damage:0});
+  const staff=(employees||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi'));
+  const submit=()=>{
+    const emp=staff.find(e=>String(e.id)===String(f.empId));
+    if(!emp){window.showToast('Chọn nhân viên.','warn');return;}
+    if(!f.date){window.showToast('Chọn ngày ghi nhận lỗi.','warn');return;}
+    if(!String(f.error||'').trim()){window.showToast('Nhập nội dung lỗi.','warn');return;}
+    const damage=Math.max(0,numFmt(f.damage));
+    onSave({...f,date:f.date,empId:emp.id,empName:emp.name||emp.id,dept:emp.dept||'',error:String(f.error).trim(),damage,
+      createdBy:record?.createdBy||currentUser.name,createdAt:record?.createdAt||fmtDT(),updatedBy:currentUser.name,updatedAt:fmtDT()});
+  };
+  return h(Modal,{title:record?'Sửa lỗi nhân viên':'Ghi lỗi nhân viên',onClose},
+    h('div',{className:'g2'},
+      h(F,{label:'Ngày'},h('input',{type:'date',value:f.date||'',onChange:e=>sf(p=>({...p,date:e.target.value}))})),
+      h(F,{label:'Tên nhân viên'},h('select',{value:f.empId||'',onChange:e=>sf(p=>({...p,empId:e.target.value}))},
+        h('option',{value:''},'— Chọn nhân viên —'),
+        staff.map(e=>h('option',{key:e.id,value:e.id},(e.name||e.id)+(e.dept?' · '+e.dept:'')))
+      ))
+    ),
+    h(F,{label:'Lỗi'},h('textarea',{rows:4,value:f.error||'',onChange:e=>sf(p=>({...p,error:e.target.value})),placeholder:'Mô tả rõ lỗi của nhân viên...'})),
+    h(F,{label:'Thiệt hại (đ)'},h(NumInput,{value:f.damage||'',onChange:v=>sf(p=>({...p,damage:v})),placeholder:'0'})),
+    h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit},'Lưu'))
+  );
+}
+
+function EmployeeErrorsTab({records,setRecords,employees,currentUser}){
+  const[modal,setModal]=useState(false);const[edit,setEdit]=useState(null);const[q,setQ]=useState('');const[month,setMonth]=useState(isoDate().slice(0,7));const[empFilter,setEmpFilter]=useState('all');
+  const employeeOptions=(employees||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi'));
+  const rows=(records||[]).filter(r=>(!month||String(r.date||'').startsWith(month))&&(empFilter==='all'||String(r.empId)===String(empFilter))&&(!q||[r.empName,r.empId,r.error,r.updatedBy].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+  const totalDamage=rows.reduce((sum,r)=>sum+Math.max(0,numFmt(r.damage)),0);
+  const money=v=>Number(v||0).toLocaleString('vi-VN')+'đ';
+  const save=data=>{
+    if(edit)setRecords(prev=>(prev||[]).map(row=>row.id===edit.id?{...row,...data}:row));
+    else setRecords(prev=>[{...data,id:'LNV'+uid()},...(prev||[])]);
+    setModal(false);setEdit(null);window.showToast(edit?'Đã cập nhật lỗi nhân viên.':'Đã ghi lỗi nhân viên.','success');
+  };
+  const remove=async row=>{
+    const ok=await window.scfConfirm('Xóa nội dung lỗi của '+(row.empName||'nhân viên')+'?','Xóa lỗi nhân viên',true);
+    if(!ok)return;
+    setRecords(prev=>(prev||[]).filter(item=>item.id!==row.id));window.showToast('Đã xóa nội dung lỗi.','success');
+  };
+  const exportCols=[['date','Ngày'],['empId','Mã NV'],['empName','Tên nhân viên'],['dept','Bộ phận'],['error','Lỗi'],['damage','Thiệt hại'],['updatedBy','Người cập nhật'],['updatedAt','Thời gian cập nhật']];
+  return h('div',null,
+    h('div',{className:'ptitle'},h('i',{className:'ti ti-alert-triangle',style:{fontSize:20}}),'Ghi lỗi nhân viên'),
+    h('div',{className:'att-stat'},
+      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Số lỗi'),h('div',{style:{fontSize:24,fontWeight:650,color:'var(--pri3)'}},rows.length)),
+      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Tổng thiệt hại'),h('div',{style:{fontSize:24,fontWeight:650,color:totalDamage?'#A32D2D':'var(--pri3)'}},money(totalDamage)))
+    ),
+    h('div',{className:'card'},
+      h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:10}},
+        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
+          h(SearchBar,{value:q,onChange:setQ,placeholder:'Tìm nhân viên, lỗi...'}),
+          h('input',{type:'month',value:month,onChange:e=>setMonth(e.target.value),style:{width:145}}),
+          h('select',{value:empFilter,onChange:e=>setEmpFilter(e.target.value),style:{minWidth:190}},
+            h('option',{value:'all'},'Tất cả nhân viên'),employeeOptions.map(e=>h('option',{key:e.id,value:e.id},e.name||e.id))
+          )
+        ),
+        h('div',{style:{display:'flex',gap:6}},
+          h(ExportBtn,{onClick:()=>xlsxExport(rows,exportCols,'Loi_nhan_vien')}),
+          h(AddBtn,{onClick:()=>{setEdit(null);setModal(true);},label:'Ghi lỗi'})
+        )
+      ),
+      h('div',{className:'tw'},h('table',null,
+        h('thead',null,h('tr',null,...['Ngày','Tên nhân viên','Lỗi','Thiệt hại','Người cập nhật',''].map(c=>h('th',{key:c},c)))),
+        h('tbody',null,rows.length?rows.map(r=>h('tr',{key:r.id},
+          h('td',null,vnDateFromISO(r.date||'')),
+          h('td',null,h('div',{style:{fontWeight:600}},r.empName||'—'),h('div',{style:{fontSize:11,color:'var(--tx2)'}},[r.empId,r.dept].filter(Boolean).join(' · '))),
+          h('td',{style:{minWidth:260,whiteSpace:'pre-wrap'}},r.error||'—'),
+          h('td',null,h('span',{style:{fontWeight:650,color:numFmt(r.damage)>0?'#A32D2D':'var(--tx2)'}},money(r.damage))),
+          h('td',null,h('div',null,r.updatedBy||r.createdBy||'—'),r.updatedAt&&h('div',{style:{fontSize:11,color:'var(--tx2)'}},r.updatedAt)),
+          h('td',null,h('div',{style:{display:'flex',gap:4}},
+            h('button',{className:'bi',title:'Sửa',onClick:()=>{setEdit(r);setModal(true);}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
+            h('button',{className:'bdel',title:'Xóa',onClick:()=>remove(r)},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+          ))
+        )):h('tr',null,h('td',{colSpan:6,className:'empty-st'},'Chưa có lỗi nhân viên nào.')))
+      )),
+      modal&&h(EmployeeErrorForm,{record:edit,employees,currentUser,onSave:save,onClose:()=>{setModal(false);setEdit(null);}})
+    )
+  );
+}
 function calcLeaveDays(fromDate,toDate){
   const from=parseAnyDate(fromDate);
   const to=parseAnyDate(toDate);

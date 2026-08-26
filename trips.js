@@ -45,7 +45,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,o
   const allCusts=[...new Set(availOrders.map(o=>o.customerId).filter(Boolean))].map(id=>customers?.find(c=>c.id===id)).filter(Boolean);
   const allFilteredChecked=filteredOrders.length>0&&filteredOrders.every(o=>(f.orderIds||[]).includes(o.id));
   const someFilteredChecked=filteredOrders.some(o=>(f.orderIds||[]).includes(o.id))&&!allFilteredChecked;
-  const isStarted=['active','completion_pending','completed'].includes(f.status);
+  const isStarted=!!trip?.driverDispatchedAt||['active','completion_pending','completed'].includes(f.status);
 
   return h(Modal,{title:trip?'Sửa chuyến '+trip.id:'Tạo chuyến giao hàng',onClose,lg:true},
     h('div',{className:'g2'},
@@ -236,31 +236,40 @@ function BulkTripModal({orders,employees,shifts,prodShifts,customers,products,tr
   };
 
   // Mỗi ca giao hàng được chọn chỉ tạo đúng một chuyến trong ngày.
-  // Khu vực không tham gia tạo tổ hợp; đơn được đưa vào chuyến theo cấu hình ca giao của chính đơn.
-  const preview=React.useMemo(()=>{
-    const combos=[];
+  // Ca chưa có đơn vẫn phải tạo chuyến trống để nhận các đơn phát sinh sau.
+  // Chỉ bỏ qua ca đã có chuyến cùng ngày và phải báo rõ trên màn hình.
+  const sameDateShift=(trip,shift)=>{
+    if(trip?.deliveryDate!==dateVN)return false;
+    const sameId=shift?.id&&String(trip?.shiftId||'')===String(shift.id);
+    const sameName=shift?.name&&normShift(trip?.shiftName)===normShift(shift.name);
+    return !!(sameId||sameName);
+  };
+  const selectedShiftRows=React.useMemo(()=>{
     const useShifts=selShifts.length>0?allShifts.filter(s=>selShifts.includes(s.id)):[];
-    useShifts.forEach(sh=>{
+    return useShifts.map(sh=>{
       const matchOrders=pendingOrders.filter(o=>orderMatchesDeliveryShift(o,sh));
-      if(matchOrders.length===0)return;
       const areas=[...new Set(matchOrders.map(getOArea).filter(Boolean))];
-      combos.push({shiftId:sh.id,shiftName:sh.name||sh.id,area:areas.length===1?areas[0]:'Nhiều khu vực',orders:matchOrders});
+      return {
+        shiftId:sh.id,
+        shiftName:sh.name||sh.id,
+        area:matchOrders.length===0?'':(areas.length===1?areas[0]:'Nhiều khu vực'),
+        orders:matchOrders,
+        alreadyExists:(trips||[]).some(t=>sameDateShift(t,sh))
+      };
     });
-    return combos;
-  },[selShifts.join(','),date,pendingOrders.length,prodShifts]);
+  },[selShifts.join(','),date,orders,trips,shifts,prodShifts,customers]);
+  const preview=selectedShiftRows.filter(combo=>!combo.alreadyExists);
+  const existingRows=selectedShiftRows.filter(combo=>combo.alreadyExists);
+  const emptyRows=preview.filter(combo=>combo.orders.length===0);
 
   const submit=()=>{
     if(!selShifts.length){window.showToast('Vui lòng chọn ít nhất một ca giao hàng cần tạo chuyến!','warn');return;}
-    if(preview.length===0){window.showToast('Không có đơn hàng phù hợp để tạo chuyến!','warn');return;}
+    if(preview.length===0){window.showToast('Các ca đã chọn đều đã có chuyến trong ngày '+dateVN+'.','warn');return;}
     const manuallySelectedDriverName=driverName||(drivers.find(d=>d.id===driver)?.name||'');
     // Tạo ID trước để check trùng trong batch
     const usedIds=new Set(trips.map(t=>t.id));
     const newTrips=[];
-    const dupCombos=preview.filter(combo=>combo.shiftId&&trips.some(t=>t.deliveryDate===dateVN&&t.shiftId===combo.shiftId));
-    if(dupCombos.length>0){
-      window.showToast('Ngày '+dateVN+' đã có chuyến giao hàng trùng ca: '+dupCombos.map(c=>c.shiftName||c.shiftId).join(', ')+'. Không tạo thêm.','warn');
-      return;
-    }
+
     preview.forEach(combo=>{
       const comboShift=(shifts||[]).find(sh=>String(sh.id)===String(combo.shiftId));
       const comboDriverId=driver||comboShift?.defaultDriverId||'';
@@ -273,7 +282,7 @@ function BulkTripModal({orders,employees,shifts,prodShifts,customers,products,tr
         .replace(/CHIỀU|CHIEU/,'C').replace(/ĐÊM|DEM/,'D')
         .replace(/[^A-Z0-9]/g,'').slice(0,3)||(combo.area||'XX').replace(/[^A-Z0-9]/gi,'').slice(0,2).toUpperCase();
       const driverAbbr=comboDriverName.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,3);
-      const areaCode=(combo.area||'').replace(/[^A-Z0-9]/gi,'').slice(0,3).toUpperCase();
+      const areaCode=(combo.area||'').replace(/[^A-Z0-9]/gi,'').slice(0,3).toUpperCase()||'XX';
       let baseId='CH'+datePart+shiftAbbr+'_'+areaCode+'_'+(driverAbbr||'XX');
       let id=baseId; let seq=2;
       while(usedIds.has(id)){id=baseId+'_'+seq;seq++;}
@@ -321,13 +330,19 @@ function BulkTripModal({orders,employees,shifts,prodShifts,customers,products,tr
     // Preview chuyến sẽ tạo
     preview.length>0&&h('div',{style:{marginBottom:12}},
       h('div',{style:{fontWeight:600,fontSize:13,color:'var(--pri3)',marginBottom:8}},
-        '📋 Sẽ tạo '+preview.length+' chuyến:'
+        '📋 Đã chọn '+selShifts.length+' ca · Sẽ tạo '+preview.length+' chuyến:'
+      ),
+      emptyRows.length>0&&h('div',{style:{fontSize:12,color:'#8A5A00',background:'#FFF7E6',border:'1px solid #F2C66D',borderRadius:'var(--r)',padding:'7px 10px',marginBottom:8}},
+        emptyRows.length+' ca chưa có đơn; hệ thống vẫn tạo chuyến trống để nhận đơn phát sinh sau: '+emptyRows.map(c=>c.shiftName).join(', ')+'.'
+      ),
+      existingRows.length>0&&h('div',{style:{fontSize:12,color:'#1F5E8C',background:'#EEF6FC',border:'1px solid #9CC7E6',borderRadius:'var(--r)',padding:'7px 10px',marginBottom:8}},
+        existingRows.length+' ca đã có chuyến trong ngày nên được bỏ qua: '+existingRows.map(c=>c.shiftName).join(', ')+'.'
       ),
       h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8}},
         preview.map((combo,i)=>h('div',{key:i,style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',
-          padding:'8px 10px',background:'#f5fbf5'}},
-          h('div',{style:{fontWeight:600,fontSize:13,color:'var(--pri)'}},combo.area),
-          combo.shiftName&&h('div',{style:{fontSize:12,color:'var(--tx2)'}},combo.shiftName),
+          padding:'8px 10px',background:combo.orders.length?'#f5fbf5':'#fffaf0'}},
+          h('div',{style:{fontWeight:600,fontSize:13,color:'var(--pri)'}},combo.shiftName),
+          h('div',{style:{fontSize:12,color:'var(--tx2)'}},combo.area||'Chuyến trống — chưa có đơn'),
           h('div',{style:{fontSize:12,marginTop:4}},combo.orders.length+' đơn · '+
             ordersWeight(combo.orders).toFixed(1)+' kg'
           )
@@ -335,7 +350,7 @@ function BulkTripModal({orders,employees,shifts,prodShifts,customers,products,tr
       )
     ),
     preview.length===0&&date&&h('div',{style:{textAlign:'center',padding:'1rem',color:'var(--tx2)',fontSize:13}},
-      'Không có đơn hàng chờ giao vào ngày '+fmtDate2(date)
+      selShifts.length?'Các ca đã chọn đều đã có chuyến trong ngày '+fmtDate2(date)+'.':'Chọn ca giao hàng cần tạo chuyến.'
     ),
     h(Row,null,
       h('button',{onClick:onClose},'Hủy'),
@@ -656,6 +671,26 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
   const lineQty=l=>numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||numFmt(l.qty)||numFmt(l.quantity)||0;
   const lineWeight=l=>{const prod=products?.find(p=>p.id===l.productId);const unit=String(l.unit||prod?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');const qty=lineQty(l);if(unit==='kg'||unit==='kgs'||unit==='kilogram'||unit==='kilograms')return qty;const wpu=prod?.weightPerUnit||numFmt(l.weightPerUnit)||0;return wpu*qty;};
   const orderWeight=o=>(o.lines||[]).reduce((s,l)=>s+lineWeight(l),0);
+  const tripMatchKey=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]+/g,'');
+  const sameTripRoute=(a,b)=>{
+    const ak=tripMatchKey(a),bk=tripMatchKey(b);
+    return !!ak&&!!bk&&(ak===bk||ak.includes(bk)||bk.includes(ak));
+  };
+  const orderArea=o=>{
+    const resolved=findOrderPointMatch(o,customers||[]);
+    return String(o?.area||resolved?.point?.area||'').trim();
+  };
+  const orderMatchesNewAutomaticTrip=(o,trip)=>{
+    if(o?.tripAssignMode==='manual'||!['pending','assigned'].includes(String(o?.status||'pending')))return false;
+    if(o?.tripId&&(trips||[]).some(t=>String(t.id||'')===String(o.tripId)))return false;
+    if(String(getOrderTripDate(o,prodShifts||[])||'')!==String(trip?.deliveryDate||''))return false;
+    const desiredId=String(getOrderTripShiftId(o,prodShifts||[])||'').trim();
+    const desiredName=getOrderTripShiftName(o,prodShifts||[]);
+    if(desiredId&&desiredId===String(trip?.shiftId||''))return true;
+    if(desiredName&&sameTripRoute(desiredName,trip?.shiftName))return true;
+    const area=orderArea(o);
+    return !!area&&(sameTripRoute(area,trip?.area)||sameTripRoute(area,trip?.shiftName));
+  };
   const deliveryOrderValue=o=>numFmt(o.deliveryOrder??o.deliverySeq??o.deliveryIndex);
   const sortedTripOrders=trip=>orders.filter(o=>(trip.orderIds||[]).includes(o.id)).sort((a,b)=>{
     const av=deliveryOrderValue(a),bv=deliveryOrderValue(b);
@@ -907,13 +942,19 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     let id=baseId;let seq=2;
     while(trips.find(t=>t.id===id)){id=baseId+'_'+seq;seq++;}
     const stamp=fmtDT();
-    setTrips(p=>[...p,{
+    const draftTrip={
       id,deliveryDate:dateVN,deliveryTime:sh.timeStart||sh.startTime||'',
       shiftId:sh.id,shiftName:sh.name||sh.id,area:sh.area||'',
-      driverName:sh.defaultDriverName||'',driverId:sh.defaultDriverId||'',driverAssignMode:sh.defaultDriverId||sh.defaultDriverName?'auto':'',orderIds:[],totalWeight:0,
+      driverName:sh.defaultDriverName||'',driverId:sh.defaultDriverId||'',driverAssignMode:sh.defaultDriverId||sh.defaultDriverName?'auto':'',
       status:sh.defaultDriverId||sh.defaultDriverName?'assigned':'planning',note:'',driverWork:0,weightRate:0,tripAllowance:0,
       attendanceStatus:'pending',createdAt:stamp,updatedBy:currentUser.name,updatedAt:stamp
-    }]);
+    };
+    const matchedOrders=(orders||[]).filter(o=>orderMatchesNewAutomaticTrip(o,draftTrip));
+    const matchedIds=matchedOrders.map(o=>o.id);
+    const newTrip={...draftTrip,orderIds:matchedIds,totalWeight:matchedOrders.reduce((sum,o)=>sum+orderWeight(o),0)};
+    setTrips(p=>[...p,newTrip]);
+    if(matchedIds.length)setOrders(p=>p.map(o=>matchedIds.includes(o.id)?{...o,tripId:id,tripAssignMode:'auto',status:'assigned',updatedAt:stamp,updatedBy:currentUser.name}:o));
+    window.showToast('Đã tạo chuyến '+id+(matchedIds.length?' và tự xếp '+matchedIds.length+' đơn phù hợp.':'. Chưa có đơn tự động phù hợp.'),matchedIds.length?'success':'info',6000);
     so(id);
   };
   const printTrip=trip=>{

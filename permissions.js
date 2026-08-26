@@ -5,11 +5,13 @@ const PAGE_ACCESS = {
   appearance:   ['admin','manager'],
   printtemplates:['admin','manager'],
   employees:    ['admin','manager'],
+  permission_settings:['admin'],
   attendance:   ['admin','manager','staff','driver'],
   attendance_settings:['admin'],
   attendance_report:['admin','manager','staff','driver'],
   advances:     ['admin','manager','staff','driver'],
   rewards:      ['admin','manager','staff','driver'],
+  employee_errors:['admin','manager'],
   leaves:       ['admin','manager','staff','driver'],
   backup:       ['admin'],
   materials:    ['admin','manager','staff'],
@@ -73,9 +75,11 @@ function canAccess(role, page, perms, dept='') {
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
   if(isFaceMask&&!faceMaskPages.includes(page)&&!sharedVariantPages.includes(page))return false;
   if(!isFaceMask&&faceMaskPages.includes(page))return false;
+  if(page==='permission_settings')return role==='admin';
   const isAccounting=String(dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('ke toan');
   if(page==='garages'&&role==='admin') return true;
   if(page==='deliveryrules') return true;
+  if(page==='employee_errors'&&(role==='admin'||role==='manager')) return true;
   if(page==='notifications') return ['admin','manager','staff','driver'].includes(role);
   if(page==='userguide') return ['admin','manager','staff','driver'].includes(role);
   if(page==='trips'&&(role==='admin'||isAccounting)) return true;

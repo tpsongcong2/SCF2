@@ -366,7 +366,11 @@ function financePurchaseExpense(purchases,month){
     const vn=s.match(/^\d{1,2}[\/-](\d{1,2})[\/-](\d{4})/);
     return vn?vn[2]+'-'+vn[1].padStart(2,'0'):'';
   };
-  return (purchases||[]).filter(purchase=>purchase.status!=='cancelled'&&monthOf(purchase.orderDate||purchase.receivedDate||purchase.createdAt)===month).reduce((total,purchase)=>total+(purchase.lines||[]).reduce((lineTotal,line)=>lineTotal+(numFmt(line.qty)||0)*(numFmt(line.price)||0),0),0);
+  return (purchases||[]).filter(purchase=>purchase.status!=='cancelled'&&monthOf(purchase.orderDate||purchase.receivedDate||purchase.createdAt)===month).reduce((total,purchase)=>total+(purchase.lines||[]).reduce((lineTotal,line)=>{
+    const subtotal=(numFmt(line.qty)||0)*(numFmt(line.price)||0);
+    const vatPercent=Math.min(100,Math.max(0,numFmt(line.vatPercent)||0));
+    return lineTotal+subtotal+Math.round(subtotal*vatPercent/100);
+  },0),0);
 }
 
 function financeMaintenanceExpense(records,month){

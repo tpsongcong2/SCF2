@@ -14,7 +14,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const[groupMode,setGroupMode]=useLS('scf_order_detail_group_mode','area');
   const[pageSize,setPageSize]=useState(25);
   const[page,setPage]=useState(1);
-  const[mobileFiltersHidden,setMobileFiltersHidden]=useLS('scf_order_detail_mobile_filters_hidden',true);
+  const[mobileFiltersHidden,setMobileFiltersHidden]=useLS('scf_order_detail_mobile_filters_hidden',window.innerWidth<=768);
 
   const cleanShiftName=name=>{
     const n=String(name||'').trim();
@@ -49,7 +49,11 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     if(pt.id)pointAreaById.set(String(pt.id),pt.area||'');
     if(pt.name)pointAreaByName.set(String(pt.name),pt.area||'');
   }));
-  const resolveArea=o=>o.area||pointAreaById.get(String(o.pointId||''))||pointAreaByName.get(String(o.pointName||''))||((shifts||[]).find(s=>s.id===o.shiftId)?.area||'');
+  const shiftById=new Map((shifts||[]).filter(s=>s?.id).map(s=>[String(s.id),s]));
+  const areaCache=new WeakMap();
+  const resolveArea=o=>{const cached=areaCache.get(o);if(cached!==undefined)return cached;const area=o.area||pointAreaById.get(String(o.pointId||''))||pointAreaByName.get(String(o.pointName||''))||(shiftById.get(String(o.shiftId||''))?.area||'');areaCache.set(o,area);return area;};
+  const orderDateCache=new WeakMap();
+  const orderDate=o=>{const cached=orderDateCache.get(o);if(cached!==undefined)return cached;const value=toISO(o.deliveryDate);orderDateCache.set(o,value);return value;};
 
   const tripById=new Map(),tripByOrder=new Map();
   (trips||[]).forEach(t=>{
@@ -89,28 +93,34 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     .trim();
   const deliveryTripShiftName=t=>cleanDeliveryShiftName(deliveryShiftById.get(String(t?.shiftId||''))?.name||t?.shiftName)||'Chưa đặt ca giao';
   const deliveryTripLabel=t=>[deliveryTripShiftName(t),t?.deliveryDate,t?.driverName].filter(Boolean).join(' · ');
+  const deliveryShiftMetaCache=new WeakMap();
   const deliveryShiftForOrder=o=>{
+    const cached=deliveryShiftMetaCache.get(o);if(cached)return cached;
     const trip=visibleTripForOrder(o);
-    const plannedId=String(getOrderTripShiftId(o,prodShifts||[])||'').trim();
-    const plannedName=String(getOrderTripShiftName(o,prodShifts||[])||'').trim();
+    let plannedId='',plannedName='';
+    if(!trip){
+      const manualShift=o?.prodShiftAssignMode==='manual'&&o?.prodShiftId?(prodShifts||[]).find(s=>s.id===o.prodShiftId):null;
+      const plannedShift=manualShift||getProdShiftForOrder(o,prodShifts||[],customers||[]);
+      const currentShift=resolveCurrentDeliveryShift(o,plannedShift);
+      plannedId=String(currentShift?.id||plannedShift?.tripShiftId||'').trim();
+      plannedName=String(currentShift?.name||resolveArea(o)||plannedShift?.tripShiftName||'').trim();
+    }
     const id=String(trip?.shiftId||plannedId||'').trim();
     const name=cleanDeliveryShiftName(deliveryShiftById.get(id)?.name||trip?.shiftName||plannedName);
     const normalizedName=name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
-    return {id,name,key:id?'id:'+id:(normalizedName?'name:'+normalizedName:'')};
+    const meta={id,name,key:id?'id:'+id:(normalizedName?'name:'+normalizedName:'')};deliveryShiftMetaCache.set(o,meta);return meta;
   };
-  // Lấy ca giao hàng trực tiếp từ từng đơn trong kỳ đang xem. Nhờ vậy đơn lịch sử
-  // chưa còn bản ghi chuyến vẫn lọc được theo SS S1, ĐT-20H... từ cấu hình ca SX.
-  const tripOptionOrders=scopedOrders.filter(o=>{
-    if(o.status==='cancelled')return false;
-    const date=toISO(o.deliveryDate);
-    if(periodRange.from&&date&&date<periodRange.from)return false;
-    if(periodRange.to&&date&&date>periodRange.to)return false;
-    if(customerF!=='all'&&o.customer!==customerF)return false;
-    if(areaF!=='all'&&resolveArea(o)!==areaF)return false;
-    return true;
-  });
+  // Dựng danh sách ca từ cấu hình/chuyến thay vì tính lại ca cho hàng nghìn đơn.
+  // Chỉ khi người dùng chọn một ca cụ thể mới tính ca của từng đơn để lọc.
   const tripOptionMap=new Map();
-  tripOptionOrders.forEach(o=>{const meta=deliveryShiftForOrder(o);if(meta.key&&!tripOptionMap.has(meta.key))tripOptionMap.set(meta.key,meta);});
+  const addTripOption=(idValue,nameValue)=>{
+    const id=String(idValue||'').trim();const name=cleanDeliveryShiftName(nameValue||deliveryShiftById.get(id)?.name||'');
+    const normalizedName=name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+    const key=id?'id:'+id:(normalizedName?'name:'+normalizedName:'');if(key&&!tripOptionMap.has(key))tripOptionMap.set(key,{id,name,key});
+  };
+  (prodShifts||[]).filter(shift=>shift?.active!==false).forEach(shift=>addTripOption(shift.tripShiftId,shift.tripShiftName));
+  (shifts||[]).forEach(shift=>addTripOption(shift.id,shift.name));
+  scopedTrips.forEach(trip=>{const date=toISO(trip.deliveryDate);if(periodRange.from&&date&&date<periodRange.from)return;if(periodRange.to&&date&&date>periodRange.to)return;addTripOption(trip.shiftId,trip.shiftName);});
   const tripOptions=[...tripOptionMap.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi'));
   const driverOptions=[...new Set(scopedTrips.map(t=>t.driverName).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
   const shiftOrder=name=>{
@@ -137,9 +147,11 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   };
 
   // Lọc ở cấp đơn trước để không phải dựng hàng nghìn dòng sản phẩm.
+  const groupInfoCache=new WeakMap();
+  const groupInfoCached=o=>{const cached=groupInfoCache.get(o);if(cached)return cached;const info=groupInfoForOrder(o);groupInfoCache.set(o,info);return info;};
   const filteredOrders=scopedOrders.filter(o=>{
     if(o.status==='cancelled')return false;
-    const date=toISO(o.deliveryDate);
+    const date=orderDate(o);
     if(periodRange.from&&date&&date<periodRange.from)return false;
     if(periodRange.to&&date&&date>periodRange.to)return false;
     if(customerF!=='all'&&o.customer!==customerF)return false;
@@ -159,10 +171,10 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     }
     return true;
   }).sort((a,b)=>{
-    const ag=groupInfoForOrder(a),bg=groupInfoForOrder(b);
+    const ag=groupInfoCached(a),bg=groupInfoCached(b);
     const gc=ag.sortKey.localeCompare(bg.sortKey,'vi');
     if(gc!==0)return gc;
-    const dc=toISO(a.deliveryDate).localeCompare(toISO(b.deliveryDate));
+    const dc=orderDate(a).localeCompare(orderDate(b));
     if(dc!==0)return dc;
     const pc=String(a.pointName||'').localeCompare(String(b.pointName||''),'vi');
     return pc!==0?pc:String(a.deliveryTime||'').localeCompare(String(b.deliveryTime||''));
@@ -260,23 +272,19 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const diff=totalProd-totalInvoice;
 
   return h('div',null,
-    h('div',{className:'detail-mobile-controls'},
+    h('div',{className:'detail-filter-toolbar'},
       h('button',{
         type:'button',
-        onClick:()=>setMenuHidden&&setMenuHidden(!menuHidden),
-        title:menuHidden?'Hiện header và menu':'Ẩn header và menu'
-      },h('i',{className:'ti '+(menuHidden?'ti-layout-navbar-expand':'ti-layout-navbar-collapse')}),menuHidden?'Hiện menu':'Ẩn menu'),
-      h('button',{
-        type:'button',
-        className:mobileFiltersHidden?'bp':'',
+        className:mobileFiltersHidden?'':'bp',
         onClick:()=>setMobileFiltersHidden(!mobileFiltersHidden),
         title:mobileFiltersHidden?'Hiện bộ lọc đơn hàng':'Ẩn bộ lọc đơn hàng'
       },h('i',{className:'ti '+(mobileFiltersHidden?'ti-filter':'ti-filter-off')}),mobileFiltersHidden?'Hiện bộ lọc':'Ẩn bộ lọc'),
-      mobileFiltersHidden&&h('span',{className:'detail-mobile-summary'},
-        vnDateFromISO(periodRange.from)+(periodRange.to!==periodRange.from?' — '+vnDateFromISO(periodRange.to):'')+' · '+totalOrders+' đơn'
-      )
+      h('span',{className:'detail-mobile-summary'},
+        'Đang xem: '+vnDateFromISO(periodRange.from)+(periodRange.to!==periodRange.from?' — '+vnDateFromISO(periodRange.to):'')
+      ),
+      h('span',{className:'detail-count-badge'},totalOrders+' đơn · '+rows.length+' dòng trên trang')
     ),
-    h('div',{className:'card detail-filter-card'+(mobileFiltersHidden?' mobile-collapsed':''),style:{marginBottom:'1rem'}},
+    h('div',{className:'detail-filter-card'+(mobileFiltersHidden?' mobile-collapsed':'')},
       h('div',{className:'detail-filter-grid'},
         h(F,{label:'Thời gian'},h('select',{value:periodMode,onChange:e=>setPeriodMode(e.target.value)},h('option',{value:'day'},'Theo ngày'),h('option',{value:'week'},'Theo tuần'),h('option',{value:'month'},'Theo tháng'),h('option',{value:'range'},'Khoảng ngày'))),
         periodMode==='month'?h(F,{label:'Chọn tháng'},h('input',{type:'month',value:(anchorDate||todayISO).slice(0,7),onChange:e=>setAnchorDate((e.target.value||todayISO.slice(0,7))+'-01')})):
@@ -292,10 +300,8 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
           h('option',{value:'area'},'Theo khu vực'),
           h('option',{value:'trip'},'Theo chuyến'),
           h('option',{value:'driver'},'Theo lái xe')
-        )),
-        h('span',{className:'detail-count-badge'},totalOrders+' đơn · '+rows.length+' dòng trên trang')
-      ),
-      h('div',{className:'detail-period-note'},'Đang xem: '+vnDateFromISO(periodRange.from)+(periodRange.to!==periodRange.from?' — '+vnDateFromISO(periodRange.to):''))
+        ))
+      )
     ),
     h('div',{className:'detail-pagination'},
       h('span',null,'Mỗi trang'),

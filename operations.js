@@ -1042,10 +1042,12 @@ function normalizeEmployeeDept(value){return String(value||'').normalize('NFD').
 function isPrivilegedEmployeeRecord(employee){
   const role=String(employee?.role||'').trim().toLowerCase();
   return ['admin','administrator'].includes(role)||normalizeEmployeeDept(employee?.dept)==='ban giam doc';
-}function EmpForm({emp,employees,depts,cu,cu2,onSave,onClose}){
+}function EmpForm({emp,employees,depts,permissionProfiles,cu,cu2,onSave,onClose}){
   const deptNames=(depts&&depts.length?depts.map(d=>d.name):DEPTS);
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
-  const scopedDeptNames=isFaceMask?[...new Set([...deptNames.filter(d=>normalizeEmployeeDept(d)==='ban giam doc'),'Ban Giám Đốc'])]:deptNames.filter(d=>normalizeEmployeeDept(d)!=='ban giam doc');
+  const normalizedProfiles=normalizePermissionProfiles(permissionProfiles);
+  const availableProfileIds=PERMISSION_PROFILE_ORDER.filter(id=>isFaceMask?id==='director':id!=='director');
+  const scopedDeptNames=isFaceMask?[...new Set([...deptNames.filter(d=>normalizeEmployeeDept(d)==='ban giam doc'),'Ban Giám Đốc'])]:[...new Set([...deptNames.filter(d=>normalizeEmployeeDept(d)!=='ban giam doc'),...availableProfileIds.map(id=>normalizedProfiles[id].dept)])];
   const roleOptions=Object.entries(ROLES).filter(([role])=>isFaceMask||!['admin','administrator'].includes(role));
   const[busy,setBusy]=useState(false);
   const[f,sf]=useState(emp
@@ -1063,8 +1065,8 @@ function isPrivilegedEmployeeRecord(employee){
     const gender=normalizeGenderValue(f.gender,f.female);
     try{
       const password=f.password?await hashPassword(f.password):'';
-      const permissions=(f.permissions||[]).filter(page=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page));
-      const permLevels=Object.fromEntries(Object.entries(f.permLevels||{}).filter(([page])=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page)));
+      const permissions=isFaceMask&&f.permissionProfileId==='director'?[]:(f.permissions||[]).filter(page=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page));
+      const permLevels=isFaceMask&&f.permissionProfileId==='director'?{}:Object.fromEntries(Object.entries(f.permLevels||{}).filter(([page])=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page)));
       onSave({...f,permissions,permLevels,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
     }catch(e){window.showToast(e.message||'Không thể lưu mật khẩu.','error');}
     finally{setBusy(false);}
@@ -1074,6 +1076,10 @@ function isPrivilegedEmployeeRecord(employee){
       h(F,{label:'Mã nhân viên *'},h('input',{value:f.id,onChange:e=>s('id',e.target.value.toUpperCase()),placeholder:'NV001'})),
       h(F,{label:'Họ và tên *'},h('input',{value:f.name,onChange:e=>s('name',e.target.value)})),
       h(F,{label:'Ngày sinh (DD/MM/YYYY)'},h('input',{value:f.birthday,onChange:e=>s('birthday',e.target.value),placeholder:'15/03/1990'})),
+    ),
+    h('div',{className:'g2'},
+      h(F,{label:'Chức vụ / bộ quyền mặc định'},h('select',{value:f.permissionProfileId||'',onChange:e=>{const id=e.target.value;sf(prev=>id?applyPermissionProfile(prev,normalizedProfiles,id):{...prev,permissionProfileId:''});}},h('option',{value:''},'— Chọn chức vụ —'),availableProfileIds.map(id=>h('option',{key:id,value:id},normalizedProfiles[id].label)))),
+      h('div',{style:{fontSize:12,color:'var(--tx2)',paddingTop:25}},f.permissionProfileId?'Đã áp dụng quyền mặc định. Admin có thể chỉnh riêng ở phần bên dưới.':'Chưa gắn bộ quyền theo chức vụ.')
     ),
     h('div',{className:'g3'},
       h(F,{label:'Bộ phận'},h('select',{value:f.dept,onChange:e=>s('dept',e.target.value)},scopedDeptNames.map(d=>h('option',{key:d,value:d},d)))),
@@ -1114,21 +1120,12 @@ function isPrivilegedEmployeeRecord(employee){
     cu2&&cu2.role==='admin'&&h('div',null,
       h('hr',{className:'divider'}),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
-        h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phan quyen chi tiet (bo trong = mac dinh theo cap bac)'),
-        h('button',{type:'button',onClick:()=>sf(p=>({...p,permissions:[],permLevels:{}})),style:{fontSize:11,padding:'3px 10px',color:'#A32D2D',borderColor:'#F7C1C1'}},'Xoa tuy chinh')
+        h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phân quyền chi tiết (có thể chỉnh riêng cho nhân viên này)'),
+        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{}})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
       ),
-      h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = không có nút Thêm/Sửa/Xóa | Xem+Sửa = có nút Thêm/Sửa | Đầy đủ = có tất cả'),
+      h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = chỉ đọc dữ liệu | Thêm + Xem + Sửa = không được xóa | Thêm + Xem + Sửa + Xóa = toàn quyền'),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 2rem'}},
-        [
-          {sec:'Cai dat', pages:[{k:'company',l:'Thong tin cong ty'},{k:'appearance',l:'Cai dat giao dien'},{k:'printtemplates',l:'Mau in Excel va mapping'},{k:'employees',l:'Nhan vien'},{k:'backup',l:'Backup'}]},
-          {sec:'Nhan su', pages:[{k:'attendance',l:'Cham cong'},{k:'attendance_settings',l:'Cai dat cham cong'},{k:'advances',l:'Ung luong'},{k:'rewards',l:'Thuong phat'},{k:'leaves',l:'Xin nghi'}]},
-          {sec:'Bao cong', pages:[{k:'attendance_report',l:'Bao cao cham cong'},{k:'workreport_vp',l:'Cong ke toan'},{k:'workreport_sx',l:'Cong san xuat'},{k:'workreport_lx',l:'Cong lai xe'},{k:'workreport_total',l:'Tong cong'}]},
-          {sec:'Danh muc', pages:[{k:'materials',l:'Vat tu'},{k:'depts',l:'Bo phan'},{k:'products',l:'San pham'},{k:'customers',l:'Khach hang'},{k:'areas',l:'Khu vuc'},{k:'prodshifts',l:'Ca san xuat'},{k:'workcats',l:'DM Cong viec'},{k:'shifts',l:'Ca giao hang'}]},
-          {sec:'Ban hang', pages:[{k:'quotes',l:'Bao gia'},{k:'delivery',l:'Don giao hang'},{k:'intem',l:'Intem'},{k:'orderdetail',l:'Chi tiet don hang'},{k:'trips',l:'Chuyen giao hang'},{k:'salesreport',l:'Bao cao BH'},{k:'marketsales',l:'Ban hang cho'},{k:'powdersales',l:'Ban bot bun'}]},
-          {sec:'Mua hang', pages:[{k:'nccs',l:'Nha CC NVL'},{k:'nccgoods',l:'Nha CC Hang hoa'},{k:'purchaseorders',l:'Don mua hang NVL'},{k:'purchasegoods',l:'Don mua hang hang hoa'},{k:'fuelpurchases',l:'Don mua xang dau'},{k:'purchasereport',l:'Bao cao MH'},{k:'materialusage',l:'Bao cao NVL ton va tieu dung'},{k:'purchase',l:'Mua hang'}]},
-          {sec:'Bao cao', pages:[{k:'cashflowreport',l:'Bao cao dong tien'},{k:'fuelreport',l:'Bao cao xang dau'},{k:'maintreport',l:'Bao cao sua chua'}]},
-          {sec:'San xuat', pages:[{k:'prodsummary',l:'Tong hop SX'},{k:'prodorders',l:'Don san xuat'},{k:'stock',l:'Ton kho'}]},
-        ].map(sec=>h('div',{key:sec.sec,style:{marginBottom:10}},
+        SCF_PERMISSION_SECTIONS.map(section=>({sec:section.sec,pages:section.pages.map(([k,l])=>({k,l}))})).map(sec=>h('div',{key:sec.sec,style:{marginBottom:10}},
           h('div',{style:{fontSize:11,fontWeight:600,color:'var(--tx2)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:5}},sec.sec),
           sec.pages.filter(pg=>!FACEMASK_ONLY_PERMISSION_PAGES.has(pg.k)).map(pg=>{
             const active = f.permissions&&f.permissions.length>0
@@ -1150,8 +1147,8 @@ function isPrivilegedEmployeeRecord(employee){
               },
                 h('option',{value:'none'},'Không truy cập'),
                 h('option',{value:'r'},'Chỉ xem'),
-                h('option',{value:'rw'},'Xem + Sửa'),
-                h('option',{value:'rwd'},'Đầy đủ (Xóa)')
+                h('option',{value:'rw'},'Thêm + Xem + Sửa'),
+                h('option',{value:'rwd'},'Thêm + Xem + Sửa + Xóa')
               )
             );
           })
@@ -1216,7 +1213,7 @@ function CpwModal({emp,cu,onSave,onClose,forced=false}){
     h(Row,null,!forced&&h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,disabled:busy,style:{padding:'8px 20px'}},busy?'Đang mã hóa...':isAdminReset?'Đặt mật khẩu tạm':'Đổi mật khẩu'))
   );
 }
-function EmployeeTab({employees,setEmployees,cu,depts}){
+function EmployeeTab({employees,setEmployees,cu,depts,permissionProfiles}){
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[cpw,scp]=useState(null);const[q,sq]=useState('');
   const[sortBy,setSortBy]=useState('id'); // id | role | dept
@@ -1328,7 +1325,7 @@ function EmployeeTab({employees,setEmployees,cu,depts}){
             h('td',null,h('span',{className:'badge',style:genderStyle},isFemale?'Nữ':'Nam')),
             h('td',null,e.startDate||'—'),
             h('td',null,e.dept),
-            h('td',null,h('span',{className:'badge '+(RCLS[e.role]||'chip-staff')},ROLES[e.role]||e.role)),
+            h('td',null,h('span',{className:'badge '+(RCLS[e.role]||'chip-staff')},ROLES[e.role]||e.role),e.permissionProfileId&&normalizedPermissionProfileLabel(permissionProfiles,e.permissionProfileId)&&h('div',{style:{fontSize:10,color:'var(--tx2)',marginTop:3}},normalizedPermissionProfileLabel(permissionProfiles,e.permissionProfileId))),
             h('td',null,e.bhxh
               ?h('span',{style:{color:'#2d6a4f',fontWeight:600,fontSize:12,display:'flex',alignItems:'center',gap:4}},h('i',{className:'ti ti-shield-check',style:{fontSize:13}}),'Có')
               :h('span',{style:{color:'var(--tx2)',fontSize:12}},'—')
@@ -1349,14 +1346,20 @@ function EmployeeTab({employees,setEmployees,cu,depts}){
         }):h('tr',null,h('td',{colSpan:11,className:'empty-st'},'Chưa có nhân viên nào.')))
       )
     ),
-    modal==='f'&&h(EmpForm,{emp:edit,employees,depts,cu,cu2:cu,onSave:save,onClose:()=>{sm(null);se(null);}}),
+    modal==='f'&&h(EmpForm,{emp:edit,employees,depts,permissionProfiles,cu,cu2:cu,onSave:save,onClose:()=>{sm(null);se(null);}}),
     cpw&&h(CpwModal,{emp:cpw,cu,onSave:(pw,options)=>savePw(cpw.id,pw,options),onClose:()=>scp(null)})
   );
 }
-function BackupTab({employees,materials,assets,garages,prodCats,products,customers,workcats,tasks,advances,rewards,leaves,nccs,purchases,goodsPurchases,depts,prodShiftRules,uiSettings,printTemplateSettings,financeEntries,financeDebts,financeOpenings}){
+function BackupTab({employees,materials,assets,garages,prodCats,products,customers,workcats,tasks,advances,rewards,employeeErrors,leaves,nccs,purchases,goodsPurchases,depts,prodShiftRules,uiSettings,printTemplateSettings,financeEntries,financeDebts,financeOpenings}){
   function exp(rows,cols,name){const data=rows.map(r=>Object.fromEntries(cols.map(([k,l])=>[l,r[k]??''])));const ws=XLSX.utils.json_to_sheet(data);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,name);XLSX.writeFile(wb,name+'_'+fmtDate().replace(/\//g,'-')+'.xlsx');}
-  const purchaseRows=(purchases||[]).flatMap(p=>(p.lines&&p.lines.length?p.lines:[{}]).map(l=>({...p,itemName:l.name||'',itemUnit:l.unit||'',itemQty:l.qty||0,itemPrice:l.price||0,itemTotal:(l.qty||0)*(l.price||0),lineNote:l.note||''})));
-  const goodsPurchaseRows=(goodsPurchases||[]).flatMap(p=>(p.lines&&p.lines.length?p.lines:[{}]).map(l=>({...p,itemName:l.name||'',itemUnit:l.unit||'',itemQty:l.qty||0,itemPrice:l.price||0,itemTotal:(l.qty||0)*(l.price||0),lineNote:l.note||''})));
+  const backupPurchaseLine=l=>{
+    const itemTotal=(Number(l.qty)||0)*(Number(l.price)||0);
+    const itemVatPercent=Math.min(100,Math.max(0,Number(l.vatPercent)||0));
+    const itemVatAmount=Math.round(itemTotal*itemVatPercent/100);
+    return {itemName:l.name||'',itemUnit:l.unit||'',itemQty:l.qty||0,itemPrice:l.price||0,itemTotal,itemVatPercent,itemVatAmount,itemAmountAfterTax:itemTotal+itemVatAmount,lineNote:l.note||''};
+  };
+  const purchaseRows=(purchases||[]).flatMap(p=>(p.lines&&p.lines.length?p.lines:[{}]).map(l=>({...p,...backupPurchaseLine(l)})));
+  const goodsPurchaseRows=(goodsPurchases||[]).flatMap(p=>(p.lines&&p.lines.length?p.lines:[{}]).map(l=>({...p,...backupPurchaseLine(l)})));
   const safeUi=normalizeUiSettings(uiSettings);
   const safeTemplateSettings=normalizePrintTemplateSettings(printTemplateSettings);
   const uiBackupRows=[{
@@ -1400,13 +1403,14 @@ function BackupTab({employees,materials,assets,garages,prodCats,products,custome
     {name:'Giao việc',rows:tasks||[],cols:[['id','Mã phiếu'],['date','Ngày'],['empName','Nhân viên'],['dept','Bộ phận'],['workCatName','Công việc'],['workDesc','Mô tả công việc'],['workDuration','Thời gian'],['qualityReq','Yêu cầu chất lượng'],['qtyAssign','KL giao'],['qtyReport','KL báo cáo'],['qtyApproved','KL duyệt'],['unit','ĐVT'],['rate','Đơn giá'],['status','Trạng thái'],['location','Địa điểm'],['note','Ghi chú giao'],['reportNote','Ghi chú báo cáo'],['reviewNote','Nhận xét quản lý']]},
     {name:'Ứng lương',rows:advances||[],cols:[['id','Mã phiếu'],['date','Ngày'],['empId','Mã NV'],['empName','Nhân viên'],['dept','Bộ phận'],['amount','Số tiền đề nghị'],['approvedAmount','Số tiền duyệt'],['reason','Lý do'],['note','Ghi chú phiếu'],['status','Trạng thái'],['reviewNote','Ghi chú duyệt'],['approvedBy','Người duyệt']]},
     {name:'Thưởng phạt',rows:rewards||[],cols:[['id','Mã phiếu'],['date','Ngày'],['empId','Mã NV'],['empName','Nhân viên'],['dept','Bộ phận'],['kind','Loại'],['amount','Số tiền đề nghị'],['approvedAmount','Số tiền duyệt'],['reason','Nội dung'],['note','Ghi chú phiếu'],['status','Trạng thái'],['reviewNote','Ghi chú duyệt'],['approvedBy','Người duyệt']]},
+    {name:'Lỗi nhân viên',rows:employeeErrors||[],cols:[['id','Mã'],['date','Ngày'],['empId','Mã NV'],['empName','Tên nhân viên'],['dept','Bộ phận'],['error','Lỗi'],['damage','Thiệt hại'],['updatedBy','Người cập nhật'],['updatedAt','Thời gian cập nhật']]},
     {name:'Xin nghỉ',rows:leaves||[],cols:[['id','Mã đơn'],['fromDate','Từ ngày'],['toDate','Đến ngày'],['empId','Mã NV'],['empName','Nhân viên'],['dept','Bộ phận'],['type','Hình thức'],['days','Số ngày đề nghị'],['approvedDays','Số ngày duyệt'],['reason','Lý do'],['note','Ghi chú đơn'],['status','Trạng thái'],['reviewNote','Ghi chú duyệt'],['approvedBy','Người duyệt']]},
     {name:'Giao diện',rows:uiBackupRows,cols:[['fontFamily','Loại chữ'],['base','Nội dung chung'],['form','Ô nhập liệu'],['menu','Menu điều hướng'],['button','Nút chức năng'],['table','Nội dung bảng'],['header','Tiêu đề bảng'],['badge','Nhãn trạng thái']]},
     {name:'Mẫu in Excel',rows:printTemplateRows,cols:[['type','Loại mẫu'],['scopeName','Đối tượng áp dụng'],['fileName','Tên file'],['sheetNames','Sheet'],['variableCount','Số biến'],['mappedCount','Đã mapping'],['uploadedAt','Cập nhật']]},
     {name:'Ca SX nhỏ',rows:prodShiftRules||[],cols:[['name','Tên ca'],['group','Ca lớn'],['start','Từ giờ'],['end','Đến giờ'],['active','Hoạt động']]},
     {name:'Nhà cung cấp',rows:nccs||[],cols:[['code','Mã NCC'],['name','Tên NCC'],['taxCode','MST'],['phone','Điện thoại'],['email','Email'],['contact','Người LH'],['address','Địa chỉ'],['note','Ghi chú']]},
-    {name:'Đơn mua NVL',rows:purchaseRows,cols:[['id','Mã đơn'],['nccName','Nhà cung cấp'],['orderDate','Ngày đặt'],['deliveryDate','Hạn giao'],['receivedDate','Ngày nhận'],['invoiceNo','Số hóa đơn'],['status','Trạng thái'],['paymentStatus','Thanh toán'],['itemName','Mặt hàng'],['itemUnit','ĐVT'],['itemQty','Số lượng'],['itemPrice','Đơn giá'],['itemTotal','Thành tiền'],['note','Ghi chú đơn'],['lineNote','Ghi chú dòng']]},
-    {name:'Đơn mua hàng hóa',rows:goodsPurchaseRows,cols:[['id','Mã đơn'],['nccName','Nhà cung cấp'],['orderDate','Ngày đặt'],['deliveryDate','Hạn giao'],['receivedDate','Ngày nhận'],['invoiceNo','Số hóa đơn'],['status','Trạng thái'],['paymentStatus','Thanh toán'],['itemName','Mặt hàng'],['itemUnit','ĐVT'],['itemQty','Số lượng'],['itemPrice','Đơn giá'],['itemTotal','Thành tiền'],['note','Ghi chú đơn'],['lineNote','Ghi chú dòng']]},
+    {name:'Đơn mua NVL',rows:purchaseRows,cols:[['id','Mã đơn'],['nccName','Nhà cung cấp'],['orderDate','Ngày đặt'],['deliveryDate','Hạn giao'],['receivedDate','Ngày nhận'],['invoiceNo','Số hóa đơn'],['status','Trạng thái'],['paymentStatus','Thanh toán'],['itemName','Mặt hàng'],['itemUnit','ĐVT'],['itemQty','Số lượng'],['itemPrice','Đơn giá'],['itemTotal','Thành tiền'],['itemVatPercent','VAT (%)'],['itemVatAmount','Tiền VAT'],['itemAmountAfterTax','Thành tiền VAT'],['note','Ghi chú đơn'],['lineNote','Ghi chú dòng']]},
+    {name:'Đơn mua hàng hóa',rows:goodsPurchaseRows,cols:[['id','Mã đơn'],['nccName','Nhà cung cấp'],['orderDate','Ngày đặt'],['deliveryDate','Hạn giao'],['receivedDate','Ngày nhận'],['invoiceNo','Số hóa đơn'],['status','Trạng thái'],['paymentStatus','Thanh toán'],['itemName','Mặt hàng'],['itemUnit','ĐVT'],['itemQty','Số lượng'],['itemPrice','Đơn giá'],['itemTotal','Thành tiền'],['itemVatPercent','VAT (%)'],['itemVatAmount','Tiền VAT'],['itemAmountAfterTax','Thành tiền VAT'],['note','Ghi chú đơn'],['lineNote','Ghi chú dòng']]},
     {name:'Sổ thu chi',rows:financeEntries||[],cols:[['id','Mã'],['date','Ngày'],['direction','Tiền vào/ra'],['category','Nhóm thu chi'],['partnerName','Đối tượng'],['method','Phương thức'],['amount','Số tiền'],['pnlType','Phân loại KQKD'],['reference','Chứng từ'],['note','Ghi chú']]},
     {name:'Công nợ',rows:financeDebts||[],cols:[['id','Mã'],['kind','Loại'],['partnerName','Đối tượng'],['date','Ngày ghi nhận'],['dueDate','Hạn thanh toán'],['invoiceNo','Chứng từ'],['amount','Giá trị'],['paidAmount','Đã thanh toán'],['status','Trạng thái'],['note','Ghi chú']]},
     {name:'Số dư đầu tháng',rows:financeOpenings||[],cols:[['month','Tháng'],['cash','Tiền mặt'],['bank','Ngân hàng'],['updatedBy','Người cập nhật'],['updatedAt','Cập nhật lúc']]},

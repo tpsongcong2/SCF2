@@ -424,7 +424,7 @@ function ProductMergeModal({products,prodCats,onMerge,onClose}){
   );
 }
 function ProductsTab({products,setProducts,prodCats,setProdCats}){
-  const[modal,sm]=useState(null);const[edit,se]=useState(null);const[catModal,scm]=useState(null);const[editCat,sec]=useState(null);const[q,sq]=useState('');const[filterCat,sfc]=useState('all');
+  const[modal,sm]=useState(null);const[edit,se]=useState(null);const[catModal,scm]=useState(null);const[editCat,sec]=useState(null);const[q,sq]=useState('');const[filterCat,sfc]=useState('all');const[goodsGroupFilter,setGoodsGroupFilter]=useState('all');
   const saveProd=d=>{if(edit)setProducts(p=>p.map(x=>x.id===edit.id?d:x));else setProducts(p=>[...p,d]);sm(null);se(null);};
   const saveCat=d=>{if(editCat)setProdCats(p=>p.map(x=>x.id===editCat.id?d:x));else setProdCats(p=>[...p,d]);scm('manage');sec(null);window.showToast(editCat?'Đã cập nhật nhóm sản phẩm':'Đã thêm nhóm sản phẩm','success');};
   const delProd=id=>{window.scfConfirm('Bạn có chắc muốn xóa sản phẩm này?','Xóa sản phẩm',true).then(ok=>{if(ok){setProducts(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa sản phẩm','success');}});};
@@ -472,8 +472,11 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
       });
     });
   },[products,prodCats]);
+  const hhCategory=prodCats.find(cat=>normalizeLookupText(cat?.name||'')==='hh');
+  const filteringHH=!!hhCategory&&filterCat===hhCategory.id;
+  const goodsGroupOptions=[...new Set(products.filter(product=>isGoodsProduct(product,prodCats)).map(product=>String(product?.goodsGroup||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
   const list=products
-    .filter(x=>(filterCat==='all'||productCategoryId(x,prodCats)===filterCat)&&(!q||x.name.toLowerCase().includes(q.toLowerCase())||x.code.toLowerCase().includes(q.toLowerCase())))
+    .filter(x=>(filterCat==='all'||productCategoryId(x,prodCats)===filterCat)&&(filteringHH&&goodsGroupFilter!=='all'?(goodsGroupFilter==='__ungrouped__'?!String(x?.goodsGroup||'').trim():normalizeLookupText(x?.goodsGroup||'')===normalizeLookupText(goodsGroupFilter)):true)&&(!q||String(x.name||'').toLowerCase().includes(q.toLowerCase())||String(x.code||'').toLowerCase().includes(q.toLowerCase())))
     .sort((a,b)=>sortProd==='code'?naturalSort(a.code,b.code):naturalSort(a.name,b.name));
   const exportRows=list.map(x=>{
     const rule=resolveProductLabelPackRule(x,x.name);
@@ -486,8 +489,13 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
     ),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
-        h('button',{className:'pill'+(filterCat==='all'?' on':''),onClick:()=>sfc('all')},'Tất cả ('+products.length+')'),
-        prodCats.map(c=>h('button',{key:c.id,className:'pill'+(filterCat===c.id?' on':''),onClick:()=>sfc(c.id)},c.name+' ('+products.filter(p=>productCategoryId(p,prodCats)===c.id).length+')'))
+        h('button',{className:'pill'+(filterCat==='all'?' on':''),onClick:()=>{sfc('all');setGoodsGroupFilter('all');}},'Tất cả ('+products.length+')'),
+        prodCats.map(c=>h('button',{key:c.id,className:'pill'+(filterCat===c.id?' on':''),onClick:()=>{sfc(c.id);setGoodsGroupFilter('all');}},c.name+' ('+products.filter(p=>productCategoryId(p,prodCats)===c.id).length+')')),
+        filteringHH&&h('select',{value:goodsGroupFilter,onChange:e=>setGoodsGroupFilter(e.target.value),style:{width:'auto',minWidth:190,padding:'5px 10px'}},
+          h('option',{value:'all'},'— Tất cả nhóm HH —'),
+          goodsGroupOptions.map(group=>h('option',{key:group,value:group},group)),
+          h('option',{value:'__ungrouped__'},'Chưa phân nhóm')
+        )
       ),
       h('div',{style:{display:'flex',gap:6}},
         h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm sản phẩm...'}),

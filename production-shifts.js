@@ -64,6 +64,21 @@ function normalizeLookupText(v){
     .trim()
     .toLowerCase();
 }
+const ORDER_POINT_INDEX_CACHE=new WeakMap();
+function getOrderPointIndex(customers){
+  if(!Array.isArray(customers))return null;
+  const cached=ORDER_POINT_INDEX_CACHE.get(customers);if(cached)return cached;
+  const all=[],byPointId=new Map(),byPointName=new Map(),byAddress=new Map(),byCustomerId=new Map(),byCustomerName=new Map();
+  const add=(map,key,row)=>{if(!key)return;const list=map.get(key)||[];list.push(row);map.set(key,list);};
+  customers.forEach(c=>{
+    const cName=normalizeLookupText(c.name||'');
+    (c.points||[]).forEach(pt=>{
+      const row={c,pt,cName,pName:normalizeLookupText(pt.name||''),pAddress:normalizeLookupText(pt.address||'')};all.push(row);
+      add(byPointId,String(pt.id||'').trim(),row);add(byPointName,row.pName,row);add(byAddress,row.pAddress,row);add(byCustomerId,String(c.id||'').trim(),row);add(byCustomerName,cName,row);
+    });
+  });
+  const index={all,byPointId,byPointName,byAddress,byCustomerId,byCustomerName};ORDER_POINT_INDEX_CACHE.set(customers,index);return index;
+}
 function findOrderPointMatch(order,customers){
   if(!order||!(customers&&customers.length))return null;
   const pointId=String(order.pointId||order.ptId||'').trim();
@@ -71,36 +86,36 @@ function findOrderPointMatch(order,customers){
   const address=normalizeLookupText(order.address||'');
   const customerId=String(order.customerId||order.custId||'').trim();
   const customerName=normalizeLookupText(order.customer||'');
-  let best=null;
-  let bestScore=-1;
-  (customers||[]).forEach(c=>{
-    const cName=normalizeLookupText(c.name||'');
-    const customerScore=customerId&&c.id===customerId?1000:(customerName&&cName===customerName?700:(customerName&&(cName.includes(customerName)||customerName.includes(cName))?350:0));
-    (c.points||[]).forEach(pt=>{
-      const pName=normalizeLookupText(pt.name||'');
-      const pAddress=normalizeLookupText(pt.address||'');
-      let score=customerScore;
-      let hit=false;
-      if(pointId&&pt.id===pointId){score+=5000;hit=true;}
-      if(pointName&&pName===pointName){score+=800;hit=true;}
-      else if(pointName&&pName&&(pName.includes(pointName)||pointName.includes(pName))){score+=500;hit=true;}
-      if(address&&pAddress===address){score+=300;hit=true;}
-      else if(address&&pAddress&&(pAddress.includes(address)||address.includes(pAddress))){score+=180;hit=true;}
-      if(!hit)return;
-      if(score>bestScore){bestScore=score;best={customer:c,point:pt,score};}
-    });
+  const index=getOrderPointIndex(customers);if(!index)return null;
+  const candidateSet=new Set();
+  const include=list=>(list||[]).forEach(row=>candidateSet.add(row));
+  include(index.byPointId.get(pointId));include(index.byPointName.get(pointName));include(index.byAddress.get(address));
+  if(!candidateSet.size){include(index.byCustomerId.get(customerId));include(index.byCustomerName.get(customerName));}
+  const candidates=candidateSet.size?[...candidateSet]:index.all;
+  let best=null,bestScore=-1;
+  candidates.forEach(row=>{
+    const {c,pt,cName,pName,pAddress}=row;
+    const customerScore=customerId&&String(c.id||'')===customerId?1000:(customerName&&cName===customerName?700:(customerName&&(cName.includes(customerName)||customerName.includes(cName))?350:0));
+    let score=customerScore,hit=false;
+    if(pointId&&String(pt.id||'')===pointId){score+=5000;hit=true;}
+    if(pointName&&pName===pointName){score+=800;hit=true;}
+    else if(pointName&&pName&&(pName.includes(pointName)||pointName.includes(pName))){score+=500;hit=true;}
+    if(address&&pAddress===address){score+=300;hit=true;}
+    else if(address&&pAddress&&(pAddress.includes(address)||address.includes(pAddress))){score+=180;hit=true;}
+    if(hit&&score>bestScore){bestScore=score;best={customer:c,point:pt,score};}
   });
   return best;
-}
-function getProdShift(deliveryTime, prodShifts, location){
+}function getProdShift(deliveryTime, prodShifts, location){
   if(!deliveryTime||!prodShifts)return null;
   const tMin=timeToMin(deliveryTime);
   const loc=normalizeLookupText(location||'');
   const inRange=(t,start,end)=>{
     const s=timeToMin(start), e=timeToMin(end);
     if(!start||!end)return false;
-    if(s<=e)return t>=s&&t<e;
-    return t>=s||t<e; // qua nửa đêm
+    // Trường "Đến giờ" là mốc bao gồm. Khi hai khoảng cùng chạm mốc,
+    // bộ chấm điểm sẽ ưu tiên địa điểm cụ thể hơn khu vực chung.
+    if(s<=e)return t>=s&&t<=e;
+    return t>=s||t<=e; // qua nửa đêm
   };
   const matches=(prodShifts||[]).filter(sh=>{
     if(sh.active===false)return false;
@@ -184,13 +199,20 @@ function getProdShiftByProdTime(prodTime, prodShifts){
 function timeInRange(t,start,end){
   if(!t||!start||!end)return false;
   const tm=timeToMin(t), s=timeToMin(start), e=timeToMin(end);
-  if(s<=e)return tm>=s&&tm<e;
-  return tm>=s||tm<e;
+  if(s<=e)return tm>=s&&tm<=e;
+  return tm>=s||tm<=e;
 }
 function getProdWorkShiftRule(prodTime,rules){
   if(!prodTime)return null;
   const activeRules=(rules&&rules.length)?rules:DEF_PROD_SHIFT_RULES;
-  return activeRules.find(r=>r.active!==false&&timeInRange(prodTime,r.start,r.end))||null;
+  const tm=timeToMin(prodTime);
+  // Các khoảng ca nhỏ nối tiếp nhau: mốc giao thuộc ca bắt đầu tại mốc đó.
+  return activeRules.find(r=>{
+    if(r.active===false||!r.start||!r.end)return false;
+    const start=timeToMin(r.start),end=timeToMin(r.end);
+    if(start<=end)return tm>=start&&tm<end;
+    return tm>=start||tm<end;
+  })||null;
 }
 function addDaysVN(dateStr,offset){
   if(!dateStr)return '';
@@ -212,15 +234,35 @@ function getOrderTripDate(order,prodShifts){
   if(offset===null||offset===undefined||Number.isNaN(offset))return '';
   return addDaysVN(order.deliveryDate,offset);
 }
+function resolveCurrentDeliveryShift(order,plannedShift){
+  const shifts=window.__SCF_SHIFTS||[];
+  const plannedId=String(plannedShift?.tripShiftId||'');
+  const byId=plannedId?shifts.find(s=>String(s?.id||'')===plannedId):null;
+  const plannedName=normalizeLookupText(plannedShift?.tripShiftName||'');
+  const byName=plannedName?shifts.find(s=>normalizeLookupText(s?.name||'')===plannedName):null;
+  if(byName)return byName;
+  if(byId)return byId;
+  const resolved=findOrderPointMatch(order,window.__SCF_CUSTOMERS||[]);
+  const area=normalizeLookupText(order?.area||resolved?.point?.area||'');
+  if(!area)return null;
+  return shifts.find(s=>normalizeLookupText(s?.name||'')===area)
+    ||shifts.find(s=>normalizeLookupText(s?.area||'')===area)
+    ||null;
+}
 function getOrderTripShiftId(order,prodShifts){
   const manualShift=order?.prodShiftAssignMode==='manual'&&order?.prodShiftId?(prodShifts||[]).find(s=>s.id===order.prodShiftId):null;
   const autoShift=getProdShiftForOrder(order,prodShifts||[],window.__SCF_CUSTOMERS||[]);
-  return String((manualShift||autoShift)?.tripShiftId||'');
+  const plannedShift=manualShift||autoShift;
+  return String(resolveCurrentDeliveryShift(order,plannedShift)?.id||plannedShift?.tripShiftId||'');
 }
 function getOrderTripShiftName(order,prodShifts){
   const manualShift=order?.prodShiftAssignMode==='manual'&&order?.prodShiftId?(prodShifts||[]).find(s=>s.id===order.prodShiftId):null;
   const autoShift=getProdShiftForOrder(order,prodShifts||[],window.__SCF_CUSTOMERS||[]);
-  return String((manualShift||autoShift)?.tripShiftName||'');
+  const plannedShift=manualShift||autoShift;
+  const currentShift=resolveCurrentDeliveryShift(order,plannedShift);
+  const resolved=findOrderPointMatch(order,window.__SCF_CUSTOMERS||[]);
+  const area=String(order?.area||resolved?.point?.area||'');
+  return String(currentShift?.name||area||plannedShift?.tripShiftName||'');
 }
 function prodShiftDisplay(sh){
   if(!sh)return sh;
@@ -297,7 +339,12 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
     const base={...empty,...sh,name:(sh?.name||'').toLowerCase().includes('ngày')?'Ca sáng':(sh?.name||'')};
     const start=sh?.orderTimeFrom||sh?.startTime||sh?.orderTime||'';
     const end=sh?.orderTimeTo||sh?.endTime||sh?.orderTime||start;
-    return prodShiftDisplay({...base,orderTime:sh?.orderTime||start,startTime:start,endTime:end,actualProdTime:sh?.actualProdTime||'',prodDateOffset:Number(sh?.prodDateOffset??0),tripDateOffset:Number(sh?.tripDateOffset??0),tripShiftId:String(sh?.tripShiftId||''),tripShiftName:String(sh?.tripShiftName||''),labelPrintTime:sh?.labelPrintTime||'',labelPrintDateOffset:Number(sh?.labelPrintDateOffset??0)});
+    const storedTripShiftId=String(sh?.tripShiftId||'');
+    const storedTripShiftName=String(sh?.tripShiftName||'');
+    const tripShiftByName=storedTripShiftName?(shifts||[]).find(s=>normalizeLookupText(s?.name||'')===normalizeLookupText(storedTripShiftName)):null;
+    const tripShiftById=storedTripShiftId?(shifts||[]).find(s=>String(s?.id||'')===storedTripShiftId):null;
+    const currentTripShift=tripShiftByName||tripShiftById;
+    return prodShiftDisplay({...base,orderTime:sh?.orderTime||start,startTime:start,endTime:end,actualProdTime:sh?.actualProdTime||'',prodDateOffset:Number(sh?.prodDateOffset??0),tripDateOffset:Number(sh?.tripDateOffset??0),tripShiftId:String(currentTripShift?.id||storedTripShiftId),tripShiftName:String(currentTripShift?.name||storedTripShiftName),labelPrintTime:sh?.labelPrintTime||'',labelPrintDateOffset:Number(sh?.labelPrintDateOffset??0)});
   };
   const orderTimeText=sh=>{
     const r=normalize(sh);

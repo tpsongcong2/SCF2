@@ -1,7 +1,7 @@
 /* ─── APP ROOT ─── */
 const PTITLES = {
   garages:'Gara ô tô',
-  welcome:'Thời tiết', company:'Thông tin công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
+  welcome:'Thời tiết', company:'Thông tin công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
   backup:'Backup dữ liệu', materials:'Nguyên vật liệu', assets:'Danh mục tài sản', products:'Sản phẩm', depts:'Bộ phận',
   customers:'Khách hàng', workcats:'Danh mục công việc', tasks:'Giao việc', notifications:'Thông báo', userguide:'HDSD SCFOOD', shifts:'Ca giao hàng',
   workreport_vp:'Công kế toán', workreport_sx:'Công sản xuất', workreport_lx:'Công lái xe', workreport_total:'Tổng công',
@@ -18,7 +18,7 @@ const PROCESS_POST_KEYS={process_accounting:'scf_process_posts_accounting',proce
 const PICONS = {
   garages:'ti-building-store',
   purchase:'ti-shopping-cart', tasks:'ti-clipboard-check', notifications:'ti-bell', userguide:'ti-book-2', prodsummary:'ti-clipboard-list',
-  prodorders:'ti-building-factory', stock:'ti-package', attendance:'ti-face-id', attendance_settings:'ti-settings', attendance_report:'ti-report-analytics', advances:'ti-cash-banknote', rewards:'ti-scale', leaves:'ti-calendar-minus', assets:'ti-building-warehouse', appearance:'ti-typography', printtemplates:'ti-file-spreadsheet',
+  prodorders:'ti-building-factory', stock:'ti-package', attendance:'ti-face-id', attendance_settings:'ti-settings', attendance_report:'ti-report-analytics', advances:'ti-cash-banknote', rewards:'ti-scale', employee_errors:'ti-alert-triangle', permission_settings:'ti-shield-lock', leaves:'ti-calendar-minus', assets:'ti-building-warehouse', appearance:'ti-typography', printtemplates:'ti-file-spreadsheet',
   workreport_vp:'ti-building', workreport_sx:'ti-building-factory', workreport_lx:'ti-steering-wheel', workreport_total:'ti-report-analytics',
   process_accounting:'ti-file-invoice', process_bun:'ti-tools-kitchen-2', process_pho:'ti-bowl', process_banhcuon:'ti-cookie',
   marketsales:'ti-building-store', powdersales:'ti-bowl', intem:'ti-printer',
@@ -62,6 +62,7 @@ function App(){
   const[customers,_scu]=useState(DEF_CUSTOMERS);
   const[workcats,_swc]=useState(DEF_WORKCATS);
   const[depts,_sdp]=useState(DEF_DEPTS);
+  const[permissionProfiles,_spermissionProfiles]=useState(DEFAULT_PERMISSION_PROFILES);
   const[tasks,_stasks]=useState([]);
   const[nccs,_sncc]=useState([]);
   const[nccGoods,_snccg]=useState([]);
@@ -79,6 +80,7 @@ function App(){
   const[attendance,_sa]=useState([]);
   const[advances,_sadv]=useState([]);
   const[rewards,_srw]=useState([]);
+  const[employeeErrors,_see]=useState([]);
   const[leaves,_slv]=useState([]);
   const[uiSettings,_sui]=useState(DEF_UI_SETTINGS);
   const[printTemplateSettings,_spt]=useState(DEF_PRINT_TEMPLATE_SETTINGS);
@@ -92,6 +94,7 @@ function App(){
   const[processPosts,_spp]=useState({});
   window.__SCF_CUSTOMERS=customers||[];
   window.__SCF_PROD_SHIFTS=prodShifts||[];
+  window.__SCF_SHIFTS=shifts||[];
   const setEmployees=mkSet('scf_employees',_se);
   const setCompany=mkSet('scf_company',_sc);
   const setMaterials=mkSet('scf_materials',_sm);
@@ -105,6 +108,7 @@ function App(){
   const setCustomers=mkSet('scf_customers',_scu);
   const setWorkcats=mkSet('scf_workcats',_swc);
   const setDepts=mkSet('scf_depts',_sdp);
+  const setPermissionProfiles=mkSet('scf_permission_profiles',_spermissionProfiles);
   const setTasks=mkSet('scf_tasks',_stasks);
   const setNCCs=mkSet('scf_nccs',_sncc);
   const setNccGoods=mkSet('scf_ncc_goods',_snccg);
@@ -122,6 +126,7 @@ function App(){
   const setAttendance=mkSet('scf_attendance',_sa);
   const setAdvances=mkSet('scf_advances',_sadv);
   const setRewards=mkSet('scf_rewards',_srw);
+  const setEmployeeErrors=mkSet('scf_employee_errors',_see);
   const setLeaves=mkSet('scf_leaves',_slv);
   const setUiSettings=mkSet('scf_ui_settings',_sui);
   const setPrintTemplateSettings=mkSet('scf_print_template_settings',_spt);
@@ -197,7 +202,7 @@ function App(){
     const loadingGuard=setTimeout(()=>setLoading(false),8000);
     (async()=>{
       try{
-        const[e,c,m,assetData,garageData,pc,p,cu,ar,wc,tk,ncc,nccg,pu,pg,q,fp,mo,o,t,a,adv,rw,lv,dp,ui,pts,pa,shData,psData,psrData,fe,fd,fo,newsData,messageData,notificationData,deliveryRulesData,processAccountingPosts,processBunPosts,processPhoPosts,processBanhCuonPosts]=await Promise.all([
+        const[e,c,m,assetData,garageData,pc,p,cu,ar,wc,tk,ncc,nccg,pu,pg,q,fp,mo,o,t,a,adv,rw,employeeErrorData,lv,dp,permissionProfileData,ui,pts,pa,shData,psData,psrData,fe,fd,fo,newsData,messageData,notificationData,deliveryRulesData,processAccountingPosts,processBunPosts,processPhoPosts,processBanhCuonPosts]=await Promise.all([
           dbGet('scf_employees',DEF_EMPS),dbGet('scf_company',DEF_COMPANY),
           dbGet('scf_materials',DEF_MATERIALS),dbGet('scf_assets',[]),dbGet('scf_garages',[]),dbGet('scf_prodcats',DEF_PRODCATS),
           dbGet('scf_products',DEF_PRODUCTS),dbGet('scf_customers',DEF_CUSTOMERS),
@@ -206,7 +211,7 @@ function App(){
           dbGet('scf_fuelpurchases',[]),
           dbGet('scf_material_month_openings',[]),
           dbGet('scf_orders',[]),dbGet('scf_trips',[]),dbGet('scf_attendance',[]),
-          dbGet('scf_advances',[]),dbGet('scf_rewards',[]),dbGet('scf_leaves',[]),dbGet('scf_depts',DEF_DEPTS),dbGet('scf_ui_settings',DEF_UI_SETTINGS),dbGet('scf_print_template_settings',DEF_PRINT_TEMPLATE_SETTINGS),dbGet('scf_prod_actuals',{}),
+          dbGet('scf_advances',[]),dbGet('scf_rewards',[]),dbGet('scf_employee_errors',[]),dbGet('scf_leaves',[]),dbGet('scf_depts',DEF_DEPTS),dbGet('scf_permission_profiles',DEFAULT_PERMISSION_PROFILES),dbGet('scf_ui_settings',DEF_UI_SETTINGS),dbGet('scf_print_template_settings',DEF_PRINT_TEMPLATE_SETTINGS),dbGet('scf_prod_actuals',{}),
           dbGet('scf_shifts',D_SHIFTS),dbGet('scf_prod_shifts',DEF_PROD_SHIFTS),dbGet('scf_prod_shift_rules',DEF_PROD_SHIFT_RULES),
           dbGet('scf_finance_entries',[]),dbGet('scf_finance_debts',[]),dbGet('scf_finance_openings',[]),
           dbGet('scf_company_news',[]),dbGet('scf_internal_messages',[]),dbGet('scf_notifications',[]),dbGet('scf_delivery_rules',[]),
@@ -214,7 +219,7 @@ function App(){
         ]);
         const normalizedOrders=normalizeOrdersForStorage(o||[]);
         const normalizedProducts=(p||[]).map(normalizeProductWeight);
-        _se(e||DEF_EMPS);_sc(c);_sm(m);_sas(assetData);_sg(garageData||[]);_spc(pc);_sp(normalizedProducts);_scu(cu);_sar(ar);_swc(wc);_stasks(tk);_sncc(ncc);_snccg(nccg);_spu(pu);_spg(pg);_sfp(fp);_smo(mo);_ssh(shData);_sq(q);_so(normalizedOrders);_st(t);_sa(a);_sadv(adv);_srw(rw);_slv(lv);_sdp(dp);_sui(normalizeUiSettings(ui));_spt(normalizePrintTemplateSettings(pts));_spa(pa||{});_sps(psData);_spr(psrData);_sfe(fe||[]);_sfd(fd||[]);_sfo(fo||[]);_snews(newsData||[]);_sim(messageData||[]);_snotifications(notificationData||[]);_sdr(deliveryRulesData||[]);_spp({process_accounting:processAccountingPosts||[],process_bun:processBunPosts||[],process_pho:processPhoPosts||[],process_banhcuon:processBanhCuonPosts||[]});
+        _se(e||DEF_EMPS);_sc(c);_sm(m);_sas(assetData);_sg(garageData||[]);_spc(pc);_sp(normalizedProducts);_scu(cu);_sar(ar);_swc(wc);_stasks(tk);_sncc(ncc);_snccg(nccg);_spu(pu);_spg(pg);_sfp(fp);_smo(mo);_ssh(shData);_sq(q);_so(normalizedOrders);_st(t);_sa(a);_sadv(adv);_srw(rw);_see(employeeErrorData||[]);_slv(lv);_sdp(dp);_spermissionProfiles(normalizePermissionProfiles(permissionProfileData));_sui(normalizeUiSettings(ui));_spt(normalizePrintTemplateSettings(pts));_spa(pa||{});_sps(psData);_spr(psrData);_sfe(fe||[]);_sfd(fd||[]);_sfo(fo||[]);_snews(newsData||[]);_sim(messageData||[]);_snotifications(notificationData||[]);_sdr(deliveryRulesData||[]);_spp({process_accounting:processAccountingPosts||[],process_bun:processBunPosts||[],process_pho:processPhoPosts||[],process_banhcuon:processBanhCuonPosts||[]});
         if(ordersNeedTimeNormalization(o||[]))dbSet('scf_orders',normalizedOrders);
         if((p||[]).some((item,index)=>Number(item?.weightPerUnit||0)!==Number(normalizedProducts[index]?.weightPerUnit||0)))dbSet('scf_products',normalizedProducts);
       }catch(err){console.warn(err);}finally{clearTimeout(loadingGuard);setLoading(false);}
@@ -404,15 +409,17 @@ function App(){
         canAccess(cu.role,'company',cu.permissions)&&page==='company'&&h(CompanySettings,{company,setCompany}),
         canAccess(cu.role,'appearance',cu.permissions)&&page==='appearance'&&h(AppearanceSettingsTab,{uiSettings,setUiSettings}),
         canAccess(cu.role,'printtemplates',cu.permissions)&&page==='printtemplates'&&h(PrintTemplateSettingsTab,{templateSettings:printTemplateSettings,setTemplateSettings:setPrintTemplateSettings,products,customers}),
-        canAccess(cu.role,'employees',cu.permissions)&&page==='employees'&&h(EmployeeTab,{employees,setEmployees,cu,depts}),
+        canAccess(cu.role,'employees',cu.permissions)&&page==='employees'&&h(EmployeeTab,{employees,setEmployees,cu,depts,permissionProfiles}),
+        canAccess(cu.role,'permission_settings',cu.permissions)&&page==='permission_settings'&&h(PermissionSettingsTab,{profiles:permissionProfiles,setProfiles:setPermissionProfiles,employees,setEmployees,currentUser:cu}),
         canAccess(cu.role,'attendance',cu.permissions)&&page==='attendance'&&h(AttendanceTab,{section:'punch',attendance,setAttendance,employees,setEmployees,currentUser:cu,company}),
         canAccess(cu.role,'attendance_settings',cu.permissions)&&page==='attendance_settings'&&h(AttendanceTab,{section:'settings',attendance,setAttendance,employees,setEmployees,currentUser:cu,company}),
         canAccess(cu.role,'attendance_report',cu.permissions)&&page==='attendance_report'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,currentUser:cu,company}),
         canAccess(cu.role,'workreport_total',cu.permissions,cu.dept)&&page==='workreport_total'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,currentUser:cu,company,reportTitle:'Tổng công'}),
         canAccess(cu.role,'advances',cu.permissions)&&page==='advances'&&h(MoneyTab,{mode:'advance',records:advances,setRecords:setAdvances,employees,currentUser:cu}),
         canAccess(cu.role,'rewards',cu.permissions)&&page==='rewards'&&h(MoneyTab,{mode:'reward',records:rewards,setRecords:setRewards,employees,currentUser:cu}),
+        canAccess(cu.role,'employee_errors',cu.permissions)&&page==='employee_errors'&&h(EmployeeErrorsTab,{records:employeeErrors,setRecords:setEmployeeErrors,employees,currentUser:cu}),
         canAccess(cu.role,'leaves',cu.permissions)&&page==='leaves'&&h(LeaveTab,{leaves,setLeaves,employees,currentUser:cu}),
-        canAccess(cu.role,'backup',cu.permissions)&&page==='backup'&&h(BackupTab,{employees,materials,assets,garages,prodCats,products,customers,workcats,tasks,advances,rewards,leaves,nccs,nccGoods,purchases,goodsPurchases,depts,prodShiftRules,uiSettings,printTemplateSettings,financeEntries,financeDebts,financeOpenings}),
+        canAccess(cu.role,'backup',cu.permissions)&&page==='backup'&&h(BackupTab,{employees,materials,assets,garages,prodCats,products,customers,workcats,tasks,advances,rewards,employeeErrors,leaves,nccs,nccGoods,purchases,goodsPurchases,depts,prodShiftRules,uiSettings,printTemplateSettings,financeEntries,financeDebts,financeOpenings}),
         canAccess(cu.role,'materials',cu.permissions)&&page==='materials'&&h(MaterialsTab,{materials,setMaterials,purchases}),
         canAccess(cu.role,'assets',cu.permissions)&&page==='assets'&&h(AssetsTab,{assets,setAssets}),
         canAccess(cu.role,'garages',cu.permissions)&&page==='garages'&&h(GaragesTab,{garages,setGarages}),
@@ -452,7 +459,7 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,products,currentUser:cu}),
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,currentUser:cu}),
         canAccess(cu.role,'syncreport',cu.permissions)&&page==='syncreport'&&h(SyncDataReportTab),
-        canAccess(cu.role,'dbusage',cu.permissions)&&page==='dbusage'&&h(SupabaseUsageReportTab,{employees,materials,assets,prodCats,products,customers,areas,workcats,tasks,nccs,purchases,goodsPurchases,quotes,orders,trips,attendance,advances,rewards,leaves,depts,shifts,prodShifts,prodShiftRules,prodOrders,stock,company}),
+        canAccess(cu.role,'dbusage',cu.permissions)&&page==='dbusage'&&h(SupabaseUsageReportTab,{employees,materials,assets,prodCats,products,customers,areas,workcats,tasks,nccs,purchases,goodsPurchases,quotes,orders,trips,attendance,advances,rewards,employeeErrors,leaves,depts,shifts,prodShifts,prodShiftRules,prodOrders,stock,company}),
         ['process_accounting','process_bun','process_pho','process_banhcuon'].includes(page)&&h(ProcessPostsTab,{page,title:PTITLES[page],icon:PICONS[page],items:processPosts[page]||[],setItems:setProcessPosts(page),currentUser:cu}),
         wips.includes(page)&&h(PlaceholderTab,{title:PTITLES[page],icon:PICONS[page]||'ti-clock'})
       ),
