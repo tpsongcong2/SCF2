@@ -1,6 +1,33 @@
 const SUPA_URL='https://ufhujngdhafcjyncslja.supabase.co';
 const SUPA_KEY='sb_publishable_np2Cvhg6LaBFjx3MKeaCLw_E7UigTyP';
 const SUPA_PHOTO_BUCKET='delivery-photos';
+const SUPA_PHOTO_SIGNED_URL_TTL=60*60*24*7;
+function storagePhotoPathFromUrl(value){
+  try{
+    const url=new URL(String(value||''));
+    const markers=['/storage/v1/object/public/'+SUPA_PHOTO_BUCKET+'/','/storage/v1/object/sign/'+SUPA_PHOTO_BUCKET+'/'];
+    const marker=markers.find(item=>url.pathname.includes(item));
+    if(!marker)return '';
+    return decodeURIComponent(url.pathname.slice(url.pathname.indexOf(marker)+marker.length));
+  }catch{return '';}
+}
+async function createPrivatePhotoUrl(path){
+  if(!sb||!path)return '';
+  const{data,error}=await sb.storage.from(SUPA_PHOTO_BUCKET).createSignedUrl(path,SUPA_PHOTO_SIGNED_URL_TTL);
+  if(error)throw error;
+  return data?.signedUrl||'';
+}
+// Tự phục hồi URL public cũ và URL có chữ ký đã hết hạn khi bucket chuyển sang private.
+document.addEventListener('error',async event=>{
+  const image=event.target;
+  if(!(image instanceof HTMLImageElement)||image.dataset.scfPhotoRefreshing==='1')return;
+  const path=storagePhotoPathFromUrl(image.currentSrc||image.src);
+  if(!path)return;
+  image.dataset.scfPhotoRefreshing='1';
+  try{const signedUrl=await createPrivatePhotoUrl(path);if(signedUrl)image.src=signedUrl;}
+  catch(error){console.warn('Không làm mới được đường dẫn ảnh bảo mật:',error?.message||error);}
+  finally{delete image.dataset.scfPhotoRefreshing;}
+},true);
 const W_LAT=21.5303,W_LON=105.8739,W_CITY='Sông Công, Thái Nguyên';
 
 /* ─── Supabase ─── */
@@ -249,8 +276,9 @@ async function uploadPhoto(file,folder='delivery',options={}){
   try{
     const{error}=await sb.storage.from(SUPA_PHOTO_BUCKET).upload(path,img.blob,{contentType:'image/jpeg',upsert:false});
     if(error)throw error;
-    const{data}=sb.storage.from(SUPA_PHOTO_BUCKET).getPublicUrl(path);
-    return data?.publicUrl||img.dataUrl;
+    const signedUrl=await createPrivatePhotoUrl(path);
+    if(!signedUrl)throw new Error('Không tạo được đường dẫn ảnh bảo mật.');
+    return signedUrl;
   }catch(e){
     console.warn('Upload Supabase Storage:',e.message||e);
     window.showToast('Chưa upload được ảnh lên Supabase Storage. App tạm lưu ảnh trên máy này. Kiểm tra bucket '+SUPA_PHOTO_BUCKET+' và policy upload/read.','error');
