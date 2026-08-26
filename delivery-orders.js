@@ -1851,6 +1851,11 @@ function deliveryOrderRecordKeys(items){
     return 'delivery-order\u001f'+identity+'\u001f'+occurrence;
   });
 }
+function cleanDeliveryOrderRecord(order){
+  const clean={};
+  Object.entries(order||{}).forEach(([key,value])=>{if(!String(key).startsWith('_'))clean[key]=value;});
+  return clean;
+}
 function deliveryProductTextWidth(text){
   const value=String(text||'');
   const fallback=Array.from(value).reduce((width,char)=>width+(/[MWĐƯƠÔ]/i.test(char)?10:/[il1.,' ]/i.test(char)?4.5:7.5),0);
@@ -1898,7 +1903,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const[fPoint,sfPoint]=useState('');const[fProduct,sfProduct]=useState('');const[fTime,sfTime]=useState('');const[fArea,sfArea]=useState('');
   const[pageSize,setPageSize]=useState(()=>typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(max-width: 768px)').matches?20:100);const[currentPage,setCurrentPage]=useState(1);let oSeq=orders.length+1;
   const[mobileActionsOpen,setMobileActionsOpen]=useState(false);const[mobileFiltersOpen,setMobileFiltersOpen]=useState(false);
-  const[bulkSelected,setBulkSelected]=useState({});
+  const[bulkSelected,setBulkSelected]=useState(()=>new Set());
   const isAdmin=String(currentUser?.role||'').trim().toLowerCase()==='admin';
   const currentDeptKey=normalizeLookupText(currentUser?.dept||'');
   const isAccounting=currentDeptKey.includes('ke toan');
@@ -1949,7 +1954,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     document.addEventListener('keydown',onKey,true);
     return()=>document.removeEventListener('keydown',onKey,true);
   },[modal,print,invoiceView]);
-  useEffect(()=>{setCurrentPage(1);setBulkSelected({});},[q,filter,dateFilterMode,fDate,fDateTo,fWeek,fMonth,fPoint,fProduct,fTime,fArea,sortMode,pageSize]);
+  useEffect(()=>{setCurrentPage(1);setBulkSelected(new Set());},[q,filter,dateFilterMode,fDate,fDateTo,fWeek,fMonth,fPoint,fProduct,fTime,fArea,sortMode,pageSize]);
   const notifyDriverOrderChange=(order,title)=>{
     const trip=(trips||[]).find(t=>String(t.id||'')===String(order?.tripId||'')||(t.orderIds||[]).includes(order?.id));
     if(!trip||(!trip.driverDispatchedAt&&!['active','completion_pending','completed'].includes(trip.status)))return;
@@ -1965,7 +1970,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     return changes.length?changes:['Đã lưu lại nội dung đơn hàng'];
   };
   const save=d=>{
-    let planned=prepareAutomaticTripForSave(d);
+    let planned=prepareAutomaticTripForSave(cleanDeliveryOrderRecord(d));
     if(edit){
       const currentTrip=orderTrip(edit);
       if(dispatchedTrip(currentTrip)||closedTrip(currentTrip)||['delivering','done'].includes(edit.status)){
@@ -1977,7 +1982,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     sm(null);se(null);setCopyDraft(null);
   };
   const copyOrder=order=>{
-    const source=orderContext(order);
+    const source=cleanDeliveryOrderRecord(orderContext(order));
     const draft={...source,id:'',copySourceId:order.id||'',status:'pending',tripId:'',tripAssignMode:'auto',invoiceImage:'',invoiceImageName:'',invoiceUploadedAt:'',invoiceUploadedBy:'',createdAt:'',updatedAt:'',lines:(source.lines||[]).map(line=>({...line,id:uid(),qtyDelivered:''}))};
     se(null);setCopyDraft(draft);sm('f');
   };
@@ -2229,7 +2234,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   };
   const allOrderRowKeys=deliveryOrderRecordKeys(orders);
   const orderRowKeyByObject=new Map((orders||[]).map((order,index)=>[order,allOrderRowKeys[index]]));
-  const orderRowKey=order=>order?._rowKey||orderRowKeyByObject.get(order)||('delivery-order-fallback\u001f'+String(order?.id||''));
+  // Đơn gốc phải ưu tiên khóa vừa tính; một số dữ liệu cũ có thể đã lưu nhầm _rowKey nội bộ.
+  const orderRowKey=order=>orderRowKeyByObject.get(order)||order?._rowKey||('delivery-order-fallback\u001f'+String(order?.id||''));
   const listWithoutPoint=orders.filter(x=>{
     if(filter!=='all'&&x.status!==filter) return false;
     if(q&&!String(x.customer||'').toLowerCase().includes(q.toLowerCase())&&!String(x.id||'').toLowerCase().includes(q.toLowerCase())&&!String(x.pointName||'').toLowerCase().includes(q.toLowerCase())&&!(x.lines||[]).some(line=>String(line.productName||'').toLowerCase().includes(q.toLowerCase()))) return false;
@@ -2461,37 +2467,38 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const productColumnTitle=longestVisibleProduct.name
     ?'Tên dài nhất đang hiển thị: '+longestVisibleProduct.name+' ('+Array.from(longestVisibleProduct.name).length+' ký tự)'
     :'Chưa có tên sản phẩm';
-  const existingOrderKeys=new Set(allOrderRowKeys);
+  // Duyệt theo danh sách khóa hiện có để số ô đã chọn và số đơn được xóa luôn đồng nhất.
+  // Cách này cũng tự loại các khóa lựa chọn cũ sau khi dữ liệu đơn hàng thay đổi.
   const selectedOrderKeys=isAdmin
-    ?Object.keys(bulkSelected).filter(key=>bulkSelected[key]&&existingOrderKeys.has(key))
+    ?allOrderRowKeys.filter(key=>bulkSelected.has(key))
     :[];
   const pageOrderKeys=pagedList.map(orderRowKey);
   const filteredOrderKeys=list.map(orderRowKey);
-  const allPageSelected=pageOrderKeys.length>0&&pageOrderKeys.every(key=>!!bulkSelected[key]);
-  const allFilteredSelected=filteredOrderKeys.length>0&&filteredOrderKeys.every(key=>!!bulkSelected[key]);
+  const allPageSelected=pageOrderKeys.length>0&&pageOrderKeys.every(key=>bulkSelected.has(key));
+  const allFilteredSelected=filteredOrderKeys.length>0&&filteredOrderKeys.every(key=>bulkSelected.has(key));
   const toggleBulkOrder=order=>{
     if(!isAdmin)return;
     const key=orderRowKey(order);
     if(!key)return;
     setBulkSelected(prev=>{
-      const next={...prev};
-      if(next[key])delete next[key];else next[key]=true;
+      const next=new Set(prev);
+      if(next.has(key))next.delete(key);else next.add(key);
       return next;
     });
   };
   const setPageSelection=checked=>{
     if(!isAdmin)return;
     setBulkSelected(prev=>{
-      const next={...prev};
-      pageOrderKeys.forEach(key=>{if(checked)next[key]=true;else delete next[key];});
+      const next=new Set(prev);
+      pageOrderKeys.forEach(key=>{if(checked)next.add(key);else next.delete(key);});
       return next;
     });
   };
   const toggleFilteredSelection=()=>{
     if(!isAdmin||!filteredOrderKeys.length)return;
     setBulkSelected(prev=>{
-      const next={...prev};
-      filteredOrderKeys.forEach(key=>{if(allFilteredSelected)delete next[key];else next[key]=true;});
+      const next=new Set(prev);
+      filteredOrderKeys.forEach(key=>{if(allFilteredSelected)next.delete(key);else next.add(key);});
       return next;
     });
   };
@@ -2506,7 +2513,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       const prevKeys=deliveryOrderRecordKeys(prev);
       return prev.filter((_order,index)=>!keySet.has(prevKeys[index]));
     });
-    setBulkSelected({});
+    setBulkSelected(new Set());
     window.showToast('Đã xóa '+keys.length+' đơn hàng.','success');
   };
   const updateOrderProductNames=async()=>{
@@ -3262,7 +3269,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
               h('div',{className:'delivery-order-date'},
                 isAdmin&&h('input',{
                   type:'checkbox',
-                  checked:!!bulkSelected[o._rowKey],
+                  checked:bulkSelected.has(o._rowKey),
                   onChange:()=>toggleBulkOrder(o),
                   onClick:e=>e.stopPropagation(),
                   title:'Chọn đơn '+(o.id||''),
@@ -3352,7 +3359,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
             h('div',{style:{display:'flex',alignItems:'flex-start',gap:8,minWidth:0}},
               isAdmin&&h('input',{
                 type:'checkbox',
-                checked:!!bulkSelected[o._rowKey],
+                checked:bulkSelected.has(o._rowKey),
                 onChange:()=>toggleBulkOrder(o),
                 onClick:e=>e.stopPropagation(),
                 title:'Chọn đơn '+(o.id||''),

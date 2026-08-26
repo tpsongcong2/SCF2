@@ -1,5 +1,5 @@
 /* ─── Default data ─── */
-const DEF_COMPANY={name:'Công ty SCF',intro:'',phone:'',email:'',address:'',website:''};
+const DEF_COMPANY={name:'Công ty SCF',intro:'',goals:'',mission:'',vision:'',phone:'',email:'',address:'',website:''};
 const DEF_EMPS=[{id:'NV001',name:'Administrator',birthday:'',gender:'male',female:false,dept:'Ban Giám Đốc',role:'admin',username:'admin',password:'',phone:'',email:'',note:'',updatedBy:'system',updatedAt:'',mustChangePw:false}];
 const DEF_MATERIALS=[
   {id:'VT001',code:'VT001',name:'Thùng carton',group:'',unit:'Cái',price:0,note:''},
@@ -99,7 +99,10 @@ const PRINT_TEMPLATE_FIELD_GROUPS=[
     {key:'company.email',label:'Email công ty'},
     {key:'company.address',label:'Địa chỉ công ty'},
     {key:'company.website',label:'Website công ty'},
-    {key:'company.intro',label:'Giới thiệu công ty'}
+    {key:'company.intro',label:'Giới thiệu công ty'},
+    {key:'company.goals',label:'Mục tiêu công ty'},
+    {key:'company.mission',label:'Sứ mệnh công ty'},
+    {key:'company.vision',label:'Tầm nhìn công ty'}
   ]},
   {label:'Thông tin đơn hàng',options:[
     {key:'order.id',label:'Mã đơn hàng'},

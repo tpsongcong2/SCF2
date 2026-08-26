@@ -1,7 +1,7 @@
 /* --- Phân quyền menu --- */
 const PAGE_ACCESS = {
   welcome:      ['admin','manager','staff','driver'],
-  company:      ['admin','manager'],
+  company:      ['admin','manager','staff','driver'],
   appearance:   ['admin','manager'],
   printtemplates:['admin','manager'],
   employees:    ['admin','manager'],
@@ -82,6 +82,7 @@ function canAccess(role, page, perms, dept='') {
   if(page==='employee_errors'&&(role==='admin'||role==='manager')) return true;
   if(page==='notifications') return ['admin','manager','staff','driver'].includes(role);
   if(page==='userguide') return ['admin','manager','staff','driver'].includes(role);
+  if(page==='company') return ['admin','manager','staff','driver'].includes(role);
   if(page==='trips'&&(role==='admin'||isAccounting)) return true;
   if(['nccgoods','purchasegoods'].includes(page)&&(role==='admin'||isAccounting)) return true;
   if(['nccs','purchaseorders','purchasereport'].includes(page)&&role!=='admin') return false;
@@ -98,6 +99,8 @@ function canAccess(role, page, perms, dept='') {
 }
 // Mức quyền: 'r'=chỉ xem, 'rw'=xem+sửa, 'rwd'=xem+sửa+xóa
 function getLvl(role, page, lvls) {
+  // Giới thiệu công ty là mục chung; nhân viên và lái xe chỉ được xem.
+  if (page === 'company' && !['admin','manager'].includes(role)) return 'r';
   // Lái xe được tạo và cập nhật đơn xăng dầu của chính mình, nhưng không được xóa.
   if (role === 'driver' && page === 'fuelpurchases') return 'rw';
   if (role === 'driver' && page === 'trips') return 'rw';

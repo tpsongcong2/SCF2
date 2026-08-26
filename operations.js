@@ -454,24 +454,49 @@ function WelcomePage({emp,employees=[],company,uiSettings,news,setNews,messages,
     h(CommunityPanel,{emp,news,setNews,messages,setMessages,onRefresh})
   );
 }
-function CompanySettings({company,setCompany}){
-  const[f,sf]=useState({...company});
+function CompanySettings({company,setCompany,canEdit=false}){
+  const[f,sf]=useState(()=>({...DEF_COMPANY,...(company||{})}));
+  useEffect(()=>{sf({...DEF_COMPANY,...(company||{})});},[company]);
+  const companyText=(icon,title,value)=>h('div',{style:{padding:'18px',border:'1px solid var(--bd)',borderRadius:'var(--r)',background:'var(--bg2)',minHeight:150}},
+    h('div',{style:{display:'flex',alignItems:'center',gap:8,fontSize:16,fontWeight:700,color:'var(--pri3)',marginBottom:10}},h('i',{className:'ti '+icon,style:{fontSize:21}}),title),
+    h('div',{style:{fontSize:14,lineHeight:1.7,whiteSpace:'pre-wrap',color:value?'var(--tx)':'var(--tx2)'}},value||'Nội dung đang được cập nhật.')
+  );
   return h('div',null,
-    h('div',{className:'ptitle'},h('i',{className:'ti ti-building',style:{fontSize:20}}),'Thông tin công ty'),
-    h('div',{className:'card',style:{maxWidth:620}},
+    h('div',{className:'ptitle'},h('i',{className:'ti ti-building-community',style:{fontSize:20}}),'Giới thiệu công ty'),
+    h('div',{className:'card',style:{maxWidth:1040,margin:'0 auto'}},
       h('div',{style:{display:'flex',alignItems:'center',gap:16,marginBottom:'1.5rem',padding:'1rem',background:'var(--bg2)',borderRadius:'var(--r)'}},
         h('img',{src:LOGO_SRC,style:{width:56,height:56,objectFit:'contain'}}),
-        h('div',null,h('div',{style:{fontWeight:600,fontSize:15}},f.name||'Tên công ty'),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:2}},'Logo công ty SCF'))
+        h('div',{style:{flex:1}},h('div',{style:{fontWeight:700,fontSize:18,color:'var(--pri3)'}},f.name||'Tên công ty'),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:3}},'Giới thiệu · Sứ mệnh · Tầm nhìn · Mục tiêu'))
       ),
-      h(F,{label:'Tên công ty'},h('input',{value:f.name,onChange:e=>sf(p=>({...p,name:e.target.value}))})),
-      h(F,{label:'Giới thiệu'},h('textarea',{value:f.intro,onChange:e=>sf(p=>({...p,intro:e.target.value})),rows:3})),
-      h('div',{className:'g2'},
-        h(F,{label:'Điện thoại'},h('input',{value:f.phone,onChange:e=>sf(p=>({...p,phone:e.target.value}))})),
-        h(F,{label:'Email'},h('input',{value:f.email,onChange:e=>sf(p=>({...p,email:e.target.value}))})),
-      ),
-      h(F,{label:'Địa chỉ'},h('input',{value:f.address,onChange:e=>sf(p=>({...p,address:e.target.value}))})),
-      h(F,{label:'Website'},h('input',{value:f.website,onChange:e=>sf(p=>({...p,website:e.target.value}))})),
-      h(Row,null,h('button',{className:'bp',onClick:()=>{setCompany({...f});window.showToast&&window.showToast('Đã lưu thông tin công ty!','success');},style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu thông tin'))
+      canEdit?h('div',null,
+        h(F,{label:'Tên công ty'},h('input',{value:f.name||'',onChange:e=>sf(p=>({...p,name:e.target.value}))})),
+        h(F,{label:'Giới thiệu'},h('textarea',{value:f.intro||'',onChange:e=>sf(p=>({...p,intro:e.target.value})),rows:3,placeholder:'Giới thiệu khái quát về công ty'})),
+        h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:12}},
+          h(F,{label:'Sứ mệnh'},h('textarea',{value:f.mission||'',onChange:e=>sf(p=>({...p,mission:e.target.value})),rows:6,placeholder:'Sứ mệnh của công ty'})),
+          h(F,{label:'Tầm nhìn'},h('textarea',{value:f.vision||'',onChange:e=>sf(p=>({...p,vision:e.target.value})),rows:6,placeholder:'Tầm nhìn phát triển dài hạn'})),
+          h(F,{label:'Mục tiêu'},h('textarea',{value:f.goals||'',onChange:e=>sf(p=>({...p,goals:e.target.value})),rows:6,placeholder:'Các mục tiêu công ty hướng tới'}))
+        ),
+        h('div',{className:'g2'},
+          h(F,{label:'Điện thoại'},h('input',{value:f.phone||'',onChange:e=>sf(p=>({...p,phone:e.target.value}))})),
+          h(F,{label:'Email'},h('input',{value:f.email||'',onChange:e=>sf(p=>({...p,email:e.target.value}))}))
+        ),
+        h(F,{label:'Địa chỉ'},h('input',{value:f.address||'',onChange:e=>sf(p=>({...p,address:e.target.value}))})),
+        h(F,{label:'Website'},h('input',{value:f.website||'',onChange:e=>sf(p=>({...p,website:e.target.value}))})),
+        h(Row,null,h('button',{className:'bp',onClick:()=>{setCompany({...DEF_COMPANY,...f});window.showToast&&window.showToast('Đã lưu phần giới thiệu công ty!','success');},style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu giới thiệu'))
+      ):h('div',null,
+        h('div',{style:{fontSize:14,lineHeight:1.75,whiteSpace:'pre-wrap',marginBottom:18,color:f.intro?'var(--tx)':'var(--tx2)'}},f.intro||'Thông tin giới thiệu công ty đang được cập nhật.'),
+        h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:12,marginBottom:18}},
+          companyText('ti-heart-handshake','Sứ mệnh',f.mission),
+          companyText('ti-eye','Tầm nhìn',f.vision),
+          companyText('ti-target-arrow','Mục tiêu',f.goals)
+        ),
+        h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:10,paddingTop:14,borderTop:'1px solid var(--bd)',fontSize:13}},
+          h('div',null,h('b',null,'Điện thoại: '),f.phone||'—'),
+          h('div',null,h('b',null,'Email: '),f.email||'—'),
+          h('div',null,h('b',null,'Địa chỉ: '),f.address||'—'),
+          h('div',null,h('b',null,'Website: '),f.website||'—')
+        )
+      )
     )
   );
 }

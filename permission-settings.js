@@ -1,6 +1,7 @@
 /* Cấu hình quyền mặc định theo chức vụ. */
 const SCF_PERMISSION_SECTIONS=[
-  {sec:'Cài đặt',pages:[['company','Thông tin công ty'],['appearance','Cài đặt giao diện'],['printtemplates','Mẫu in Excel'],['employees','Nhân viên'],['permission_settings','Cài đặt phân quyền'],['backup','Backup dữ liệu']]},
+  {sec:'Giới thiệu công ty',pages:[['company','Giới thiệu công ty']]},
+  {sec:'Cài đặt',pages:[['appearance','Cài đặt giao diện'],['printtemplates','Mẫu in Excel'],['employees','Nhân viên'],['permission_settings','Cài đặt phân quyền'],['backup','Backup dữ liệu']]},
   {sec:'Nhân sự',pages:[['attendance','Chấm công'],['attendance_settings','Cài đặt chấm công'],['attendance_report','Báo cáo chấm công'],['advances','Ứng lương'],['rewards','Thưởng phạt'],['employee_errors','Ghi lỗi nhân viên'],['leaves','Xin nghỉ'],['tasks','Giao việc']]},
   {sec:'Báo công & quy trình',pages:[['workreport_vp','Công kế toán'],['workreport_sx','Công sản xuất'],['workreport_lx','Công lái xe'],['workreport_total','Tổng công'],['process_accounting','Quy trình kế toán'],['process_bun','Quy trình sản xuất Bún'],['process_pho','Quy trình sản xuất Phở'],['process_banhcuon','Quy trình sản xuất Bánh cuốn']]},
   {sec:'Danh mục',pages:[['materials','Nguyên vật liệu'],['assets','Tài sản'],['garages','Gara ô tô'],['depts','Bộ phận'],['products','Sản phẩm'],['customers','Khách hàng'],['areas','Khu vực'],['prodshifts','Ca sản xuất'],['deliveryrules','Quy định giao hàng'],['workcats','Danh mục công việc'],['shifts','Ca giao hàng']]},
@@ -14,7 +15,7 @@ function scfProfile(id,label,role,dept,permissions,readOnly=[]){
   const ro=new Set(readOnly);
   return{id,label,role,dept,permissions:[...permissions],permLevels:Object.fromEntries(permissions.map(page=>[page,ro.has(page)?'r':(role==='manager'?'rwd':'rw')]))};
 }
-const SCF_PROFILE_COMMON=['attendance','attendance_report','leaves','tasks','notifications','userguide'];
+const SCF_PROFILE_COMMON=['company','attendance','attendance_report','leaves','tasks','notifications','userguide'];
 const DEFAULT_PERMISSION_PROFILES={
   director:scfProfile('director','Ban giám đốc','manager','Ban Giám Đốc',['company','appearance','printtemplates','employees','attendance','attendance_report','advances','rewards','employee_errors','leaves','tasks','workreport_vp','workreport_sx','workreport_lx','workreport_total','process_accounting','process_bun','process_pho','process_banhcuon','materials','assets','garages','depts','products','customers','areas','prodshifts','deliveryrules','workcats','shifts','quotes','delivery','intem','orderdetail','trips','marketsales','powdersales','nccgoods','purchasegoods','fuelpurchases','maint_vehicle','maint_machine','prodsummary','prodorders','stock','notifications','userguide'],['company','appearance','printtemplates','attendance_report','workreport_vp','workreport_sx','workreport_lx','workreport_total','materials','products','customers','orderdetail']),
   accounting_manager:scfProfile('accounting_manager','Quản lý kế toán','manager','Kế toán',[...SCF_PROFILE_COMMON,'advances','rewards','employee_errors','workreport_vp','workreport_total','process_accounting','materials','assets','products','customers','areas','deliveryrules','quotes','delivery','intem','orderdetail','trips','nccgoods','purchasegoods','fuelpurchases','marketsales','powdersales'],['attendance_report','workreport_total','materials','assets','products','customers','areas','orderdetail']),
