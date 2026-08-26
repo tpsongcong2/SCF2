@@ -3068,13 +3068,15 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                     else{dStr=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();}
                   } else if(typeof cells[0]==='string') dStr=cells[0];
                   const point=(cells[1]||'').toString().trim();
-                  const col4=String(cells[4]??'').trim();
-                  const normalizedCol4Time=normalizeCustomerImportTime(col4);
-                  const col4LooksTime=/^\d{1,2}:\d{2}$/.test(normalizedCol4Time)&&timeToMin(normalizedCol4Time)>=0;
-                  const trailingTimeCells=cells.slice(4,10);
-                  const explicitTimeCell=trailingTimeCells.find(value=>/(?:\d\s*[hH]|\d\s*(?:giờ|gio)|\d{1,2}\s*[:.]\s*\d{1,2})/i.test(String(value??'').trim()));
-                  const excelTimeCell=trailingTimeCells.find((value,tailIndex)=>tailIndex>0&&typeof value==='number'&&value>=0&&value<1);
-                  const time=normalizeCustomerImportTime(explicitTimeCell??excelTimeCell??(col4LooksTime?col4:''));
+                  // Sau cột ngày/địa điểm/sản phẩm/SL SX/SL HĐ, cột thứ 6 là "Thời gian".
+                  // Không quét ngược cột SL HĐ: các số 13.5, 7.5 từng bị hiểu nhầm phần .5
+                  // là 0.5 ngày Excel và biến thành 12:00.
+                  const invoiceQtyCell=cells[4];
+                  const timeCell=cells[5];
+                  const timeText=String(timeCell??'').trim();
+                  const explicitTime=/(?:^\d{1,2}\s*[hH](?:\s*\d{1,2})?$|^\d{1,2}\s*(?:giờ|gio)(?:\s*\d{1,2})?$|^\d{1,2}\s*[:.]\s*\d{1,2}$)/i.test(timeText);
+                  const excelTime=typeof timeCell==='number'&&timeCell>=0&&timeCell<1;
+                  const time=normalizeCustomerImportTime(explicitTime||excelTime?timeCell:'');
                   const dParts=(dStr||'').split('/');
                   const dd=(dParts[0]||'').toString().padStart(2,'0');
                   const mm=(dParts[1]||'').toString().padStart(2,'0');
@@ -3114,8 +3116,9 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                   const safeProduct=/^#(?:N\/A|VALUE!|REF!|NAME\?|DIV\/0!|NULL!|NUM!)$/i.test(rawProduct)?'':rawProduct;
                   const {name,unit}=parseProductStr(safeProduct);
                   const qtyOrdered=parseFloat(String(cells[3]??'').replace(',','.'))||0;
-                  const separateInvoiceQty=col4&&!col4LooksTime&&Number.isFinite(Number(col4.replace(',','.')));
-                  const qtyInvoice=separateInvoiceQty?(parseFloat(col4.replace(',','.'))||0):qtyOrdered;
+                  const invoiceQtyText=String(invoiceQtyCell??'').trim().replace(',','.');
+                  const separateInvoiceQty=invoiceQtyText!==''&&Number.isFinite(Number(invoiceQtyText));
+                  const qtyInvoice=separateInvoiceQty?(parseFloat(invoiceQtyText)||0):qtyOrdered;
                   // Find product in catalog
                   const prod=products.find(p=>p.name.toUpperCase()===name.toUpperCase())||{};
                   orderMap[key].lines.push({
