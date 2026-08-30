@@ -11,7 +11,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const[customerF,setCustomerF]=useState('all');
   const[tripF,setTripF]=useState('all');
   const[driverF,setDriverF]=useState('all');
-  const[groupMode,setGroupMode]=useLS('scf_order_detail_group_mode','area');
+  const[groupMode,setGroupMode]=useLS('scf_order_detail_group_mode_v2','time');
   const[pageSize,setPageSize]=useState(25);
   const[page,setPage]=useState(1);
   const[mobileFiltersHidden,setMobileFiltersHidden]=useLS('scf_order_detail_mobile_filters_hidden',window.innerWidth<=768);
@@ -54,6 +54,12 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const resolveArea=o=>{const cached=areaCache.get(o);if(cached!==undefined)return cached;const area=o.area||pointAreaById.get(String(o.pointId||''))||pointAreaByName.get(String(o.pointName||''))||(shiftById.get(String(o.shiftId||''))?.area||'');areaCache.set(o,area);return area;};
   const orderDateCache=new WeakMap();
   const orderDate=o=>{const cached=orderDateCache.get(o);if(cached!==undefined)return cached;const value=toISO(o.deliveryDate);orderDateCache.set(o,value);return value;};
+  const deliveryTimeSort=value=>{
+    const normalized=normalizeTimeInput(value);
+    if(!/^\d{1,2}:\d{2}$/.test(normalized))return 24*60+1;
+    const[hour,minute]=normalized.split(':').map(Number);
+    return hour*60+minute;
+  };
 
   const tripById=new Map(),tripByOrder=new Map();
   (trips||[]).forEach(t=>{
@@ -134,6 +140,10 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
 
   const groupInfoForOrder=o=>{
     const trip=visibleTripForOrder(o);
+    if(groupMode==='time'){
+      const date=orderDate(o)||'9999-99-99';
+      return {key:'date:'+date,label:o.deliveryDate||'Chưa có ngày giao',sortKey:date};
+    }
     if(groupMode==='trip'){
       const label=trip?deliveryTripLabel(trip):'Chưa có chuyến';
       return {key:trip?'trip:'+String(trip.id):'trip:~',label,sortKey:trip?(toISO(trip.deliveryDate)+'|'+deliveryTripShiftName(trip)+'|'+String(trip.id||'')):'9999-99-99|~'};
@@ -176,8 +186,9 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     if(gc!==0)return gc;
     const dc=orderDate(a).localeCompare(orderDate(b));
     if(dc!==0)return dc;
-    const pc=String(a.pointName||'').localeCompare(String(b.pointName||''),'vi');
-    return pc!==0?pc:String(a.deliveryTime||'').localeCompare(String(b.deliveryTime||''));
+    const tc=deliveryTimeSort(a.deliveryTime)-deliveryTimeSort(b.deliveryTime);
+    if(tc!==0)return tc;
+    return String(a.pointName||'').localeCompare(String(b.pointName||''),'vi');
   });
 
   const totalOrders=filteredOrders.length;
@@ -217,8 +228,10 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     if(gc!==0)return gc;
     const dc=toISO(a.date).localeCompare(toISO(b.date));
     if(dc!==0)return dc;
+    const tc=deliveryTimeSort(a.time)-deliveryTimeSort(b.time);
+    if(tc!==0)return tc;
     const pc=(a.point||'').localeCompare(b.point||'','vi');
-    return pc!==0?pc:(a.time||'').localeCompare(b.time||'');
+    return pc!==0?pc:(a.product||'').localeCompare(b.product||'','vi');
   });
   const tableRows=[];
   let curGroup=null,groupLabel='',areaSX=0,areaHD=0,areaDG=0;
@@ -297,6 +310,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
         h(F,{label:'Chuyến giao hàng'},h('select',{value:tripF,onChange:e=>setTripF(e.target.value)},h('option',{value:'all'},'Tất cả chuyến giao'),tripOptions.map(t=>h('option',{key:t.key,value:t.key},t.name)))),
         h(F,{label:'Lái xe'},h('select',{value:driverF,onChange:e=>setDriverF(e.target.value)},h('option',{value:'all'},'Tất cả lái xe'),driverOptions.map(name=>h('option',{key:name,value:name},name)))),
         h(F,{label:'Sắp xếp'},h('select',{value:groupMode,onChange:e=>setGroupMode(e.target.value)},
+          h('option',{value:'time'},'Theo ngày và giờ'),
           h('option',{value:'area'},'Theo khu vực'),
           h('option',{value:'trip'},'Theo chuyến'),
           h('option',{value:'driver'},'Theo lái xe')
@@ -320,19 +334,20 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     ),
     h('div',{className:'tw detail-orders-wrap'},
       h('table',{style:{minWidth:1080}},
-        h('thead',null,h('tr',null,...['Ngày giao','Địa điểm','Sản phẩm','SL ĐẶT','SL HĐ','SL đã giao','Giờ','Ngày SX','Ngày in tem','Chú ý'].map(c=>h('th',{key:c},c)))),
+        h('thead',null,h('tr',null,...['LX','Ngày giao','Địa điểm','Sản phẩm','SL ĐẶT','SL HĐ','SL đã giao','Giờ','Chú ý'].map(c=>h('th',{key:c},c)))),
         h('tbody',null,sorted.length?tableRows.map((r,i)=>{
-          if(r._hdr){const prefix=groupMode==='trip'?'🚚 Chuyến: ':groupMode==='driver'?'👤 Lái xe: ':'📍 Khu vực: ';return h('tr',{key:'h'+i,className:'area-sticky'},h('td',{colSpan:10,style:{background:'#2d6a4f',color:'#fff',fontWeight:700,fontSize:13,padding:'5px 12px'}},prefix+r.label));}
-          if(r._sub)return h('tr',{key:'s'+i},h('td',{colSpan:3,style:{background:'#e8f5e9',fontWeight:600,fontSize:12,padding:'4px 12px',color:'#2d6a4f',textAlign:'right'}},'Tổng '+r.label+':'),h('td',{style:{background:'#e8f5e9',fontWeight:700,color:'var(--pri)',fontSize:14,padding:'4px 8px'}},r.sx.toLocaleString()),h('td',{style:{background:'#e8f5e9',fontWeight:700,fontSize:14,padding:'4px 8px'}},r.hd.toLocaleString()),h('td',{style:{background:'#e8f5e9',fontWeight:700,color:'#8A5A00',fontSize:14,padding:'4px 8px'}},r.dg.toLocaleString()),h('td',{colSpan:4,style:{background:'#e8f5e9'}}));
+          if(r._hdr){const prefix=groupMode==='time'?'📅 Ngày giao: ':groupMode==='trip'?'🚚 Chuyến: ':groupMode==='driver'?'👤 Lái xe: ':'📍 Khu vực: ';return h('tr',{key:'h'+i,className:'area-sticky'},h('td',{colSpan:9,style:{background:'#2d6a4f',color:'#fff',fontWeight:700,fontSize:13,padding:'5px 12px'}},prefix+r.label));}
+          if(r._sub)return h('tr',{key:'s'+i},h('td',{colSpan:4,style:{background:'#e8f5e9',fontWeight:600,fontSize:12,padding:'4px 12px',color:'#2d6a4f',textAlign:'right'}},'Tổng '+r.label+':'),h('td',{style:{background:'#e8f5e9',fontWeight:700,color:'var(--pri)',fontSize:14,padding:'4px 8px'}},r.sx.toLocaleString()),h('td',{style:{background:'#e8f5e9',fontWeight:700,fontSize:14,padding:'4px 8px'}},r.hd.toLocaleString()),h('td',{style:{background:'#e8f5e9',fontWeight:700,color:'#8A5A00',fontSize:14,padding:'4px 8px'}},r.dg.toLocaleString()),h('td',{colSpan:2,style:{background:'#e8f5e9'}}));
           const sourceOrder=(orders||[]).find(o=>String(o.id)===String(r.orderId));
           const canInput=canEditDeliveredForOrder(sourceOrder)&&(r.status==='delivering'||r.status==='done'||r.status==='completed');
           return h('tr',{key:r.orderId+'-'+r.lineId,style:{background:r.prodColor||(r.shift==='night'?'rgba(83,52,131,.04)':'')}},
+            h('td',null,h('span',{style:{fontSize:12,fontWeight:r.driverName?600:400,color:r.driverName?'var(--pri3)':'var(--tx2)',whiteSpace:'nowrap'}},r.driverName||'—')),
             h('td',null,h('span',{style:{fontWeight:500}},r.date)),h('td',null,h('div',{style:{fontWeight:600}},r.point||'—')),h('td',null,h('div',{style:{fontWeight:500}},r.product)),
             h('td',null,h('span',{style:{fontWeight:600,color:'var(--pri)',fontSize:15}},r.qtyProd.toLocaleString())),h('td',null,h('span',{style:{fontWeight:600,fontSize:15}},r.qtyInvoice.toLocaleString())),
             h('td',null,canInput?h('input',{type:'number',min:0,step:'0.01',value:r.qtyDelivered??'',placeholder:String(r.qtyInvoice||0),onChange:e=>updateDeliveredQty(r.orderId,r.lineId,e.target.value),style:{fontSize:13,padding:'4px 6px',width:86,borderColor:(r.qtyDelivered!==undefined&&numFmt(r.qtyDelivered)!==numFmt(r.qtyInvoice))?'#E0A800':'var(--bd)'}}):h('span',{style:{fontWeight:600,color:r.qtyDelivered!==undefined?'#8A5A00':'var(--tx2)',fontSize:15}},r.qtyDelivered!==undefined?numFmt(r.qtyDelivered).toLocaleString():'—')),
-            h('td',null,r.time||'—'),h('td',null,h('span',{style:{fontSize:12,fontWeight:600,color:'var(--pri3)',whiteSpace:'nowrap'}},r.prodDate||'—')),h('td',null,h('span',{style:{fontSize:12,fontWeight:600,color:'#8A5A00',whiteSpace:'nowrap'}},r.labelDate||'—')),h('td',null,h('span',{style:{fontSize:12,color:'var(--tx2)'}},r.note||'—'))
+            h('td',null,r.time||'—'),h('td',null,h('span',{style:{fontSize:12,color:'var(--tx2)'}},r.note||'—'))
           );
-        }):h('tr',null,h('td',{colSpan:10,className:'empty-st'},'Không có dữ liệu phù hợp.')))
+        }):h('tr',null,h('td',{colSpan:9,className:'empty-st'},'Không có dữ liệu phù hợp.')))
       )
     )
   );

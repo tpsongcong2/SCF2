@@ -3,12 +3,27 @@
 const SCF_SERVER_AUTH_ENABLED=true;
 
 async function serverFunctionErrorMessage(error,data,fallback){
-  if(data?.error)return data.error;
+  const messageFrom=body=>{
+    if(!body)return'';
+    if(typeof body==='string')return body.trim();
+    if(body.error)return typeof body.error==='string'?body.error:(body.error.message||JSON.stringify(body.error));
+    if(body.message)return String(body.message);
+    if(Array.isArray(body.errors))return body.errors.map(item=>item?.message||item).filter(Boolean).join('; ');
+    return'';
+  };
+  const direct=messageFrom(data);
+  if(direct)return direct;
   try{
     const response=error?.context;
     if(response&&typeof response.clone==='function'){
-      const body=await response.clone().json();
-      if(body?.error)return body.error;
+      const copy=response.clone();
+      try{
+        const detail=messageFrom(await copy.json());
+        if(detail)return detail;
+      }catch{
+        const detail=messageFrom(await response.clone().text());
+        if(detail)return detail;
+      }
     }
   }catch(e){console.warn('Không đọc được nội dung lỗi Edge Function:',e?.message||e);}
   return error?.message||fallback;

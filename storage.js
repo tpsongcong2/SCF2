@@ -168,7 +168,7 @@ async function performDbSet(key,val,queuedAt=''){
   }
   if(serverAuthEnabled()&&key==='scf_employees'){
     try{setSyncState('syncing','Đang lưu danh sách nhân viên');await serverSaveEmployees(val);removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
-    catch(e){console.warn('serverSaveEmployees:',e.message);setSyncState('error','Không lưu được danh sách nhân viên');window.showToast&&window.showToast(e.message||'Không lưu được danh sách nhân viên.','error');return false;}
+    catch(e){console.warn('serverSaveEmployees:',e.message);setSyncState('error','Không lưu được danh sách nhân viên');window.showToast&&window.showToast(e.message||'Không lưu được danh sách nhân viên.','error');scheduleSyncRetry();return false;}
   }
   // Chỉ giữ dữ liệu không nhạy cảm lâu dài khi đã bật xác thực máy chủ.
   if(allowPersistentLocalCache(key))try{localStorage.setItem(localCacheKey(key),JSON.stringify(val));}catch(e){console.warn('localStorage save:',e.message);}

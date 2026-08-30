@@ -2061,58 +2061,29 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   };
   const autoTripForOrder=(o,plannedProdShift)=>{
     const ctx=orderContext(o);
-    const preferredDate=plannedProdShift
-      ?addDaysVN(ctx.deliveryDate,Number(plannedProdShift.tripDateOffset??0))
-      :(getOrderTripDate(ctx,prodShifts||[])||'');
-    const configuredShiftId=String(plannedProdShift?.tripShiftId||'').trim();
-    const configuredShiftName=normalizeLookupText(plannedProdShift?.tripShiftName||'');
+    const configuredProdShift=plannedProdShift
+      ||(ctx?.prodShiftAssignMode==='manual'&&ctx?.prodShiftId?(prodShifts||[]).find(s=>String(s?.id||'')===String(ctx.prodShiftId)):null)
+      ||getProdShiftForOrder(ctx,prodShifts||[],customers||[]);
+    if(!configuredProdShift)return null;
+    const preferredDate=addDaysVN(ctx.deliveryDate,Number(configuredProdShift.tripDateOffset??0));
+    const configuredShiftId=String(configuredProdShift.tripShiftId||'').trim();
+    const configuredShiftName=normalizeLookupText(configuredProdShift.tripShiftName||'');
+    // Ca SX chưa cấu hình ca giao thì giữ đơn ở Chờ xếp.
+    // Không tự suy đoán theo khu vực hoặc theo một chuyến bất kỳ cùng ngày.
+    if(!configuredShiftId&&!configuredShiftName)return null;
     const configuredShiftByName=configuredShiftName?(shifts||[]).find(s=>normalizeLookupText(s?.name||'')===configuredShiftName):null;
     const configuredShiftById=configuredShiftId?(shifts||[]).find(s=>String(s?.id||'')===configuredShiftId):null;
     const configuredShift=configuredShiftByName||configuredShiftById;
-    const preferredShiftId=String(configuredShift?.id||configuredShiftId||getOrderTripShiftId(ctx,prodShifts||[])||'');
-    const preferredShiftName=String(configuredShift?.name||plannedProdShift?.tripShiftName||getOrderTripShiftName(ctx,prodShifts||[])||'');
-    const area=getArea(ctx);
+    if(!configuredShift)return null;
+    const preferredShiftId=String(configuredShift.id||'');
+    const preferredShiftName=String(configuredShift.name||'');
     const options=tripOptionsForOrder(ctx);
     if(!options.length||!preferredDate)return null;
-    // Ưu tiên ca giao đã cấu hình. Nếu dữ liệu cũ còn ID/tên ca không khớp,
-    // chỉ fallback sang chuyến cùng ngày và đúng khu vực của điểm giao.
-    if(preferredShiftId||preferredShiftName){
-      const byDate=options.filter(t=>sameTripDate(t.deliveryDate,preferredDate));
-      let candidates=byDate.filter(t=>tripMatchesShift(t,preferredShiftId,preferredShiftName));
-      if(!candidates.length&&area){
-        candidates=byDate.filter(t=>tripMatchesArea(t,area));
-      }
-      if(!candidates.length)return null;
-      return [...candidates].sort((a,b)=>{
-        const currentScore=t=>String(t.id||'')===String(o.tripId||'')?20:0;
-        return currentScore(b)-currentScore(a)||(String(a.id||'').localeCompare(String(b.id||''),'vi'));
-      })[0]||null;
-    }
-    const sameAreaOptions=area?options.filter(t=>tripMatchesArea(t,area)):[];
-    if(sameAreaOptions.length){
-      const byDate=preferredDate?sameAreaOptions.filter(t=>t.deliveryDate===preferredDate):sameAreaOptions;
-      if(preferredDate&&!byDate.length)return null;
-      return [...byDate].sort((a,b)=>{
-        const ad=parseAnyDate(a.deliveryDate||''),bd=parseAnyDate(b.deliveryDate||'');
-        const byDate=(bd?.getTime?.()||0)-(ad?.getTime?.()||0);
-        if(byDate)return byDate;
-        const score=t=>(tripMatchesShift(t,preferredShiftId,preferredShiftName)?60:0)+(t.id===o.tripId?20:0);
-        return score(b)-score(a)||(String(a.id||'').localeCompare(String(b.id||''),'vi'));
-      })[0]||null;
-    }
-    // Đơn đã có khu vực thì chỉ được ghép vào chuyến đúng khu vực.
-    // Không lấy một chuyến khác cùng ngày làm phương án dự phòng.
-    if(area)return null;
-    const candidates=preferredDate?options.filter(t=>t.deliveryDate===preferredDate):options;
+    const candidates=options.filter(t=>sameTripDate(t.deliveryDate,preferredDate)&&tripMatchesShift(t,preferredShiftId,preferredShiftName));
     if(!candidates.length)return null;
     return [...candidates].sort((a,b)=>{
-      const score=t=>(t.deliveryDate===preferredDate?100:0)+(t.id===o.tripId?20:0)+(tripMatchesArea(t,area)?10:0);
-      const diff=score(b)-score(a);
-      if(diff)return diff;
-      const ad=parseAnyDate(a.deliveryDate||''),bd=parseAnyDate(b.deliveryDate||'');
-      const byDate=(bd?.getTime?.()||0)-(ad?.getTime?.()||0);
-      if(byDate)return byDate;
-      return String(a.id||'').localeCompare(String(b.id||''),'vi');
+      const currentScore=t=>String(t.id||'')===String(o.tripId||'')?20:0;
+      return currentScore(b)-currentScore(a)||(String(a.id||'').localeCompare(String(b.id||''),'vi'));
     })[0]||null;
   };
   const prepareAutomaticTripForSave=d=>{
@@ -2126,17 +2097,19 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     return {...d,...(manualProdShift?{}:{prodShiftAssignMode:'auto',prodShiftId:plannedShift.id}),tripAssignMode:'auto',tripId:autoTrip?.id||null,status:autoTrip?'assigned':'pending'};
   };
   const syncTripOrderIds=nextOrders=>{
-    let changed=false;
-    const nextTrips=(trips||[]).map(t=>{
-      const desired=nextOrders.filter(o=>o.tripId===t.id).map(o=>o.id);
-      const current=t.orderIds||[];
-      if(desired.length!==current.length||desired.some((id,idx)=>id!==current[idx])){
-        changed=true;
-        return {...t,orderIds:desired};
-      }
-      return t;
+    setTrips(prevTrips=>{
+      let changed=false;
+      const nextTrips=(prevTrips||[]).map(t=>{
+        const desired=nextOrders.filter(o=>o.tripId===t.id).map(o=>o.id);
+        const current=t.orderIds||[];
+        if(desired.length!==current.length||desired.some((id,idx)=>id!==current[idx])){
+          changed=true;
+          return {...t,orderIds:desired};
+        }
+        return t;
+      });
+      return changed?nextTrips:prevTrips;
     });
-    if(changed)setTrips(nextTrips);
   };
   // Chỉ ghi dữ liệu tự động khi người dùng thao tác hoặc bấm cập nhật,
   // tránh vừa mở tab đã quét + lưu lại toàn bộ đơn hàng.

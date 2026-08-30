@@ -51,6 +51,7 @@ const PAGE_ACCESS = {
   purchaseorders:['admin'],
   purchasegoods:['admin','manager'],
   fuelpurchases:['admin','manager','driver'],
+  utilityexpenses:['admin'],
   fuelreport:['admin','manager'],
   purchasereport:['admin'],
   maintreport:['admin','manager'],
@@ -71,7 +72,7 @@ function roleDefaults(role) {
 }
 // canAccess checks employee's custom permissions first, else falls back to role
 function canAccess(role, page, perms, dept='') {
-  const faceMaskPages=['materials','workreport_total','nccs','purchaseorders','cashflowreport','salesreport','fuelreport','purchasereport','maintreport','materialusage','syncreport','dbusage'];
+  const faceMaskPages=['permission_settings','materials','workreport_total','nccs','purchaseorders','utilityexpenses','cashflowreport','salesreport','fuelreport','purchasereport','maintreport','materialusage','syncreport','dbusage'];
   const sharedVariantPages=['employees'];
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
   if(isFaceMask&&!faceMaskPages.includes(page)&&!sharedVariantPages.includes(page))return false;
@@ -86,7 +87,8 @@ function canAccess(role, page, perms, dept='') {
   if(page==='company') return ['admin','manager','staff','driver'].includes(role);
   if(page==='trips'&&(role==='admin'||isAccounting)) return true;
   if(['nccgoods','purchasegoods'].includes(page)&&(role==='admin'||isAccounting)) return true;
-  if(['nccs','purchaseorders','purchasereport'].includes(page)&&role!=='admin') return false;
+  if(['nccs','purchaseorders','utilityexpenses','purchasereport'].includes(page)&&role!=='admin') return false;
+  if(page==='utilityexpenses'&&role==='admin') return true;
   const allowed = PAGE_ACCESS[page];
   if (!allowed) return false;
   if (perms && perms.length > 0) {

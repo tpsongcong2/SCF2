@@ -1384,11 +1384,23 @@ function PurchaseReportTab({purchases,goodsPurchases,nccs}) {
     h('div',{className:'report-grid-2 desktop-only'},
       h('div',{className:'tw'},h('table',null,
         h('thead',null,h('tr',null,...['Nhà cung cấp','Số đơn','Số lượng','Tổng tiền'].map(c=>h('th',{key:c},c)))),
-        h('tbody',null,Object.entries(byNcc).length?Object.entries(byNcc).map(([id,v])=>h('tr',{key:id},h('td',null,h('div',{style:{fontWeight:500}},v.name)),h('td',null,v.orders+' đơn'),h('td',null,v.qty.toLocaleString()),h('td',null,h('span',{style:{fontWeight:500,color:'var(--pri)'}},v.total.toLocaleString('vi-VN')+'đ')))):h('tr',null,h('td',{colSpan:4,className:'empty-st'},'Chưa có dữ liệu theo bộ lọc.')))
+        h('tbody',null,Object.entries(byNcc).length?Object.entries(byNcc).map(([id,v])=>h('tr',{key:id},h('td',null,h('div',{style:{fontWeight:500}},v.name)),h('td',null,v.orders+' đơn'),h('td',null,v.qty.toLocaleString()),h('td',null,h('span',{style:{fontWeight:500,color:'var(--pri)'}},v.total.toLocaleString('vi-VN')+'đ')))):h('tr',null,h('td',{colSpan:4,className:'empty-st'},'Chưa có dữ liệu theo bộ lọc.'))),
+        Object.entries(byNcc).length?h('tfoot',null,h('tr',{style:{background:'var(--bg2)',fontWeight:700}},
+          h('td',null,'TỔNG CỘNG'),
+          h('td',null,active.length+' đơn'),
+          h('td',null,totalItems.toLocaleString()),
+          h('td',null,h('span',{style:{color:'var(--pri)'}},totalAmt.toLocaleString('vi-VN')+'đ'))
+        )):null
       )),
       h('div',{className:'tw'},h('table',null,
         h('thead',null,h('tr',null,...['Mặt hàng','ĐVT','Số lượng','Tổng tiền'].map(c=>h('th',{key:c},c)))),
-        h('tbody',null,Object.entries(byItem).length?Object.entries(byItem).map(([id,v])=>h('tr',{key:id},h('td',null,h('div',{style:{fontWeight:500}},v.name)),h('td',null,v.unit||'—'),h('td',null,v.qty.toLocaleString()),h('td',null,h('span',{style:{fontWeight:500,color:'var(--pri)'}},v.total.toLocaleString('vi-VN')+'đ')))):h('tr',null,h('td',{colSpan:4,className:'empty-st'},'Chưa có dữ liệu mặt hàng.')))
+        h('tbody',null,Object.entries(byItem).length?Object.entries(byItem).map(([id,v])=>h('tr',{key:id},h('td',null,h('div',{style:{fontWeight:500}},v.name)),h('td',null,v.unit||'—'),h('td',null,v.qty.toLocaleString()),h('td',null,h('span',{style:{fontWeight:500,color:'var(--pri)'}},v.total.toLocaleString('vi-VN')+'đ')))):h('tr',null,h('td',{colSpan:4,className:'empty-st'},'Chưa có dữ liệu mặt hàng.'))),
+        Object.entries(byItem).length?h('tfoot',null,h('tr',{style:{background:'var(--bg2)',fontWeight:700}},
+          h('td',null,'TỔNG CỘNG'),
+          h('td',null,'—'),
+          h('td',null,totalItems.toLocaleString()),
+          h('td',null,h('span',{style:{color:'var(--pri)'}},totalAmt.toLocaleString('vi-VN')+'đ'))
+        )):null
       ))
     ),
     h('div',{className:'mobile-only report-mobile-section'},

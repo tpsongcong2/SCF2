@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V224';
+const SCF_BUILD_VERSION='V245';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -9,7 +9,7 @@ const PTITLES = {
   process_accounting:'QUY TRÌNH KẾ TOÁN', process_bun:'QT SẢN XUẤT BÚN', process_pho:'QT SX PHỞ', process_banhcuon:'QT SX BÁNH CUỐN',
   quotes:'Báo giá', delivery:'Đơn giao hàng', intem:'Intem', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng',
   salesreport:'Báo cáo bán hàng', cashflowreport:'Báo cáo dòng tiền', fuelreport:'Báo cáo mua xăng dầu', marketsales:'Bán hàng chợ', powdersales:'Bán bột bún',
-  nccs:'Nhà CC NVL', nccgoods:'Nhà CC Hàng hóa', purchaseorders:'Đơn mua hàng NVL', purchasegoods:'Đơn mua hàng hàng hóa', fuelpurchases:'Đơn mua xăng dầu', purchasereport:'Báo cáo mua hàng', maintreport:'Báo cáo sửa chữa', materialusage:'Báo cáo NVL tồn và tiêu dùng', powderdebtreport:'Báo cáo công nợ', syncreport:'Đồng bộ dữ liệu', dbusage:'Dung lượng Supabase',
+  nccs:'Nhà CC NVL', nccgoods:'Nhà CC Hàng hóa', purchaseorders:'Đơn mua hàng NVL', purchasegoods:'Đơn mua hàng hàng hóa', fuelpurchases:'Đơn mua xăng dầu', utilityexpenses:'Chi phí điện nước', purchasereport:'Báo cáo mua hàng', maintreport:'Báo cáo sửa chữa', materialusage:'Báo cáo NVL tồn và tiêu dùng', powderdebtreport:'Báo cáo công nợ', syncreport:'Đồng bộ dữ liệu', dbusage:'Dung lượng Supabase',
   maint_vehicle:'Bảo dưỡng xe', maint_machine:'Bảo dưỡng máy',
   prodsummary:'Tổng hợp sản xuất', prodorders:'Đơn sản xuất', stock:'Tồn kho',
 };
@@ -23,7 +23,7 @@ const PICONS = {
   workreport_vp:'ti-building', workreport_sx:'ti-building-factory', workreport_lx:'ti-steering-wheel', workreport_total:'ti-report-analytics',
   process_accounting:'ti-file-invoice', process_bun:'ti-tools-kitchen-2', process_pho:'ti-bowl', process_banhcuon:'ti-cookie',
   marketsales:'ti-building-store', powdersales:'ti-bowl', intem:'ti-printer',
-  cashflowreport:'ti-cash-banknote', powderdebtreport:'ti-report-money', syncreport:'ti-cloud-data-connection', dbusage:'ti-database', purchasegoods:'ti-packages', fuelpurchases:'ti-gas-station', fuelreport:'ti-gas-station', maintreport:'ti-tool', materialusage:'ti-chart-histogram',
+  cashflowreport:'ti-cash-banknote', powderdebtreport:'ti-report-money', syncreport:'ti-cloud-data-connection', dbusage:'ti-database', purchasegoods:'ti-packages', fuelpurchases:'ti-gas-station', utilityexpenses:'ti-bolt', fuelreport:'ti-gas-station', maintreport:'ti-tool', materialusage:'ti-chart-histogram',
   maint_vehicle:'ti-car', maint_machine:'ti-settings'
 };
 
@@ -40,7 +40,8 @@ function SyncStatus(){
   };
   const item=map[state?.status]||map.idle;
   const label=state?.pending?item[0]+' ('+state.pending+')':item[0];
-  return h('span',{className:'sync-status sync-'+(state?.status||'idle'),title:state?.detail||label,'aria-live':'polite'},
+  const retry=()=>{if(state?.pending&&state?.status!=='syncing')window.scfFlushPendingWrites?.();};
+  return h('span',{className:'sync-status sync-'+(state?.status||'idle'),title:state?.pending?'Bấm để đồng bộ lại':(state?.detail||label),'aria-live':'polite',role:state?.pending?'button':undefined,tabIndex:state?.pending?0:undefined,onClick:retry,onKeyDown:event=>{if(state?.pending&&(event.key==='Enter'||event.key===' ')){event.preventDefault();retry();}},style:state?.pending?{cursor:'pointer'}:null},
     h('i',{className:'ti '+item[1]+(state?.status==='syncing'?' spin':'')}),label
   );
 }
@@ -257,40 +258,64 @@ function App(){
     return()=>clearInterval(tm);
   },[loading]);
 
-  /* ── TỰ ĐỘNG TẠO CHUYẾN MỖI NGÀY LÚC 6:00 ── */
-  const[autoNotif,setAutoNotif]=useState(null);
+  /* ── TỰ TÌM/TẠO CHUYẾN CHỈ KHI CÓ ĐƠN CHƯA XẾP ── */
   useEffect(()=>{
-    if(loading) return;
-    const now=new Date();
-    if(now.getHours()<6) return;
-    const todayKey='scf_autotrip_'+now.toISOString().slice(0,10);
-    if(localStorage.getItem(todayKey)) return;
-    if(!shifts||shifts.length===0) return;
-    const tom=new Date(now); tom.setDate(tom.getDate()+1);
-    const tStr=String(tom.getDate()).padStart(2,'0')+'/'+String(tom.getMonth()+1).padStart(2,'0')+'/'+tom.getFullYear();
-    setTrips(prev=>{
-      const news=[];
-      shifts.forEach(sh=>{
-        if(!prev.some(t=>t.deliveryDate===tStr&&t.shiftId===sh.id)){
-          news.push({
-            id:'CH'+uid(),deliveryDate:tStr,
-            deliveryTime:sh.timeStart||'',
-            shiftId:sh.id,shiftName:sh.name,area:sh.area||'',
-            driverName:sh.defaultDriverName||'',driverId:sh.defaultDriverId||'',driverAssignMode:sh.defaultDriverId||sh.defaultDriverName?'auto':'',orderIds:[],totalWeight:0,
-            status:sh.defaultDriverId||sh.defaultDriverName?'assigned':'planning',
-            note:'Tự động tạo: '+sh.name+(sh.area?' - '+sh.area:''),
-            createdAt:fmtDT(),autoCreated:true
-          });
-        }
-      });
-      if(news.length>0){
-        localStorage.setItem(todayKey,'1');
-        if(!isFaceMask)setTimeout(()=>window.showToast&&window.showToast('Đã tự động tạo '+news.length+' chuyến giao hàng cho ngày '+tStr,'info',6000),1500);
-        return[...prev,...news];
+    const automationUser=session?(employees.find(e=>String(e.id)===String(session.id))||null):null;
+    if(loading||isFaceMask||!automationUser||!canAccess(automationUser.role,'delivery',automationUser.permissions,automationUser.dept)||!canWrite(automationUser.role,'delivery',automationUser.permLevels)||!shifts?.length||!prodShifts?.length)return;
+    const norm=v=>normalizeLookupText(v||'');
+    const sameDate=(a,b)=>String(a||'').trim()===String(b||'').trim();
+    const usableTrip=t=>!['active','completion_pending','completed','cancelled'].includes(String(t?.status||''));
+    const linkedTripIds=new Set((orders||[]).filter(o=>!['cancelled','done','failed'].includes(String(o?.status||''))).map(o=>String(o?.tripId||'')).filter(Boolean));
+    const keptTrips=(trips||[]).filter(t=>!(t?.autoCreated&&usableTrip(t)&&!(t.orderIds||[]).length&&!linkedTripIds.has(String(t.id||''))));
+    const workingTrips=keptTrips.map(t=>({...t,orderIds:[...(t.orderIds||[])]}));
+    const tripById=new Map(workingTrips.map(t=>[String(t.id||''),t]));
+    let tripsChanged=keptTrips.length!==(trips||[]).length,ordersChanged=false;
+    const nextOrders=(orders||[]).map(order=>{
+      if(order?.tripAssignMode==='manual'||!['','pending','assigned'].includes(String(order?.status||'')))return order;
+      const linked=tripById.get(String(order?.tripId||''));
+      if(linked){
+        if(!(linked.orderIds||[]).includes(order.id)){linked.orderIds=[...(linked.orderIds||[]),order.id];tripsChanged=true;}
+        return order;
       }
-      return prev;
+      const plannedShift=order?.prodShiftAssignMode==='manual'&&order?.prodShiftId
+        ?(prodShifts||[]).find(s=>String(s?.id||'')===String(order.prodShiftId))
+        :getProdShiftForOrder(order,prodShifts||[],customers||[]);
+      if(!plannedShift)return order;
+      const tripDate=addDaysVN(order.deliveryDate,Number(plannedShift.tripDateOffset??0));
+      // Chỉ dùng ca giao đã được khai báo trực tiếp trong cấu hình ca SX.
+      // Không suy đoán ca giao theo khu vực, tên điểm hoặc các chuyến cùng ngày.
+      const wantedShiftId=String(plannedShift.tripShiftId||'').trim();
+      const wantedShiftName=String(plannedShift.tripShiftName||'').trim();
+      if(!tripDate||(!wantedShiftId&&!wantedShiftName))return order;
+      const deliveryShift=(shifts||[]).find(s=>wantedShiftId&&String(s.id||'')===wantedShiftId)
+        ||(shifts||[]).find(s=>wantedShiftName&&norm(s.name)===norm(wantedShiftName));
+      if(!deliveryShift)return order;
+      const shiftId=String(deliveryShift.id||'').trim();
+      const shiftName=String(deliveryShift.name||'').trim();
+      let trip=workingTrips.find(t=>usableTrip(t)&&sameDate(t.deliveryDate,tripDate)&&(
+        (shiftId&&String(t.shiftId||'')===shiftId)||(shiftName&&norm(t.shiftName)===norm(shiftName))
+      ));
+      if(!trip){
+        const driverId=String(deliveryShift?.defaultDriverId||'').trim();
+        const driverName=String(deliveryShift?.defaultDriverName||'').trim();
+        trip={
+          id:'CH'+uid(),deliveryDate:tripDate,deliveryTime:deliveryShift?.timeStart||deliveryShift?.startTime||order.deliveryTime||'',
+          shiftId,shiftName:shiftName||deliveryShift?.area||'Chuyến tự động',area:deliveryShift?.area||order.area||'',
+          driverName,driverId,driverAssignMode:driverId||driverName?'auto':'',orderIds:[],totalWeight:0,
+          status:driverId||driverName?'assigned':'planning',
+          note:'Tự động tạo khi có đơn phù hợp'+(shiftName?': '+shiftName:''),
+          createdAt:fmtDT(),updatedAt:fmtDT(),updatedBy:automationUser.name||'Hệ thống',autoCreated:true
+        };
+        workingTrips.push(trip);tripById.set(String(trip.id),trip);tripsChanged=true;
+      }
+      if(!trip.orderIds.includes(order.id)){trip.orderIds.push(order.id);tripsChanged=true;}
+      if(String(order.tripId||'')===String(trip.id)&&order.status==='assigned'&&order.tripAssignMode==='auto')return order;
+      ordersChanged=true;
+      return {...order,tripId:trip.id,tripAssignMode:'auto',status:'assigned',updatedAt:fmtDT(),updatedBy:automationUser.name||'Hệ thống'};
     });
-  },[loading,shifts]);
+    if(tripsChanged)setTrips(workingTrips);
+    if(ordersChanged)setOrders(nextOrders);
+  },[loading,isFaceMask,session,employees,orders,trips,shifts,prodShifts,customers]);
 
   const cu=session?(employees.find(e=>e.id===session.id)||(String(window.__SCF_CURRENT_EMPLOYEE?.id||'')===String(session.id)?window.__SCF_CURRENT_EMPLOYEE:null)):null;
   const addNotification=React.useCallback(data=>{
@@ -439,6 +464,7 @@ function App(){
         canAccess(cu.role,'purchaseorders',cu.permissions)&&page==='purchaseorders'&&h(PurchaseTab,{purchases,setPurchases,nccs,setNCCs,materials,products,cu,setPage,mode:'material'}),
         canAccess(cu.role,'purchasegoods',cu.permissions,cu.dept)&&page==='purchasegoods'&&h(PurchaseTab,{purchases:goodsPurchases,setPurchases:setGoodsPurchases,nccs:nccGoods,setNCCs:setNccGoods,materials,products,cu,setPage,mode:'goods'}),
         canAccess(cu.role,'fuelpurchases',cu.permissions)&&page==='fuelpurchases'&&h(FuelPurchaseTab,{rows:fuelPurchases,setRows:setFuelPurchases,employees,assets,currentUser:cu}),
+        canAccess(cu.role,'utilityexpenses',cu.permissions)&&page==='utilityexpenses'&&h(UtilityExpenseTab,{entries:financeEntries,setEntries:setFinanceEntries,currentUser:cu}),
         canAccess(cu.role,'fuelreport',cu.permissions)&&page==='fuelreport'&&h(FuelPurchaseReportTab,{rows:fuelPurchases}),
         canAccess(cu.role,'purchasereport',cu.permissions)&&page==='purchasereport'&&h(PurchaseReportTab,{purchases,goodsPurchases,nccs:[...(nccs||[]),...(nccGoods||[])]}),
         canAccess(cu.role,'maintreport',cu.permissions)&&page==='maintreport'&&h(MaintenanceReportTab),

@@ -1062,11 +1062,12 @@ function PasswordField({value,onChange,placeholder}){
     )
   );
 }
-const FACEMASK_ONLY_PERMISSION_PAGES=new Set(['materials','workreport_total','nccs','purchaseorders','cashflowreport','salesreport','fuelreport','purchasereport','maintreport','materialusage','syncreport','dbusage']);
-function normalizeEmployeeDept(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');}
+const FACEMASK_ONLY_PERMISSION_PAGES=new Set(['materials','workreport_total','nccs','purchaseorders','utilityexpenses','cashflowreport','salesreport','fuelreport','purchasereport','maintreport','materialusage','syncreport','dbusage']);
+function normalizeEmployeeDept(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/đ/g,'d').replace(/[^a-z0-9]+/g,' ').trim();}
 function isPrivilegedEmployeeRecord(employee){
   const role=String(employee?.role||'').trim().toLowerCase();
-  return ['admin','administrator'].includes(role)||normalizeEmployeeDept(employee?.dept)==='ban giam doc';
+  const permissionProfileId=String(employee?.permissionProfileId||'').trim().toLowerCase();
+  return ['admin','administrator'].includes(role)||permissionProfileId==='director'||normalizeEmployeeDept(employee?.dept)==='ban giam doc';
 }function EmpForm({emp,employees,depts,permissionProfiles,cu,cu2,onSave,onClose}){
   const deptNames=(depts&&depts.length?depts.map(d=>d.name):DEPTS);
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
@@ -1092,7 +1093,7 @@ function isPrivilegedEmployeeRecord(employee){
       const password=f.password?await hashPassword(f.password):'';
       const permissions=isFaceMask&&f.permissionProfileId==='director'?[]:(f.permissions||[]).filter(page=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page));
       const permLevels=isFaceMask&&f.permissionProfileId==='director'?{}:Object.fromEntries(Object.entries(f.permLevels||{}).filter(([page])=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page)));
-      onSave({...f,permissions,permLevels,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
+      onSave({...f,dept:isFaceMask&&f.permissionProfileId==='director'?'Ban Giám Đốc':f.dept,permissions,permLevels,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
     }catch(e){window.showToast(e.message||'Không thể lưu mật khẩu.','error');}
     finally{setBusy(false);}
   };
@@ -1437,7 +1438,7 @@ function BackupTab({employees,materials,assets,garages,prodCats,products,custome
     {name:'Nhà cung cấp',rows:nccs||[],cols:[['code','Mã NCC'],['name','Tên NCC'],['taxCode','MST'],['phone','Điện thoại'],['email','Email'],['contact','Người LH'],['address','Địa chỉ'],['note','Ghi chú']]},
     {name:'Đơn mua NVL',rows:purchaseRows,cols:[['id','Mã đơn'],['nccName','Nhà cung cấp'],['orderDate','Ngày đặt'],['deliveryDate','Hạn giao'],['receivedDate','Ngày nhận'],['invoiceNo','Số hóa đơn'],['status','Trạng thái'],['paymentStatus','Thanh toán'],['itemName','Mặt hàng'],['itemUnit','ĐVT'],['itemQty','Số lượng'],['itemPrice','Đơn giá'],['itemTotal','Thành tiền'],['itemVatPercent','VAT (%)'],['itemVatAmount','Tiền VAT'],['itemAmountAfterTax','Thành tiền VAT'],['note','Ghi chú đơn'],['lineNote','Ghi chú dòng']]},
     {name:'Đơn mua hàng hóa',rows:goodsPurchaseRows,cols:[['id','Mã đơn'],['nccName','Nhà cung cấp'],['orderDate','Ngày đặt'],['deliveryDate','Hạn giao'],['receivedDate','Ngày nhận'],['invoiceNo','Số hóa đơn'],['status','Trạng thái'],['paymentStatus','Thanh toán'],['itemName','Mặt hàng'],['itemUnit','ĐVT'],['itemQty','Số lượng'],['itemPrice','Đơn giá'],['itemTotal','Thành tiền'],['itemVatPercent','VAT (%)'],['itemVatAmount','Tiền VAT'],['itemAmountAfterTax','Thành tiền VAT'],['note','Ghi chú đơn'],['lineNote','Ghi chú dòng']]},
-    {name:'Sổ thu chi',rows:financeEntries||[],cols:[['id','Mã'],['date','Ngày'],['direction','Tiền vào/ra'],['category','Nhóm thu chi'],['partnerName','Đối tượng'],['method','Phương thức'],['amount','Số tiền'],['pnlType','Phân loại KQKD'],['reference','Chứng từ'],['note','Ghi chú']]},
+    {name:'Sổ thu chi',rows:(financeEntries||[]).map(row=>({...row,utilityInvoicesJson:JSON.stringify(row.utilityInvoices||[])})),cols:[['id','Mã'],['date','Ngày'],['direction','Tiền vào/ra'],['category','Nhóm thu chi'],['utilityType','Loại điện nước'],['period','Kỳ hóa đơn'],['partnerName','Đối tượng'],['consumption','Sản lượng'],['unit','Đơn vị'],['amountBeforeTax','Trước thuế'],['vatAmount','Thuế GTGT'],['amountAfterTax','Sau thuế'],['method','Phương thức'],['amount','Số tiền'],['pnlType','Phân loại KQKD'],['reference','Chứng từ'],['utilityInvoicesJson','Chi tiết 3 hóa đơn (JSON)'],['note','Ghi chú']]},
     {name:'Công nợ',rows:financeDebts||[],cols:[['id','Mã'],['kind','Loại'],['partnerName','Đối tượng'],['date','Ngày ghi nhận'],['dueDate','Hạn thanh toán'],['invoiceNo','Chứng từ'],['amount','Giá trị'],['paidAmount','Đã thanh toán'],['status','Trạng thái'],['note','Ghi chú']]},
     {name:'Số dư đầu tháng',rows:financeOpenings||[],cols:[['month','Tháng'],['cash','Tiền mặt'],['bank','Ngân hàng'],['updatedBy','Người cập nhật'],['updatedAt','Cập nhật lúc']]},
   ];

@@ -568,6 +568,7 @@ const NAV=[
   {key:'purchaseorders',icon:'ti-shopping-cart',label:'Đơn mua hàng NVL'},
   {key:'purchasegoods',icon:'ti-packages',label:'Đơn mua hàng hàng hóa'},
   {key:'fuelpurchases',icon:'ti-gas-station',label:'Đơn mua xăng dầu'},
+  {key:'utilityexpenses',icon:'ti-bolt',label:'Chi phí điện nước'},
   {sec:'Báo cáo'},
   {key:'cashflowreport',icon:'ti-cash-banknote',label:'Báo cáo dòng tiền'},
   {key:'salesreport',icon:'ti-chart-line',label:'Báo cáo BH'},
