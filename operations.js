@@ -1072,17 +1072,26 @@ function isPrivilegedEmployeeRecord(employee){
   const deptNames=(depts&&depts.length?depts.map(d=>d.name):DEPTS);
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
   const normalizedProfiles=normalizePermissionProfiles(permissionProfiles);
-  const availableProfileIds=PERMISSION_PROFILE_ORDER.filter(id=>isFaceMask?id==='director':id!=='director');
+  const privilegedProfileIds=new Set(['admin','director']);
+  const availableProfileIds=PERMISSION_PROFILE_ORDER.filter(id=>isFaceMask?privilegedProfileIds.has(id):!privilegedProfileIds.has(id));
   const scopedDeptNames=isFaceMask?[...new Set([...deptNames.filter(d=>normalizeEmployeeDept(d)==='ban giam doc'),'Ban Giám Đốc'])]:[...new Set([...deptNames.filter(d=>normalizeEmployeeDept(d)!=='ban giam doc'),...availableProfileIds.map(id=>normalizedProfiles[id].dept)])];
-  const roleOptions=Object.entries(ROLES).filter(([role])=>isFaceMask||!['admin','administrator'].includes(role));
   const[busy,setBusy]=useState(false);
   const[f,sf]=useState(emp
     ?{...emp,password:isPasswordHash(emp.password)?'':String(emp.password||''),gender:normalizeGenderValue(emp?.gender,emp?.female),female:isFemaleGender(emp?.gender,emp?.female)}
     :{id:'NV'+String(Date.now()).slice(-4),name:'',birthday:'',gender:'male',female:false,dept:scopedDeptNames[0]||(isFaceMask?'Ban Giám Đốc':''),role:isFaceMask?'manager':'staff',username:'',password:'',phone:'',email:'',note:'',startDate:'',bhxh:false}
   );
+  const isBoardDirectorDept=normalizeEmployeeDept(f.dept)==='ban giam doc';
+  const selectableProfileIds=availableProfileIds.filter(id=>id!=='admin'||isBoardDirectorDept);
+  const roleOptions=Object.entries(ROLES).filter(([role])=>{
+    if(!isFaceMask&&['admin','administrator'].includes(role))return false;
+    if(['admin','administrator'].includes(role)&&!isBoardDirectorDept)return false;
+    return true;
+  });
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
   const submit=async()=>{
     if(!f.name||!f.username){window.showToast('Nhập tên và tên đăng nhập!','warn');return;}
+    const requestsAdmin=f.permissionProfileId==='admin'||['admin','administrator'].includes(String(f.role||'').toLowerCase());
+    if(requestsAdmin&&!isBoardDirectorDept){window.showToast('Chỉ người thuộc Ban Giám Đốc mới được cấp quyền Admin.','error');return;}
     if(isPrivilegedEmployeeRecord(f)!==isFaceMask){window.showToast(isFaceMask?'FACE MASK chỉ lưu Admin hoặc người thuộc Ban Giám Đốc.':'Tài khoản Admin/Ban Giám Đốc phải được quản lý trên FACE MASK.','error');return;}
     if(!emp&&employees.some(e=>e.username===f.username)){window.showToast('Tên đăng nhập đã tồn tại!','error');return;}
     if(!emp&&!f.password){window.showToast('Nhập mật khẩu!','warn');return;}
@@ -1091,9 +1100,10 @@ function isPrivilegedEmployeeRecord(employee){
     const gender=normalizeGenderValue(f.gender,f.female);
     try{
       const password=f.password?await hashPassword(f.password):'';
-      const permissions=isFaceMask&&f.permissionProfileId==='director'?[]:(f.permissions||[]).filter(page=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page));
-      const permLevels=isFaceMask&&f.permissionProfileId==='director'?{}:Object.fromEntries(Object.entries(f.permLevels||{}).filter(([page])=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page)));
-      onSave({...f,dept:isFaceMask&&f.permissionProfileId==='director'?'Ban Giám Đốc':f.dept,permissions,permLevels,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
+      const isFaceMaskPrivilegedProfile=isFaceMask&&privilegedProfileIds.has(f.permissionProfileId);
+      const permissions=isFaceMaskPrivilegedProfile?[]:(f.permissions||[]).filter(page=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page));
+      const permLevels=isFaceMaskPrivilegedProfile?{}:Object.fromEntries(Object.entries(f.permLevels||{}).filter(([page])=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page)));
+      onSave({...f,dept:isFaceMaskPrivilegedProfile?'Ban Giám Đốc':f.dept,permissions,permLevels,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
     }catch(e){window.showToast(e.message||'Không thể lưu mật khẩu.','error');}
     finally{setBusy(false);}
   };
@@ -1104,11 +1114,11 @@ function isPrivilegedEmployeeRecord(employee){
       h(F,{label:'Ngày sinh (DD/MM/YYYY)'},h('input',{value:f.birthday,onChange:e=>s('birthday',e.target.value),placeholder:'15/03/1990'})),
     ),
     h('div',{className:'g2'},
-      h(F,{label:'Chức vụ / bộ quyền mặc định'},h('select',{value:f.permissionProfileId||'',onChange:e=>{const id=e.target.value;sf(prev=>id?applyPermissionProfile(prev,normalizedProfiles,id):{...prev,permissionProfileId:''});}},h('option',{value:''},'— Chọn chức vụ —'),availableProfileIds.map(id=>h('option',{key:id,value:id},normalizedProfiles[id].label)))),
+      h(F,{label:'Chức vụ / bộ quyền mặc định'},h('select',{value:f.permissionProfileId||'',onChange:e=>{const id=e.target.value;if(id==='admin'&&!isBoardDirectorDept){window.showToast('Chỉ Ban Giám Đốc mới được chọn quyền Admin.','warn');return;}sf(prev=>id?applyPermissionProfile(prev,normalizedProfiles,id):{...prev,permissionProfileId:''});}},h('option',{value:''},'— Chọn chức vụ —'),selectableProfileIds.map(id=>h('option',{key:id,value:id},normalizedProfiles[id].label)))),
       h('div',{style:{fontSize:12,color:'var(--tx2)',paddingTop:25}},f.permissionProfileId?'Đã áp dụng quyền mặc định. Admin có thể chỉnh riêng ở phần bên dưới.':'Chưa gắn bộ quyền theo chức vụ.')
     ),
     h('div',{className:'g3'},
-      h(F,{label:'Bộ phận'},h('select',{value:f.dept,onChange:e=>s('dept',e.target.value)},scopedDeptNames.map(d=>h('option',{key:d,value:d},d)))),
+      h(F,{label:'Bộ phận'},h('select',{value:f.dept,onChange:e=>{const dept=e.target.value;sf(prev=>normalizeEmployeeDept(dept)==='ban giam doc'?{...prev,dept}:{...prev,dept,permissionProfileId:prev.permissionProfileId==='admin'?'':prev.permissionProfileId,role:['admin','administrator'].includes(String(prev.role||'').toLowerCase())?'manager':prev.role,permissions:prev.permissionProfileId==='admin'?[]:prev.permissions,permLevels:prev.permissionProfileId==='admin'?{}:prev.permLevels});}},scopedDeptNames.map(d=>h('option',{key:d,value:d},d)))),
       h(F,{label:'Phân quyền'},h('select',{value:f.role,onChange:e=>s('role',e.target.value)},roleOptions.map(([v,l])=>h('option',{key:v,value:v},l)))),
       h(F,{label:'Ngày vào làm (DD/MM/YYYY)'},h('input',{value:f.startDate||'',onChange:e=>s('startDate',e.target.value),placeholder:'01/01/2024'})),
     ),
