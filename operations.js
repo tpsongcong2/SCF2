@@ -1268,7 +1268,8 @@ function EmployeeTab({employees,setEmployees,cu,depts,permissionProfiles}){
   const save=d=>{if(isPrivilegedEmployeeRecord(d)!==isFaceMask){window.showToast(isFaceMask?'Chỉ lưu Admin/Ban Giám Đốc trên FACE MASK.':'Admin/Ban Giám Đốc phải quản lý trên FACE MASK.','error');return;}if(edit)setEmployees(p=>p.map(e=>e.id===edit.id?{...e,...d,...(!d.password?{password:edit.password}:{})}:e));else setEmployees(p=>[...p,d]);sm(null);se(null);};
   const del=id=>{if(id===cu.id){window.showToast('Không thể xóa tài khoản đang đăng nhập!','error');return;}window.scfConfirm('Bạn có chắc muốn xóa nhân viên này?','Xóa nhân viên',true).then(ok=>{if(ok){setEmployees(p=>p.filter(e=>e.id!==id));window.showToast('Đã xóa nhân viên','success');}});};
   const savePw=(id,pw,options={})=>{setEmployees(p=>p.map(e=>e.id===id?{...e,password:pw,mustChangePw:!!options.mustChangePw,updatedBy:cu.name,updatedAt:fmtDT()}:e));scp(null);};
-  const list=employees
+  const list=(employees||[])
+    .filter(employee=>isPrivilegedEmployeeRecord(employee)===isFaceMask)
     .filter(e=>{
       if(q&&!e.name.toLowerCase().includes(q.toLowerCase())&&!e.username.toLowerCase().includes(q.toLowerCase())&&!(e.id||'').toLowerCase().includes(q.toLowerCase()))return false;
       if(fRole&&e.role!==fRole)return false;
