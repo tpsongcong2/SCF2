@@ -140,7 +140,7 @@ async function dbGet(key,def){
     if(!sb){setSyncState('error','Không kết nối được máy chủ');return def;}
     try{const{data}=await sb.auth.getSession();if(!data?.session)return def;}catch{setSyncState('error','Không kiểm tra được phiên đăng nhập');return def;}
   }
-  if(serverAuthEnabled()&&key==='scf_employees'){
+  if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees')){
     try{setSyncState('syncing','Đang nhận danh sách nhân viên');const employees=await serverLoadEmployees();setSyncState('synced');return employees;}
     catch(e){console.warn('serverLoadEmployees:',e.message);setSyncState('error','Không tải được danh sách nhân viên');return def;}
   }
@@ -166,8 +166,8 @@ async function performDbSet(key,val,queuedAt=''){
       if(!data?.session){window.showToast&&window.showToast('Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.','warn');return false;}
     }catch{setSyncState('error','Không kiểm tra được phiên đăng nhập');return false;}
   }
-  if(serverAuthEnabled()&&key==='scf_employees'){
-    try{setSyncState('syncing','Đang lưu danh sách nhân viên');await serverSaveEmployees(val);removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
+  if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees')){
+    try{setSyncState('syncing','Đang lưu danh sách nhân viên');await withRemoteTimeout(serverSaveEmployees(val),remoteTimeoutFor(val));removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
     catch(e){console.warn('serverSaveEmployees:',e.message);setSyncState('error','Không lưu được danh sách nhân viên');window.showToast&&window.showToast(e.message||'Không lưu được danh sách nhân viên.','error');scheduleSyncRetry();return false;}
   }
   // Chỉ giữ dữ liệu không nhạy cảm lâu dài khi đã bật xác thực máy chủ.
@@ -222,7 +222,7 @@ async function flushPendingWrites(){
       if(debounced){clearTimeout(debounced.timer);waitingResolvers=debounced.resolvers||[];delete scfDebouncedWrites[key];}
       if(scfWriteChains[key])await scfWriteChains[key].catch(()=>false);
       const item=readSyncQueue()[key];if(!item){waitingResolvers.forEach(done=>done(true));continue;}
-      if(serverAuthEnabled()&&key==='scf_employees')await serverSaveEmployees(item.value);
+      if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees'))await withRemoteTimeout(serverSaveEmployees(item.value),remoteTimeoutFor(item.value));
       else{
         const{error}=await withRemoteTimeout(sb.from('kv_store').upsert({key,value:item.value,updated_at:item.updatedAt||new Date().toISOString()}),remoteTimeoutFor(item.value));
         if(error)throw error;
@@ -230,9 +230,10 @@ async function flushPendingWrites(){
       removeQueuedWrite(key,item.updatedAt||'');
       waitingResolvers.forEach(done=>done(true));
     }catch(e){
+      console.warn('flushPendingWrites '+key+':',e?.message||e);
       waitingResolvers.forEach(done=>done(false));
       const latest=readSyncQueue();if(latest[key]){latest[key].attempts=(Number(latest[key].attempts)||0)+1;writeSyncQueue(latest);}
-      setSyncState('error','Còn thay đổi chưa đồng bộ');scheduleSyncRetry();return false;
+      setSyncState('error',e?.message||'Còn thay đổi chưa đồng bộ');scheduleSyncRetry();return false;
     }
   }
   scfRetryAttempt=0;setSyncState('synced');return true;

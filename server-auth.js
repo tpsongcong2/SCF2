@@ -60,9 +60,31 @@ async function serverLoadEmployees(){
   return data.employees;
 }
 
+function serverEmployeeIsPrivileged(employee){
+  const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').trim().toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const role=normalize(employee?.role).replace(/\s+/g,'');
+  return role==='admin'||role==='administrator'||normalize(employee?.permissionProfileId)==='director'||normalize(employee?.dept)==='ban giam doc';
+}
+function sanitizeEmployeesForServer(employees){
+  const source=Array.isArray(employees)?employees:[];
+  const faceMask=window.SCF_APP_VARIANT==='face-mask';
+  const scoped=source.filter(employee=>serverEmployeeIsPrivileged(employee)===faceMask);
+  // Nếu đây là hàng đợi cũ chỉ chứa dữ liệu của app còn lại, giữ nguyên để Edge Function
+  // nhận biết và bảo toàn vùng dữ liệu hiện tại thay vì hiểu nhầm là yêu cầu xóa sạch.
+  if(source.length&&!scoped.length)return source;
+  const ids=new Set(),usernames=new Set(),clean=[];
+  for(const employee of scoped){
+    const id=String(employee?.id||'').trim();
+    const username=String(employee?.username||'').trim().toLowerCase();
+    if(!id||!username||ids.has(id)||usernames.has(username))continue;
+    ids.add(id);usernames.add(username);clean.push(employee);
+  }
+  return clean;
+}
 async function serverSaveEmployees(employees){
   if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'save_employees',employees,appVariant:window.SCF_APP_VARIANT||'scfood'}});
+  const payload=sanitizeEmployeesForServer(employees);
+  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'save_employees',employees:payload,appVariant:window.SCF_APP_VARIANT||'scfood'}});
   if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không lưu được danh sách nhân viên.'));
   return data.employees||employees;
 }

@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V250';
+const SCF_BUILD_VERSION='V251';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -48,6 +48,7 @@ function SyncStatus(){
 
 function App(){
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
+  const employeeStorageKey=isFaceMask?'scf_privileged_employees':'scf_employees';
   const homePage=isFaceMask?'workreport_total':'welcome';
   const[session,setSession]=useLS('scf_session',null);
   const[menuHidden,setMenuHidden]=useLS('scf_topnav_hidden',false);
@@ -98,7 +99,7 @@ function App(){
   window.__SCF_CUSTOMERS=customers||[];
   window.__SCF_PROD_SHIFTS=prodShifts||[];
   window.__SCF_SHIFTS=shifts||[];
-  const setEmployees=mkSet('scf_employees',_se);
+  const setEmployees=mkSet(employeeStorageKey,_se);
   const setCompany=mkSet('scf_company',_sc);
   const setMaterials=mkSet('scf_materials',_sm);
   const setAssets=mkSet('scf_assets',_sas);
@@ -207,7 +208,7 @@ function App(){
     (async()=>{
       try{
         const[e,c,m,assetData,garageData,pc,p,cu,ar,wc,tk,ncc,nccg,pu,pg,q,fp,mo,o,t,a,adv,rw,employeeErrorData,employeeUniformData,lv,dp,permissionProfileData,ui,pts,pa,shData,psData,psrData,fe,fd,fo,newsData,messageData,notificationData,deliveryRulesData,processAccountingPosts,processBunPosts,processPhoPosts,processBanhCuonPosts]=await Promise.all([
-          dbGet('scf_employees',DEF_EMPS),dbGet('scf_company',DEF_COMPANY),
+          dbGet(employeeStorageKey,DEF_EMPS),dbGet('scf_company',DEF_COMPANY),
           dbGet('scf_materials',DEF_MATERIALS),dbGet('scf_assets',[]),dbGet('scf_garages',[]),dbGet('scf_prodcats',DEF_PRODCATS),
           dbGet('scf_products',DEF_PRODUCTS),dbGet('scf_customers',DEF_CUSTOMERS),
           dbGet('scf_areas',DEF_AREAS),
