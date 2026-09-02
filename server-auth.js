@@ -89,6 +89,15 @@ async function serverSaveEmployees(employees){
   return data.employees||employees;
 }
 
+async function serverSaveAutoTrips(trips){
+  if(!sb)throw new Error('Chưa kết nối được máy chủ chuyến tự động.');
+  const{data,error}=await sb.functions.invoke('scf-auth',{
+    body:{action:'save_auto_trips',trips:Array.isArray(trips)?trips:[]}
+  });
+  if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không lưu được chuyến tự động.'));
+  return data.trips||trips;
+}
+
 async function serverChangePassword(employeeId,currentPassword,newPassword,adminReset=false){
   if(!sb)throw new Error('Chưa kết nối được máy chủ đổi mật khẩu.');
   const{data,error}=await sb.functions.invoke('scf-auth',{

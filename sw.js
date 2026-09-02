@@ -1,4 +1,4 @@
-const CACHE = 'scf-v251';
+const CACHE = 'scf-v252';
 const ASSETS = [
   './',
   './index.html',

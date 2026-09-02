@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V251';
+const SCF_BUILD_VERSION='V252';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -124,6 +124,11 @@ function App(){
   const setQuotes=mkSet('scf_quotes',_sq);
   const setOrders=mkSet('scf_orders',_so);
   const setTrips=mkSet('scf_trips',_st);
+  const setAutoTrips=valOrFn=>_st(prev=>{
+    const next=typeof valOrFn==='function'?valOrFn(prev):valOrFn;
+    dbSetAutoTrips(next);
+    return next;
+  });
   const setProdOrders=mkSet('scf_prodorders',_spo);
   const setProdActuals=mkSet('scf_prod_actuals',_spa);
   const setStock=mkSet('scf_stock',_sstk);
@@ -314,7 +319,7 @@ function App(){
       ordersChanged=true;
       return {...order,tripId:trip.id,tripAssignMode:'auto',status:'assigned',updatedAt:fmtDT(),updatedBy:automationUser.name||'Hệ thống'};
     });
-    if(tripsChanged)setTrips(workingTrips);
+    if(tripsChanged)setAutoTrips(workingTrips);
     if(ordersChanged)setOrders(nextOrders);
   },[loading,isFaceMask,session,employees,orders,trips,shifts,prodShifts,customers]);
 
