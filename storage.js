@@ -43,6 +43,7 @@ const SCF_SENSITIVE_KEYS=new Set([
   'scf_employees','scf_privileged_employees','scf_orders','scf_trips','scf_attendance','scf_advances','scf_rewards','scf_employee_errors','scf_leaves',
   'scf_finance_entries','scf_finance_debts','scf_finance_openings','scf_internal_messages','scf_tasks','scf_notifications'
 ]);
+const SCF_EDGE_WRITE_KEYS=new Set(['scf_ncc_goods','scf_goods_purchases']);
 function serverAuthEnabled(){return typeof SCF_SERVER_AUTH_ENABLED!=='undefined'&&SCF_SERVER_AUTH_ENABLED;}
 function localCacheKey(key){return 'scf_'+String(key||'').replace('scf_','');}
 function allowPersistentLocalCache(key){return !serverAuthEnabled()||!SCF_SENSITIVE_KEYS.has(key);}
@@ -94,7 +95,8 @@ window.scfGetSyncReport=function(){
     scf_employees:'Nhân viên SCFOOD',scf_privileged_employees:'Admin & Ban Giám Đốc',scf_orders:'Đơn giao hàng',scf_trips:'Chuyến giao hàng',scf_attendance:'Chấm công',
     scf_advances:'Ứng lương',scf_rewards:'Thưởng phạt',scf_employee_errors:'Lỗi nhân viên',scf_employee_uniforms:'Cấp đồng phục',scf_leaves:'Nghỉ phép',scf_finance_entries:'Dòng tiền',
     scf_finance_debts:'Công nợ',scf_finance_openings:'Số dư đầu kỳ',scf_internal_messages:'Tin nhắn nội bộ',scf_tasks:'Giao việc',scf_notifications:'Thông báo',
-    scf_customers:'Khách hàng',scf_products:'Sản phẩm',scf_materials:'Nguyên vật liệu',scf_quotes:'Báo giá'
+    scf_customers:'Khách hàng',scf_products:'Sản phẩm',scf_materials:'Nguyên vật liệu',scf_quotes:'Báo giá',
+    scf_ncc_goods:'Nhà cung cấp hàng hóa',scf_goods_purchases:'Đơn mua hàng hóa'
   };
   return {
     ...window.scfGetSyncState(),
@@ -199,6 +201,10 @@ async function performDbSet(key,val,queuedAt='',mode=''){
     try{setSyncState('syncing','Đang lưu chuyến tự động');await withRemoteTimeout(serverSaveAutoTrips(val),remoteTimeoutFor(val));removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
     catch(e){console.warn('serverSaveAutoTrips:',e.message);setSyncState('error',e.message||'Không lưu được chuyến tự động');window.showToast&&window.showToast(e.message||'Không lưu được chuyến tự động.','error');scheduleSyncRetry();return false;}
   }
+  if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
+    try{setSyncState('syncing','Đang kiểm tra quyền và đồng bộ');await withRemoteTimeout(serverSavePermittedCollection(key,val),remoteTimeoutFor(val));removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
+    catch(e){console.warn('serverSavePermittedCollection:',e.message);setSyncState('error',e.message||'Không đồng bộ được dữ liệu');window.showToast&&window.showToast(e.message||'Không đồng bộ được dữ liệu.','error');scheduleSyncRetry();return false;}
+  }
   // Chỉ giữ dữ liệu không nhạy cảm lâu dài khi đã bật xác thực máy chủ.
   if(allowPersistentLocalCache(key))try{localStorage.setItem(localCacheKey(key),JSON.stringify(val));}catch(e){console.warn('localStorage save:',e.message);}
   // Sync lên Supabase nếu có
@@ -256,6 +262,7 @@ async function flushPendingWrites(){
       const item=readSyncQueue()[key];if(!item){waitingResolvers.forEach(done=>done(true));continue;}
       if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees'))await withRemoteTimeout(serverSaveEmployees(item.value),remoteTimeoutFor(item.value));
       else if(serverAuthEnabled()&&key==='scf_trips'&&(item.mode==='auto-trips'||(Array.isArray(item.value)&&item.value.some(trip=>trip?.autoCreated))))await withRemoteTimeout(serverSaveAutoTrips(item.value),remoteTimeoutFor(item.value));
+      else if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key))await withRemoteTimeout(serverSavePermittedCollection(key,item.value),remoteTimeoutFor(item.value));
       else{
         const{error}=await withRemoteTimeout(sb.from('kv_store').upsert({key,value:item.value,updated_at:item.updatedAt||new Date().toISOString()}),remoteTimeoutFor(item.value));
         if(error)throw error;

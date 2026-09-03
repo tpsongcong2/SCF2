@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V253';
+const SCF_BUILD_VERSION='V254';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -594,7 +594,7 @@ function App(){
         canAccess(cu.role,'notifications',cu.permissions)&&page==='notifications'&&h(NotificationsTab,{notifications,setNotifications,currentUser:cu,setPage}),
         canAccess(cu.role,'userguide',cu.permissions)&&page==='userguide'&&h(UserGuideTab,{currentUser:cu}),
         canAccess(cu.role,'nccs',cu.permissions)&&page==='nccs'&&h(NCCTab,{nccs,setNCCs,purchases,setPurchases,title:'Nhà CC NVL',fileName:'Nha_CC_NVL'}),
-        canAccess(cu.role,'nccgoods',cu.permissions,cu.dept)&&page==='nccgoods'&&h(NCCTab,{nccs:nccGoods,setNCCs:setNccGoods,purchases:goodsPurchases,setPurchases:setGoodsPurchases,title:'Nhà CC Hàng hóa',fileName:'Nha_CC_Hang_hoa',readOnly:cu.role!=='admin'&&!isAccounting}),
+        canAccess(cu.role,'nccgoods',cu.permissions,cu.dept)&&page==='nccgoods'&&h(NCCTab,{nccs:nccGoods,setNCCs:setNccGoods,purchases:goodsPurchases,setPurchases:setGoodsPurchases,title:'Nhà CC Hàng hóa',fileName:'Nha_CC_Hang_hoa',readOnly:!canWrite(cu.role,'nccgoods',cu.permLevels)}),
         canAccess(cu.role,'purchaseorders',cu.permissions)&&page==='purchaseorders'&&h(PurchaseTab,{purchases,setPurchases,nccs,setNCCs,materials,products,prodCats,cu,setPage,mode:'material'}),
         canAccess(cu.role,'purchasegoods',cu.permissions,cu.dept)&&page==='purchasegoods'&&h(PurchaseTab,{purchases:goodsPurchases,setPurchases:setGoodsPurchases,nccs:nccGoods,setNCCs:setNccGoods,materials,products,prodCats,cu,setPage,mode:'goods'}),
         canAccess(cu.role,'fuelpurchases',cu.permissions)&&page==='fuelpurchases'&&h(FuelPurchaseTab,{rows:fuelPurchases,setRows:setFuelPurchases,employees,assets,currentUser:cu}),

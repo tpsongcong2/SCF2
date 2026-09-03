@@ -102,6 +102,15 @@ async function serverSaveAutoTrips(trips){
   return data.trips||trips;
 }
 
+async function serverSavePermittedCollection(key,value){
+  if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
+  const{data,error}=await sb.functions.invoke('scf-auth',{
+    body:{action:'save_permitted_collection',key:String(key||''),value:Array.isArray(value)?value:[]}
+  });
+  if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không đồng bộ được dữ liệu.'));
+  return data.value||value;
+}
+
 async function serverChangePassword(employeeId,currentPassword,newPassword,adminReset=false){
   if(!sb)throw new Error('Chưa kết nối được máy chủ đổi mật khẩu.');
   const{data,error}=await sb.functions.invoke('scf-auth',{
