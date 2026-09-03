@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V252';
+const SCF_BUILD_VERSION='V253';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -15,6 +15,83 @@ const PTITLES = {
 };
 
 const PROCESS_POST_KEYS={process_accounting:'scf_process_posts_accounting',process_bun:'scf_process_posts_bun',process_pho:'scf_process_posts_pho',process_banhcuon:'scf_process_posts_banhcuon'};
+
+// Every editable page must load all of its input collections before mounting.
+// Names below are kv_store keys without the scf_ prefix; employees load separately.
+const SCF_PAGE_DATA={
+  welcome:['company_news','internal_messages'], company:[], appearance:[],
+  printtemplates:['print_template_settings','products','customers'],
+  employees:['depts','permission_profiles'], permission_settings:['permission_profiles'],
+  attendance:['attendance'],attendance_settings:['attendance'],attendance_report:['attendance'],workreport_total:['attendance'],
+  advances:['advances'],rewards:['rewards'],employee_errors:['employee_errors'],employee_uniforms:['employee_uniforms'],leaves:['leaves'],
+  materials:['materials','purchases'],assets:['assets'],garages:['garages'],
+  products:['products','prodcats'],depts:['depts','workcats'],workcats:['workcats','depts'],
+  customers:['customers','shifts','orders','areas'],areas:['areas','customers','orders'],
+  prodshifts:['prod_shifts','prod_shift_rules','orders','customers','shifts'],deliveryrules:['delivery_rules'],
+  tasks:['tasks','workcats'],notifications:[],userguide:[],
+  nccs:['nccs','purchases'],nccgoods:['ncc_goods','goods_purchases'],
+  purchaseorders:['purchases','nccs','materials','products','prodcats'],
+  purchasegoods:['goods_purchases','ncc_goods','materials','products','prodcats'],
+  fuelpurchases:['fuelpurchases','assets'],utilityexpenses:['finance_entries'],fuelreport:['fuelpurchases'],
+  purchasereport:['purchases','goods_purchases','nccs','ncc_goods'],maintreport:[],
+  materialusage:['materials','purchases','material_month_openings'],powderdebtreport:['customers'],
+  maint_vehicle:['assets','garages'],maint_machine:['assets'],shifts:['shifts','trips'],
+  quotes:['quotes','customers','products'],intem:['products'],
+  delivery:['orders','customers','products','prodcats','quotes','trips','prod_shifts','prod_shift_rules','shifts','print_template_settings'],
+  trips:['trips','orders','shifts','prod_shifts','customers','products','quotes','finance_debts'],
+  orderdetail:['orders','products','customers','shifts','trips','prod_shifts','quotes','finance_debts'],
+  workreport_lx:['trips','orders','products','customers'],
+  salesreport:['orders','customers','products','prod_shifts','quotes'],
+  cashflowreport:['finance_entries','finance_debts','finance_openings','customers','nccs','orders','products','quotes','purchases','goods_purchases'],
+  powdersales:['customers','trips'],prodsummary:['orders','products','prod_shifts','prod_shift_rules','prod_actuals'],
+  prodorders:['prodorders','products'],stock:['stock','products','prodcats'],
+  syncreport:[],purchase:[],workreport_vp:[],workreport_sx:[],marketsales:[]
+};
+function scfPageDataKeys(page,allKeys){
+  const keys=['company','ui_settings','notifications'];
+  if(page==='backup'||page==='dbusage')return [...new Set([...keys,...allKeys])];
+  if(PROCESS_POST_KEYS[page])keys.push(PROCESS_POST_KEYS[page].replace(/^scf_/,''));
+  else keys.push(...(SCF_PAGE_DATA[page]||[]));
+  return [...new Set(keys)];
+}
+function createScfDataLoader(read,apply){
+  const loaded=new Set(),pending=new Map();let disposed=false;
+  return {
+    loaded,
+    dispose(){disposed=true;},
+    load(key,refresh=false){
+      if(disposed)return Promise.resolve();
+      if(pending.has(key))return pending.get(key);
+      if(loaded.has(key)&&!refresh)return Promise.resolve();
+      const task=Promise.resolve().then(()=>read(key)).then(value=>{
+        if(disposed)return;
+        apply(key,value);loaded.add(key);
+      }).finally(()=>pending.delete(key));
+      pending.set(key,task);return task;
+    }
+  };
+}
+const scfScriptLoads=new Map();
+function scfLoadOptionalScript(name,url){
+  if(window[name])return Promise.resolve();
+  if(scfScriptLoads.has(name))return scfScriptLoads.get(name);
+  const task=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    const timer=setTimeout(()=>fail(),20000);
+    function fail(){clearTimeout(timer);script.remove();reject(new Error('Chưa tải được công cụ Excel. Kiểm tra kết nối rồi thử tải lại.'));}
+    script.src=url;script.async=true;script.crossOrigin='anonymous';
+    script.onload=()=>{clearTimeout(timer);if(window[name])resolve();else fail();};
+    script.onerror=fail;document.head.appendChild(script);
+  }).catch(error=>{scfScriptLoads.delete(name);throw error;});
+  scfScriptLoads.set(name,task);return task;
+}
+function scfEnsurePageTools(page){
+  if(['welcome','company','appearance','userguide','notifications','syncreport','permission_settings'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
+  return Promise.all([
+    scfLoadOptionalScript('JSZip','https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'),
+    scfLoadOptionalScript('XLSX','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js')
+  ]);
+}
 
 const PICONS = {
   garages:'ti-building-store',
@@ -52,7 +129,7 @@ function App(){
   const homePage=isFaceMask?'workreport_total':'welcome';
   const[session,setSession]=useLS('scf_session',null);
   const[menuHidden,setMenuHidden]=useLS('scf_topnav_hidden',false);
-  const[employees,_se]=useState(DEF_EMPS);
+  const[employees,_se]=useState(SCF_SERVER_AUTH_ENABLED?[]:DEF_EMPS);
   const[company,_sc]=useState(DEF_COMPANY);
   const[materials,_sm]=useState(DEF_MATERIALS);
   const[assets,_sas]=useState([]);
@@ -159,21 +236,43 @@ function App(){
     return {...(prev||{}),[processPage]:next};
   });
   const refreshCommunityData=React.useCallback(async()=>{
-    const[newsData,messageData,notificationData]=await Promise.all([
-      dbGet('scf_company_news',[]),
-      dbGet('scf_internal_messages',[]),
-      dbGet('scf_notifications',[])
-    ]);
-    _snews(newsData||[]);
-    _sim(messageData||[]);
-    _snotifications(notificationData||[]);
+    try{await Promise.all(['company_news','internal_messages','notifications'].map(key=>dataLoaderRef.current.load(key,true)));}
+    catch(error){window.showToast?.(error.message||'Chưa làm mới được dữ liệu.','error');}
   },[]);
   const[loading,setLoading]=useState(true);
   const[col,setCol]=useState(false);
   const[page,setPage]=useLS(isFaceMask?'facemask_last_page':'scf_last_page',homePage);
+  const[authEmployee,setAuthEmployee]=useState(null);
+  const[bootError,setBootError]=useState('');
+  const[bootAttempt,setBootAttempt]=useState(0);
+  const[pageError,setPageError]=useState('');
+  const[pageAttempt,setPageAttempt]=useState(0);
+  const[readyPage,setReadyPage]=useState(null);
+  const[autoSyncReady,setAutoSyncReady]=useState(true);
+  const dataLoaderRef=React.useRef(null);
+  const cu=SCF_SERVER_AUTH_ENABLED
+    ?(authEmployee&&(employees.find(e=>String(e.id)===String(authEmployee.id))||authEmployee))
+    :(session?employees.find(e=>String(e.id)===String(session.id)):null);
+  const resources={
+    company:[DEF_COMPANY,_sc,v=>({...DEF_COMPANY,...v})],ui_settings:[DEF_UI_SETTINGS,_sui,normalizeUiSettings],
+    materials:[[],_sm],assets:[[],_sas],garages:[[],_sg],prodcats:[[],_spc],
+    products:[[],_sp,v=>v.map(normalizeProductWeight)],customers:[[],_scu],areas:[[],_sar],
+    workcats:[[],_swc],depts:[[],_sdp],permission_profiles:[DEFAULT_PERMISSION_PROFILES,_spermissionProfiles,normalizePermissionProfiles],
+    tasks:[[],_stasks],nccs:[[],_sncc],ncc_goods:[[],_snccg],purchases:[[],_spu],goods_purchases:[[],_spg],
+    fuelpurchases:[[],_sfp],material_month_openings:[[],_smo],quotes:[[],_sq],
+    orders:[[],_so,normalizeOrdersForStorage],trips:[[],_st],prodorders:[[],_spo],stock:[[],_sstk],
+    attendance:[[],_sa],advances:[[],_sadv],rewards:[[],_srw],employee_errors:[[],_see],employee_uniforms:[[],_seu],leaves:[[],_slv],
+    print_template_settings:[DEF_PRINT_TEMPLATE_SETTINGS,_spt,normalizePrintTemplateSettings],prod_actuals:[{},_spa],
+    shifts:[[],_ssh],prod_shifts:[[],_sps],prod_shift_rules:[[],_spr],
+    finance_entries:[[],_sfe],finance_debts:[[],_sfd],finance_openings:[[],_sfo],
+    company_news:[[],_snews],internal_messages:[[],_sim],notifications:[[],_snotifications],delivery_rules:[[],_sdr],
+    ...Object.fromEntries(Object.entries(PROCESS_POST_KEYS).map(([name,key])=>[key.replace(/^scf_/,''),[[],value=>_spp(prev=>({...prev,[name]:value}))]]))
+  };
+  const requiredKeys=scfPageDataKeys(page,Object.keys(resources));
+  const pageReady=readyPage===page&&!pageError;
   const browserNavReadyRef=React.useRef(false);
   const browserPopRef=React.useRef(false);
-  const[serverAuthReady,setServerAuthReady]=useState(!SCF_SERVER_AUTH_ENABLED);
+  const[serverAuthReady,setServerAuthReady]=useState(false);
   useEffect(()=>{
     const onPopState=e=>{
       browserPopRef.current=true;
@@ -201,41 +300,51 @@ function App(){
     else setPage(homePage);
   };
   useEffect(()=>{
-    if(!SCF_SERVER_AUTH_ENABLED)return;
-    getServerAuthSession().then(serverSession=>{
-      const employeeId=serverSession?.user?.app_metadata?.employee_id;
-      setSession(employeeId?{id:employeeId}:null);
-    }).catch(()=>setSession(null)).finally(()=>setServerAuthReady(true));
-  },[]);
-  useEffect(()=>{
-    if(!serverAuthReady)return;
-    const loadingGuard=setTimeout(()=>setLoading(false),8000);
+    let cancelled=false;
+    setLoading(true);setBootError('');setServerAuthReady(false);setAuthEmployee(null);setReadyPage(null);
+    window.__SCF_CURRENT_EMPLOYEE=null;
+    dataLoaderRef.current?.dispose();
+    const loader=createScfDataLoader(
+      key=>dbGetRequired('scf_'+key,resources[key][0]),
+      (key,value)=>{const[,setter,normalize]=resources[key];setter(normalize?normalize(value):value);}
+    );
+    dataLoaderRef.current=loader;
     (async()=>{
       try{
-        const[e,c,m,assetData,garageData,pc,p,cu,ar,wc,tk,ncc,nccg,pu,pg,q,fp,mo,o,t,a,adv,rw,employeeErrorData,employeeUniformData,lv,dp,permissionProfileData,ui,pts,pa,shData,psData,psrData,fe,fd,fo,newsData,messageData,notificationData,deliveryRulesData,processAccountingPosts,processBunPosts,processPhoPosts,processBanhCuonPosts]=await Promise.all([
-          dbGet(employeeStorageKey,DEF_EMPS),dbGet('scf_company',DEF_COMPANY),
-          dbGet('scf_materials',DEF_MATERIALS),dbGet('scf_assets',[]),dbGet('scf_garages',[]),dbGet('scf_prodcats',DEF_PRODCATS),
-          dbGet('scf_products',DEF_PRODUCTS),dbGet('scf_customers',DEF_CUSTOMERS),
-          dbGet('scf_areas',DEF_AREAS),
-          dbGet('scf_workcats',DEF_WORKCATS),dbGet('scf_tasks',[]),dbGet('scf_nccs',[]),dbGet('scf_ncc_goods',[]),dbGet('scf_purchases',[]),dbGet('scf_goods_purchases',[]),dbGet('scf_quotes',[]),
-          dbGet('scf_fuelpurchases',[]),
-          dbGet('scf_material_month_openings',[]),
-          dbGet('scf_orders',[]),dbGet('scf_trips',[]),dbGet('scf_attendance',[]),
-          dbGet('scf_advances',[]),dbGet('scf_rewards',[]),dbGet('scf_employee_errors',[]),dbGet('scf_employee_uniforms',[]),dbGet('scf_leaves',[]),dbGet('scf_depts',DEF_DEPTS),dbGet('scf_permission_profiles',DEFAULT_PERMISSION_PROFILES),dbGet('scf_ui_settings',DEF_UI_SETTINGS),dbGet('scf_print_template_settings',DEF_PRINT_TEMPLATE_SETTINGS),dbGet('scf_prod_actuals',{}),
-          dbGet('scf_shifts',D_SHIFTS),dbGet('scf_prod_shifts',DEF_PROD_SHIFTS),dbGet('scf_prod_shift_rules',DEF_PROD_SHIFT_RULES),
-          dbGet('scf_finance_entries',[]),dbGet('scf_finance_debts',[]),dbGet('scf_finance_openings',[]),
-          dbGet('scf_company_news',[]),dbGet('scf_internal_messages',[]),dbGet('scf_notifications',[]),dbGet('scf_delivery_rules',[]),
-          dbGet(PROCESS_POST_KEYS.process_accounting,[]),dbGet(PROCESS_POST_KEYS.process_bun,[]),dbGet(PROCESS_POST_KEYS.process_pho,[]),dbGet(PROCESS_POST_KEYS.process_banhcuon,[]),
-        ]);
-        const normalizedOrders=normalizeOrdersForStorage(o||[]);
-        const normalizedProducts=(p||[]).map(normalizeProductWeight);
-        _se(e||DEF_EMPS);_sc({...DEF_COMPANY,...(c||{})});_sm(m);_sas(assetData);_sg(garageData||[]);_spc(pc);_sp(normalizedProducts);_scu(cu);_sar(ar);_swc(wc);_stasks(tk);_sncc(ncc);_snccg(nccg);_spu(pu);_spg(pg);_sfp(fp);_smo(mo);_ssh(shData);_sq(q);_so(normalizedOrders);_st(t);_sa(a);_sadv(adv);_srw(rw);_see(employeeErrorData||[]);_seu(employeeUniformData||[]);_slv(lv);_sdp(dp);_spermissionProfiles(normalizePermissionProfiles(permissionProfileData));_sui(normalizeUiSettings(ui));_spt(normalizePrintTemplateSettings(pts));_spa(pa||{});_sps(psData);_spr(psrData);_sfe(fe||[]);_sfd(fd||[]);_sfo(fo||[]);_snews(newsData||[]);_sim(messageData||[]);_snotifications(notificationData||[]);_sdr(deliveryRulesData||[]);_spp({process_accounting:processAccountingPosts||[],process_bun:processBunPosts||[],process_pho:processPhoPosts||[],process_banhcuon:processBanhCuonPosts||[]});
-        if(ordersNeedTimeNormalization(o||[]))dbSet('scf_orders',normalizedOrders);
-        if((p||[]).some((item,index)=>Number(item?.weightPerUnit||0)!==Number(normalizedProducts[index]?.weightPerUnit||0)))dbSet('scf_products',normalizedProducts);
-      }catch(err){console.warn(err);}finally{clearTimeout(loadingGuard);setLoading(false);}
+        if(SCF_SERVER_AUTH_ENABLED){
+          const authSession=await withRemoteTimeout(getServerAuthSession(),15000);
+          if(cancelled)return;
+          if(!authSession){setSession(null);_se([]);return;}
+          const employeeId=String(authSession.user?.app_metadata?.employee_id||'');
+          if(!employeeId)throw new Error('Phiên đăng nhập thiếu mã nhân viên. Vui lòng đăng nhập lại.');
+          const context=await withRemoteTimeout(serverLoadEmployeeContext(),15000);
+          if(cancelled)return;
+          const current=context.currentEmployee;
+          if(!current||String(current.id)!==employeeId)throw new Error('Chưa tải được hồ sơ của tài khoản đang đăng nhập.');
+          window.__SCF_CURRENT_EMPLOYEE=current;
+          _se(context.employees);setAuthEmployee(current);setSession({id:current.id});
+        }else{
+          const rows=await dbGet(employeeStorageKey,DEF_EMPS);
+          if(cancelled)return;
+          _se(rows);
+        }
+      }catch(err){if(!cancelled)setBootError(err.message||'Không tải được hồ sơ đăng nhập.');}
+      finally{if(!cancelled){setServerAuthReady(true);setLoading(false);}}
     })();
-    return()=>clearTimeout(loadingGuard);
-  },[serverAuthReady]);
+    return()=>{cancelled=true;loader.dispose();};
+  },[bootAttempt]);
+  useEffect(()=>{
+    if(!serverAuthReady||bootError||!cu)return;
+    if(isFaceMask&&!['admin','administrator'].includes(String(cu.role||'').toLowerCase()))return;
+    if(!canAccess(cu.role,page,cu.permissions,cu.dept))return;
+    let cancelled=false;
+    setReadyPage(null);setPageError('');
+    const loader=dataLoaderRef.current;
+    Promise.all([...requiredKeys.map(key=>loader.load(key)),scfEnsurePageTools(page)])
+      .then(()=>{if(!cancelled){setAutoSyncReady(true);setReadyPage(page);}})
+      .catch(error=>{if(!cancelled)setPageError(error.message||'Không tải được dữ liệu màn hình.');});
+    return()=>{cancelled=true;};
+  },[serverAuthReady,bootError,cu?.id,page,pageAttempt]);
   useEffect(()=>{
     const vars=uiSettingsToCssVars(uiSettings);
     Object.entries(vars).forEach(([key,val])=>document.documentElement.style.setProperty(key,val));
@@ -252,22 +361,31 @@ function App(){
   },[]);
 
   useEffect(()=>{
-    if(loading||!sb)return;
+    if(loading||bootError||!cu||!pageReady||!sb)return;
+    const keys=requiredKeys.filter(key=>['orders','trips','notifications'].includes(key));
+    let stopped=false,busy=false;
     const refresh=async()=>{
+      if(stopped||busy||document.hidden||!navigator.onLine)return;
+      busy=true;
+      const tripRefresh=keys.includes('orders')&&keys.includes('trips');
+      if(tripRefresh)setAutoSyncReady(false);
       try{
-        const[o,t,n]=await Promise.all([dbGet('scf_orders',orders),dbGet('scf_trips',trips),dbGet('scf_notifications',notifications)]);
-        _so(normalizeOrdersForStorage(o||[]));_st(t||[]);_snotifications(n||[]);
+        const results=await Promise.allSettled(keys.map(key=>dataLoaderRef.current.load(key,true)));
+        if(tripRefresh&&!stopped&&results.every(result=>result.status==='fulfilled'))setAutoSyncReady(true);
       }catch(e){console.warn('Auto sync:',e.message||e);}
+      finally{busy=false;}
     };
-    const tm=setInterval(refresh,5000);
+    const tm=setInterval(refresh,15000);
+    document.addEventListener('visibilitychange',refresh);
     window.scfSyncNow=refresh;
-    return()=>clearInterval(tm);
-  },[loading]);
+    return()=>{stopped=true;clearInterval(tm);document.removeEventListener('visibilitychange',refresh);if(window.scfSyncNow===refresh)delete window.scfSyncNow;};
+  },[loading,bootError,cu?.id,page,pageReady]);
 
   /* ── TỰ TÌM/TẠO CHUYẾN CHỈ KHI CÓ ĐƠN CHƯA XẾP ── */
   useEffect(()=>{
-    const automationUser=session?(employees.find(e=>String(e.id)===String(session.id))||null):null;
-    if(loading||isFaceMask||!automationUser||!canAccess(automationUser.role,'delivery',automationUser.permissions,automationUser.dept)||!canWrite(automationUser.role,'delivery',automationUser.permLevels)||!shifts?.length||!prodShifts?.length)return;
+    const automationUser=cu;
+    const tripInputsReady=['orders','trips','shifts','prod_shifts','customers'].every(key=>dataLoaderRef.current?.loaded.has(key));
+    if(loading||!pageReady||!autoSyncReady||!tripInputsReady||!['delivery','trips','orderdetail'].includes(page)||isFaceMask||!automationUser||!canAccess(automationUser.role,'delivery',automationUser.permissions,automationUser.dept)||!canWrite(automationUser.role,'delivery',automationUser.permLevels)||!shifts?.length||!prodShifts?.length)return;
     const norm=v=>normalizeLookupText(v||'');
     const sameDate=(a,b)=>String(a||'').trim()===String(b||'').trim();
     const usableTrip=t=>!['active','completion_pending','completed','cancelled'].includes(String(t?.status||''));
@@ -321,9 +439,8 @@ function App(){
     });
     if(tripsChanged)setAutoTrips(workingTrips);
     if(ordersChanged)setOrders(nextOrders);
-  },[loading,isFaceMask,session,employees,orders,trips,shifts,prodShifts,customers]);
+  },[loading,pageReady,autoSyncReady,page,isFaceMask,session,employees,orders,trips,shifts,prodShifts,customers]);
 
-  const cu=session?(employees.find(e=>e.id===session.id)||(String(window.__SCF_CURRENT_EMPLOYEE?.id||'')===String(session.id)?window.__SCF_CURRENT_EMPLOYEE:null)):null;
   const addNotification=React.useCallback(data=>{
     const recipientIds=[...new Set((data?.recipientIds||[data?.recipientId]).filter(Boolean).map(String))];
     if(!recipientIds.length)return;
@@ -360,6 +477,13 @@ function App(){
   useEffect(()=>{
     if(cu&&!canAccess(cu.role,page,cu.permissions,cu.dept))setPage(homePage);
   },[cu?.id,cu?.role,cu?.dept,page]);
+  if(bootError)return h('div',{className:'login-bg'},h('div',{className:'login-card',role:'alert'},
+    h('h2',null,'Chưa tải được hồ sơ đăng nhập'),
+    h('p',null,'App chưa xác định được hồ sơ của bạn. Không cần thay đổi quyền hay nhập lại đơn hàng.'),
+    h('p',null,bootError),
+    h('button',{className:'bp',onClick:()=>setBootAttempt(v=>v+1)},'Thử tải lại'),
+    h('button',{className:'bb',onClick:async()=>{await serverLogout();setSession(null);setBootAttempt(v=>v+1);}},'Đăng nhập lại')
+  ));
   if(loading)return h('div',{className:'load-screen'},
     isFaceMask?h('div',{className:'face-mask-load-icon'},h('i',{className:'ti ti-mask'})):h('div',{className:'load-logo-shell'},
       h('img',{src:'icon-192.png',className:'load-logo',alt:'Logo Thực Phẩm Sông Công'})
@@ -384,7 +508,7 @@ function App(){
     await dbSet('scf_employees',next);
     window.showToast&&window.showToast('Đã tạo tài khoản Admin. Hãy đăng nhập để tiếp tục.','success');
   }});
-  if(!cu)return h(LoginPage,{employees,onLogin:u=>{setSession({id:u.id});if(SCF_SERVER_AUTH_ENABLED)setTimeout(()=>location.reload(),50);}});
+  if(!cu)return h(LoginPage,{employees,onLogin:u=>{setSession({id:u.id});if(SCF_SERVER_AUTH_ENABLED)setBootAttempt(v=>v+1);}});
   if(isFaceMask&&!['admin','administrator'].includes(String(cu.role||'').toLowerCase()))return h('div',{className:'login-bg'},
     h('div',{className:'login-card',style:{textAlign:'center'}},
       h('div',{className:'face-mask-login-icon',style:{margin:'0 auto 12px'}},h('i',{className:'ti ti-shield-lock'})),
@@ -436,6 +560,10 @@ function App(){
         className:'content'+(menuHidden?' compact-top':'')+(page!=='welcome'?' mobile-subpage-content':'')+(readOnly?' scf-readonly':'')+(activeLevel!=='rwd'?' scf-no-delete':''),
         onClickCapture:e=>guardPermissionAction(e,cu.role,page,cu.permLevels)
       },
+        !pageReady?h('div',{className:'card',role:pageError?'alert':'status',style:{padding:24}},
+          h('p',null,pageError||'Đang tải dữ liệu '+(PTITLES[page]||'màn hình')+'…'),
+          pageError&&h('button',{className:'bp',onClick:()=>setPageAttempt(v=>v+1)},'Thử tải lại')
+        ):h(React.Fragment,null,
         canAccess(cu.role,page)&&page==='welcome'&&h(WelcomePage,{emp:cu,employees,company,uiSettings,news:companyNews,setNews:setCompanyNews,messages:internalMessages,setMessages:setInternalMessages,onRefresh:refreshCommunityData}),
         canAccess(cu.role,'company',cu.permissions,cu.dept)&&page==='company'&&h(CompanySettings,{company,setCompany,canEdit:canWrite(cu.role,'company',cu.permLevels)}),
         canAccess(cu.role,'appearance',cu.permissions)&&page==='appearance'&&h(AppearanceSettingsTab,{uiSettings,setUiSettings}),
@@ -495,6 +623,7 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         canAccess(cu.role,'dbusage',cu.permissions)&&page==='dbusage'&&h(SupabaseUsageReportTab,{employees,materials,assets,prodCats,products,customers,areas,workcats,tasks,nccs,purchases,goodsPurchases,quotes,orders,trips,attendance,advances,rewards,employeeErrors,employeeUniforms,leaves,depts,shifts,prodShifts,prodShiftRules,prodOrders,stock,company}),
         ['process_accounting','process_bun','process_pho','process_banhcuon'].includes(page)&&h(ProcessPostsTab,{page,title:PTITLES[page],icon:PICONS[page],items:processPosts[page]||[],setItems:setProcessPosts(page),currentUser:cu}),
         wips.includes(page)&&h(PlaceholderTab,{title:PTITLES[page],icon:PICONS[page]||'ti-clock'})
+        )
       ),
       (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cu.dept,onLogout:logout})
     ),

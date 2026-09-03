@@ -52,10 +52,14 @@ async function serverLogout(){
   if(SCF_SERVER_AUTH_ENABLED&&sb)try{await sb.auth.signOut();}catch(e){console.warn('Server logout:',e.message);}
 }
 
-async function serverLoadEmployees(){
+async function serverLoadEmployeeContext(){
   if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
   const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'load_employees',appVariant:window.SCF_APP_VARIANT||'scfood'}});
   if(error||!Array.isArray(data?.employees))throw new Error(await serverFunctionErrorMessage(error,data,'Không tải được danh sách nhân viên.'));
+  return data;
+}
+async function serverLoadEmployees(){
+  const data=await serverLoadEmployeeContext();
   window.__SCF_CURRENT_EMPLOYEE=data.currentEmployee||null;
   return data.employees;
 }

@@ -135,6 +135,31 @@ document.addEventListener('keydown',e=>{
     openNativeDatePicker(el);
   }
 },true);
+// Startup/page loads must fail visibly, never treat a network error as an empty
+// editable collection. Keep the legacy offline fallback for older standalone tabs.
+const scfLocalWrites=new Map();
+async function dbGetRequired(key,def){
+  if(!serverAuthEnabled())return dbGet(key,def);
+  if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
+  const pending=readSyncQueue()[key];
+  if(pending)return pending.value;
+  const before=scfLocalWrites.get(key);
+  try{
+    const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('value').eq('key',key).maybeSingle());
+    if(error)throw error;
+    // An edit made while this request was in flight wins over its old snapshot,
+    // including an edit whose queued write has already finished.
+    const latest=scfLocalWrites.get(key),queued=readSyncQueue()[key];
+    if(queued)return queued.value;
+    if(latest!==before)return latest.value;
+    const value=data&&Object.prototype.hasOwnProperty.call(data,'value')?data.value:def;
+    if(Array.isArray(def)&&!Array.isArray(value))throw new Error('Dữ liệu trả về không đúng định dạng.');
+    return value;
+  }catch(error){
+    setSyncState(navigator.onLine?'error':'offline','Không tải được '+key);
+    throw new Error('Không tải được '+key+': '+(error.message||'Lỗi kết nối'));
+  }
+}
 async function dbGet(key,def){
   if(serverAuthEnabled()){
     if(!sb){setSyncState('error','Không kết nối được máy chủ');return def;}
@@ -188,6 +213,7 @@ async function performDbSet(key,val,queuedAt='',mode=''){
 const scfWriteChains={};
 const scfDebouncedWrites={};
 function dbSetWithMode(key,val,mode=''){
+  scfLocalWrites.set(key,{value:val});
   if(allowPersistentLocalCache(key))try{localStorage.setItem(localCacheKey(key),JSON.stringify(val));}catch(e){console.warn('localStorage save:',e.message);}
   const queuedAt=queueRemoteWrite(key,val,{syncing:true,detail:'Đang chuẩn bị đồng bộ',mode});
   return new Promise(resolve=>{
