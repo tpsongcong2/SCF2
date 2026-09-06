@@ -1,10 +1,10 @@
 /* Cấu hình quyền mặc định theo chức vụ. */
 const SCF_PERMISSION_SECTIONS=[
   {sec:'Giới thiệu công ty',pages:[['company','Giới thiệu công ty']]},
-  {sec:'Cài đặt',pages:[['appearance','Cài đặt giao diện'],['printtemplates','Mẫu in Excel'],['employees','Nhân viên'],['permission_settings','Cài đặt phân quyền'],['backup','Backup dữ liệu']]},
+  {sec:'Cài đặt',pages:[['appearance','Cài đặt giao diện'],['printtemplates','Mẫu in Excel'],['employees','Nhân viên'],['permission_settings','Cài đặt phân quyền'],['backup','Backup dữ liệu'],['prodshifts','Cài đặt ca SX + ca GH tự động']]},
   {sec:'Nhân sự',pages:[['attendance','Chấm công'],['attendance_settings','Cài đặt chấm công'],['attendance_report','Báo cáo chấm công'],['advances','Ứng lương'],['rewards','Thưởng phạt'],['employee_errors','Ghi lỗi nhân viên'],['employee_uniforms','Cấp đồng phục nhân viên'],['leaves','Xin nghỉ'],['tasks','Giao việc']]},
   {sec:'Báo công & quy trình',pages:[['workreport_vp','Công kế toán'],['workreport_sx','Công sản xuất'],['workreport_lx','Công lái xe'],['workreport_total','Tổng công'],['process_accounting','Quy trình kế toán'],['process_bun','Quy trình sản xuất Bún'],['process_pho','Quy trình sản xuất Phở'],['process_banhcuon','Quy trình sản xuất Bánh cuốn']]},
-  {sec:'Danh mục',pages:[['materials','Nguyên vật liệu'],['assets','Tài sản'],['garages','Gara ô tô'],['depts','Bộ phận'],['products','Sản phẩm'],['customers','Khách hàng'],['areas','Khu vực'],['prodshifts','Ca sản xuất'],['deliveryrules','Quy định giao hàng'],['workcats','Danh mục công việc'],['shifts','Ca giao hàng']]},
+  {sec:'Danh mục',pages:[['materials','Nguyên vật liệu'],['assets','Tài sản'],['garages','Gara ô tô'],['depts','Bộ phận'],['products','Sản phẩm'],['customers','Khách hàng'],['areas','Khu vực'],['deliveryrules','Quy định giao hàng'],['workcats','Danh mục công việc'],['shifts','Ca giao hàng']]},
   {sec:'Bán hàng',pages:[['quotes','Báo giá'],['delivery','Đơn giao hàng'],['intem','In tem'],['orderdetail','Chi tiết đơn hàng'],['trips','Chuyến giao hàng'],['marketsales','Báo cáo công nợ'],['powdersales','Bán bột bún']]},
   {sec:'Mua hàng & bảo dưỡng',pages:[['nccgoods','Nhà cung cấp hàng hóa'],['purchasegoods','Mua hàng hóa'],['fuelpurchases','Mua xăng dầu'],['utilityexpenses','Chi phí điện nước'],['maint_vehicle','Bảo dưỡng xe'],['maint_machine','Bảo dưỡng máy']]},
   {sec:'Sản xuất',pages:[['prodsummary','Tổng hợp sản xuất'],['prodorders','Đơn sản xuất'],['stock','Tồn kho']]},
