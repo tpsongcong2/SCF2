@@ -2076,6 +2076,85 @@ function SupabaseUsageReportTab({employees,materials,assets,prodCats,products,cu
 }
 
 /* --- Báo cáo bán hàng --- */
+function SalesDebtReportTab({orders,customers,products}){
+  const today=isoDate();
+  const [fromDate,setFromDate]=useState(today.slice(0,7)+'-01');
+  const [toDate,setToDate]=useState(today);
+  const [customerId,setCustomerId]=useState('');
+  const [pointKey,setPointKey]=useState('');
+  const dateValue=value=>{const parsed=parseAnyDate(value);return parsed?parsed.getTime():NaN;};
+  const deliveredOrders=(orders||[]).filter(order=>!!(order.driverCompletedAt||order.accountingConfirmedAt)||String(order.status||'').toLowerCase()==='done');
+  const deliveredQty=line=>line.qtyDelivered!==undefined&&line.qtyDelivered!==''?(numFmt(line.qtyDelivered)||0):(numFmt(line.qtyInvoice)||0);
+  const customerOptions=[...new Map(deliveredOrders.map(order=>{
+    const customer=(customers||[]).find(item=>String(item.id||'')===String(order.customerId||''));
+    const id=String(order.customerId||customer?.id||order.customer||'');
+    return[id,{id,label:customer?.name||order.customer||id||'Chưa xác định'}];
+  }).filter(([id])=>id)).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
+  const customerMatch=order=>!customerId||String(order.customerId||order.customer||'')===customerId;
+  const pointIdentity=order=>String(order.pointId||order.pointName||order.address||'');
+  const pointOptions=[...new Map(deliveredOrders.filter(customerMatch).map(order=>{
+    const key=pointIdentity(order);return[key,{key,label:order.pointName||order.address||'Chưa xác định'}];
+  }).filter(([key])=>key)).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
+  const fromTime=fromDate?dateValue(fromDate):NaN,toTime=toDate?dateValue(toDate):NaN;
+  const filtered=deliveredOrders.filter(order=>{
+    const time=dateValue(order.deliveryDate||order.date);
+    if(Number.isFinite(fromTime)&&(!Number.isFinite(time)||time<fromTime))return false;
+    if(Number.isFinite(toTime)&&(!Number.isFinite(time)||time>toTime))return false;
+    if(!customerMatch(order))return false;
+    if(pointKey&&pointIdentity(order)!==pointKey)return false;
+    return true;
+  }).sort((a,b)=>dateValue(b.deliveryDate||b.date)-dateValue(a.deliveryDate||a.date));
+  const productMap=new Map();
+  filtered.forEach(order=>(order.lines||[]).forEach(line=>{
+    const product=(products||[]).find(item=>String(item.id||'')===String(line.productId||''));
+    const key=String(line.productId||line.productName||product?.name||'unknown');
+    const current=productMap.get(key)||{key,name:line.productName||product?.name||'Chưa xác định',unit:line.unit||product?.unit||'',invoice:0,delivered:0,orders:0};
+    current.invoice+=numFmt(line.qtyInvoice)||0;
+    current.delivered+=deliveredQty(line);
+    current.orders+=1;productMap.set(key,current);
+  }));
+  const productRows=[...productMap.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi'));
+  const totals=filtered.reduce((sum,order)=>{sum.invoice+=(order.lines||[]).reduce((value,line)=>value+(numFmt(line.qtyInvoice)||0),0);sum.delivered+=(order.lines||[]).reduce((value,line)=>value+deliveredQty(line),0);return sum;},{invoice:0,delivered:0});
+  const qty=value=>(numFmt(value)||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
+  return h('div',null,
+    h('div',{className:'ptitle'},h('i',{className:'ti ti-report-money'}),'Báo cáo công nợ'),
+    h('div',{className:'card',style:{marginBottom:14}},
+      h('div',{className:'g2'},
+        h(F,{label:'Từ ngày'},h('input',{type:'date',value:fromDate,onChange:event=>setFromDate(event.target.value)})),
+        h(F,{label:'Đến ngày'},h('input',{type:'date',value:toDate,onChange:event=>setToDate(event.target.value)}))
+      ),
+      h('div',{className:'g2'},
+        h(F,{label:'Khách hàng'},h('select',{value:customerId,onChange:event=>{setCustomerId(event.target.value);setPointKey('');}},h('option',{value:''},'Tất cả khách hàng'),customerOptions.map(item=>h('option',{key:item.id,value:item.id},item.label)))),
+        h(F,{label:'Địa điểm'},h('select',{value:pointKey,onChange:event=>setPointKey(event.target.value)},h('option',{value:''},'Tất cả địa điểm'),pointOptions.map(item=>h('option',{key:item.key,value:item.key},item.label))))
+      )
+    ),
+    h('div',{className:'g3',style:{marginBottom:14}},
+      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Đơn đã giao'),h('div',{style:{fontSize:24,fontWeight:700,color:'var(--pri3)'}},filtered.length.toLocaleString('vi-VN'))),
+      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Tổng SL hóa đơn'),h('div',{style:{fontSize:24,fontWeight:700}},qty(totals.invoice))),
+      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Tổng SL đã giao'),h('div',{style:{fontSize:24,fontWeight:700,color:'var(--pri)'}},qty(totals.delivered)))
+    ),
+    h('div',{className:'card',style:{marginBottom:14}},
+      h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:10}},'Tổng hợp sản phẩm đã giao'),
+      h('div',{className:'tw'},h('table',null,
+        h('thead',null,h('tr',null,...['STT','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch'].map(label=>h('th',{key:label},label)))),
+        h('tbody',null,productRows.length?productRows.map((row,index)=>h('tr',{key:row.key},h('td',null,index+1),h('td',null,h('b',null,row.name)),h('td',null,row.unit||'—'),h('td',null,qty(row.invoice)),h('td',null,h('b',{style:{color:'var(--pri)'}},qty(row.delivered))),h('td',null,qty(row.delivered-row.invoice)))):h('tr',null,h('td',{colSpan:6,className:'empty-st'},'Không có sản phẩm đã giao theo bộ lọc.')))
+      ))
+    ),
+    h('div',{className:'card'},
+      h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:10}},'Các đơn hàng đã giao'),
+      h('div',{className:'tw'},h('table',null,
+        h('thead',null,h('tr',null,...['Ngày giao','Mã đơn','Khách hàng','Địa điểm','Sản phẩm','SL hóa đơn','SL đã giao'].map(label=>h('th',{key:label},label)))),
+        h('tbody',null,filtered.length?filtered.map(order=>{
+          const invoice=(order.lines||[]).reduce((sum,line)=>sum+(numFmt(line.qtyInvoice)||0),0);
+          const delivered=(order.lines||[]).reduce((sum,line)=>sum+deliveredQty(line),0);
+          const detail=(order.lines||[]).map(line=>(line.productName||'Sản phẩm')+': '+qty(deliveredQty(line))+(line.unit?' '+line.unit:'')).join('; ');
+          return h('tr',{key:order.id},h('td',null,fmtAnyDate(order.deliveryDate||order.date)||'—'),h('td',null,h('b',null,order.orderId||order.id||'—')),h('td',null,order.customer||'—'),h('td',null,order.pointName||order.address||'—'),h('td',{style:{minWidth:240}},detail||'—'),h('td',null,qty(invoice)),h('td',null,h('b',{style:{color:'var(--pri)'}},qty(delivered))));
+        }):h('tr',null,h('td',{colSpan:7,className:'empty-st'},'Không có đơn đã giao theo bộ lọc.')))
+      ))
+    )
+  );
+}
+
 function SalesReportTab({orders,customers,products,shifts,quotes}) {
   const _td2=fmtDate();const _ti2=_td2.split('/').reverse().join('-');const _mr2=reportMonthDateRange(_ti2.slice(0,7));const [df,sdf]=useState(_mr2.from); const [dt,sdt]=useState(_mr2.to);
   const [period,setPeriod]=useState('month'); const [monthVal,setMonthVal]=useState(_ti2.slice(0,7)); const [weekVal,setWeekVal]=useState('');
