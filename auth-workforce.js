@@ -80,7 +80,7 @@ function LoginPage({employees,onLogin}){
       ),
       h('button',{className:'bp',onClick:submit,disabled:busy,style:{width:'100%',padding:'10px',fontSize:15,justifyContent:'center',marginTop:4}},h('i',{className:'ti '+(busy?'ti-loader-2 spin':'ti-login'),style:{fontSize:16}}),busy?'Đang kiểm tra...':'Đăng nhập'),
       h('button',{type:'button',className:'bb',onClick:()=>setResetOpen(true),style:{width:'100%',justifyContent:'center',marginTop:'1rem',border:0,background:'transparent',color:'var(--pri)'}},
-        h('i',{className:'ti ti-key'}),'Admin quên mật khẩu?'
+        h('i',{className:'ti ti-key'}),'Quên mật khẩu'
       )
     ),
     resetOpen&&h(AdminPasswordReset,{initialUsername:un,onClose:()=>setResetOpen(false)})
@@ -97,12 +97,12 @@ function AdminPasswordReset({initialUsername,onClose}){
   const[message,setMessage]=useState('');
   const[error,setError]=useState('');
   const sendCode=async()=>{
-    if(!username.trim()){setError('Hãy nhập tên đăng nhập Admin.');return;}
+    if(!username.trim()){setError('Hãy nhập tên đăng nhập.');return;}
     setBusy(true);setError('');
     try{
       await requestAdminPasswordReset(username);
       setStep(2);
-      setMessage('Nếu tài khoản Admin và email khôi phục hợp lệ, mã 6 số đã được gửi. Mã có hiệu lực 10 phút.');
+      setMessage('Nếu thông tin hợp lệ, mã 6 số đã được gửi tới email khôi phục. Mã có hiệu lực 10 phút.');
     }catch(e){setError(e.message||'Không thể gửi mã khôi phục.');}
     finally{setBusy(false);}
   };
@@ -113,19 +113,19 @@ function AdminPasswordReset({initialUsername,onClose}){
     setBusy(true);setError('');
     try{
       await confirmAdminPasswordReset(username,code,password);
-      setMessage('Đã đổi mật khẩu Admin. App sẽ tải lại để đăng nhập bằng mật khẩu mới.');
+      setMessage('Đã đổi mật khẩu. App sẽ tải lại để đăng nhập bằng mật khẩu mới.');
       setTimeout(()=>location.reload(),1200);
     }catch(e){setError(e.message||'Không thể đặt lại mật khẩu.');}
     finally{setBusy(false);}
   };
-  return h(Modal,{title:'Khôi phục mật khẩu Admin',onClose,big:false},
+  return h(Modal,{title:'Khôi phục mật khẩu',onClose,big:false},
     h('div',{style:{maxWidth:520}},
       h('div',{style:{padding:'10px 12px',borderRadius:8,background:'#eef7f2',marginBottom:14,fontSize:13}},
-        h('b',null,'Bảo mật: '),'Mã chỉ gửi tới email khôi phục đã lưu trong hồ sơ Admin, hết hạn sau 10 phút và chỉ dùng được một lần.'
+        h('b',null,'Bảo mật: '),'Mã chỉ gửi tới email khôi phục đã lưu, hết hạn sau 10 phút và chỉ dùng được một lần.'
       ),
       error&&h('div',{style:{background:'#fce8e8',color:'#a32d2d',padding:'9px 12px',borderRadius:7,marginBottom:12}},error),
       message&&h('div',{style:{background:'#e8f3ff',color:'#175a91',padding:'9px 12px',borderRadius:7,marginBottom:12}},message),
-      h(F,{label:'Tên đăng nhập Admin *'},
+      h(F,{label:'Tên đăng nhập *'},
         h('input',{value:username,disabled:step===2,onChange:e=>{setUsername(e.target.value);setError('');},autoComplete:'username'})
       ),
       step===2&&h(Fragment,null,
