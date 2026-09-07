@@ -484,7 +484,11 @@ function AdditionalTripOrderForm({trip,customers,products,onSave,onClose}){
 function tripImageRows(trip,orders,products){
   const ids=new Set((trip.orderIds||[]).map(String));
   return orders.filter(order=>order.status!=='cancelled'&&(order.tripId?String(order.tripId)===String(trip.id):ids.has(String(order.id))))
-    .sort((a,b)=>String(a.deliveryDate||'').localeCompare(String(b.deliveryDate||''))||String(a.deliveryTime||'').padStart(5,'0').localeCompare(String(b.deliveryTime||'').padStart(5,'0')))
+    .sort((a,b)=>{
+      const av=numFmt(a.deliveryOrder??a.deliverySeq??a.deliveryIndex),bv=numFmt(b.deliveryOrder??b.deliverySeq??b.deliveryIndex);
+      const ao=av>0?av:Number.MAX_SAFE_INTEGER,bo=bv>0?bv:Number.MAX_SAFE_INTEGER;
+      return ao-bo||String(a.deliveryDate||'').localeCompare(String(b.deliveryDate||''))||String(a.deliveryTime||'').padStart(5,'0').localeCompare(String(b.deliveryTime||'').padStart(5,'0'))||String(a.pointName||a.customer||'').localeCompare(String(b.pointName||b.customer||''),'vi');
+    })
     .flatMap(order=>(order.lines||[]).map(line=>{
       const product=products.find(p=>String(p.id)===String(line.productId));
       return [order.deliveryDate||trip.deliveryDate||'',order.pointName||order.address||'—',line.productName||product?.name||'—',numFmt(line.qtyProd),line.unit||product?.unit||'',normalizeTimeInput(order.deliveryTime||trip.deliveryTime||''),[order.note,line.note].filter(Boolean).join(' · ')];
@@ -515,7 +519,7 @@ function renderTripImage(trips,orders,products,title){
     const color=index%2?'#e3effb':'#e6f2de';
     const driverName=tripImageDriverName(trip.driverName);
     blocks.push({cells:['Lái xe','Ngày giao','Địa điểm','Sản phẩm','SL đặt','ĐVT','Giờ giao','Chú ý'],fill:'#b9d3e8',bold:true});
-    rows.forEach(row=>blocks.push({cells:[driverName,...row],fill:'#ffffff'}));
+    rows.forEach(row=>blocks.push({cells:[driverName,...row],fill:normalizePlainText(row[2])==='banh cuon'?'#fff1a8':'#ffffff'}));
     const totals=new Map();rows.forEach(row=>totals.set(row[4],(totals.get(row[4])||0)+row[3]));
     blocks.push({cells:'Tổng chuyến: '+[...totals].map(([unit,qty])=>qty.toLocaleString('vi-VN',{maximumFractionDigits:2})+' '+unit).join(' · ')+(rows.length?'':'Không có sản phẩm'),fill:color,bold:true});
   });

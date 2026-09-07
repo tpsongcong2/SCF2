@@ -2155,8 +2155,33 @@ function SalesDebtReportTab({orders,customers,products,trips=[]}){
   const productRows=[...productMap.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi'));
   const totals=filtered.reduce((sum,order)=>{sum.invoice+=(order.lines||[]).reduce((value,line)=>value+(numFmt(line.qtyInvoice)||0),0);sum.delivered+=(order.lines||[]).reduce((value,line)=>value+deliveredQty(line),0);return sum;},{invoice:0,delivered:0});
   const qty=value=>(numFmt(value)||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
+  const exportExcel=()=>{
+    if(!window.XLSX){window.showToast('Công cụ Excel chưa tải xong. Vui lòng thử lại.','warn');return;}
+    const customerLabel=customerOptions.find(item=>item.id===customerId)?.label||'Tất cả khách hàng';
+    const pointLabel=pointOptions.find(item=>item.key===pointKey)?.label||'Tất cả địa điểm';
+    const overview=[
+      ['BÁO CÁO ĐƠN HÀNG ĐÃ GIAO'],['Từ ngày',fmtAnyDate(fromDate)||fromDate],['Đến ngày',fmtAnyDate(toDate)||toDate],
+      ['Khách hàng',customerLabel],['Địa điểm',pointLabel],[],['Số đơn đã giao',filtered.length],
+      ['Tổng SL hóa đơn',totals.invoice],['Tổng SL đã giao',totals.delivered],['Chênh lệch',totals.delivered-totals.invoice]
+    ];
+    const productsData=[['STT','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch'],...productRows.map((row,index)=>[index+1,row.name,row.unit||'',row.invoice,row.delivered,row.delivered-row.invoice])];
+    const ordersData=[['Ngày giao','Mã đơn','Khách hàng','Địa điểm','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch']];
+    filtered.forEach(order=>(order.lines||[]).forEach(line=>ordersData.push([
+      fmtAnyDate(order.deliveryDate||order.date)||'',order.orderId||order.id||'',order.customer||'',order.pointName||order.address||'',
+      line.productName||'',line.unit||'',numFmt(line.qtyInvoice)||0,deliveredQty(line),deliveredQty(line)-(numFmt(line.qtyInvoice)||0)
+    ])));
+    const wb=XLSX.utils.book_new();
+    [['Tong quan',overview],['Tong hop san pham',productsData],['Don da giao',ordersData]].forEach(([name,data])=>{
+      const ws=XLSX.utils.aoa_to_sheet(data);ws['!cols']=data[0].map((_,column)=>({wch:Math.min(45,Math.max(12,...data.map(row=>String(row[column]??'').length+2)))}));
+      XLSX.utils.book_append_sheet(wb,ws,name);
+    });
+    XLSX.writeFile(wb,'Bao_cao_don_da_giao_'+(fromDate||'')+'_'+(toDate||'')+'.xlsx');
+  };
   return h('div',null,
-    h('div',{className:'ptitle'},h('i',{className:'ti ti-report-money'}),'Báo cáo công nợ'),
+    h('div',{className:'ptitle',style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}},
+      h('span',null,h('i',{className:'ti ti-report-money'}),'Báo cáo công nợ'),
+      h(ExportBtn,{onClick:exportExcel})
+    ),
     h('div',{className:'card',style:{marginBottom:14}},
       h('div',{className:'g2'},
         h(F,{label:'Từ ngày'},h('input',{type:'date',value:fromDate,onChange:event=>setFromDate(event.target.value)})),
