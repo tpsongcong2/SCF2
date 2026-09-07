@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V258';
+const SCF_BUILD_VERSION='V259';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -34,7 +34,7 @@ const SCF_PAGE_DATA={
   purchasegoods:['goods_purchases','ncc_goods','materials','products','prodcats'],
   fuelpurchases:['fuelpurchases','assets'],utilityexpenses:['finance_entries'],fuelreport:['fuelpurchases'],
   purchasereport:['purchases','goods_purchases','nccs','ncc_goods'],maintreport:[],
-  materialusage:['materials','purchases','material_month_openings'],powderdebtreport:['customers'],marketsales:['orders','customers','products'],
+  materialusage:['materials','purchases','material_month_openings'],powderdebtreport:['customers'],marketsales:['orders','customers','products','trips'],
   maint_vehicle:['assets','garages'],maint_machine:['assets'],shifts:['shifts','trips'],
   quotes:['quotes','customers','products'],intem:['products'],
   delivery:['orders','customers','products','prodcats','quotes','trips','prod_shifts','prod_shift_rules','shifts','print_template_settings'],
@@ -614,7 +614,7 @@ function App(){
         canAccess(cu.role,'workreport_lx',cu.permissions,cu.dept)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,orders,products,customers,currentUser:cu}),
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,trips,currentUser:cu,prodShifts,quotes,financeDebts,setFinanceDebts,menuHidden,setMenuHidden}),
         canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),
-        canAccess(cu.role,'marketsales',cu.permissions)&&page==='marketsales'&&h(SalesDebtReportTab,{orders,customers,products}),
+        canAccess(cu.role,'marketsales',cu.permissions)&&page==='marketsales'&&h(SalesDebtReportTab,{orders,customers,products,trips}),
 canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(FinanceReportTab,{entries:financeEntries,setEntries:setFinanceEntries,debts:financeDebts,setDebts:setFinanceDebts,openings:financeOpenings,setOpenings:setFinanceOpenings,customers,nccs,currentUser:cu,orders,products,quotes,purchases,goodsPurchases}),
         canAccess(cu.role,'powdersales',cu.permissions)&&page==='powdersales'&&h(PowderSalesTab,{customers,trips,employees,setPage}),
         canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products,prodShifts,prodShiftRules,prodActuals,setProdActuals,currentUser:cu}),

@@ -2076,23 +2076,31 @@ function SupabaseUsageReportTab({employees,materials,assets,prodCats,products,cu
 }
 
 /* --- Báo cáo bán hàng --- */
-function SalesDebtReportTab({orders,customers,products}){
+function SalesDebtReportTab({orders,customers,products,trips=[]}){
   const today=isoDate();
   const [fromDate,setFromDate]=useState(today.slice(0,7)+'-01');
   const [toDate,setToDate]=useState(today);
   const [customerId,setCustomerId]=useState('');
   const [pointKey,setPointKey]=useState('');
-  const dateValue=value=>{const parsed=parseAnyDate(value);return parsed?parsed.getTime():NaN;};
-  const deliveredOrders=(orders||[]).filter(order=>!!(order.driverCompletedAt||order.accountingConfirmedAt)||String(order.status||'').toLowerCase()==='done');
+  const dateValue=value=>{const text=String(value||'').trim();const vn=text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);const iso=text.match(/^(\d{4})-(\d{2})-(\d{2})/);return vn?new Date(+vn[3],+vn[2]-1,+vn[1]).getTime():iso?new Date(+iso[1],+iso[2]-1,+iso[3]).getTime():NaN;};
+  const completedTrips=trips.filter(trip=>['completion_pending','completed'].includes(trip.status));
+  const completedOrderIds=new Set(completedTrips.flatMap(trip=>trip.orderIds||[]).map(String));
+  const deliveredOrders=(orders||[]).filter(order=>!['cancelled','failed'].includes(order.status)&&(!!(order.driverCompletedAt||order.accountingConfirmedAt)||order.status==='done'||completedOrderIds.has(String(order.id))||completedTrips.some(trip=>String(trip.id)===String(order.tripId))||(order.lines||[]).some(line=>line.deliveredAt||Number(line.qtyDelivered)>0)));
   const deliveredQty=line=>line.qtyDelivered!==undefined&&line.qtyDelivered!==''?(numFmt(line.qtyDelivered)||0):(numFmt(line.qtyInvoice)||0);
-  const customerOptions=[...new Map(deliveredOrders.map(order=>{
+  const customerOptions=[...new Map([...(customers||[]).map(customer=>[String(customer.id||customer.name),{id:String(customer.id||customer.name),label:customer.name||customer.id}]),...(orders||[]).map(order=>{
     const customer=(customers||[]).find(item=>String(item.id||'')===String(order.customerId||''));
     const id=String(order.customerId||customer?.id||order.customer||'');
     return[id,{id,label:customer?.name||order.customer||id||'Chưa xác định'}];
-  }).filter(([id])=>id)).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
-  const customerMatch=order=>!customerId||String(order.customerId||order.customer||'')===customerId;
-  const pointIdentity=order=>String(order.pointId||order.pointName||order.address||'');
-  const pointOptions=[...new Map(deliveredOrders.filter(customerMatch).map(order=>{
+  }).filter(([id])=>id)]).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
+  const customerFor=order=>(customers||[]).find(customer=>order.customerId?String(customer.id)===String(order.customerId):String(customer.name||'').trim()===String(order.customer||'').trim());
+  const customerMatch=order=>!customerId||String(customerFor(order)?.id||order.customerId||order.customer||'')===customerId;
+  const pointIdentity=order=>{
+    const customer=customerFor(order);
+    const point=(customer?.points||[]).find(point=>order.pointId?String(point.id)===String(order.pointId):String(point.name||'').trim()===String(order.pointName||'').trim());
+    return JSON.stringify([String(customer?.id||order.customerId||order.customer||''),String(point?.id||order.pointId||order.pointName||order.address||'')]);
+  };
+  const catalogPoints=(customers||[]).filter(customer=>!customerId||String(customer.id||customer.name)===customerId).flatMap(customer=>(customer.points||[]).map(point=>({customerId:customer.id,customer:customer.name,pointId:point.id,pointName:point.name,address:point.address})));
+  const pointOptions=[...new Map([...catalogPoints,...(orders||[]).filter(customerMatch)].map(order=>{
     const key=pointIdentity(order);return[key,{key,label:order.pointName||order.address||'Chưa xác định'}];
   }).filter(([key])=>key)).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
   const fromTime=fromDate?dateValue(fromDate):NaN,toTime=toDate?dateValue(toDate):NaN;
