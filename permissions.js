@@ -81,7 +81,10 @@ function canAccess(role, page, perms, dept='') {
   const isAccounting=String(dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('ke toan');
   if(page==='garages'&&role==='admin') return true;
   if(page==='deliveryrules') return true;
-  if(page==='employee_errors'&&(role==='admin'||role==='manager')) return true;
+  // Admin luôn được quản trị lỗi nhân viên. Quản lý phải tuân theo quyền
+  // được cấu hình riêng; nếu `employee_errors` không có trong `perms` thì
+  // menu và trang đều phải bị chặn.
+  if(page==='employee_errors'&&role==='admin') return true;
   if(page==='notifications') return ['admin','manager','staff','driver'].includes(role);
   if(page==='userguide') return ['admin','manager','staff','driver'].includes(role);
   if(page==='company') return ['admin','manager','staff','driver'].includes(role);

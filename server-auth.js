@@ -120,7 +120,7 @@ async function serverSavePermittedCollection(key,value,expectedUpdatedAt=''){
     body:{action:'save_permitted_collection',key:String(key||''),value:Array.isArray(value)?value:[],enforceVersion:true,expectedUpdatedAt:String(expectedUpdatedAt||'')}
   });
   if(data?.conflict){
-    const conflict=new Error('Dữ liệu vừa được người khác cập nhật. Thay đổi của bạn chưa được lưu; hệ thống đang tải bản mới nhất.');
+    const conflict=new Error('Dữ liệu trên máy chủ vừa thay đổi'+(data.actorName?' bởi '+data.actorName:'')+'. Thay đổi của bạn chưa được lưu; hệ thống đang tải bản mới nhất.');
     conflict.code='SCF_WRITE_CONFLICT';throw conflict;
   }
   if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không đồng bộ được dữ liệu.'));
