@@ -2629,8 +2629,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const buildClassicLabelSvg=(it,o)=>{
     const l=it.line;
     const product=l.productName||'';
-    const nsx=it.plan?.prodDate||o.deliveryDate||'';
-    const gioSx=(it.plan?.prodTime||'').replace(':','H').replace(/H00$/,'H');
+    const nsx=it.plan?.labelDate||o.deliveryDate||'';
+    const gioSx=(it.plan?.labelTime||'').replace(':','H').replace(/H00$/,'H');
     const kgNum=Number(it.kg).toLocaleString('vi-VN',{maximumFractionDigits:2});
     const pName=product.toUpperCase();
     const directUse=pName.includes('BÚN LÁ')||pName.includes('BUN LA')||pName.includes('BÁNH CUỐN')||pName.includes('BANH CUON')||pName.includes('BÁNH PHỞ CUỐN')||pName.includes('BANH PHO CUON');
@@ -2668,8 +2668,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const pointName=String(matchedPoint?.name||o.pointName||'KHO VẬN').toUpperCase();
     const product=cleanPacProductName(l.productName||'');
     const kgNum=Number(it.kg||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
-    const nsx=it.plan?.prodDate||o.deliveryDate||'';
-    const gioSx=String(it.plan?.prodTime||'').replace(':','H').replace(/H00$/,'H')||'';
+    const nsx=it.plan?.labelDate||o.deliveryDate||'';
+    const gioSx=String(it.plan?.labelTime||'').replace(':','H').replace(/H00$/,'H')||'';
     return (
       '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">'+
         '<rect width="1000" height="1000" fill="white"/>'+
@@ -2713,12 +2713,24 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const title=isPacMode?'In tem kho vận ':'In tem ';
     const printOrders=(Array.isArray(ordersForPrint)?ordersForPrint:[ordersForPrint]).filter(Boolean);
     const orderSummary=buildPrintOrderSummaryHtml(printOrders);
-    const cards=labels.map(it=>{
+    const groups=new Map();
+    labels.forEach(it=>{
+      const order=it.order||printOrders[0]||{};
+      const key=JSON.stringify([order.customerId||order.customer||'',order.pointId||order.pointName||order.address||'',order.deliveryDate||'',normalizeTimeInput(order.deliveryTime||'')]);
+      if(!groups.has(key))groups.set(key,{order,labels:[]});
+      groups.get(key).labels.push(it);
+    });
+    const cards=[...groups.values()].map(group=>{
+      const order=group.order;
+      const separatorSvg='<svg xmlns="http://www.w3.org/2000/svg" width="580" height="400" viewBox="0 0 580 400"><rect width="580" height="400" fill="white"/><rect x="10" y="10" width="560" height="380" fill="none" stroke="black" stroke-width="3"/><text x="290" y="65" text-anchor="middle" font-family="Arial" font-size="30">ĐỊA ĐIỂM GIAO HÀNG</text><foreignObject x="25" y="85" width="530" height="160"><div xmlns="http://www.w3.org/1999/xhtml" style="font:bold 38px Arial;text-align:center;overflow-wrap:anywhere">'+esc(order.pointName||order.address||order.pointId||'Chưa có địa điểm')+'</div></foreignObject><text x="290" y="290" text-anchor="middle" font-family="Arial" font-size="34">Ngày giao: '+esc(order.deliveryDate||'—')+'</text><text x="290" y="350" text-anchor="middle" font-family="Arial" font-size="36" font-weight="bold">Giờ giao: '+esc(normalizeTimeInput(order.deliveryTime||'')||'—')+'</text></svg>';
+      const separator='<section class="label"><img class="label-img'+(isClassic58?' classic58-img':'')+'" alt="Tem địa điểm và lịch giao hàng" src="data:image/svg+xml;charset=utf-8,'+encodeURIComponent(separatorSvg)+'"></section>';
+      return separator+group.labels.map(it=>{
       const product=it.line?.productName||'';
       const orderForLabel=it.order||printOrders[0]||{};
       const svg=isPacMode?buildPacLabelSvg(it,orderForLabel):buildClassicLabelSvg(it,orderForLabel);
       const src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
       return '<section class="label'+(isClassic58?' classic58':'')+'"><img class="label-img'+(isClassic58?' classic58-img':'')+'" alt="Tem '+esc(product)+'" src="'+src+'"></section>';
+      }).join('');
     }).join('');
     const w=window.open('','_blank');
     if(!w){window.showToast('Trình duyệt đang chặn cửa sổ in tem. Hãy cho phép popup rồi thử lại.','warn');return;}
