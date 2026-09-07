@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V262';
+const SCF_BUILD_VERSION='V264';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -118,7 +118,8 @@ function SyncStatus(){
   const item=map[state?.status]||map.idle;
   const label=state?.pending?item[0]+' ('+state.pending+')':item[0];
   const retry=()=>{if(state?.pending&&state?.status!=='syncing')window.scfFlushPendingWrites?.();};
-  return h('span',{className:'sync-status sync-'+(state?.status||'idle'),title:state?.pending?'Bấm để đồng bộ lại':(state?.detail||label),'aria-live':'polite',role:state?.pending?'button':undefined,tabIndex:state?.pending?0:undefined,onClick:retry,onKeyDown:event=>{if(state?.pending&&(event.key==='Enter'||event.key===' ')){event.preventDefault();retry();}},style:state?.pending?{cursor:'pointer'}:null},
+  const title=state?.detail?(state.detail+(state?.pending?' — Bấm để đồng bộ lại':'')):(state?.pending?'Bấm để đồng bộ lại':label);
+  return h('span',{className:'sync-status sync-'+(state?.status||'idle'),title,'aria-live':'polite',role:state?.pending?'button':undefined,tabIndex:state?.pending?0:undefined,onClick:retry,onKeyDown:event=>{if(state?.pending&&(event.key==='Enter'||event.key===' ')){event.preventDefault();retry();}},style:state?.pending?{cursor:'pointer'}:null},
     h('i',{className:'ti '+item[1]+(state?.status==='syncing'?' spin':'')}),label
   );
 }
@@ -222,6 +223,7 @@ function App(){
   const setFinanceOpenings=mkSet('scf_finance_openings',_sfo);
   const mkCommunitySet=(key,setter)=>valOrFn=>setter(prev=>{
     const next=typeof valOrFn==='function'?valOrFn(prev):valOrFn;
+    if(next===prev)return prev;
     dbSet(key,next);
     return next;
   });
@@ -450,10 +452,21 @@ function App(){
       type:data.type||'info',icon:data.icon||'ti-bell',sourceType:data.sourceType||'',sourceId:data.sourceId||'',
       targetPage:data.targetPage||'notifications',createdAt:stamp,createdAtIso:nowIso,createdBy:cu?.name||'Hệ thống',readAt:''
     }));
-    setNotifications(prev=>[...rows,...(prev||[])].slice(0,2000));
+    setNotifications(prev=>data?.dedupeKey&&(prev||[]).some(item=>item.sourceType==='sync-error'&&item.sourceId===data.dedupeKey&&!item.readAt)?prev:[...rows,...(prev||[])].slice(0,2000));
     setTimeout(()=>window.scfFlushPendingWrites&&window.scfFlushPendingWrites(),900);
     return rows.length;
   },[cu?.id,cu?.name]);
+  useEffect(()=>{
+    if(loading||!pageReady||!cu||isFaceMask)return;
+    const saveSyncError=event=>{
+      const detail=event?.detail||window.__SCF_LAST_SYNC_ERROR;
+      if(!detail?.message||!detail?.fingerprint||detail.key==='scf_notifications')return;
+      addNotification({recipientId:cu.id,title:'Lỗi đồng bộ cần kiểm tra',message:detail.message,type:'error',icon:'ti-alert-triangle',sourceType:'sync-error',sourceId:detail.fingerprint,dedupeKey:detail.fingerprint,targetPage:detail.key==='scf_orders'?'delivery':'notifications'});
+    };
+    window.addEventListener('scf-sync-error-notification',saveSyncError);
+    if(window.__SCF_LAST_SYNC_ERROR)saveSyncError({detail:window.__SCF_LAST_SYNC_ERROR});
+    return()=>window.removeEventListener('scf-sync-error-notification',saveSyncError);
+  },[loading,pageReady,cu?.id,isFaceMask,addNotification]);
   const notificationReadyRef=React.useRef(false);
   useEffect(()=>{
     if(loading||!cu)return;

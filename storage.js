@@ -37,8 +37,15 @@ const DB_REMOTE_TIMEOUT_MS=10000;
 const DB_REMOTE_MAX_TIMEOUT_MS=30000;
 const SCF_SYNC_DEBOUNCE_MS=700;
 const SCF_SYNC_QUEUE_KEY='scf_sync_queue_v1';
+const SCF_SYNC_LABELS={
+  scf_employees:'Nhân viên SCFOOD',scf_privileged_employees:'Admin & Ban Giám Đốc',scf_orders:'Đơn giao hàng',scf_trips:'Chuyến giao hàng',scf_attendance:'Chấm công',
+  scf_advances:'Ứng lương',scf_rewards:'Thưởng phạt',scf_employee_errors:'Lỗi nhân viên',scf_employee_uniforms:'Cấp đồng phục',scf_leaves:'Nghỉ phép',scf_finance_entries:'Dòng tiền',
+  scf_finance_debts:'Công nợ',scf_finance_openings:'Số dư đầu kỳ',scf_internal_messages:'Tin nhắn nội bộ',scf_tasks:'Giao việc',scf_notifications:'Thông báo',
+  scf_customers:'Khách hàng',scf_products:'Sản phẩm',scf_materials:'Nguyên vật liệu',scf_quotes:'Báo giá',scf_ncc_goods:'Nhà cung cấp hàng hóa',scf_goods_purchases:'Đơn mua hàng hóa'
+};
 let scfMemorySyncQueue={};
 let scfMemorySyncQueueReady=false;
+let scfLastSyncErrorNotice={message:'',at:0};
 const SCF_SENSITIVE_KEYS=new Set([
   'scf_employees','scf_privileged_employees','scf_orders','scf_trips','scf_attendance','scf_advances','scf_rewards','scf_employee_errors','scf_leaves',
   'scf_finance_entries','scf_finance_debts','scf_finance_openings','scf_internal_messages','scf_tasks','scf_notifications'
@@ -78,6 +85,44 @@ function setSyncState(status,detail=''){
   }
   window.__SCF_SYNC_STATE={status,detail,pending,updatedAt:new Date().toISOString()};
   window.dispatchEvent(new CustomEvent('scf-sync-state',{detail:window.__SCF_SYNC_STATE}));
+}
+function syncCollectionLabel(key){return SCF_SYNC_LABELS[key]||String(key||'').replace(/^scf_/,'').replaceAll('_',' ');}
+function duplicateItemGroups(value){
+  if(!Array.isArray(value))return [];
+  const groups=new Map();
+  value.forEach(item=>{const id=String(item?.id||'').trim();if(id)groups.set(id,[...(groups.get(id)||[]),item]);});
+  return [...groups.entries()].filter(([,items])=>items.length>1).map(([id,items])=>({id,items}));
+}
+function syncOrderActor(order){
+  const history=Array.isArray(order?.orderHistory)?order.orderHistory:[];
+  return order?.updatedBy||order?.createdBy||history[history.length-1]?.by||'không rõ người tạo/cập nhật';
+}
+function duplicateOrderMessage(groups){
+  const details=groups.slice(0,3).map(group=>{
+    const records=group.items.slice(0,3).map((order,index)=>(index+1)+') ngày '+(order?.deliveryDate||'chưa có')+', địa điểm '+(order?.pointName||order?.address||order?.customer||'chưa có')+', người tạo/cập nhật '+syncOrderActor(order));
+    return 'mã đơn hàng '+group.id+' bị trùng: '+records.join('; ');
+  });
+  return details.join(' | ')+(groups.length>3?' | …':'' );
+}
+function syncErrorMessage(key,error,value){
+  const reason=String(error?.message||error||'Không đồng bộ được dữ liệu');
+  const groups=/mã bị trùng/i.test(reason)?duplicateItemGroups(value):[];
+  if(key==='scf_orders'&&groups.length)return syncCollectionLabel(key)+': '+duplicateOrderMessage(groups);
+  const ids=groups.map(group=>group.id);
+  return syncCollectionLabel(key)+': '+(ids.length?'trùng mã '+ids.slice(0,5).join(', ')+(ids.length>5?'…':''):reason);
+}
+function reportSyncError(key,error,value){
+  const message=syncErrorMessage(key,error,value);setSyncState('error',message);
+  const now=Date.now();
+  if(window.showToast&&(scfLastSyncErrorNotice.message!==message||now-scfLastSyncErrorNotice.at>60000)){
+    scfLastSyncErrorNotice={message,at:now};window.showToast(message,'error',12000);
+  }
+  if(key!=='scf_notifications'){
+    let hash=0;for(let i=0;i<message.length;i++)hash=((hash<<5)-hash+message.charCodeAt(i))|0;
+    const detail={key,message,fingerprint:'sync-'+key+'-'+Math.abs(hash)};
+    window.__SCF_LAST_SYNC_ERROR=detail;
+    window.dispatchEvent(new CustomEvent('scf-sync-error-notification',{detail}));
+  }
 }
 function syncPayloadBytes(value){try{return new Blob([JSON.stringify(value??null)]).size;}catch{return 0;}}
 function remoteTimeoutFor(value){return Math.min(DB_REMOTE_MAX_TIMEOUT_MS,DB_REMOTE_TIMEOUT_MS+Math.ceil(syncPayloadBytes(value)/65536)*750);}
@@ -229,7 +274,7 @@ async function performDbSet(key,val,queuedAt='',mode=''){
         window.showToast&&window.showToast(e.message,'warn',8000);
         setTimeout(()=>window.scfSyncNow?.(),300);return false;
       }
-      setSyncState('error',e.message||'Không đồng bộ được dữ liệu');window.showToast&&window.showToast(e.message||'Không đồng bộ được dữ liệu.','error');scheduleSyncRetry();return false;
+      reportSyncError(key,e,val);scheduleSyncRetry();return false;
     }
   }
   // Chỉ giữ dữ liệu không nhạy cảm lâu dài khi đã bật xác thực máy chủ.
@@ -310,7 +355,7 @@ async function flushPendingWrites(){
         setTimeout(()=>window.scfSyncNow?.(),300);return false;
       }
       const latest=readSyncQueue();if(latest[key]){latest[key].attempts=(Number(latest[key].attempts)||0)+1;writeSyncQueue(latest);}
-      setSyncState('error',e?.message||'Còn thay đổi chưa đồng bộ');scheduleSyncRetry();return false;
+      reportSyncError(key,e,item.value);scheduleSyncRetry();return false;
     }
   }
   scfRetryAttempt=0;setSyncState('synced');return true;
