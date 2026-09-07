@@ -171,7 +171,7 @@ window.scfGetSyncReport=function(){
     ...window.scfGetSyncState(),
     online:navigator.onLine,
     serverReady:!!sb,
-    items:Object.entries(queue).map(([key,item])=>({key,label:labels[key]||key.replace(/^scf_/,'').replaceAll('_',' '),updatedAt:item?.updatedAt||'',bytes:Number(item?.bytes)||syncPayloadBytes(item?.value),attempts:Number(item?.attempts)||0,mode:item?.mode||''}))
+    items:Object.entries(queue).map(([key,item])=>({key,label:labels[key]||key.replace(/^scf_/,'').replaceAll('_',' '),updatedAt:item?.updatedAt||'',bytes:Number(item?.bytes)||syncPayloadBytes(item?.value),recordCount:Array.isArray(item?.value)?item.value.length:(item?.value&&typeof item.value==='object'?Object.keys(item.value).length:1),attempts:Number(item?.attempts)||0,mode:item?.mode||''}))
   };
 };
 function withRemoteTimeout(promise,ms=DB_REMOTE_TIMEOUT_MS){
