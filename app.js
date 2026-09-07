@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V275';
+const SCF_BUILD_VERSION='V276';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -120,11 +120,12 @@ function SyncStatus(){
   const label=state?.pending?item[0]+' ('+state.pending+')':item[0];
   const report=reportOpen&&window.scfGetSyncReport?window.scfGetSyncReport():null;
   const reportRows=(report?.items||[]).map(row=>h('div',{key:row.key,style:{padding:'10px 12px',border:'1px solid var(--bd)',borderRadius:'var(--r)',background:'var(--bg2)'}},h('div',{style:{fontWeight:700}},row.label),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:4}},row.recordCount+' bản ghi · Sửa lúc '+(row.updatedAt?new Date(row.updatedAt).toLocaleString('vi-VN'):'—')+' · Đã thử '+row.attempts+' lần')));
+  const canOpen=!!state?.pending||state?.status==='error'||state?.status==='offline';
   const retry=()=>{if(state?.pending&&state?.status!=='syncing')window.scfFlushPendingWrites?.();};
   const title=state?.detail?(state.detail+(state?.pending?' — Bấm để đồng bộ lại':'')):(state?.pending?'Bấm để đồng bộ lại':label);
   return h(React.Fragment,null,
-    h('span',{className:'sync-status sync-'+(state?.status||'idle'),title,'aria-live':'polite',role:state?.pending?'button':undefined,tabIndex:state?.pending?0:undefined,onClick:()=>state?.pending&&setReportOpen(true),onKeyDown:event=>{if(state?.pending&&(event.key==='Enter'||event.key===' ')){event.preventDefault();setReportOpen(true);}},style:state?.pending?{cursor:'pointer'}:null},h('i',{className:'ti '+item[1]+(state?.status==='syncing'?' spin':'')}),label),
-    reportOpen&&h(Modal,{title:'Chi tiết dữ liệu chờ đồng bộ',onClose:()=>setReportOpen(false)},h('div',{style:{display:'grid',gap:9}},reportRows.length?reportRows:h('div',{style:{color:'var(--tx2)'}},'Không còn dữ liệu chờ đồng bộ.'),h('div',{style:{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}},h('button',{onClick:()=>setReportOpen(false)},'Đóng'),h('button',{className:'bp',disabled:state?.status==='syncing'||!(report?.items||[]).length,onClick:()=>{retry();setReportOpen(false);}},h('i',{className:'ti ti-refresh'}),'Đồng bộ ngay'))))
+    h('span',{className:'sync-status sync-'+(state?.status||'idle'),title,'aria-live':'polite',role:canOpen?'button':undefined,tabIndex:canOpen?0:undefined,onClick:()=>canOpen&&setReportOpen(true),onKeyDown:event=>{if(canOpen&&(event.key==='Enter'||event.key===' ')){event.preventDefault();setReportOpen(true);}},style:canOpen?{cursor:'pointer'}:null},h('i',{className:'ti '+item[1]+(state?.status==='syncing'?' spin':'')}),label),
+    reportOpen&&h(Modal,{title:'Chi tiết dữ liệu chờ đồng bộ',onClose:()=>setReportOpen(false)},h('div',{style:{display:'grid',gap:9}},state?.detail&&h('div',{style:{padding:'9px 11px',border:'1px solid #f0cf7a',borderRadius:'var(--r)',background:'#fff8e1',color:'#6d4b00'}},h('b',null,'Trạng thái: '),state.detail),reportRows.length?reportRows:h('div',{style:{color:'var(--tx2)'}},'Không có bản ghi trong hàng đợi. Đây là trạng thái lỗi của lần đồng bộ trước; hãy kiểm tra nội dung trạng thái ở trên.'),h('div',{style:{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}},h('button',{onClick:()=>setReportOpen(false)},'Đóng'),h('button',{className:'bp',disabled:state?.status==='syncing'||!(report?.items||[]).length,onClick:()=>{retry();setReportOpen(false);}},h('i',{className:'ti ti-refresh'}),'Đồng bộ ngay'))))
   );
 }
 
