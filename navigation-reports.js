@@ -2076,6 +2076,39 @@ function SupabaseUsageReportTab({employees,materials,assets,prodCats,products,cu
 }
 
 /* --- Báo cáo bán hàng --- */
+function scfReportCustomerNameKey(value){
+  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/Đ/g,'D').replace(/đ/g,'d').toUpperCase().replace(/\s+/g,' ').trim();
+}
+function scfReportCustomerByName(customers){
+  return new Map((customers||[]).map(customer=>[scfReportCustomerNameKey(customer?.name),customer]).filter(([key])=>key));
+}
+function scfResolveReportCustomer(order,customers,customersByName){
+  const list=customers||[];
+  const byId=list.find(customer=>String(customer?.id||'')===String(order?.customerId||order?.custId||''));
+  if(byId)return byId;
+  const nameKey=scfReportCustomerNameKey(order?.customer||order?.customerName);
+  return nameKey?(customersByName||scfReportCustomerByName(list)).get(nameKey):undefined;
+}
+function scfReportCustomerIdentity(order,customers,customersByName){
+  const customer=scfResolveReportCustomer(order,customers,customersByName);
+  if(customer)return String(customer.id||customer.name||'');
+  const nameKey=scfReportCustomerNameKey(order?.customer||order?.customerName);
+  return nameKey?'legacy:'+nameKey:'';
+}
+function scfSalesDebtCustomerOptions(customers,orders){
+  const list=customers||[];
+  const customersByName=scfReportCustomerByName(list);
+  const entries=list.map(customer=>{
+    const id=String(customer.id||customer.name||'');
+    return[id,{id,label:customer.name||customer.id||'Chưa xác định'}];
+  });
+  (orders||[]).forEach(order=>{
+    const customer=scfResolveReportCustomer(order,list,customersByName);
+    const id=scfReportCustomerIdentity(order,list,customersByName);
+    if(id)entries.push([id,{id,label:customer?.name||order.customer||order.customerName||id}]);
+  });
+  return [...new Map(entries).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
+}
 function SalesDebtReportTab({orders,customers,products,trips=[]}){
   const today=isoDate();
   const [fromDate,setFromDate]=useState(today.slice(0,7)+'-01');
@@ -2087,17 +2120,15 @@ function SalesDebtReportTab({orders,customers,products,trips=[]}){
   const completedOrderIds=new Set(completedTrips.flatMap(trip=>trip.orderIds||[]).map(String));
   const deliveredOrders=(orders||[]).filter(order=>!['cancelled','failed'].includes(order.status)&&(!!(order.driverCompletedAt||order.accountingConfirmedAt)||order.status==='done'||completedOrderIds.has(String(order.id))||completedTrips.some(trip=>String(trip.id)===String(order.tripId))||(order.lines||[]).some(line=>line.deliveredAt||Number(line.qtyDelivered)>0)));
   const deliveredQty=line=>line.qtyDelivered!==undefined&&line.qtyDelivered!==''?(numFmt(line.qtyDelivered)||0):(numFmt(line.qtyInvoice)||0);
-  const customerOptions=[...new Map([...(customers||[]).map(customer=>[String(customer.id||customer.name),{id:String(customer.id||customer.name),label:customer.name||customer.id}]),...(orders||[]).map(order=>{
-    const customer=(customers||[]).find(item=>String(item.id||'')===String(order.customerId||''));
-    const id=String(order.customerId||customer?.id||order.customer||'');
-    return[id,{id,label:customer?.name||order.customer||id||'Chưa xác định'}];
-  }).filter(([id])=>id)]).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
-  const customerFor=order=>(customers||[]).find(customer=>order.customerId?String(customer.id)===String(order.customerId):String(customer.name||'').trim()===String(order.customer||'').trim());
-  const customerMatch=order=>!customerId||String(customerFor(order)?.id||order.customerId||order.customer||'')===customerId;
+  const customersByName=scfReportCustomerByName(customers);
+  const customerOptions=scfSalesDebtCustomerOptions(customers,orders);
+  const customerFor=order=>scfResolveReportCustomer(order,customers,customersByName);
+  const customerIdentity=order=>scfReportCustomerIdentity(order,customers,customersByName);
+  const customerMatch=order=>!customerId||customerIdentity(order)===customerId;
   const pointIdentity=order=>{
     const customer=customerFor(order);
     const point=(customer?.points||[]).find(point=>order.pointId?String(point.id)===String(order.pointId):String(point.name||'').trim()===String(order.pointName||'').trim());
-    return JSON.stringify([String(customer?.id||order.customerId||order.customer||''),String(point?.id||order.pointId||order.pointName||order.address||'')]);
+    return JSON.stringify([customerIdentity(order),String(point?.id||order.pointId||order.pointName||order.address||'')]);
   };
   const catalogPoints=(customers||[]).filter(customer=>!customerId||String(customer.id||customer.name)===customerId).flatMap(customer=>(customer.points||[]).map(point=>({customerId:customer.id,customer:customer.name,pointId:point.id,pointName:point.name,address:point.address})));
   const pointOptions=[...new Map([...catalogPoints,...(orders||[]).filter(customerMatch)].map(order=>{

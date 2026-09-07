@@ -715,17 +715,17 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   };
   const renderAttendanceZoneEditor=zoneId=>{
     const zone=attendanceZones[zoneId];
-    return h('div',{className:'sc',key:zoneId,style:{padding:14}},
+    return h('div',{className:'sc attendance-zone-card',key:zoneId},
       h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:3}},zone.name),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:10}},zone.description),
-      h('div',{className:'g3'},
+      h('div',{className:'g3 attendance-zone-fields'},
         h(F,{label:'Vĩ độ'},h('input',{value:zone.lat,onChange:e=>updateAttendanceZone(zoneId,{lat:numFmt(e.target.value)})})),
         h(F,{label:'Kinh độ'},h('input',{value:zone.lon,onChange:e=>updateAttendanceZone(zoneId,{lon:numFmt(e.target.value)})})),
         h(F,{label:'Bán kính (m)'},h('input',{value:zone.radius,onChange:e=>updateAttendanceZone(zoneId,{radius:numFmt(e.target.value)})}))
       ),
-      h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
-        h('button',{onClick:()=>applyGpsToSettings(zoneId),disabled:gpsBusy},h('i',{className:'ti '+(gpsBusy?'ti-loader-2 spin':'ti-current-location')}),' Dùng GPS hiện tại'),
-        h('button',{onClick:()=>resetGpsSettings(zoneId)},'Mặc định Sông Công')
+      h('div',{className:'attendance-zone-actions'},
+        h('button',{type:'button',className:'attendance-zone-gps-button',onClick:()=>applyGpsToSettings(zoneId),disabled:gpsBusy},h('i',{className:'ti '+(gpsBusy?'ti-loader-2 spin':'ti-current-location')}),gpsBusy?' Đang lấy GPS...':' Dùng GPS hiện tại'),
+        h('button',{type:'button',className:'attendance-zone-default-button',onClick:()=>resetGpsSettings(zoneId)},'Mặc định Sông Công')
       )
     );
   };
@@ -812,7 +812,7 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     return h('div',{className:'attendance-settings-page'},
       h('div',{className:'ptitle'},h('i',{className:'ti ti-settings'}),'Cài đặt chấm công'),
       h('div',{className:'att-grid'},
-        h('div',{className:'card'},
+        h('div',{className:'card attendance-face-settings-card'},
           h(F,{label:'Nhân viên đăng ký khuôn mặt'},h('select',{value:empId,onChange:e=>{setEmpId(e.target.value);setPreview('');setCap(null);}},
             h('option',{value:''},'— Chọn nhân viên —'),employees.map(e=>h('option',{key:e.id,value:e.id},e.id+' - '+e.name))
           )),
@@ -825,12 +825,13 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
             h('button',{className:'bp',onClick:saveTemplate,disabled:!cap,style:{marginTop:10}},h('i',{className:'ti ti-id'}),' Lưu khuôn mặt mẫu')
           )
         ),
-        h('div',null,
+        h('div',{className:'attendance-config-column'},
           h('div',{className:'card',style:{marginBottom:'1rem'}},
             h('div',{className:'attendance-manager-title'},'Thiết lập 2 vùng chấm công'),
-            h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(290px,1fr))',gap:12,marginBottom:14}},
+            h('div',{className:'attendance-zone-grid'},
               renderAttendanceZoneEditor('office'),renderAttendanceZoneEditor('production')
             ),
+            gpsMsg&&h('div',{className:'attendance-gps-message','aria-live':'polite'},h('i',{className:'ti ti-map-pin'}),h('span',null,gpsMsg)),
             h('div',{className:'attendance-workshift-title'},'Ca làm việc theo 3 ca lớn'),
             h('div',{className:'attendance-workshift-grid'},workShifts.map(sh=>h('div',{className:'attendance-workshift-card',key:sh.id,style:{borderColor:sh.color,background:sh.color}},
               h('div',{className:'attendance-workshift-name',style:{color:sh.textColor}},sh.name),
@@ -1004,7 +1005,8 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
       !showQuickPunch&&h('div',null,
         canManage&&h('div',{className:'card',style:{marginBottom:'1rem'}},
           h('div',{style:{fontWeight:600,marginBottom:10,color:'var(--pri3)'}},'Thiết lập 2 vùng chấm công'),
-          h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(290px,1fr))',gap:12,marginBottom:12}},renderAttendanceZoneEditor('office'),renderAttendanceZoneEditor('production')),
+          h('div',{className:'attendance-zone-grid'},renderAttendanceZoneEditor('office'),renderAttendanceZoneEditor('production')),
+          gpsMsg&&h('div',{className:'attendance-gps-message','aria-live':'polite'},h('i',{className:'ti ti-map-pin'}),h('span',null,gpsMsg)),
           h('div',{className:'g4'},
             h(F,{label:'Giờ vào chuẩn'},h('input',{type:'time',value:settings.start||'',onChange:e=>setSettings({...settings,start:e.target.value})})),
             h(F,{label:'Giờ ra chuẩn'},h('input',{type:'time',value:settings.end||'',onChange:e=>setSettings({...settings,end:e.target.value})})),

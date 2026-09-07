@@ -384,6 +384,15 @@ th{font-family:var(--ui-header-family)!important}
 .attendance-workshift-times{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .attendance-workshift-times .field{margin-bottom:0}
 .attendance-workshift-range{font-size:11px;color:var(--tx2);margin-top:7px}
+.attendance-settings-page,.attendance-settings-page .att-grid>*,.attendance-config-column{min-width:0}
+.attendance-zone-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.attendance-zone-card{min-width:0;padding:14px}
+.attendance-zone-fields{grid-template-columns:repeat(3,minmax(0,1fr))}
+.attendance-zone-fields .field,.attendance-zone-fields input{min-width:0;width:100%}
+.attendance-zone-actions{display:flex;gap:6px;flex-wrap:wrap}
+.attendance-zone-actions button{min-width:0}
+.attendance-gps-message{display:flex;align-items:flex-start;gap:7px;margin:-4px 0 12px;padding:9px 11px;border:1px solid #c7ddcf;border-radius:9px;background:#edf7f1;color:var(--pri3);font-size:12px;line-height:1.4}
+.attendance-gps-message i{flex:0 0 auto;margin-top:1px}
 @media(max-width:768px){
   body{font-size:13px;overflow-x:hidden}
   input,select,textarea{min-height:40px;font-size:13px}
@@ -550,14 +559,23 @@ th{font-family:var(--ui-header-family)!important}
   .mobile-data-grid{grid-template-columns:1fr}
   .delivery-body .mobile-data-grid,.trip-attendance-card .mobile-data-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .prodshift-mobile-grid{grid-template-columns:1fr}
+  .attendance-settings-page .attendance-workshift-times{grid-template-columns:1fr}
 }
 @media(max-width:900px){.att-grid,.att-stat{grid-template-columns:1fr}}
 @media(max-width:900px){
   .attendance-manager-simple{grid-template-columns:1fr}
   .attendance-period-stats{grid-template-columns:repeat(3,minmax(80px,1fr))}
   .attendance-workshift-grid{grid-template-columns:1fr}
+  .attendance-zone-grid{grid-template-columns:1fr}
 }
 @media(max-width:600px){
+  .attendance-settings-page .att-grid{display:flex;flex-direction:column}
+  .attendance-config-column{order:-1;width:100%}
+  .attendance-face-settings-card{width:100%}
+  .attendance-zone-card{padding:11px}
+  .attendance-zone-fields{grid-template-columns:1fr!important;gap:0}
+  .attendance-zone-actions{display:grid;grid-template-columns:1fr;gap:8px}
+  .attendance-zone-actions button{width:100%;min-height:44px;white-space:normal}
   .attendance-report-filters>*{width:100%!important;min-width:0!important}
   .attendance-period-stats{grid-template-columns:repeat(2,minmax(80px,1fr))}
   .attendance-month-actions{width:100%}

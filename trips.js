@@ -490,10 +490,17 @@ function tripImageRows(trip,orders,products){
       return [order.deliveryDate||trip.deliveryDate||'',order.pointName||order.address||'—',line.productName||product?.name||'—',numFmt(line.qtyProd),line.unit||product?.unit||'',normalizeTimeInput(order.deliveryTime||trip.deliveryTime||''),[order.note,line.note].filter(Boolean).join(' · ')];
     }));
 }
+function tripImageDriverName(value){
+  return String(value||'').trim().split(/\s+/).filter(Boolean).slice(-2).join(' ')||'Chưa có lái xe';
+}
+function isDtTrip(trip){
+  const value=[trip?.shiftName,trip?.shiftCode,trip?.id].filter(Boolean).join(' ').toUpperCase();
+  return /(^|[^A-ZÀ-Ỹ])ĐT(?=$|[^A-ZÀ-Ỹ])/.test(value);
+}
 function renderTripImage(trips,orders,products,title){
   const canvas=document.createElement('canvas');
   canvas.width=1600;const ctx=canvas.getContext('2d');
-  const widths=[155,275,345,125,90,125,485];
+  const widths=[180,145,240,310,115,80,115,415];
   const wrap=(value,width)=>{
     const lines=[];let current='';
     for(const char of String(value??'')){
@@ -506,11 +513,11 @@ function renderTripImage(trips,orders,products,title){
   trips.forEach((trip,index)=>{
     const rows=tripImageRows(trip,orders,products);
     const color=index%2?'#e3effb':'#e6f2de';
-    blocks.push({cells:[trip.driverName||'Chưa có lái xe',trip.shiftName||trip.id,trip.deliveryDate||''].join(' · '),fill:color,bold:true});
-    blocks.push({cells:['Ngày giao','Địa điểm','Sản phẩm','SL đặt / SX','ĐVT','Giờ giao','Chú ý'],fill:'#b9d3e8',bold:true});
-    rows.forEach(row=>blocks.push({cells:row,fill:'#ffffff'}));
+    const driverName=tripImageDriverName(trip.driverName);
+    blocks.push({cells:['Lái xe','Ngày giao','Địa điểm','Sản phẩm','SL đặt','ĐVT','Giờ giao','Chú ý'],fill:'#b9d3e8',bold:true});
+    rows.forEach(row=>blocks.push({cells:[driverName,...row],fill:'#ffffff'}));
     const totals=new Map();rows.forEach(row=>totals.set(row[4],(totals.get(row[4])||0)+row[3]));
-    blocks.push({cells:'Tổng '+(trip.driverName||'chuyến')+': '+[...totals].map(([unit,qty])=>qty.toLocaleString('vi-VN',{maximumFractionDigits:2})+' '+unit).join(' · ')+(rows.length?'':'Không có sản phẩm'),fill:color,bold:true});
+    blocks.push({cells:'Tổng chuyến: '+[...totals].map(([unit,qty])=>qty.toLocaleString('vi-VN',{maximumFractionDigits:2})+' '+unit).join(' · ')+(rows.length?'':'Không có sản phẩm'),fill:color,bold:true});
   });
   blocks.forEach(block=>{
     ctx.font=(block.bold?'bold ':'')+'22px Arial';
@@ -527,14 +534,14 @@ function renderTripImage(trips,orders,products,title){
     block.lines.forEach((lines,index)=>{
       const width=Array.isArray(block.cells)?widths[index]:1600;
       ctx.strokeStyle='#6b7377';ctx.lineWidth=1;ctx.strokeRect(x+.5,y+.5,width,block.height);
-      ctx.fillStyle=Array.isArray(block.cells)&&index===6&&!block.bold?'#b51e20':'#17251d';
+      ctx.fillStyle=Array.isArray(block.cells)&&index===7&&!block.bold?'#b51e20':'#17251d';
       lines.forEach((line,i)=>ctx.fillText(line,x+10,y+30+i*28));x+=width;
     });y+=block.height;
   });
   return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('Không tạo được ảnh. Hãy chọn ít chuyến hơn.')),'image/png'));
 }
 function TripImagesModal({trips,orders,products,onClose}){
-  const [selection,setSelection]=useState({});const [images,setImages]=useState([]);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
+  const [selection,setSelection]=useState(()=>Object.fromEntries(trips.map(trip=>[trip.id,isDtTrip(trip)?'1':'2'])));const [images,setImages]=useState([]);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
   const urls=React.useRef([]);const active=React.useRef(true);
   useEffect(()=>()=>{active.current=false;urls.current.forEach(url=>URL.revokeObjectURL(url));},[]);
   const clear=()=>{urls.current.forEach(url=>URL.revokeObjectURL(url));urls.current=[];setImages([]);setError('');};
@@ -552,7 +559,7 @@ function TripImagesModal({trips,orders,products,onClose}){
     finally{if(active.current)setBusy(false);}
   };
   return h(Modal,{title:'Tạo ảnh chuyến giao hàng',lg:true,onClose},
-    h('p',null,'Chọn các chuyến cho Ảnh 1 hoặc Ảnh 2. Số lượng lấy từ SL đặt / sản xuất; chú ý lấy từ ghi chú đơn và dòng sản phẩm.'),
+    h('p',null,'Mặc định Ảnh 1 gồm các chuyến ĐT, Ảnh 2 gồm các chuyến còn lại. Chú ý lấy từ ghi chú đơn và dòng sản phẩm.'),
     h('div',{style:{display:'flex',gap:8,marginBottom:12}},['1','2'].map(group=>h('button',{key:group,disabled:busy,onClick:()=>{clear();setSelection(Object.fromEntries(trips.map(trip=>[trip.id,group])));}},'Tất cả vào ảnh '+group)),h('button',{disabled:busy,onClick:()=>{clear();setSelection({});}},'Bỏ chọn')),
     h('div',{className:'tw',style:{maxHeight:330,overflow:'auto'}},h('table',null,
       h('thead',null,h('tr',null,['Chọn ảnh','Ngày giao','Chuyến / ca','Lái xe','Dòng SP'].map(label=>h('th',{key:label},label)))),
