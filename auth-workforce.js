@@ -47,7 +47,14 @@ function LoginPage({employees,onLogin}){
     setBusy(true);se('');
     try{
       if(SCF_SERVER_AUTH_ENABLED){
-        const user=await serverUsernameLogin(un,pw);
+        let user;
+        try{user=await serverUsernameLogin(un,pw);}
+        catch(e){
+          if(e?.code!=='SESSION_ACTIVE')throw e;
+          const agreed=await window.scfConfirm('Tài khoản này đang đăng nhập trên '+e.activeDeviceLabel+'. Bạn có muốn đăng xuất máy cũ để đăng nhập trên máy này không?','Tài khoản đã có máy đăng nhập');
+          if(!agreed){se('Đã giữ nguyên phiên đăng nhập trên máy cũ.');return;}
+          user=await serverUsernameLogin(un,pw,true);
+        }
         if(isFaceMask&&!['admin','administrator'].includes(String(user?.role||'').toLowerCase())){
           await serverLogout();
           throw new Error('FACE MASK chỉ cho phép tài khoản Admin đăng nhập.');

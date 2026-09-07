@@ -31,8 +31,19 @@ document.addEventListener('error',async event=>{
 const W_LAT=21.5303,W_LON=105.8739,W_CITY='Sông Công, Thái Nguyên';
 
 /* ─── Supabase ─── */
+function scfDeviceId(){
+  const key='scf_device_id_v1';
+  try{let value=localStorage.getItem(key);if(!value){value=crypto.randomUUID?.()||('dev-'+Date.now().toString(36)+Math.random().toString(36).slice(2));localStorage.setItem(key,value);}return value;}catch{return 'device-unavailable';}
+}
+function scfDeviceLabel(){
+  const ua=String(navigator.userAgent||'');
+  const browser=ua.includes('Edg/')?'Edge':ua.includes('Chrome/')?'Chrome':ua.includes('Firefox/')?'Firefox':ua.includes('Safari/')?'Safari':'Trình duyệt';
+  const system=ua.includes('Windows')?'Windows':ua.includes('Android')?'Android':/iPhone|iPad/.test(ua)?'iPhone/iPad':ua.includes('Mac OS')?'macOS':'Thiết bị';
+  return system+' · '+browser;
+}
+window.scfDeviceId=scfDeviceId;window.scfDeviceLabel=scfDeviceLabel;
 let sb=null;
-try{sb=window.supabase.createClient(SUPA_URL,SUPA_KEY);}catch(e){}
+try{sb=window.supabase.createClient(SUPA_URL,SUPA_KEY,{global:{headers:{'x-scf-device-id':scfDeviceId()}}});}catch(e){}
 const DB_REMOTE_TIMEOUT_MS=10000;
 const DB_REMOTE_MAX_TIMEOUT_MS=30000;
 const SCF_SYNC_DEBOUNCE_MS=700;

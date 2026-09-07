@@ -1,4 +1,20 @@
 /* ─── DELIVERY ORDERS ─── */
+function deliveryOrderDuplicateKey(order){
+  const date=String(order?.deliveryDate||'').trim(),time=normalizeTimeInput(order?.deliveryTime||'');
+  const point=normalizeLookupText(order?.pointName||order?.address||'')||String(order?.pointId||'').trim();
+  return date&&time&&point?[date,time,point].join('|'):'';
+}
+function findExistingDeliveryOrder(orders,candidate,excludeId=''){
+  const key=deliveryOrderDuplicateKey(candidate);if(!key)return null;
+  return (orders||[]).find(order=>String(order?.id||'')!==String(excludeId||'')&&order?.status!=='cancelled'&&deliveryOrderDuplicateKey(order)===key)||null;
+}
+function deliveryOrderCreator(order){
+  const history=Array.isArray(order?.orderHistory)?order.orderHistory:[];
+  return order?.createdBy||history[0]?.by||order?.updatedBy||'không rõ người tạo';
+}
+function duplicateDeliveryOrderMessage(candidate,existing){
+  return 'Đơn ngày '+(candidate?.deliveryDate||'chưa có')+', giờ '+(normalizeTimeInput(candidate?.deliveryTime||'')||'chưa có')+', địa điểm '+(candidate?.pointName||candidate?.address||'chưa có')+' đã tồn tại. Người tạo trước đó: '+deliveryOrderCreator(existing)+'.';
+}
 function OrderDetailLine({line,products,prodCats,prodShifts,deliveryDate,deliveryTime,pointName,area,inheritedShift,inheritedTiming,inheritedMode,onChange,onRemove}){
   const prod=products.find(p=>p.id===line.productId)||{};
   const showPurchasePrice=isGoodsProduct(prod,prodCats||[]);
@@ -540,9 +556,8 @@ const MemoImportProductSearch=React.memo(ImportProductSearch,(prev,next)=>
 );
 
 /* ─── IMPORT PREVIEW MODAL ─── */
-function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, products=[], prodCats=[], prodShifts, onClose}) {
+function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, products=[], prodCats=[], prodShifts, currentUser, onClose}) {
   const {newOrders=[], dupOrders=[], unknownPts=[], incompleteOrders=[], columnOffset=0} = data||{};
-  const [skipDups, setSkipDups] = React.useState(true);
   const [includeIncomplete, setIncludeIncomplete] = React.useState(false);
   const [ptAssign, setPtAssign] = React.useState({}); // pointName -> customerId
   const [addToCustomer, setAddToCustomer] = React.useState({}); // pointName -> bool
@@ -618,7 +633,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
 
   const incompleteIssueMap=new Map(incompleteOrders.map(item=>[item.order.id,item.issues]));
   const candidateOrders=includeIncomplete?newOrders:newOrders.filter(o=>!incompleteIssueMap.has(o.id));
-  const toImport = skipDups ? candidateOrders.filter(o=>!dupOrders.includes(o)) : candidateOrders;
+  const toImport = candidateOrders.filter(o=>!findExistingDeliveryOrder(orders,o));
   const resolvedProductForLine=line=>productById(line?.productId)||productById(productAssign[productGroupKeyForLine(line)]);
   const importableOrders=toImport.filter(order=>!skipPoint[order.pointName]).map(order=>({
     ...order,
@@ -685,13 +700,17 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
         }
       });
     });
-    const cleanOrders=importableOrders.map(o=>{
+    const preparedOrders=importableOrders.map(o=>{
       const {_importRow,...clean}=o;
-      return {...clean,lines:(o.lines||[]).map(line=>{
+      return {...clean,createdAt:clean.createdAt||fmtDate(),createdBy:clean.createdBy||currentUser?.name||'',updatedAt:fmtDT(),updatedBy:currentUser?.name||'',lines:(o.lines||[]).map(line=>{
         const mapped=resolvedProductForLine(line);
         return {...line,productId:mapped.id,productName:mapped.name,unit:mapped.unit||line.unit,weightPerUnit:mapped.weightPerUnit||0};
       })};
     });
+    const blockedDuplicates=preparedOrders.filter(order=>findExistingDeliveryOrder(orders,order));
+    if(blockedDuplicates.length){const first=blockedDuplicates[0];window.showToast(duplicateDeliveryOrderMessage(first,findExistingDeliveryOrder(orders,first))+(blockedDuplicates.length>1?' Và '+(blockedDuplicates.length-1)+' đơn trùng khác đã bị bỏ qua.':''),'warn',10000);}
+    const cleanOrders=preparedOrders.filter(order=>!blockedDuplicates.includes(order));
+    if(!cleanOrders.length){window.showToast('Không còn đơn hàng mới để import.','info');return;}
     setOrders(p=>[...p,...cleanOrders]);
     window.showToast('Đã import '+cleanOrders.length+' đơn hàng ('+cleanOrders.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng sản phẩm); các dòng không tìm được sản phẩm đã được bỏ qua.','success');
     onClose();
@@ -767,19 +786,8 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     // Duplicate handling
     dupOrders.length>0&&h('div',{style:{background:'#FFFBF0',border:'1px solid #FFC107',borderRadius:'var(--r)',padding:'12px',marginBottom:'1rem'}},
       h('div',{style:{fontWeight:600,marginBottom:8,fontSize:14}},'⚠️ Các đơn trùng:'),
-      dupOrders.map(o=>h('div',{key:o.id,style:{fontSize:12,padding:'3px 0',color:'#666'}},
-        '• '+o.deliveryDate+' '+o.deliveryTime+' — '+o.pointName
-      )),
-      h('div',{style:{marginTop:10,display:'flex',gap:16}},
-        h('label',{style:{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13}},
-          h('input',{type:'radio',checked:skipDups,onChange:()=>setSkipDups(true)}),
-          'Bỏ qua đơn trùng'
-        ),
-        h('label',{style:{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13}},
-          h('input',{type:'radio',checked:!skipDups,onChange:()=>setSkipDups(false)}),
-          'Import thêm cả đơn trùng'
-        )
-      )
+      dupOrders.map(o=>{const existing=findExistingDeliveryOrder(orders,o);return h('div',{key:o.id,style:{fontSize:12,padding:'3px 0',color:'#666'}},'• '+duplicateDeliveryOrderMessage(o,existing));}),
+      h('div',{style:{marginTop:10,fontSize:12,fontWeight:600,color:'#856404'}},'Các đơn này sẽ không được import thêm.')
     ),
 
     // Unknown points handling
@@ -923,7 +931,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
   );
 }
 
-function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,onClose}) {
+function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,currentUser,onClose}) {
   const[file,setFile]=useState(null);
   const[img,setImg]=useState('');
   const[text,setText]=useState('');
@@ -1157,8 +1165,9 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,o
       window.showToast('Còn '+unmatchedLines.length+' dòng sản phẩm chưa khớp danh mục. Hãy chọn sản phẩm tương ứng trước khi nhập.','warn');
       return;
     }
-    const dup=rows.filter(o=>orders.some(ex=>ex.deliveryDate===o.deliveryDate&&ex.pointName===o.pointName&&ex.deliveryTime===o.deliveryTime));
-    const finalRows=dup.length&&confirm('Có '+dup.length+' đơn có thể bị trùng. Bỏ qua đơn trùng?')?rows.filter(o=>!dup.includes(o)):rows;
+    const dup=rows.filter(o=>findExistingDeliveryOrder(orders,o));
+    if(dup.length){const first=dup[0],existing=findExistingDeliveryOrder(orders,first);window.showToast(duplicateDeliveryOrderMessage(first,existing)+(dup.length>1?' Và '+(dup.length-1)+' đơn trùng khác đã bị bỏ qua.':''),'warn',10000);}
+    const finalRows=rows.filter(o=>!dup.includes(o)).map(o=>({...o,createdAt:o.createdAt||fmtDate(),createdBy:o.createdBy||currentUser?.name||'',updatedAt:fmtDT(),updatedBy:currentUser?.name||''}));
     if(!finalRows.length){window.showToast('Không còn đơn hàng mới để nhập.','info');return;}
     setOrders(p=>[...p,...finalRows]);
     window.showToast('Đã nhập '+finalRows.length+' đơn hàng từ ảnh.','success');
@@ -2004,6 +2013,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   };
   const save=d=>{
     let planned=prepareAutomaticTripForSave(cleanDeliveryOrderRecord(d));
+    const duplicate=findExistingDeliveryOrder(orders,planned,edit?.id||'');
+    if(duplicate){window.showToast(duplicateDeliveryOrderMessage(planned,duplicate),'warn',10000);return;}
     if(edit){
       const currentTrip=orderTrip(edit);
       if(dispatchedTrip(currentTrip)||closedTrip(currentTrip)||['delivering','done'].includes(edit.status)){
@@ -3047,8 +3058,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         ),
         modal==='print'&&h(PrintByCustomerModal,{orders,customers,products,company,initialDate:dateFilterMode==='day'?fDate:'',onClose:()=>sm(null)}),
         modal==='printlabels'&&h(PrintLabelsMultiModal,{orders,customers,initialDate:dateFilterMode==='day'?fDate:'',onClose:()=>sm(null),onPrint:printLabelsForOrders}),
-        modal==='importPreview'&&window._importData&&h(ImportPreviewModal,{data:window._importData,customers,setCustomers,orders,setOrders,products,prodCats,prodShifts,onClose:()=>{sm(null);delete window._importData;}}),
-        modal==='imageImport'&&h(ImageOrderImportModal,{customers,products,orders,setOrders,prodShifts,onClose:()=>sm(null)}),
+        modal==='importPreview'&&window._importData&&h(ImportPreviewModal,{data:window._importData,customers,setCustomers,orders,setOrders,products,prodCats,prodShifts,currentUser,onClose:()=>{sm(null);delete window._importData;}}),
+        modal==='imageImport'&&h(ImageOrderImportModal,{customers,products,orders,setOrders,prodShifts,currentUser,onClose:()=>sm(null)}),
         h('button',{
           onClick:()=>sm('imageImport'),
           style:{display:'none'}
@@ -3153,11 +3164,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                 const incompleteOrders=newOrders.map(order=>({order,issues:customerImportOrderIssues(order)})).filter(item=>item.issues.length);
                 const incompleteIds=new Set(incompleteOrders.map(item=>item.order.id));
                 // Check duplicates & unknown points
-                const dupOrders=newOrders.filter(o=>!incompleteIds.has(o.id)&&orders.some(ex=>
-                  ex.deliveryDate===o.deliveryDate&&
-                  ex.pointName===o.pointName&&
-                  (ex.deliveryTime===o.deliveryTime||timeToMin(ex.deliveryTime)===timeToMin(o.deliveryTime))
-                ));
+                const dupOrders=newOrders.filter(o=>!incompleteIds.has(o.id)&&findExistingDeliveryOrder(orders,o));
                 const unknownPts=[...new Set(newOrders.filter(o=>!o.customerId&&o.pointName).map(o=>o.pointName))];
                 // Store parsed data for modal
                 if(invalidDateRows.length){
