@@ -1330,6 +1330,8 @@ function PrintByCustomerModal({orders,customers,products,company,initialDate,onC
 
 function PrintLabelsMultiModal({orders,customers,initialDate,onClose,onPrint}) {
   const [custId,sCust]=useState('');
+  const [area,setArea]=useState('');
+  const [pointKey,setPointKey]=useState('');
   const [df,sdf]=useState(initialDate||'');
   const [dt,sdt]=useState(initialDate||'');
   const [selected,setSelected]=useState({});
@@ -1345,9 +1347,26 @@ function PrintLabelsMultiModal({orders,customers,initialDate,onClose,onPrint}) {
   };
   const selectedCustomer=customers.find(c=>c.id===custId);
   const orderDate=o=>o.deliveryDate||o.date||o.ngayGiao||'';
+  const matchesCustomer=o=>!custId||o.customerId===custId||o.custId===custId||selectedCustomer?.name===o.customer;
+  const pointIdentity=o=>{
+    const customer=customers.find(c=>o.customerId||o.custId?String(c.id)===String(o.customerId||o.custId):c.name===o.customer);
+    const point=(customer?.points||[]).find(p=>o.pointId||o.ptId?String(p.id)===String(o.pointId||o.ptId):p.name===o.pointName);
+    return JSON.stringify([customer?.id||o.customerId||o.custId||o.customer||'',point?.id||o.pointId||o.ptId||o.pointName||o.address||'']);
+  };
+  const areaFor=o=>{
+    const customer=customers.find(c=>o.customerId||o.custId?String(c.id)===String(o.customerId||o.custId):c.name===o.customer);
+    const point=(customer?.points||[]).find(p=>o.pointId||o.ptId?String(p.id)===String(o.pointId||o.ptId):p.name===o.pointName);
+    return String(point?.area||o.area||'').trim();
+  };
+  const pointSources=[
+    ...customers.filter(c=>!custId||c.id===custId).flatMap(c=>(c.points||[]).map(p=>({customerId:c.id,customer:c.name,pointId:p.id,pointName:p.name,address:p.address,area:p.area}))),
+    ...orders.filter(matchesCustomer)
+  ];
+  const areaOptions=[...new Set(pointSources.map(areaFor).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const pointOptions=[...new Map(pointSources.filter(o=>(!area||areaFor(o)===area)&&(o.pointId||o.ptId||o.pointName||o.address)).map(o=>[pointIdentity(o),{key:pointIdentity(o),label:(o.pointName||o.address||o.pointId||o.ptId)+(custId?'':' · '+(o.customer||customers.find(c=>c.id===(o.customerId||o.custId))?.name||''))}])).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
   const filtered=orders.filter(o=>
     o.status!=='cancelled'&&
-    (!custId||o.customerId===custId||o.custId===custId||selectedCustomer?.name===o.customer)&&
+    matchesCustomer(o)&&(!area||areaFor(o)===area)&&(!pointKey||pointIdentity(o)===pointKey)&&
     inRange(orderDate(o))
   ).sort((a,b)=>{
     const da=parseD(orderDate(a));const db=parseD(orderDate(b));
@@ -1363,10 +1382,18 @@ function PrintLabelsMultiModal({orders,customers,initialDate,onClose,onPrint}) {
     onPrint(selectedOrders);
   };
   return h(Modal,{title:'In tem cho nhiều đơn hàng',lg:true,onClose},
-    h('div',{className:'g3'},
-      h(F,{label:'Khách hàng'},h('select',{value:custId,onChange:e=>sCust(e.target.value)},
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:14}},
+      h(F,{label:'Khách hàng'},h('select',{value:custId,onChange:e=>{sCust(e.target.value);setArea('');setPointKey('');}},
         h('option',{value:''},'— Tất cả —'),
         customers.map(c=>h('option',{key:c.id,value:c.id},c.name))
+      )),
+      h(F,{label:'Khu vực'},h('select',{value:area,onChange:e=>{setArea(e.target.value);setPointKey('');}},
+        h('option',{value:''},'— Tất cả khu vực —'),
+        areaOptions.map(value=>h('option',{key:value,value},value))
+      )),
+      h(F,{label:'Địa điểm'},h('select',{value:pointKey,onChange:e=>setPointKey(e.target.value)},
+        h('option',{value:''},'— Tất cả địa điểm —'),
+        pointOptions.map(point=>h('option',{key:point.key,value:point.key},point.label))
       )),
       h(F,{label:'Từ ngày'},h('input',{type:'date',value:df,onChange:e=>sdf(e.target.value)})),
       h(F,{label:'Đến ngày'},h('input',{type:'date',value:dt,onChange:e=>sdt(e.target.value)}))
@@ -1399,7 +1426,7 @@ function PrintLabelsMultiModal({orders,customers,initialDate,onClose,onPrint}) {
         h('button',{className:'bp',onClick:doPrint,disabled:!selectedOrders.length,style:{padding:'8px 20px'}},h('i',{className:'ti ti-printer',style:{fontSize:15}}),' In tem '+selectedOrders.length+' đơn')
       )
     ):h('div',null,
-      h('div',{style:{textAlign:'center',padding:'2rem',color:'var(--tx2)',fontSize:13}},'Không có đơn hàng. Chọn khách hàng hoặc điều chỉnh khoảng ngày.'),
+      h('div',{style:{textAlign:'center',padding:'2rem',color:'var(--tx2)',fontSize:13}},'Không có đơn hàng. Điều chỉnh khách hàng, địa điểm hoặc khoảng ngày.'),
       h(Row,null,h('button',{onClick:onClose},'Đóng'))
     )
   );
