@@ -57,6 +57,12 @@ async function getServerAuthSession(){
 async function serverLogout(){
   if(SCF_SERVER_AUTH_ENABLED&&sb)try{await sb.functions.invoke('scf-auth',{body:{action:'release_session'}});await sb.auth.signOut();}catch(e){console.warn('Server logout:',e.message);}
 }
+async function serverTouchSession(){
+  if(!SCF_SERVER_AUTH_ENABLED||!sb)return false;
+  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'touch_session'}});
+  if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không duy trì được phiên đăng nhập.'));
+  return true;
+}
 
 async function serverLoadEmployeeContext(){
   if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
