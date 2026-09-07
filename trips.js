@@ -500,7 +500,7 @@ function isDtTrip(trip){
 function renderTripImage(trips,orders,products,title){
   const canvas=document.createElement('canvas');
   canvas.width=1600;const ctx=canvas.getContext('2d');
-  const widths=[180,145,240,310,115,80,115,415];
+  const widths=[230,145,240,310,115,80,115,365];
   const wrap=(value,width)=>{
     const lines=[];let current='';
     for(const char of String(value??'')){

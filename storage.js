@@ -153,6 +153,7 @@ document.addEventListener('keydown',e=>{
 // Startup/page loads must fail visibly, never treat a network error as an empty
 // editable collection. Keep the legacy offline fallback for older standalone tabs.
 const scfLocalWrites=new Map();
+const scfRemoteVersions=new Map();
 async function dbGetRequired(key,def){
   if(!serverAuthEnabled())return dbGet(key,def);
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
@@ -160,7 +161,7 @@ async function dbGetRequired(key,def){
   if(pending)return pending.value;
   const before=scfLocalWrites.get(key);
   try{
-    const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('value').eq('key',key).maybeSingle());
+    const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('value,updated_at').eq('key',key).maybeSingle());
     if(error)throw error;
     // An edit made while this request was in flight wins over its old snapshot,
     // including an edit whose queued write has already finished.
@@ -168,6 +169,7 @@ async function dbGetRequired(key,def){
     if(queued)return queued.value;
     if(latest!==before)return latest.value;
     const value=data&&Object.prototype.hasOwnProperty.call(data,'value')?data.value:def;
+    scfRemoteVersions.set(key,String(data?.updated_at||''));
     if(Array.isArray(def)&&!Array.isArray(value))throw new Error('Dữ liệu trả về không đúng định dạng.');
     return value;
   }catch(error){
@@ -187,9 +189,10 @@ async function dbGet(key,def){
   // Khi online thì ưu tiên dữ liệu mới từ Supabase để các máy đồng bộ với nhau.
   if(sb)try{
     setSyncState('syncing','Đang nhận dữ liệu');
-    const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('value').eq('key',key).maybeSingle());
+    const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('value,updated_at').eq('key',key).maybeSingle());
     if(error)throw error;
     if(data&&Object.prototype.hasOwnProperty.call(data,'value')){
+      scfRemoteVersions.set(key,String(data.updated_at||''));
       if(allowPersistentLocalCache(key))try{localStorage.setItem(localCacheKey(key),JSON.stringify(data.value));}catch{}
       setSyncState('synced');return data.value;
     }
@@ -215,8 +218,19 @@ async function performDbSet(key,val,queuedAt='',mode=''){
     catch(e){console.warn('serverSaveAutoTrips:',e.message);setSyncState('error',e.message||'Không lưu được chuyến tự động');window.showToast&&window.showToast(e.message||'Không lưu được chuyến tự động.','error');scheduleSyncRetry();return false;}
   }
   if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
-    try{setSyncState('syncing','Đang kiểm tra quyền và đồng bộ');await withRemoteTimeout(serverSavePermittedCollection(key,val),remoteTimeoutFor(val));removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
-    catch(e){console.warn('serverSavePermittedCollection:',e.message);setSyncState('error',e.message||'Không đồng bộ được dữ liệu');window.showToast&&window.showToast(e.message||'Không đồng bộ được dữ liệu.','error');scheduleSyncRetry();return false;}
+    try{
+      setSyncState('syncing','Đang kiểm tra quyền và đồng bộ');
+      const saved=await withRemoteTimeout(serverSavePermittedCollection(key,val,scfRemoteVersions.get(key)||''),remoteTimeoutFor(val));
+      scfRemoteVersions.set(key,String(saved?.updatedAt||''));removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;
+    }catch(e){
+      console.warn('serverSavePermittedCollection:',e.message);
+      if(e?.code==='SCF_WRITE_CONFLICT'){
+        removeQueuedWrite(key,queuedAt);setSyncState('error','Có người khác vừa cập nhật dữ liệu');
+        window.showToast&&window.showToast(e.message,'warn',8000);
+        setTimeout(()=>window.scfSyncNow?.(),300);return false;
+      }
+      setSyncState('error',e.message||'Không đồng bộ được dữ liệu');window.showToast&&window.showToast(e.message||'Không đồng bộ được dữ liệu.','error');scheduleSyncRetry();return false;
+    }
   }
   // Chỉ giữ dữ liệu không nhạy cảm lâu dài khi đã bật xác thực máy chủ.
   if(allowPersistentLocalCache(key))try{localStorage.setItem(localCacheKey(key),JSON.stringify(val));}catch(e){console.warn('localStorage save:',e.message);}
@@ -275,7 +289,10 @@ async function flushPendingWrites(){
       const item=readSyncQueue()[key];if(!item){waitingResolvers.forEach(done=>done(true));continue;}
       if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees'))await withRemoteTimeout(serverSaveEmployees(item.value),remoteTimeoutFor(item.value));
       else if(serverAuthEnabled()&&key==='scf_trips'&&(item.mode==='auto-trips'||(Array.isArray(item.value)&&item.value.some(trip=>trip?.autoCreated))))await withRemoteTimeout(serverSaveAutoTrips(item.value),remoteTimeoutFor(item.value));
-      else if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key))await withRemoteTimeout(serverSavePermittedCollection(key,item.value),remoteTimeoutFor(item.value));
+      else if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
+        const saved=await withRemoteTimeout(serverSavePermittedCollection(key,item.value,scfRemoteVersions.get(key)||''),remoteTimeoutFor(item.value));
+        scfRemoteVersions.set(key,String(saved?.updatedAt||''));
+      }
       else{
         const{error}=await withRemoteTimeout(sb.from('kv_store').upsert({key,value:item.value,updated_at:item.updatedAt||new Date().toISOString()}),remoteTimeoutFor(item.value));
         if(error)throw error;
@@ -285,6 +302,13 @@ async function flushPendingWrites(){
     }catch(e){
       console.warn('flushPendingWrites '+key+':',e?.message||e);
       waitingResolvers.forEach(done=>done(false));
+      if(e?.code==='SCF_WRITE_CONFLICT'){
+        const conflicted=readSyncQueue()[key];
+        if(conflicted)removeQueuedWrite(key,conflicted.updatedAt||'');
+        setSyncState('error','Có người khác vừa cập nhật dữ liệu');
+        window.showToast&&window.showToast(e.message,'warn',8000);
+        setTimeout(()=>window.scfSyncNow?.(),300);return false;
+      }
       const latest=readSyncQueue();if(latest[key]){latest[key].attempts=(Number(latest[key].attempts)||0)+1;writeSyncQueue(latest);}
       setSyncState('error',e?.message||'Còn thay đổi chưa đồng bộ');scheduleSyncRetry();return false;
     }
