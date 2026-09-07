@@ -64,25 +64,34 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const tripById=new Map(),tripByOrder=new Map();
   (trips||[]).forEach(t=>{
     tripById.set(String(t.id),t);
-    (t.orderIds||[]).forEach(orderId=>{if(!tripByOrder.has(String(orderId)))tripByOrder.set(String(orderId),t);});
+    (t.orderIds||[]).forEach(orderId=>{const key=String(orderId);tripByOrder.set(key,[...(tripByOrder.get(key)||[]),t]);});
   });
-  const tripForOrder=o=>tripById.get(String(o.tripId||''))||tripByOrder.get(String(o.id||''))||null;
+  const sameTripDate=(trip,o)=>{
+    const tripDate=toISO(trip?.deliveryDate),orderTripDate=toISO(getOrderTripDate(o,prodShifts||[])||o?.deliveryDate);
+    return !tripDate||!orderTripDate||tripDate===orderTripDate;
+  };
+  const tripForOrder=o=>{
+    const stored=tripById.get(String(o.tripId||''));if(stored)return stored;
+    return (tripByOrder.get(String(o.id||''))||[]).find(linked=>sameTripDate(linked,o))||null;
+  };
+  const tripIsDispatched=t=>!!t?.driverDispatchedAt||['active','completion_pending','completed'].includes(t?.status);
+  const dispatchedDriverName=t=>tripIsDispatched(t)?String(t?.driverName||'').trim():'';
 
   const isDriver=currentUser?.role==='driver';
   const deptKey=String(currentUser?.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const isAccounting=deptKey.includes('ke toan');
   const cleanName=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
   const isOwnTrip=t=>!isDriver||String(t?.driverId||'')===String(currentUser?.id||'')||cleanName(t?.driverName)===cleanName(currentUser?.name);
-  const scopedTrips=isDriver?(trips||[]).filter(t=>isOwnTrip(t)&&t.status!=='cancelled'):(trips||[]);
+  const scopedTrips=isDriver?(trips||[]).filter(t=>isOwnTrip(t)&&tripIsDispatched(t)&&t.status!=='cancelled'):(trips||[]);
   const scopedTripIds=new Set(scopedTrips.map(t=>String(t.id)));
   const scopedTripById=new Map(scopedTrips.map(t=>[String(t.id),t]));
   const scopedTripByOrder=new Map();
-  scopedTrips.forEach(t=>(t.orderIds||[]).forEach(orderId=>{if(!scopedTripByOrder.has(String(orderId)))scopedTripByOrder.set(String(orderId),t);}));
+  scopedTrips.forEach(t=>(t.orderIds||[]).forEach(orderId=>{const key=String(orderId);scopedTripByOrder.set(key,[...(scopedTripByOrder.get(key)||[]),t]);}));
   const visibleTripForOrder=o=>{
     if(!isDriver)return tripForOrder(o);
     const storedTripId=String(o?.tripId||'').trim();
     if(storedTripId)return scopedTripById.get(storedTripId)||null;
-    return scopedTripByOrder.get(String(o?.id||''))||null;
+    return (scopedTripByOrder.get(String(o?.id||''))||[]).find(linked=>sameTripDate(linked,o))||null;
   };
   const scopedOrders=isDriver?(orders||[]).filter(o=>scopedTripIds.has(String(visibleTripForOrder(o)?.id||''))):(orders||[]);
 
@@ -98,7 +107,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     .replace(/^CH[a-z0-9_-]+$/i,'')
     .trim();
   const deliveryTripShiftName=t=>cleanDeliveryShiftName(deliveryShiftById.get(String(t?.shiftId||''))?.name||t?.shiftName)||'Chưa đặt ca giao';
-  const deliveryTripLabel=t=>[deliveryTripShiftName(t),t?.deliveryDate,t?.driverName].filter(Boolean).join(' · ');
+  const deliveryTripLabel=t=>[deliveryTripShiftName(t),t?.deliveryDate,dispatchedDriverName(t)].filter(Boolean).join(' · ');
   const deliveryShiftMetaCache=new WeakMap();
   const deliveryShiftForOrder=o=>{
     const cached=deliveryShiftMetaCache.get(o);if(cached)return cached;
@@ -128,7 +137,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   (shifts||[]).forEach(shift=>addTripOption(shift.id,shift.name));
   scopedTrips.forEach(trip=>{const date=toISO(trip.deliveryDate);if(periodRange.from&&date&&date<periodRange.from)return;if(periodRange.to&&date&&date>periodRange.to)return;addTripOption(trip.shiftId,trip.shiftName);});
   const tripOptions=[...tripOptionMap.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi'));
-  const driverOptions=[...new Set(scopedTrips.map(t=>t.driverName).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const driverOptions=[...new Set(scopedTrips.map(dispatchedDriverName).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
   const shiftOrder=name=>{
     const n=String(name||'').toLowerCase();
     if(n.includes('sáng')||n.includes('sang'))return 1;
@@ -149,7 +158,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
       return {key:trip?'trip:'+String(trip.id):'trip:~',label,sortKey:trip?(toISO(trip.deliveryDate)+'|'+deliveryTripShiftName(trip)+'|'+String(trip.id||'')):'9999-99-99|~'};
     }
     if(groupMode==='driver'){
-      const driver=String(trip?.driverName||'').trim();
+      const driver=dispatchedDriverName(trip);
       return {key:'driver:'+(driver||'~'),label:driver||'Chưa có lái xe',sortKey:driver||'~'};
     }
     const area=resolveArea(o)||'Chưa phân khu vực';
@@ -168,7 +177,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     if(areaF!=='all'&&resolveArea(o)!==areaF)return false;
     const trip=visibleTripForOrder(o);
     if(tripF!=='all'&&deliveryShiftForOrder(o).key!==tripF)return false;
-    if(driverF!=='all'&&String(trip?.driverName||'')!==driverF)return false;
+    if(driverF!=='all'&&dispatchedDriverName(trip)!==driverF)return false;
     if(shiftF!=='all'){
       const plans=prodShiftPlansForOrder(o,prodShifts||[]);
       const plan=prodShiftPlan(o,prodShifts||[]);
@@ -218,7 +227,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
         qtyDelivered:l.qtyDelivered,shift:l.shift||(lineShiftName.toLowerCase().includes('đêm')||lineShiftName.toLowerCase().includes('dem')?'night':'day'),
         shiftName:lineShiftName,time:o.deliveryTime||'',prodDate:linePlan?.prodDate||'',labelDate:linePlan?.labelDate||'',
         note:l.note||o.note||'',status:o.status,prodColor:(products.find(p=>p.id===l.productId)||{}).color||'',area,
-        groupKey:group.key,groupLabel:group.label,groupSortKey:group.sortKey,tripId:trip?.id||'',driverName:trip?.driverName||''
+        groupKey:group.key,groupLabel:group.label,groupSortKey:group.sortKey,tripId:trip?.id||'',driverName:dispatchedDriverName(trip)
       });
     });
   });
