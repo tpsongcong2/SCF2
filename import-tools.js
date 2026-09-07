@@ -126,9 +126,43 @@ function parseProductStr(s){
 const PRINT_TEMPLATES = [
   {id:'welstory',       name:'Welstory — Phiếu giao hàng'},
   {id:'foseca',         name:'Foseca — Phiếu giao nhận hàng'},
-  {id:'youngsun_dbg',   name:'Youngsun DBG — 送货确认单'},
-  {id:'youngsun_trina', name:'Youngsun TRINA — 送货确认单'},
+  {id:'youngsun',       name:'YOUGSUN — 送货确认单'},
 ];
+
+const YOUGSUN_PRODUCT_MAP = [
+  {code:'B0001',name:'BÁNH CUỐN',aliases:['BANH CUON']},
+  {code:'B0005',name:'BÚN TƯƠI SỢI TO',aliases:['BUN TUOI SOI TO','BUN SOI TO','SOI TO']},
+  {code:'B0002',name:'BÚN TƯƠI SỢI NHỎ',aliases:['BUN TUOI SOI NHO','BUN SOI NHO','BUN TUOI']},
+  {code:'B0006',name:'BÚN LÁ',aliases:['BUN LA']},
+  {code:'T0016',name:'ĐẬU PHỤ',aliases:['DAU PHU']},
+  {code:'K0022',name:'NƯỚC ĐẬU',aliases:['NUOC DAU']},
+  {code:'B0004',name:'BÁNH PHỞ CUỐN',aliases:['BANH PHO CUON']},
+  {code:'B0003',name:'BÁNH PHỞ TƯƠI',aliases:['BANH PHO TUOI','PHO TUOI']},
+  {code:'K0041',name:'QUẨY ĐÔI',aliases:['QUAY DOI','QUAY']},
+  {code:'K0003',name:'BÁNH CHƯNG 300G/CÁI',aliases:['BANH CHUNG 300G/CAI','BANH CHUNG 300G','BANH CHUNG']},
+];
+
+function normalizeYougsunText(value){
+  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/Đ/g,'D').replace(/đ/g,'d').toUpperCase().replace(/\s+/g,' ').trim();
+}
+
+function findYougsunProduct(productName){
+  const normalized=normalizeYougsunText(productName);
+  return YOUGSUN_PRODUCT_MAP.find(item=>item.aliases.some(alias=>normalized.includes(alias)))||null;
+}
+
+function yougsunShiftForDeliveryTime(value){
+  const match=String(value||'').trim().match(/^(\d{1,2})(?::|H)?(\d{2})?/i);
+  if(!match)return '';
+  const hour=Number(match[1]);
+  const minute=Number(match[2]||0);
+  if(!Number.isInteger(hour)||hour<0||hour>23||minute<0||minute>59)return '';
+  const minutes=hour*60+minute;
+  if(minutes>=19*60||minutes<2*60)return 'CA ĐÊM';
+  if(minutes>=13*60)return 'CA CHIỀU';
+  if(minutes>=7*60)return 'CA TRƯA';
+  return 'CA SÁNG';
+}
 
 function addDays(dateStr, n) {
   if(!dateStr) return '';
@@ -139,6 +173,8 @@ function addDays(dateStr, n) {
 }
 
 function buildPrintHTML(template, order, company) {
+  order = scfEscapePrintData(order || {});
+  company = scfEscapePrintData(company || {});
   const co = company || {};
   const lines = (order.lines || []).filter(l => l.productName);
   const totalQty = lines.reduce((s,l) => s + Number(l.qtyInvoice||l.qtyProd||0), 0);
@@ -330,35 +366,12 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
     </div>
     <\/body><\/html>`;
   }
-  if (template === 'youngsun_dbg' || template === 'youngsun_trina') {
-    const isDBG = template === 'youngsun_dbg';
-    const bep     = isDBG ? 'DBG'        : 'TRINA SOLAR';
-    const bepCode = isDBG ? 'DBG'        : 'TS';
-    const caDefault = isDBG ? 'CA CHIỀU' : 'CA SÁNG';
-
-    // Bảng tra mã Youngsun từ tên sản phẩm SCF
-    // key: chuỗi viết tắt trong Sheet1 → {code, name, unit}
-    const YS_MAP = {
-      'BC':  {code:'B001', name:'BÁNH CUỐN',        unit:'KG'},
-      'B':   {code:'B002', name:'BÚN TƯƠI',          unit:'KG'},
-      'T':   {code:'B005', name:'BÚN TƯƠI SỢI TO',   unit:'KG'},
-      'L':   {code:'B006', name:'BÚN LÁ',            unit:'KG'},
-      'P':   {code:'B003', name:'BÁNH PHỞ TƯƠI',     unit:'KG'},
-      'Q':   {code:'K0039',name:'QUẨY ĐÔI',          unit:'CÁI'},
-      'C':   {code:'K0041',name:'BÁNH CHƯNG NHỎ',    unit:'CÁI'},
-    };
-    // Tra mã Youngsun từ tên sản phẩm SCF
-    function findYS(productName) {
-      const n = (productName||'').toUpperCase();
-      if(n.includes('BÁNH CUỐN')||n.includes('BANH CUON'))  return YS_MAP['BC'];
-      if(n.includes('SỢI TO')||n.includes('SOI TO'))         return YS_MAP['T'];
-      if(n.includes('BÚN TƯƠI')||n.includes('BUN TUOI'))    return YS_MAP['B'];
-      if(n.includes('BÚN LÁ')||n.includes('BUN LA'))        return YS_MAP['L'];
-      if(n.includes('BÁNH PHỞ')||n.includes('BANH PHO'))    return YS_MAP['P'];
-      if(n.includes('QUẨY')||n.includes('QUAY'))            return YS_MAP['Q'];
-      if(n.includes('BÁNH CHƯNG')||n.includes('BANH CHUNG'))return YS_MAP['C'];
-      return null;
-    }
+  if (template === 'youngsun' || template === 'youngsun_dbg' || template === 'youngsun_trina') {
+    const pointText=normalizeYougsunText([order.pointName,order.address].filter(Boolean).join(' '));
+    const isTrina=pointText.includes('TRINA');
+    const isDBG=pointText.includes('DBG');
+    const bep=isTrina?'TRINA SOLAR':(isDBG?'DBG':(order.pointName||'YOUGSUN'));
+    const bepCode=isTrina?'TS':(isDBG?'DBG':'YS');
 
     const co = company || {};
     const coName  = co.name  || 'CÔNG TY TNHH THỰC PHẨM SÔNG CÔNG - A0031';
@@ -367,24 +380,24 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
 
     // Ngày giao & MVĐ
     const ngayGiao = order.deliveryDate || fmtDate();
-    // MVĐ: YS + ddmmyy + DBG/TS  (theo công thức Excel B28&B29&B30)
+    // MVĐ giữ hậu tố theo địa điểm thực tế của đơn (DBG/TRINA).
     const [dd,mm,yyyy] = ngayGiao.split('/');
     const ddmmyy = (dd||'00')+(mm||'00')+(yyyy||'0000').slice(-2);
     const mvd = 'YS' + ddmmyy + bepCode;
 
-    // Ca
-    const caDisplay = order.shiftLabel || caDefault;
+    // Ca theo giờ giao; mốc 13:00 thuộc CA CHIỀU để tránh chồng lấn với CA TRƯA.
+    const caDisplay = yougsunShiftForDeliveryTime(order.deliveryTime) || '—';
 
     const B  = 'border:1px solid #333';
     const BC = B+';text-align:center;padding:4px 6px';
     const BL = B+';text-align:left;padding:4px 8px';
 
-    // Build rows — dùng mã Youngsun, không dùng mã SCF
+    // Build rows — dùng đúng bảng mã YOUGSUN, không dùng mã nội bộ SCF.
     const rows = lines.map((l,i) => {
-      const ys = findYS(l.productName);
-      const yscode = ys ? ys.code : (l.productId||'');
+      const ys = findYougsunProduct(l.productName);
+      const yscode = ys ? ys.code : '';
       const ysname = ys ? ys.name : (l.productName||'');
-      const ysunit = ys ? ys.unit : (l.unit||'KG');
+      const ysunit = l.unit||'KG';
       const qty    = Number(l.qtyInvoice||l.qtyProd||0);
       return `<tr style="height:36px">
         <td style="${BC};font-size:14px">${i+1}</td>
@@ -399,7 +412,7 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
     const totalQ = lines.reduce((s,l)=>s+Number(l.qtyInvoice||l.qtyProd||0),0);
 
     return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>送货确认单 - ${bep}</title>
+<title>送货确认单 - YOUGSUN</title>
 <style>
   *{box-sizing:border-box}
   body{margin:0;padding:14px 18px;font-family:'Arial',sans-serif;font-size:13px;color:#111}
@@ -501,6 +514,9 @@ function PrintTemplateModal({order, company, onClose}) {
       h('div',{style:{fontWeight:500,marginBottom:4}},'Thông tin đơn:'),
       h('div',null,'📍 ',order.pointName||'—', ' | 📅 ',order.deliveryDate||'—',' | ⏰ ',order.deliveryTime||'—'),
       h('div',null,'📦 ',(order.lines||[]).length,' mặt hàng — KH: ',order.customer||'—')
+    ),
+    tpl==='youngsun'&&h('div',{style:{fontSize:12,color:'var(--tx2)',margin:'-2px 0 10px'}},
+      'YOUGSUN tự lấy bếp từ địa điểm giao và xác định ca: 02:00 Sáng · 07:00 Trưa · 13:00 Chiều · 19:00 Đêm.'
     ),
     h(Row,null,
       h('button',{onClick:onClose},'Hủy'),

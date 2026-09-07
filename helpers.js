@@ -1,4 +1,23 @@
 /* ─── Helpers ─── */
+// Chỉ dùng cho dữ liệu được chèn vào chuỗi HTML của cửa sổ in.
+// React tự escape nội dung giao diện; document.write thì không.
+function scfEscapePrintHtml(value){
+  return String(value??'').replace(/[&<>"']/g,char=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[char]));
+}
+function scfEscapePrintData(value){
+  if(typeof value==='string')return scfEscapePrintHtml(value);
+  if(Array.isArray(value))return value.map(scfEscapePrintData);
+  if(value&&typeof value==='object'){
+    if(Object.prototype.toString.call(value)==='[object Date]')return value;
+    return Object.fromEntries(
+      Object.entries(value).map(([key,item])=>[key,scfEscapePrintData(item)])
+    );
+  }
+  return value;
+}
+
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const fmtDate=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
 const fmtDT=()=>{const d=new Date();return fmtDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};

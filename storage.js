@@ -43,7 +43,20 @@ const SCF_SENSITIVE_KEYS=new Set([
   'scf_employees','scf_privileged_employees','scf_orders','scf_trips','scf_attendance','scf_advances','scf_rewards','scf_employee_errors','scf_leaves',
   'scf_finance_entries','scf_finance_debts','scf_finance_openings','scf_internal_messages','scf_tasks','scf_notifications'
 ]);
-const SCF_EDGE_WRITE_KEYS=new Set(['scf_ncc_goods','scf_goods_purchases']);
+// Khi bật xác thực máy chủ, không cho trình duyệt ghi trực tiếp các collection
+// nghiệp vụ. Edge Function sẽ đối chiếu quyền trang và mức r/rw/rwd của nhân viên.
+const SCF_EDGE_WRITE_KEYS=new Set([
+  'scf_company','scf_materials','scf_assets','scf_garages','scf_prodcats','scf_products',
+  'scf_prod_shifts','scf_prod_shift_rules','scf_areas','scf_customers','scf_workcats','scf_depts',
+  'scf_permission_profiles','scf_tasks','scf_nccs','scf_ncc_goods','scf_purchases','scf_goods_purchases',
+  'scf_fuelpurchases','scf_material_month_openings','scf_shifts','scf_quotes','scf_orders','scf_trips',
+  'scf_prodorders','scf_prod_actuals','scf_stock','scf_attendance','scf_advances','scf_rewards',
+  'scf_employee_errors','scf_employee_uniforms','scf_leaves','scf_ui_settings','scf_print_template_settings',
+  'scf_finance_entries','scf_finance_debts','scf_finance_openings','scf_company_news',
+  'scf_internal_messages','scf_notifications','scf_delivery_rules','scf_process_posts_accounting',
+  'scf_process_posts_bun','scf_process_posts_pho','scf_process_posts_banhcuon','scf_print_jobs',
+  'scf_maint_vehicle','scf_maint_machine','scf_powdersales'
+]);
 function serverAuthEnabled(){return typeof SCF_SERVER_AUTH_ENABLED!=='undefined'&&SCF_SERVER_AUTH_ENABLED;}
 function localCacheKey(key){return 'scf_'+String(key||'').replace('scf_','');}
 function allowPersistentLocalCache(key){return !serverAuthEnabled()||!SCF_SENSITIVE_KEYS.has(key);}

@@ -114,33 +114,36 @@ function OrderDetailLine({line,products,prodCats,prodShifts,deliveryDate,deliver
 }
 
 function PrintModal({order,company,onClose}){
+  const displayOrder=order,displayCompany=company;
+  order=scfEscapePrintData(order||{});
+  company=scfEscapePrintData(company||{});
   return h('div',{className:'overlay',onClick:e=>{if(e.target===e.currentTarget)onClose()}},
     h('div',{style:{background:'#fff',borderRadius:'var(--rl)',width:700,maxWidth:'95vw',maxHeight:'92vh',overflow:'auto',padding:'2rem'}},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'1.5rem'}},
         h('div',{style:{display:'flex',alignItems:'center',gap:12}},
           h('img',{src:LOGO_SRC,style:{width:50,height:50}}),
           h('div',null,
-            h('div',{style:{fontSize:16,fontWeight:700,color:'var(--pri3)'}},company&&company.name||'Công ty SCF'),
-            company&&company.address&&h('div',{style:{fontSize:12,color:'var(--tx2)'}},company.address),
-            company&&company.phone&&h('div',{style:{fontSize:12,color:'var(--tx2)'}},'ĐT: '+company.phone)
+            h('div',{style:{fontSize:16,fontWeight:700,color:'var(--pri3)'}},displayCompany&&displayCompany.name||'Công ty SCF'),
+            displayCompany&&displayCompany.address&&h('div',{style:{fontSize:12,color:'var(--tx2)'}},displayCompany.address),
+            displayCompany&&displayCompany.phone&&h('div',{style:{fontSize:12,color:'var(--tx2)'}},'ĐT: '+displayCompany.phone)
           )
         ),
         h('div',{style:{textAlign:'right'}},
           h('div',{style:{fontSize:20,fontWeight:700,color:'var(--pri3)'}},'HÓA ĐƠN GIAO HÀNG'),
-          h('div',{style:{fontSize:13,color:'var(--tx2)'}},order.id),
-          order.invoiceNo&&h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Số HĐ: '+order.invoiceNo)
+          h('div',{style:{fontSize:13,color:'var(--tx2)'}},displayOrder.id),
+          displayOrder.invoiceNo&&h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Số HĐ: '+displayOrder.invoiceNo)
         )
       ),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,background:'var(--bg2)',padding:'12px 16px',borderRadius:'var(--r)',marginBottom:'1.5rem',fontSize:13}},
-        h('div',null,h('b',null,'Khách hàng: '),order.customer),
-        h('div',null,h('b',null,'Ngày giao: '),order.deliveryDate+(order.deliveryTime?' lúc '+order.deliveryTime:'')),
-        h('div',{style:{gridColumn:'1/-1'}},h('b',null,'Địa chỉ: '),order.address||order.pointName||'—')
+        h('div',null,h('b',null,'Khách hàng: '),displayOrder.customer),
+        h('div',null,h('b',null,'Ngày giao: '),displayOrder.deliveryDate+(displayOrder.deliveryTime?' lúc '+displayOrder.deliveryTime:'')),
+        h('div',{style:{gridColumn:'1/-1'}},h('b',null,'Địa chỉ: '),displayOrder.address||displayOrder.pointName||'—')
       ),
       h('table',{style:{width:'100%',borderCollapse:'collapse',marginBottom:'1rem',fontSize:13}},
         h('thead',null,h('tr',{style:{background:'var(--pri3)',color:'#fff'}},
           ...[['STT','40px'],['Tên sản phẩm',''],['Đơn vị','80px'],['SL Đặt','100px'],['SL hóa đơn','100px'],['Ca SX','80px']].map(([c,w])=>h('th',{key:c,style:{padding:'8px 10px',textAlign:'left',width:w||'auto'}},c))
         )),
-        h('tbody',null,(order.lines||[]).map((l,i)=>h('tr',{key:l.id,style:{borderBottom:'.5px solid var(--bd)',background:i%2?'var(--bg2)':'#fff'}},
+        h('tbody',null,(displayOrder.lines||[]).map((l,i)=>h('tr',{key:l.id,style:{borderBottom:'.5px solid var(--bd)',background:i%2?'var(--bg2)':'#fff'}},
           h('td',{style:{padding:'7px 10px'}},(i+1)),
           h('td',{style:{padding:'7px 10px',fontWeight:500}},l.productName||'—'),
           h('td',{style:{padding:'7px 10px'}},l.unit||'—'),
@@ -149,7 +152,7 @@ function PrintModal({order,company,onClose}){
           h('td',{style:{padding:'7px 10px'}},l.shift==='night'?'Ca đêm':'Ca sáng')
         )))
       ),
-      order.note&&h('div',{style:{fontSize:13,marginBottom:'1rem'}},h('b',null,'Ghi chú: '),order.note),
+      displayOrder.note&&h('div',{style:{fontSize:13,marginBottom:'1rem'}},h('b',null,'Ghi chú: '),displayOrder.note),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:20,marginTop:'2rem',fontSize:12,textAlign:'center'}},
         h('div',null,h('div',{style:{borderTop:'.5px solid #333',paddingTop:8,fontWeight:500}},'Người giao hàng'),h('div',{style:{color:'var(--tx2)'}},'(Ký và ghi rõ họ tên)')),
         h('div',null,h('div',{style:{borderTop:'.5px solid #333',paddingTop:8,fontWeight:500}},'Người nhận hàng'),h('div',{style:{color:'var(--tx2)'}},'(Ký và ghi rõ họ tên)')),
@@ -157,8 +160,8 @@ function PrintModal({order,company,onClose}){
       ),
       h('div',{style:{display:'flex',gap:8,justifyContent:'flex-end',marginTop:'1.5rem'}},
         window.scfShouldUsePrintAgent?.()&&h('button',{className:'bp',onClick:function(){
-          var html=buildPrintHTML('welstory',order,company);
-          window.scfQueueA4Print(html,{title:'Phiếu giao hàng · '+(order.pointName||order.customer||order.id||'SCF')})
+          var html=buildPrintHTML('welstory',displayOrder,displayCompany);
+          window.scfQueueA4Print(html,{title:'Phiếu giao hàng · '+(displayOrder.pointName||displayOrder.customer||displayOrder.id||'SCF')})
             .then(function(){window.showToast('Đã gửi đơn tới Canon 2900.','success');})
             .catch(function(error){window.showToast(error&&error.message||'Chưa gửi được lệnh in tới Canon 2900.','error');});
         }},h('i',{className:'ti ti-printer',style:{fontSize:14}}),'Gửi Canon 2900'),
@@ -1294,6 +1297,9 @@ function PrintByCustomerModal({orders,customers,products,company,initialDate,onC
       h(F,{label:'Từ ngày'},h('input',{type:'date',value:df,onChange:e=>sdf(e.target.value)})),
       h(F,{label:'Đến ngày'},h('input',{type:'date',value:dt,onChange:e=>sdt(e.target.value)}))
     ),
+    tpl==='youngsun'&&h('div',{style:{fontSize:12,color:'var(--tx2)',margin:'0 0 10px'}},
+      'YOUGSUN tự lấy bếp từ địa điểm giao và xác định ca: 02:00 Sáng · 07:00 Trưa · 13:00 Chiều · 19:00 Đêm.'
+    ),
     filtered.length>0?h('div',null,
       h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:'1rem',fontSize:13}},
         h('i',{className:'ti ti-file-invoice',style:{color:'var(--pri)',marginRight:6}}),
@@ -1691,7 +1697,7 @@ function IntemTab({products,company}){
     }).join('');
     const popup=window.open('','_blank','width=1200,height=850');
     if(!popup){window.showToast('Trình duyệt đang chặn cửa sổ in. Hãy cho phép popup.','warn');return;}
-    popup.document.write('<html><head><title>In tem '+String(selectedProduct.name||'')+'</title><style>'
+    popup.document.write('<html><head><title>In tem '+scfEscapePrintHtml(selectedProduct.name||'')+'</title><style>'
       +'@page{size:'+width+' '+height+';margin:0}'
       +'html,body{margin:0;padding:0;font-family:Arial,sans-serif;background:#eef3f0}'
       +'body{display:flex;min-height:100vh}'
@@ -1710,7 +1716,7 @@ function IntemTab({products,company}){
       +'@media print{body{display:block;background:#fff}.summary{display:none}.labels{display:block}.label.classic58{width:58mm;height:40mm}.label-img.classic58-img{position:static;width:'+contentWidth+';height:'+contentHeight+';transform:rotate(180deg);transform-origin:center center}}'
       +'</style></head><body>'
       +'<aside class=\"summary\"><h2>Intem 420B</h2>'
-      +'<div class=\"meta\"><b>Sản phẩm:</b> '+String(selectedProduct.name||'')+'<br><b>Mẫu tem:</b> '+templateType+'<br><b>Ngày SX:</b> '+toVnDate(prodDate)+'<br><b>Giờ SX:</b> '+String(prodTime||'—')+'<br><b>Tổng số tem:</b> '+labelWeights.length+'<br><b>IP máy in:</b> '+String(printerIp||'Chưa lưu')+'</div>'
+      +'<div class=\"meta\"><b>Sản phẩm:</b> '+scfEscapePrintHtml(selectedProduct.name||'')+'<br><b>Mẫu tem:</b> '+scfEscapePrintHtml(templateType)+'<br><b>Ngày SX:</b> '+scfEscapePrintHtml(toVnDate(prodDate))+'<br><b>Giờ SX:</b> '+scfEscapePrintHtml(prodTime||'—')+'<br><b>Tổng số tem:</b> '+labelWeights.length+'<br><b>IP máy in:</b> '+scfEscapePrintHtml(printerIp||'Chưa lưu')+'</div>'
       +'<div class=\"chips\">'+labelWeights.map((kg,idx)=>'<span class=\"chip\">Tem '+(idx+1)+': '+formatKg(kg)+'kg</span>').join('')+'</div>'
       +'<div class=\"note\">Trình duyệt sẽ mở hộp in. Nếu máy 420B đã cài trên Windows, chọn đúng máy in trong hộp in để in ra tem.</div>'
       +'</aside><main class=\"labels\">'+labels+'</main></body></html>');

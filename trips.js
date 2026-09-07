@@ -1044,8 +1044,9 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     so(id);
   };
   const printTrip=trip=>{
-    const tripOrders=sortedTripOrders(trip);
+    const tripOrders=scfEscapePrintData(sortedTripOrders(trip));
     const totalW=calcTripWeight(trip);
+    trip=scfEscapePrintData(trip);
     const rows=tripOrders.map(o=>{
       const ow=orderWeight(o);
       const items=(o.lines||[]).reduce((s,l)=>s+(l.productName?'• '+l.productName+' '+lineQty(l)+(l.unit?' '+l.unit:'')+'<br>':''),'');
