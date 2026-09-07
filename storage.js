@@ -326,12 +326,12 @@ async function flushPendingWrites(){
   if(!entries.length){setSyncState('synced');return true;}
   setSyncState('syncing','Đang gửi '+entries.length+' thay đổi');
   for(const[key]of entries){
-    let waitingResolvers=[];
+    let waitingResolvers=[],item=null;
     try{
       const debounced=scfDebouncedWrites[key];
       if(debounced){clearTimeout(debounced.timer);waitingResolvers=debounced.resolvers||[];delete scfDebouncedWrites[key];}
       if(scfWriteChains[key])await scfWriteChains[key].catch(()=>false);
-      const item=readSyncQueue()[key];if(!item){waitingResolvers.forEach(done=>done(true));continue;}
+      item=readSyncQueue()[key];if(!item){waitingResolvers.forEach(done=>done(true));continue;}
       if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees'))await withRemoteTimeout(serverSaveEmployees(item.value),remoteTimeoutFor(item.value));
       else if(serverAuthEnabled()&&key==='scf_trips'&&(item.mode==='auto-trips'||(Array.isArray(item.value)&&item.value.some(trip=>trip?.autoCreated))))await withRemoteTimeout(serverSaveAutoTrips(item.value),remoteTimeoutFor(item.value));
       else if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
@@ -355,7 +355,7 @@ async function flushPendingWrites(){
         setTimeout(()=>window.scfSyncNow?.(),300);return false;
       }
       const latest=readSyncQueue();if(latest[key]){latest[key].attempts=(Number(latest[key].attempts)||0)+1;writeSyncQueue(latest);}
-      reportSyncError(key,e,item.value);scheduleSyncRetry();return false;
+      reportSyncError(key,e,item?.value);scheduleSyncRetry();return false;
     }
   }
   scfRetryAttempt=0;setSyncState('synced');return true;
