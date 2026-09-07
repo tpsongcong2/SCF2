@@ -11,7 +11,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const[customerF,setCustomerF]=useState('all');
   const[tripF,setTripF]=useState('all');
   const[driverF,setDriverF]=useState('all');
-  const[groupMode,setGroupMode]=useLS('scf_order_detail_group_mode_v2','time');
+  const[groupMode,setGroupMode]=useLS('scf_order_detail_group_mode_v3','trip');
   const[pageSize,setPageSize]=useState(25);
   const[page,setPage]=useState(1);
   const[mobileFiltersHidden,setMobileFiltersHidden]=useLS('scf_order_detail_mobile_filters_hidden',window.innerWidth<=768);

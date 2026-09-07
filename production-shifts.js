@@ -357,6 +357,7 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
   const[form,sf]=useState(empty);
   const[sortMode,setSortMode]=useState('area');
   const[areaFilter,setAreaFilter]=useState('all');
+  const[locationSearch,setLocationSearch]=useState('');
   const pointOptions=[...new Set((customers||[]).flatMap(c=>(c.points||[]).map(pt=>pt.name).filter(Boolean)))].sort((a,b)=>a.localeCompare(b));
   const dateOffsetLabel=v=>{
     const n=Number(v||0);
@@ -407,7 +408,8 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
     }
     return group==='Chưa phân khu vực'?9999:0;
   };
-  const groupedShifts=[...prodShifts].map(normalize).filter(r=>areaFilter==='all'||areaOfLocation(r.location)===areaFilter).sort((a,b)=>{
+  const locationSearchKey=normalizeLookupText(locationSearch);
+  const groupedShifts=[...prodShifts].map(normalize).filter(r=>(areaFilter==='all'||areaOfLocation(r.location)===areaFilter)&&(!locationSearchKey||normalizeLookupText(r.location).includes(locationSearchKey))).sort((a,b)=>{
     const ga=groupLabelForShift(a),gb=groupLabelForShift(b);
     const gp=sortPriorityForGroup(ga)-sortPriorityForGroup(gb);
     if(gp)return gp;
@@ -516,6 +518,7 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
       )
     ),
     h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:'1rem',gap:8,flexWrap:'wrap',alignItems:'center'}},
+      h('input',{value:locationSearch,onChange:e=>setLocationSearch(e.target.value),placeholder:'Tìm địa điểm...',type:'search',style:{padding:'7px 10px',border:'1px solid var(--bd)',borderRadius:'var(--r)',fontSize:13,minWidth:240}}),
       h('span',{style:{fontSize:12,color:'var(--tx2)',fontWeight:600}},'Lọc khu vực'),
       h('select',{value:areaFilter,onChange:e=>setAreaFilter(e.target.value),style:{padding:'7px 10px',border:'1px solid var(--bd)',borderRadius:'var(--r)',fontSize:13,minWidth:180}},
         h('option',{value:'all'},'Tất cả khu vực ('+(prodShifts||[]).length+')'),
