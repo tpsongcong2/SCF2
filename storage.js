@@ -88,7 +88,9 @@ function writeSyncQueue(queue){
   try{sessionStorage.setItem(SCF_SYNC_QUEUE_KEY,JSON.stringify(queue));}catch(e){console.warn('Sync queue only kept in memory:',e.message);}
   return Object.keys(queue).length;
 }
+let scfSyncedIdleTimer=null;
 function setSyncState(status,detail=''){
+  if(scfSyncedIdleTimer){clearTimeout(scfSyncedIdleTimer);scfSyncedIdleTimer=null;}
   const pending=Object.keys(readSyncQueue()).length;
   if(pending&&(status==='idle'||status==='synced')){
     status='error';
@@ -96,6 +98,10 @@ function setSyncState(status,detail=''){
   }
   window.__SCF_SYNC_STATE={status,detail,pending,updatedAt:new Date().toISOString()};
   window.dispatchEvent(new CustomEvent('scf-sync-state',{detail:window.__SCF_SYNC_STATE}));
+  if(status==='synced'&&!pending)scfSyncedIdleTimer=setTimeout(()=>{
+    scfSyncedIdleTimer=null;
+    if(window.__SCF_SYNC_STATE?.status==='synced'&&!Object.keys(readSyncQueue()).length)setSyncState(navigator.onLine?'idle':'offline');
+  },5000);
 }
 function syncCollectionLabel(key){return SCF_SYNC_LABELS[key]||String(key||'').replace(/^scf_/,'').replaceAll('_',' ');}
 function duplicateItemGroups(value){
