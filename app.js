@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V269';
+const SCF_BUILD_VERSION='V270';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -331,7 +331,13 @@ function App(){
           if(cancelled)return;
           _se(rows);
         }
-      }catch(err){if(!cancelled)setBootError(err.message||'Không tải được hồ sơ đăng nhập.');}
+      }catch(err){
+        if(!cancelled&&String(err?.message||'').includes('Phiên đăng nhập không hợp lệ')){
+          try{await sb?.auth?.signOut({scope:'local'});}catch{}
+          window.scfClearSensitiveLocalData?.();setSession(null);_se([]);setBootError('');
+          window.showToast?.('Tài khoản đã được đăng nhập trên máy khác. Máy này đã tự đăng xuất.','warn',7000);
+        }else if(!cancelled)setBootError(err.message||'Không tải được hồ sơ đăng nhập.');
+      }
       finally{if(!cancelled){setServerAuthReady(true);setLoading(false);}}
     })();
     return()=>{cancelled=true;loader.dispose();};
