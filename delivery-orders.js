@@ -381,6 +381,20 @@ function isValidCustomerImportDate(value){
   const date=new Date(year,month-1,day);
   return date.getFullYear()===year&&date.getMonth()===month-1&&date.getDate()===day;
 }
+function ensureUniqueDeliveryOrderIds(rows){
+  const source=Array.isArray(rows)?rows:[],used=new Set(),nextByDate=new Map();
+  const datePrefix=value=>{const m=String(value||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);return m?'D'+m[3].slice(-2)+m[1].padStart(2,'0')+m[2].padStart(2,'0'):'D000000';};
+  source.forEach(order=>{const id=String(order?.id||'').trim();if(!id||used.has(id))return;used.add(id);const prefix=datePrefix(order?.deliveryDate);const match=id.match(new RegExp('^'+prefix+'(\\d+)$'));if(match)nextByDate.set(prefix,Math.max(nextByDate.get(prefix)||1,Number(match[1])+1));});
+  const seen=new Set();
+  return source.map(order=>{
+    const current=String(order?.id||'').trim();
+    if(current&&!seen.has(current)){seen.add(current);return order;}
+    const prefix=datePrefix(order?.deliveryDate);let seq=Math.max(1,nextByDate.get(prefix)||1),id='';
+    do{id=prefix+String(seq++).padStart(3,'0');}while(used.has(id));
+    nextByDate.set(prefix,seq);used.add(id);seen.add(id);
+    return {...order,id,legacyOrderId:current||undefined,updatedAt:fmtDT(),updatedBy:order?.updatedBy||order?.createdBy||'Hệ thống sửa mã trùng'};
+  });
+}
 function customerImportColumnOffset(rawRows){
   const rows=(rawRows||[]).slice(0,100);
   const maxColumns=Math.min(12,Math.max(0,...rows.map(row=>(row||[]).length)));
@@ -711,7 +725,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     if(blockedDuplicates.length){const first=blockedDuplicates[0];window.showToast(duplicateDeliveryOrderMessage(first,findExistingDeliveryOrder(orders,first))+(blockedDuplicates.length>1?' Và '+(blockedDuplicates.length-1)+' đơn trùng khác đã bị bỏ qua.':''),'warn',10000);}
     const cleanOrders=preparedOrders.filter(order=>!blockedDuplicates.includes(order));
     if(!cleanOrders.length){window.showToast('Không còn đơn hàng mới để import.','info');return;}
-    setOrders(p=>[...p,...cleanOrders]);
+    setOrders(p=>ensureUniqueDeliveryOrderIds([...p,...cleanOrders]));
     window.showToast('Đã import '+cleanOrders.length+' đơn hàng ('+cleanOrders.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng sản phẩm); các dòng không tìm được sản phẩm đã được bỏ qua.','success');
     onClose();
   };
