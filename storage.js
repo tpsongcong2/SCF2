@@ -225,6 +225,15 @@ async function dbGetRequired(key,def){
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
   const pending=readSyncQueue()[key];
   if(pending)return pending.value;
+  if(SCF_EDGE_WRITE_KEYS.has(key)){
+    try{
+      setSyncState('syncing','Đang nhận '+syncCollectionLabel(key));
+      const loaded=await serverLoadPermittedCollection(key);
+      const value=Array.isArray(loaded?.value)?loaded.value:def;
+      scfRemoteVersions.set(key,String(loaded?.updatedAt||''));
+      scfRemoteSnapshots.set(key,syncSnapshot(value));setSyncState('synced');return value;
+    }catch(error){setSyncState('error','Không tải được '+syncCollectionLabel(key));throw new Error('Không tải được '+key+': '+(error.message||'Lỗi kết nối'));}
+  }
   const before=scfLocalWrites.get(key);
   try{
     const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('value,updated_at').eq('key',key).maybeSingle());
@@ -259,6 +268,14 @@ async function dbGet(key,def){
   if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees')){
     try{setSyncState('syncing','Đang nhận danh sách nhân viên');const employees=await serverLoadEmployees();setSyncState('synced');return employees;}
     catch(e){console.warn('serverLoadEmployees:',e.message);setSyncState('error','Không tải được danh sách nhân viên');return def;}
+  }
+  if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
+    try{
+      setSyncState('syncing','Đang nhận '+syncCollectionLabel(key));
+      const loaded=await serverLoadPermittedCollection(key);
+      const value=Array.isArray(loaded?.value)?loaded.value:def;
+      scfRemoteVersions.set(key,String(loaded?.updatedAt||''));scfRemoteSnapshots.set(key,syncSnapshot(value));setSyncState('synced');return value;
+    }catch(error){setSyncState('error','Không tải được '+syncCollectionLabel(key));return def;}
   }
   // Khi online thì ưu tiên dữ liệu mới từ Supabase để các máy đồng bộ với nhau.
   if(sb)try{

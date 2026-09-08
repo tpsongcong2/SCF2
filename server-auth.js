@@ -75,6 +75,12 @@ async function serverLoadEmployees(){
   window.__SCF_CURRENT_EMPLOYEE=data.currentEmployee||null;
   return data.employees;
 }
+async function serverLoadPermittedCollection(key){
+  if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
+  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'load_permitted_collection',key:String(key||'')}});
+  if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không tải được dữ liệu.'));
+  return{value:data.value,updatedAt:data.updatedAt||''};
+}
 
 function serverEmployeeIsPrivileged(employee){
   const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').trim().toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
