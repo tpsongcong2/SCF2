@@ -1983,6 +1983,15 @@ function SyncDataReportTab(){
 function SupabaseUsageReportTab({employees,materials,assets,prodCats,products,customers,areas,workcats,tasks,nccs,purchases,goodsPurchases,quotes,orders,trips,attendance,advances,rewards,employeeErrors,employeeUniforms,leaves,depts,shifts,prodShifts,prodShiftRules,prodOrders,stock,company}) {
   const [maintenanceVehicle,setMaintenanceVehicle]=useState([]);
   const [maintenanceMachine,setMaintenanceMachine]=useState([]);
+  const [serverUsage,setServerUsage]=useState(null);
+  const [usageLoading,setUsageLoading]=useState(true);
+  const [usageError,setUsageError]=useState('');
+  const loadUsage=async()=>{
+    setUsageLoading(true);setUsageError('');
+    try{setServerUsage(await serverLoadSupabaseUsage());}
+    catch(error){setUsageError(error?.message||'Không tải được số liệu Supabase.');}
+    finally{setUsageLoading(false);}
+  };
   useEffect(()=>{
     let active=true;
     Promise.all([dbGet('scf_maint_vehicle',[]),dbGet('scf_maint_machine',[])]).then(([vehicle,machine])=>{
@@ -1990,6 +1999,7 @@ function SupabaseUsageReportTab({employees,materials,assets,prodCats,products,cu
     }).catch(()=>{});
     return()=>{active=false;};
   },[]);
+  useEffect(()=>{loadUsage();},[]);
   const sizeOf=v=>new Blob([JSON.stringify(v??null)]).size;
   const rows=[
     ['employees','Nhân viên',employees],
@@ -2033,10 +2043,42 @@ function SupabaseUsageReportTab({employees,materials,assets,prodCats,products,cu
   };
   const top5=rows.slice(0,5);
   const maxBytes=Math.max(...rows.map(r=>r.bytes),1);
+  const limits={databaseBytes:500*1024*1024,storageBytes:1024*1024*1024,monthlyActiveUsers:50000};
+  const actualMetrics=serverUsage?[
+    {key:'databaseBytes',label:'Cơ sở dữ liệu',used:Number(serverUsage.databaseBytes)||0,limit:limits.databaseBytes,format:fmtBytes,detail:'Gồm dữ liệu và chỉ mục của toàn project'},
+    {key:'storageBytes',label:'Kho tệp Storage',used:Number(serverUsage.storageBytes)||0,limit:limits.storageBytes,format:fmtBytes,detail:(Number(serverUsage.storageObjects)||0).toLocaleString('vi-VN')+' tệp'},
+    {key:'monthlyActiveUsers',label:'Người dùng hoạt động tháng',used:Number(serverUsage.monthlyActiveUsers)||0,limit:limits.monthlyActiveUsers,format:n=>n.toLocaleString('vi-VN'),detail:(Number(serverUsage.authUsers)||0).toLocaleString('vi-VN')+' tài khoản xác thực'},
+  ]:[];
+  const metricCard=metric=>{
+    const percent=metric.limit?metric.used/metric.limit*100:0;
+    const color=percent>=100?'#b42318':percent>=80?'#b26a00':'#16835d';
+    return h('div',{key:metric.key,className:'card',style:{padding:14,minWidth:220}},
+      h('div',{style:{fontSize:13,fontWeight:700,marginBottom:8}},metric.label),
+      h('div',{style:{fontSize:21,fontWeight:800,color}},metric.format(metric.used),' / ',metric.format(metric.limit)),
+      h('div',{style:{height:9,background:'var(--bg2)',borderRadius:99,overflow:'hidden',margin:'10px 0 7px'}},
+        h('div',{style:{height:'100%',width:Math.min(100,Math.max(percent,1))+'%',background:color,borderRadius:99}})
+      ),
+      h('div',{style:{fontSize:12,color:'var(--tx2)'}},percent.toFixed(percent<1?2:1)+'% đã dùng · Còn '+metric.format(Math.max(0,metric.limit-metric.used))),
+      h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:4}},metric.detail)
+    );
+  };
   return h('div',null,
-    h('div',{className:'ptitle'},h('i',{className:'ti ti-database',style:{fontSize:20}}),'Báo cáo dung lượng Supabase'),
+    h('div',{className:'ptitle',style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}},
+      h('span',null,h('i',{className:'ti ti-database',style:{fontSize:20}}),'Báo cáo dung lượng Supabase'),
+      h('button',{className:'btn',onClick:loadUsage,disabled:usageLoading},h('i',{className:'ti ti-refresh'}),usageLoading?' Đang tải...':' Cập nhật số liệu')
+    ),
+    h('div',{className:'card',style:{marginBottom:'1rem'}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',marginBottom:12}},
+        h('div',null,h('div',{style:{fontWeight:700}},'Sử dụng thực tế trên Supabase'),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:3}},'Hạn mức bên dưới áp dụng cho gói Free; số liệu được đọc trực tiếp từ project.')),
+        serverUsage?.measuredAt&&h('div',{style:{fontSize:11,color:'var(--tx2)',textAlign:'right'}},'Đo lúc ',new Date(serverUsage.measuredAt).toLocaleString('vi-VN'))
+      ),
+      usageError&&h('div',{style:{padding:'10px 12px',borderRadius:8,background:'#fff1f0',color:'#b42318',marginBottom:10}},h('i',{className:'ti ti-alert-triangle'}),' ',usageError),
+      usageLoading&&!serverUsage?h('div',{className:'empty-st',style:{padding:'1.2rem'}},'Đang lấy thông số Supabase...'):
+        h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:12}},actualMetrics.map(metricCard)),
+      h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:12}},'Lưu ý: Egress, lượt gọi Edge Function và Realtime được Supabase tính ở cấp tổ chức. Các chỉ số đó cần xem tại Dashboard Supabase → Organization → Usage.')
+    ),
     h('div',{className:'card',style:{marginBottom:'1rem',background:'linear-gradient(135deg,#f7fbf9,#eef6f1)'}},
-      h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:4}},'Dung lượng ước tính'),
+      h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:4}},'Dữ liệu nghiệp vụ ước tính trong app'),
       h('div',{style:{fontSize:28,fontWeight:700,color:'var(--pri)'}},fmtBytes(totalBytes)),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:6}},'Tính từ dữ liệu hiện có trong app và các bảng đang đồng bộ lên Supabase qua `kv_store`. Số liệu là ước tính theo JSON.')
     ),

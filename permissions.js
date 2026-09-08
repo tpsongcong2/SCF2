@@ -58,7 +58,7 @@ const PAGE_ACCESS = {
   materialusage:['admin','manager','staff'],
   powderdebtreport:['admin','manager','staff'],
   syncreport:['admin','manager'],
-  dbusage:['admin','manager'],
+  dbusage:['admin'],
   maint_vehicle:['admin','manager','staff'],
   maint_machine:['admin','manager','staff'],
   salesreport:  ['admin','manager','staff'],
@@ -72,6 +72,9 @@ function roleDefaults(role) {
 }
 // canAccess checks employee's custom permissions first, else falls back to role
 function canAccess(role, page, perms, dept='') {
+  // Báo cáo sử dụng Supabase chứa thông tin hạ tầng và hạn mức của công ty.
+  // Không cho quyền tùy chỉnh của nhân viên/quản lý mở trang này.
+  if(page==='dbusage')return role==='admin';
   const faceMaskPages=['permission_settings','materials','workreport_total','nccs','purchaseorders','utilityexpenses','cashflowreport','salesreport','fuelreport','purchasereport','maintreport','materialusage','syncreport','dbusage'];
   const sharedVariantPages=['employees'];
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';

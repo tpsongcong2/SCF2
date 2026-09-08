@@ -239,6 +239,13 @@ async function dbGetRequired(key,def){
     throw new Error('Không tải được '+key+': '+(error.message||'Lỗi kết nối'));
   }
 }
+async function dbGetChangedKeys(keys){
+  const wanted=[...new Set((keys||[]).map(String).filter(Boolean))];
+  if(!wanted.length||!sb)return[];
+  const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('key,updated_at').in('key',wanted),10000);
+  if(error)throw error;
+  return (data||[]).filter(row=>String(row?.updated_at||'')!==String(scfRemoteVersions.get(String(row?.key||''))||'')).map(row=>String(row.key));
+}
 async function dbGet(key,def){
   if(serverAuthEnabled()){
     if(!sb){setSyncState('error','Không kết nối được máy chủ');return def;}

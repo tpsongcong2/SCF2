@@ -127,6 +127,13 @@ async function serverSavePermittedCollection(key,value,expectedUpdatedAt=''){
   return{value:data.value||value,updatedAt:data.updatedAt||''};
 }
 
+async function serverLoadSupabaseUsage(){
+  if(!sb)throw new Error('Chưa kết nối được máy chủ báo cáo dung lượng.');
+  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'load_supabase_usage'}});
+  if(error||!data?.ok||!data?.usage)throw new Error(await serverFunctionErrorMessage(error,data,'Không tải được dung lượng Supabase.'));
+  return data.usage;
+}
+
 async function serverChangePassword(employeeId,currentPassword,newPassword,adminReset=false){
   if(!sb)throw new Error('Chưa kết nối được máy chủ đổi mật khẩu.');
   const{data,error}=await sb.functions.invoke('scf-auth',{

@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V279';
+const SCF_BUILD_VERSION='V280';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -382,15 +382,18 @@ function App(){
     const refresh=async()=>{
       if(stopped||busy||document.hidden||!navigator.onLine)return;
       busy=true;
-      const tripRefresh=keys.includes('orders')&&keys.includes('trips');
-      if(tripRefresh)setAutoSyncReady(false);
       try{
-        const results=await Promise.allSettled(keys.map(key=>dataLoaderRef.current.load(key,true)));
+        const changed=await dbGetChangedKeys(keys.map(key=>'scf_'+key));
+        const changedKeys=changed.map(key=>key.replace(/^scf_/,''));
+        if(!changedKeys.length)return;
+        const tripRefresh=changedKeys.some(key=>key==='orders'||key==='trips');
+        if(tripRefresh)setAutoSyncReady(false);
+        const results=await Promise.allSettled(changedKeys.map(key=>dataLoaderRef.current.load(key,true)));
         if(tripRefresh&&!stopped&&results.every(result=>result.status==='fulfilled'))setAutoSyncReady(true);
       }catch(e){console.warn('Auto sync:',e.message||e);}
       finally{busy=false;}
     };
-    const tm=setInterval(refresh,15000);
+    const tm=setInterval(refresh,60000);
     document.addEventListener('visibilitychange',refresh);
     window.scfSyncNow=refresh;
     return()=>{stopped=true;clearInterval(tm);document.removeEventListener('visibilitychange',refresh);if(window.scfSyncNow===refresh)delete window.scfSyncNow;};
