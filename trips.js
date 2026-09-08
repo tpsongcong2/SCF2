@@ -578,8 +578,8 @@ function TripImagesModal({trips,orders,products,onClose}){
   );
 }
 
-function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,quotes,financeDebts,setFinanceDebts,currentUser,notify}){
-  const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);const[additionalTrip,setAdditionalTrip]=useState(null);
+function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,quotes,financeDebts,setFinanceDebts,company,currentUser,notify}){
+  const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);const[additionalTrip,setAdditionalTrip]=useState(null);const[printOrder,setPrintOrder]=useState(null);
   const _td1=fmtDate();const _ti1=_td1.split('/').reverse().join('-');const[fPeriod,sfPeriod]=useState('day');const[fDate,sfDate]=useState(_ti1);const[fMonth,sfMonth]=useState(_ti1.slice(0,7));const[fShift,sfShift]=useState('');const[fDriver,sfDriver]=useState('');
   const isDriver=currentUser?.role==='driver';
   const canManageTrips=currentUser?.role==='admin'||currentUser?.role==='manager';
@@ -1054,8 +1054,40 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     window.showToast('Đã tạo chuyến '+id+(matchedIds.length?' và tự xếp '+matchedIds.length+' đơn phù hợp.':'. Chưa có đơn tự động phù hợp.'),matchedIds.length?'success':'info',6000);
     so(id);
   };
+  const tripPackSummaryHtml=tripOrders=>{
+    const groups=new Map();
+    (tripOrders||[]).forEach(order=>(order.lines||[]).forEach(line=>{
+      const product=(products||[]).find(item=>String(item.id||'')===String(line.productId||''));
+      const name=String(line.productName||product?.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toUpperCase();
+      const group=name.includes('BANH CUON')?'BÁNH CUỐN':name.includes('PHO')?'PHỞ':name.includes('BUN')?'BÚN':'';
+      if(!group)return;
+      const pack=group==='PHỞ'?5:10;
+      const kg=Number(lineWeight(line)||0);
+      if(!(kg>0))return;
+      const full=Math.floor((kg+1e-9)/pack);
+      const remainder=Number((kg-full*pack).toFixed(2));
+      const current=groups.get(group)||{group,pack,totalKg:0,full:0,remainders:new Map()};
+      current.totalKg+=kg;current.full+=full;
+      if(remainder>0){const key=String(remainder);current.remainders.set(key,(current.remainders.get(key)||0)+1);}
+      groups.set(group,current);
+    }));
+    if(!groups.size)return '';
+    const fmt=value=>Number(value||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
+    const ordered=['BÚN','BÁNH CUỐN','PHỞ'].map(key=>groups.get(key)).filter(Boolean);
+    const rows=ordered.map(item=>{
+      const oddCount=[...item.remainders.values()].reduce((sum,count)=>sum+count,0);
+      const oddDetail=oddCount?[...item.remainders.entries()].sort((a,b)=>Number(b[0])-Number(a[0])).map(([kg,count])=>count+' mã × '+fmt(kg)+' kg').join('; '):'Không có';
+      return '<tr><td><b>'+item.group+'</b></td><td class="num">'+fmt(item.totalKg)+' kg</td><td class="num">'+fmt(item.pack)+' kg/mã</td><td>'+item.full+' mã × '+fmt(item.pack)+' kg = '+fmt(item.full*item.pack)+' kg</td><td>'+oddDetail+'</td><td class="num"><b>'+(item.full+oddCount)+' mã</b></td></tr>';
+    }).join('');
+    const totalKg=ordered.reduce((sum,item)=>sum+item.totalKg,0);
+    const fullCodes=ordered.reduce((sum,item)=>sum+item.full,0);
+    const oddCodes=ordered.reduce((sum,item)=>sum+[...item.remainders.values()].reduce((part,count)=>part+count,0),0);
+    return '<section class="pack-summary"><h3>Báo cáo chia mã theo số lượng đặt</h3><table><thead><tr><th>Nhóm sản phẩm</th><th>Tổng SL đặt</th><th>Quy cách</th><th>Mã đủ</th><th>Mã lẻ của nhóm</th><th>Tổng mã</th></tr></thead><tbody>'+rows+'<tr class="summary-row"><td><b>TỔNG</b></td><td class="num"><b>'+fmt(totalKg)+' kg</b></td><td>—</td><td><b>'+fullCodes+' mã đủ</b></td><td><b>'+oddCodes+' mã lẻ</b></td><td class="num"><b>'+(fullCodes+oddCodes)+' mã</b></td></tr></tbody></table><div class="pack-note">Bún và Bánh cuốn: mã chuẩn 10 kg, phần dưới 10 kg là mã lẻ. Phở: mã chuẩn 5 kg, phần dưới 5 kg là mã lẻ. Phần lẻ được tính riêng theo từng dòng đơn hàng như khi in tem.</div></section>';
+  };
   const printTrip=trip=>{
-    const tripOrders=scfEscapePrintData(sortedTripOrders(trip));
+    const rawTripOrders=sortedTripOrders(trip);
+    const packSummary=tripPackSummaryHtml(rawTripOrders);
+    const tripOrders=scfEscapePrintData(rawTripOrders);
     const totalW=calcTripWeight(trip);
     trip=scfEscapePrintData(trip);
     const rows=tripOrders.map(o=>{
@@ -1063,7 +1095,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
       const items=(o.lines||[]).reduce((s,l)=>s+(l.productName?'• '+l.productName+' '+lineQty(l)+(l.unit?' '+l.unit:'')+'<br>':''),'');
       return '<tr><td style="text-align:center">'+(deliveryOrderValue(o)||'')+'</td><td>'+(o.pointName||o.customer||'')+'</td><td>'+(o.deliveryTime||'')+'</td><td>'+items+'</td><td style="font-weight:700">'+ow.toFixed(2)+'</td></tr>';
     }).join('');
-    const printHtml='<html><head><meta charset="UTF-8"><title>Chuyến '+trip.id+'</title><style>body{font-family:Arial;padding:16px;font-size:13px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:5px 8px}th{background:#d9e8d9}h2{color:#2d6a4f}.total{font-weight:700;text-align:right;padding:8px;background:#f5fbf5}@media print{@page{size:A4;margin:8mm}body{padding:0}}<\/style><\/head><body><h2>Chuyến giao hàng</h2><p>Ngày: <b>'+trip.deliveryDate+'</b> &nbsp;|&nbsp; Ca: <b>'+(trip.shiftName||'—')+'</b> &nbsp;|&nbsp; Lái xe: <b>'+(trip.driverName||'—')+'</b> &nbsp;|&nbsp; Tổng KL: <b>'+totalW.toFixed(2)+' kg</b></p><table><thead><tr><th>STT</th><th>Địa điểm</th><th>Giờ</th><th>Hàng hóa</th><th>KL (kg)</th></tr></thead><tbody>'+rows+'<\/tbody><\/table><div class="total">Tổng: '+tripOrders.length+' đơn — '+totalW.toFixed(2)+' kg</div><br><div style="display:flex;justify-content:space-between;margin-top:24px"><div style="text-align:center;width:40%"><div>Lái xe</div><div style="height:50px"></div><small>(Ký tên)</small></div><div style="text-align:center;width:40%"><div>Người nhận</div><div style="height:50px"></div><small>(Ký tên)</small></div></div><\/body><\/html>';
+    const printHtml='<html><head><meta charset="UTF-8"><title>Chuyến '+trip.id+'</title><style>body{font-family:Arial;padding:16px;font-size:13px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #333;padding:5px 8px}th{background:#d9e8d9}h2{color:#2d6a4f}.total{font-weight:700;text-align:right;padding:8px;background:#f5fbf5}.pack-summary{margin-top:16px;page-break-inside:avoid}.pack-summary h3{margin:0 0 7px;color:#2d6a4f;text-transform:uppercase;font-size:15px}.pack-summary th{background:#fff2b8}.pack-summary .num{text-align:right;white-space:nowrap}.summary-row td{background:#f5fbf5}.pack-note{font-size:11px;margin-top:6px;font-style:italic}@media print{@page{size:A4;margin:8mm}body{padding:0}}<\/style><\/head><body><h2>Chuyến giao hàng</h2><p>Ngày: <b>'+trip.deliveryDate+'</b> &nbsp;|&nbsp; Ca: <b>'+(trip.shiftName||'—')+'</b> &nbsp;|&nbsp; Lái xe: <b>'+(trip.driverName||'—')+'</b> &nbsp;|&nbsp; Tổng KL: <b>'+totalW.toFixed(2)+' kg</b></p><table><thead><tr><th>STT</th><th>Địa điểm</th><th>Giờ</th><th>Hàng hóa</th><th>KL (kg)</th></tr></thead><tbody>'+rows+'<\/tbody><\/table><div class="total">Tổng: '+tripOrders.length+' đơn — '+totalW.toFixed(2)+' kg</div>'+packSummary+'<br><div style="display:flex;justify-content:space-between;margin-top:24px"><div style="text-align:center;width:40%"><div>Lái xe</div><div style="height:50px"></div><small>(Ký tên)</small></div><div style="text-align:center;width:40%"><div>Người nhận</div><div style="height:50px"></div><small>(Ký tên)</small></div></div><\/body><\/html>';
     if(window.scfShouldUsePrintAgent?.()){
       window.scfQueueA4Print(printHtml,{title:'Đơn tổng chuyến · '+trip.deliveryDate+' · '+(trip.shiftName||'')})
         .then(()=>window.showToast('Đã gửi đơn tổng chuyến tới Canon 2900.','success'))
@@ -1167,7 +1199,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
             h('div',{style:{fontWeight:500,fontSize:12,color:'var(--tx2)',marginBottom:6}},'Chi tiết đơn hàng:'),
             tripOrders.length?h('div',{className:'desktop-only tw'},
               h('table',null,
-                h('thead',null,h('tr',null,...['STT','Địa điểm','Giờ','Hàng hóa','SL đã giao','Ảnh HĐ','HĐ LX','Trạng thái'].map(c=>h('th',{key:c},c)))),
+                h('thead',null,h('tr',null,...['STT','Địa điểm','Giờ','Hàng hóa','SL đã giao','Ảnh HĐ','HĐ LX','Trạng thái','In đơn'].map(c=>h('th',{key:c},c)))),
                 h('tbody',null,tripOrders.map(o=>{
                   return h('tr',{key:o.id},
                     h('td',null,canEditDeliveryOrder
@@ -1204,7 +1236,8 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                         )
                       )
                     ),
-                    h('td',null,h(StatusBadge,{s:o.status}))
+                    h('td',null,h(StatusBadge,{s:o.status})),
+                    h('td',{style:{textAlign:'center',whiteSpace:'nowrap'}},h('button',{className:'bi',title:'In đơn '+(o.id||o.pointName||''),onClick:()=>setPrintOrder(o)},h('i',{className:'ti ti-printer',style:{fontSize:15}}),' In đơn'))
                   );
                 }))
               )
@@ -1384,6 +1417,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
       h('i',{className:'ti ti-steering-wheel',style:{fontSize:56,display:'block',marginBottom:'1rem',color:'var(--pri2)'}}),
       'Chưa có chuyến giao hàng nào.'
     ),
+    printOrder&&h(PrintModal,{order:printOrder,company,onClose:()=>setPrintOrder(null)}),
     canManageTrips&&modal==='f'&&h(TripForm,{trip:edit,orders,employees,shifts,customers,products,currentUser,onSave:save,onClose:()=>{sm(null);se(null);}}),
     isDriver&&modal==='additional'&&additionalTrip&&h(AdditionalTripOrderForm,{trip:additionalTrip,customers,products,onSave:createAdditionalOrder,onClose:()=>{sm(null);setAdditionalTrip(null);}}),
     canManageTrips&&modal==='bulk'&&h(BulkTripModal,{orders,employees,shifts,prodShifts,customers,products,trips,currentUser,initialDate:fDate,initialShift:fShift,
