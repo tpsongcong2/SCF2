@@ -8,6 +8,10 @@ function findExistingDeliveryOrder(orders,candidate,excludeId=''){
   const key=deliveryOrderDuplicateKey(candidate);if(!key)return null;
   return (orders||[]).find(order=>String(order?.id||'')!==String(excludeId||'')&&order?.status!=='cancelled'&&deliveryOrderDuplicateKey(order)===key)||null;
 }
+function findExistingDeliveryOrderId(orders,id,excludeId=''){
+  const target=String(id||'').trim();if(!target)return null;
+  return (orders||[]).find(order=>String(order?.id||'').trim()===target&&String(order?.id||'')!==String(excludeId||''))||null;
+}
 function deliveryOrderCreator(order){
   const history=Array.isArray(order?.orderHistory)?order.orderHistory:[];
   return order?.createdBy||history[0]?.by||order?.updatedBy||'không rõ người tạo';
@@ -721,6 +725,14 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
         return {...line,productId:mapped.id,productName:mapped.name,unit:mapped.unit||line.unit,weightPerUnit:mapped.weightPerUnit||0};
       })};
     });
+    const codeCounts=new Map();
+    preparedOrders.forEach(order=>{const code=String(order?.id||'').trim();if(code)codeCounts.set(code,(codeCounts.get(code)||0)+1);});
+    const duplicateCodes=[...codeCounts.entries()].filter(([code,count])=>count>1||findExistingDeliveryOrderId(orders,code));
+    if(duplicateCodes.length){
+      const codes=duplicateCodes.slice(0,8).map(([code])=>code).join(', ');
+      window.showToast('Mã đơn hàng bị trùng: '+codes+'. Vui lòng đổi mã rồi nhập lại; chưa có đơn nào được import.','error',10000);
+      return;
+    }
     const blockedDuplicates=preparedOrders.filter(order=>findExistingDeliveryOrder(orders,order));
     if(blockedDuplicates.length){const first=blockedDuplicates[0];window.showToast(duplicateDeliveryOrderMessage(first,findExistingDeliveryOrder(orders,first))+(blockedDuplicates.length>1?' Và '+(blockedDuplicates.length-1)+' đơn trùng khác đã bị bỏ qua.':''),'warn',10000);}
     const cleanOrders=preparedOrders.filter(order=>!blockedDuplicates.includes(order));
@@ -2036,7 +2048,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       }
       const updated={...planned,id:edit.id,orderHistory:[...(edit.orderHistory||[]),historyEntry('Cập nhật đơn hàng',orderChanges(edit,planned))],updatedAt:fmtDT(),updatedBy:currentUser?.name||''};applyOrdersAndTripSync(p=>p.map(x=>x.id===edit.id?updated:x));notifyDriverOrderChange({...edit,...updated,id:edit.id},'Đơn hàng trong chuyến đã được cập nhật');
     }
-    else{const datePart=(planned.deliveryDate||fmtDate()).split('/').slice(0,2).join('');const id='DGH'+datePart+String(oSeq++).toString().padStart(3,'0');const clean={...planned};delete clean.copySourceId;const created={...clean,id,createdAt:fmtDate(),createdBy:currentUser?.name||'',orderHistory:[historyEntry(copyDraft?'Tạo đơn từ bản sao':'Tạo đơn hàng',[(copyDraft?'Sao chép từ đơn '+copyDraft.copySourceId+'. ':'')+'Địa điểm: '+(clean.pointName||clean.customer||'—'),'Hàng hóa: '+(lineText(clean)||'—')])]};applyOrdersAndTripSync(p=>[...p,created]);if(copyDraft)window.showToast('Đã tạo đơn mới từ bản sao '+copyDraft.copySourceId+'.','success');}
+    else{const datePart=(planned.deliveryDate||fmtDate()).split('/').slice(0,2).join('');const creatorCode=String(currentUser?.id||currentUser?.username||'NV').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(-8)||'NV';let id='DGH'+datePart+'-'+creatorCode+'-'+String(oSeq++).padStart(3,'0');while(findExistingDeliveryOrderId(orders,id))id='DGH'+datePart+'-'+creatorCode+'-'+String(oSeq++).padStart(3,'0');const clean={...planned};delete clean.copySourceId;const created={...clean,id,createdAt:fmtDate(),createdBy:currentUser?.name||'',orderHistory:[historyEntry(copyDraft?'Tạo đơn từ bản sao':'Tạo đơn hàng',[(copyDraft?'Sao chép từ đơn '+copyDraft.copySourceId+'. ':'')+'Địa điểm: '+(clean.pointName||clean.customer||'—'),'Hàng hóa: '+(lineText(clean)||'—')])]};applyOrdersAndTripSync(p=>[...p,created]);if(copyDraft)window.showToast('Đã tạo đơn mới từ bản sao '+copyDraft.copySourceId+'.','success');}
     sm(null);se(null);setCopyDraft(null);
   };
   const copyOrder=order=>{

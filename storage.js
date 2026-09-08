@@ -328,6 +328,12 @@ async function performDbSet(key,val,queuedAt='',mode=''){
         scheduleSyncRetry();
         return false;
       }
+      if(e?.code==='SCF_DUPLICATE_ORDER_CODE'){
+        setSyncState('error','Mã đơn hàng bị trùng');
+        window.showToast&&window.showToast(e.message||'Mã đơn hàng bị trùng. Vui lòng nhập lại mã khác.','error',10000);
+        removeQueuedWrite(key,queuedAt);
+        return false;
+      }
       reportSyncError(key,e,val);scheduleSyncRetry();return false;
     }
   }
@@ -408,6 +414,12 @@ async function flushPendingWrites(){
         setSyncState('syncing','Đang ghép thay đổi với máy khác rồi thử lại');
         window.showToast&&window.showToast('Máy khác vừa lưu dữ liệu. App đang tự ghép thay đổi và đồng bộ lại…','info',6000);
         scheduleSyncRetry();
+        return false;
+      }
+      if(e?.code==='SCF_DUPLICATE_ORDER_CODE'){
+        setSyncState('error','Mã đơn hàng bị trùng');
+        window.showToast&&window.showToast(e.message||'Mã đơn hàng bị trùng. Vui lòng nhập lại mã khác.','error',10000);
+        removeQueuedWrite(key,item?.updatedAt||'');
         return false;
       }
       const latest=readSyncQueue();if(latest[key]){latest[key].attempts=(Number(latest[key].attempts)||0)+1;writeSyncQueue(latest);}

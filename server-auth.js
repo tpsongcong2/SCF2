@@ -130,6 +130,10 @@ async function serverSavePermittedCollection(key,value,expectedUpdatedAt='',base
     const conflict=new Error('Dữ liệu trên máy chủ vừa thay đổi'+(data.actorName?' bởi '+data.actorName:'')+'. Thay đổi trên máy này vẫn được giữ để kiểm tra.'+ids);
     conflict.code='SCF_WRITE_CONFLICT';throw conflict;
   }
+  if(data?.duplicateCode){
+    const duplicate=new Error(data.error||'Mã đơn hàng bị trùng. Vui lòng nhập lại mã khác.');
+    duplicate.code='SCF_DUPLICATE_ORDER_CODE';throw duplicate;
+  }
   if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không đồng bộ được dữ liệu.'));
   return{value:data.value||value,updatedAt:data.updatedAt||''};
 }
