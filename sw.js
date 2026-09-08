@@ -1,10 +1,10 @@
-const CACHE = 'scf-v299';
+const CACHE = 'scf-v300';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './runtime.js',
-  './storage.js?v=299',
+  './storage.js?v=300',
   './print-agent.js',
   './helpers.js',
   './defaults.js',

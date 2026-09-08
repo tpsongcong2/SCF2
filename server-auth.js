@@ -123,7 +123,7 @@ async function serverSaveAutoTrips(trips){
 async function serverSavePermittedCollection(key,value,expectedUpdatedAt='',baseValue){
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
   const{data,error}=await sb.functions.invoke('scf-auth',{
-    body:{action:'save_permitted_collection',key:String(key||''),value:Array.isArray(value)?value:[],baseValue:Array.isArray(baseValue)?baseValue:undefined,enforceVersion:true,expectedUpdatedAt:String(expectedUpdatedAt||'')}
+    body:{action:'save_permitted_collection',key:String(key||''),value:value===undefined?null:value,baseValue:baseValue===undefined?undefined:baseValue,enforceVersion:true,expectedUpdatedAt:String(expectedUpdatedAt||'')}
   });
   if(data?.conflict){
     const ids=Array.isArray(data.conflictIds)&&data.conflictIds.length?' Các mã đang bị sửa đồng thời: '+data.conflictIds.join(', ')+'.':'';

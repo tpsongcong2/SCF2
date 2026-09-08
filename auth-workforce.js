@@ -78,7 +78,7 @@ function LoginPage({employees,onLogin}){
         h('h1',{style:{fontSize:22,fontWeight:700,color:'var(--pri3)'}},isFaceMask?'FACE MASK':'Thực Phẩm Sông Công')
       ),
       err&&h('div',{style:{background:'#FCEBEB',color:'#A32D2D',padding:'8px 12px',borderRadius:6,fontSize:13,marginBottom:'1rem',textAlign:'center'}},err),
-      h(F,{label:'Tên đăng nhập'},h('input',{value:un,onChange:e=>{su(e.target.value);se('');},onKeyDown:e=>e.key==='Enter'&&submit()})),
+      h(F,{label:'Tên đăng nhập hoặc email'},h('input',{value:un,onChange:e=>{su(e.target.value);se('');},onKeyDown:e=>e.key==='Enter'&&submit(),autoComplete:'username'})),
       h(F,{label:'Mật khẩu'},
         h('div',{className:'pw-wrap'},
           h('input',{type:show?'text':'password',value:pw,onChange:e=>{sp(e.target.value);se('');},onKeyDown:e=>e.key==='Enter'&&submit()}),
