@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V293';
+const SCF_BUILD_VERSION='V294';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -19,7 +19,7 @@ const PROCESS_POST_KEYS={process_accounting:'scf_process_posts_accounting',proce
 // Every editable page must load all of its input collections before mounting.
 // Names below are kv_store keys without the scf_ prefix; employees load separately.
 const SCF_PAGE_DATA={
-  welcome:['company_news','internal_messages'], company:[], appearance:[],
+  welcome:['company_news','internal_messages'], company:['company'], appearance:[],
   printtemplates:['print_template_settings','products','customers'],
   employees:['depts','permission_profiles'], permission_settings:['permission_profiles'],
   attendance:['attendance'],attendance_settings:['attendance'],attendance_report:['attendance'],workreport_total:['attendance'],
