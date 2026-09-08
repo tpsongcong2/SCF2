@@ -46,7 +46,9 @@ let sb=null;
 try{sb=window.supabase.createClient(SUPA_URL,SUPA_KEY,{global:{headers:{'x-scf-device-id':scfDeviceId()}}});}catch(e){}
 const DB_REMOTE_TIMEOUT_MS=10000;
 const DB_REMOTE_MAX_TIMEOUT_MS=30000;
-const SCF_SYNC_DEBOUNCE_MS=700;
+// Gom các thay đổi rất ngắn để tránh gửi cả danh sách nhiều lần khi người dùng
+// vừa lưu đơn; vẫn đủ thời gian gom các trường được cập nhật liên tiếp.
+const SCF_SYNC_DEBOUNCE_MS=300;
 const SCF_SYNC_QUEUE_KEY='scf_sync_queue_v1';
 const SCF_SYNC_LABELS={
   scf_employees:'Nhân viên SCFOOD',scf_privileged_employees:'Admin & Ban Giám Đốc',scf_orders:'Đơn giao hàng',scf_trips:'Chuyến giao hàng',scf_attendance:'Chấm công',
@@ -301,8 +303,12 @@ async function performDbSet(key,val,queuedAt='',mode=''){
     }catch(e){
       console.warn('serverSavePermittedCollection:',e.message);
       if(e?.code==='SCF_WRITE_CONFLICT'){
-        setSyncState('error',e.message||'Có người khác đang sửa cùng dữ liệu');
-        window.showToast&&window.showToast(e.message,'warn',8000);
+        // Xung đột do máy khác vừa lưu được giữ lại trong hàng đợi. Với các
+        // đơn khác nhau, Edge Function sẽ ghép theo mã đơn ở lần thử lại;
+        // người dùng không cần reset hoặc bấm lưu lại thủ công.
+        setSyncState('syncing','Đang ghép thay đổi với máy khác rồi thử lại');
+        window.showToast&&window.showToast('Máy khác vừa lưu dữ liệu. App đang tự ghép thay đổi và đồng bộ lại…','info',6000);
+        scheduleSyncRetry();
         return false;
       }
       reportSyncError(key,e,val);scheduleSyncRetry();return false;
@@ -344,7 +350,7 @@ function dbSetAutoTrips(val){return dbSetWithMode('scf_trips',val,'auto-trips');
 let scfRetryTimer=null,scfRetryAttempt=0;
 function scheduleSyncRetry(){
   if(scfRetryTimer||!navigator.onLine||!sb)return;
-  const delays=[3000,10000,30000,60000];
+  const delays=[1500,5000,15000,30000];
   const delay=delays[Math.min(scfRetryAttempt,delays.length-1)];scfRetryAttempt++;
   scfRetryTimer=setTimeout(async()=>{scfRetryTimer=null;await flushPendingWrites();},delay);
 }
@@ -382,8 +388,9 @@ async function flushPendingWrites(){
       console.warn('flushPendingWrites '+key+':',e?.message||e);
       waitingResolvers.forEach(done=>done(false));
       if(e?.code==='SCF_WRITE_CONFLICT'){
-        setSyncState('error',e.message||'Có người khác đang sửa cùng dữ liệu');
-        window.showToast&&window.showToast(e.message,'warn',8000);
+        setSyncState('syncing','Đang ghép thay đổi với máy khác rồi thử lại');
+        window.showToast&&window.showToast('Máy khác vừa lưu dữ liệu. App đang tự ghép thay đổi và đồng bộ lại…','info',6000);
+        scheduleSyncRetry();
         return false;
       }
       const latest=readSyncQueue();if(latest[key]){latest[key].attempts=(Number(latest[key].attempts)||0)+1;writeSyncQueue(latest);}

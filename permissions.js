@@ -64,6 +64,7 @@ const PAGE_ACCESS = {
   salesreport:  ['admin','manager','staff'],
   cashflowreport:['admin','manager'],
   marketsales:  ['admin','manager','staff'],
+  invoicereport:['admin','manager','staff'],
   powdersales:  ['admin','manager','staff'],
 };
 // Default permissions by role
@@ -98,6 +99,8 @@ function canAccess(role, page, perms, dept='') {
   const allowed = PAGE_ACCESS[page];
   if (!allowed) return false;
   if (perms && perms.length > 0) {
+    // Tài khoản cũ chưa có khóa quyền mới: kế thừa quyền xem Đơn giao hàng.
+    if(page==='invoicereport'&&perms.includes('delivery')) return true;
     if(page==='purchasegoods'&&perms.includes('purchaseorders')) return true;
     if(page==='nccgoods'&&perms.includes('nccs')) return true;
     if(page==='attendance_report'&&perms.includes('attendance')) return true;

@@ -578,6 +578,7 @@ const NAV=[
   {key:'orderdetail',icon:'ti-list-details',label:'Chi tiết đơn hàng'},
   {key:'trips',icon:'ti-steering-wheel',label:'Chuyến giao hàng'},
   {key:'marketsales',icon:'ti-report-money',label:'Báo cáo công nợ'},
+  {key:'invoicereport',icon:'ti-file-alert',label:'Báo cáo hóa đơn'},
   {key:'powdersales',icon:'ti-bowl',label:'Bán bột bún'},
   {sec:'Mua hàng'},
   {key:'nccs',icon:'ti-building-store',label:'Nhà CC NVL'},
