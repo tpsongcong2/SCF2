@@ -114,13 +114,14 @@ async function serverSaveAutoTrips(trips){
   return data.trips||trips;
 }
 
-async function serverSavePermittedCollection(key,value,expectedUpdatedAt=''){
+async function serverSavePermittedCollection(key,value,expectedUpdatedAt='',baseValue){
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
   const{data,error}=await sb.functions.invoke('scf-auth',{
-    body:{action:'save_permitted_collection',key:String(key||''),value:Array.isArray(value)?value:[],enforceVersion:true,expectedUpdatedAt:String(expectedUpdatedAt||'')}
+    body:{action:'save_permitted_collection',key:String(key||''),value:Array.isArray(value)?value:[],baseValue:Array.isArray(baseValue)?baseValue:undefined,enforceVersion:true,expectedUpdatedAt:String(expectedUpdatedAt||'')}
   });
   if(data?.conflict){
-    const conflict=new Error('Dữ liệu trên máy chủ vừa thay đổi'+(data.actorName?' bởi '+data.actorName:'')+'. Thay đổi của bạn chưa được lưu; hệ thống đang tải bản mới nhất.');
+    const ids=Array.isArray(data.conflictIds)&&data.conflictIds.length?' Các mã đang bị sửa đồng thời: '+data.conflictIds.join(', ')+'.':'';
+    const conflict=new Error('Dữ liệu trên máy chủ vừa thay đổi'+(data.actorName?' bởi '+data.actorName:'')+'. Thay đổi trên máy này vẫn được giữ để kiểm tra.'+ids);
     conflict.code='SCF_WRITE_CONFLICT';throw conflict;
   }
   if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không đồng bộ được dữ liệu.'));
