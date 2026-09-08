@@ -229,7 +229,7 @@ async function dbGetRequired(key,def){
     try{
       setSyncState('syncing','Đang nhận '+syncCollectionLabel(key));
       const loaded=await serverLoadPermittedCollection(key);
-      const value=Array.isArray(loaded?.value)?loaded.value:def;
+      const value=loaded&&Object.prototype.hasOwnProperty.call(loaded,'value')&&loaded.value!==undefined?loaded.value:def;
       scfRemoteVersions.set(key,String(loaded?.updatedAt||''));
       scfRemoteSnapshots.set(key,syncSnapshot(value));setSyncState('synced');return value;
     }catch(error){setSyncState('error','Không tải được '+syncCollectionLabel(key));throw new Error('Không tải được '+key+': '+(error.message||'Lỗi kết nối'));}
@@ -273,7 +273,7 @@ async function dbGet(key,def){
     try{
       setSyncState('syncing','Đang nhận '+syncCollectionLabel(key));
       const loaded=await serverLoadPermittedCollection(key);
-      const value=Array.isArray(loaded?.value)?loaded.value:def;
+      const value=loaded&&Object.prototype.hasOwnProperty.call(loaded,'value')&&loaded.value!==undefined?loaded.value:def;
       scfRemoteVersions.set(key,String(loaded?.updatedAt||''));scfRemoteSnapshots.set(key,syncSnapshot(value));setSyncState('synced');return value;
     }catch(error){setSyncState('error','Không tải được '+syncCollectionLabel(key));return def;}
   }
