@@ -462,9 +462,9 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
   const [quickCaptureStep,setQuickCaptureStep]=useState('meter');
   const normalizeText=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const normalizeVehicleKey=s=>String(s||'').toUpperCase().replace(/[^0-9A-Z]/g,'');
-  const deptKey=normalizeText(currentUser?.dept);
-  const isAccounting=deptKey==='ke toan';
-  const canManage=currentUser?.role==='admin'||currentUser?.role==='manager'||isAccounting;
+  const canOpen=canAccess(currentUser?.role,'fuelpurchases',currentUser?.permissions,currentUser?.dept);
+  const canManage=canOpen&&canWrite(currentUser?.role,'fuelpurchases',currentUser?.permLevels);
+  const canRemove=canOpen&&canDel(currentUser?.role,'fuelpurchases',currentUser?.permLevels);
   const isDriver=currentUser?.role==='driver';
   const selfOption=currentUser?{id:currentUser.id,name:currentUser.name||currentUser.id,label:(currentUser.name||currentUser.id)+(currentUser.id?' - '+currentUser.id:'')}:null;
   const driverOptions=(employees||[])
@@ -538,8 +538,8 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
     setModal(true);
   };
   const isOwn=row=>!isDriver||row.buyerId===currentUser.id||String(row.buyerName||'').trim().toLowerCase()===String(currentUser.name||'').trim().toLowerCase();
-  const canEditRow=row=>canManage||(isDriver&&isOwn(row));
-  const canDeleteRow=row=>canManage;
+  const canEditRow=row=>canManage&&(!isDriver||isOwn(row));
+  const canDeleteRow=row=>canRemove&&(!isDriver||isOwn(row));
   const busyPlate=uploading==='plate';
   const busyMeter=uploading==='meter';
   const countImages=row=>((row.plateImage?1:0)+(row.meterImage?1:0)+((!row.plateImage&&!row.meterImage&&row.image)?1:0));
@@ -763,7 +763,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
       h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Lọc theo ngày, người đổ và xe để xem nhanh trên điện thoại.'),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
         h(ExportBtn,{onClick:()=>xlsxExport(visible.map(r=>({...r,image:r.meterImage||r.plateImage||r.image||''})),[['date','Ngày mua'],['buyerName','Người đổ'],['vehicle','Xe'],['liters','Số lít'],['price','Giá tiền'],['amount','Thành tiền'],['note','Chú ý'],['plateImage','Ảnh biển số'],['meterImage','Ảnh cây xăng'],['image','Ảnh chính']],'Don_mua_xang_dau')}),
-        h(AddBtn,{onClick:openAdd,label:'Thêm đơn mua xăng dầu'})
+        canManage&&h(AddBtn,{onClick:openAdd,label:'Thêm đơn mua xăng dầu'})
       )
     ),
     h('div',{className:'card',style:{marginBottom:'1rem',padding:'12px 14px'}},
@@ -837,7 +837,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
         ))
       )):h('tr',null,h('td',{colSpan:9,className:'empty-st'},'Chưa có đơn mua xăng dầu nào.')))
     )),
-    modal&&h(Modal,{title:edit?'Sửa đơn mua xăng dầu':'Thêm đơn mua xăng dầu',onClose:()=>{setModal(false);setEdit(null);}},
+    canManage&&modal&&h(Modal,{title:edit?'Sửa đơn mua xăng dầu':'Thêm đơn mua xăng dầu',onClose:()=>{setModal(false);setEdit(null);}},
       h('div',{className:'g2'},
         h(F,{label:'Người đổ *'},h('input',{value:edit?(form.buyerName||currentUser.name||''):(currentUser.name||''),readOnly:true,style:{background:'var(--bg2)'}})),
         h(F,{label:'Ngày mua *'},h('input',{type:'date',value:toIsoDate(form.date),onChange:e=>setF('date',e.target.value)}))

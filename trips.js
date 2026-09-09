@@ -582,7 +582,9 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);const[additionalTrip,setAdditionalTrip]=useState(null);const[printOrder,setPrintOrder]=useState(null);
   const _td1=fmtDate();const _ti1=_td1.split('/').reverse().join('-');const[fPeriod,sfPeriod]=useState('day');const[fDate,sfDate]=useState(_ti1);const[fMonth,sfMonth]=useState(_ti1.slice(0,7));const[fShift,sfShift]=useState('');const[fDriver,sfDriver]=useState('');
   const isDriver=currentUser?.role==='driver';
-  const canManageTrips=currentUser?.role==='admin'||currentUser?.role==='manager';
+  const canOpenTrips=canAccess(currentUser?.role,'trips',currentUser?.permissions,currentUser?.dept);
+  const canManageTrips=canOpenTrips&&canWrite(currentUser?.role,'trips',currentUser?.permLevels);
+  const canDeleteTrips=canOpenTrips&&canDel(currentUser?.role,'trips',currentUser?.permLevels);
   const deptKey=String(currentUser?.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const isAccounting=deptKey.includes('ke toan');
   const canReviewTrips=currentUser?.role==='admin'||isAccounting;
@@ -1178,7 +1180,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
               canReviewTrips&&trip.status==='completion_pending'&&h('button',{onClick:()=>approveTripCompletion(trip),style:{fontSize:11,padding:'4px 10px',background:'#E1F5EE',color:'#0F6E56',border:'none',borderRadius:4}},'Kế toán duyệt'),
               h('button',{className:'bi',title:'In chuyến',onClick:()=>printTrip(trip)},h('i',{className:'ti ti-printer',style:{fontSize:15}})),
               canManageTrips&&h('button',{className:'bi',onClick:()=>{se(trip);sm('f')}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
-              canManageTrips&&['planning','assigned'].includes(trip.status)&&h('button',{className:'bi',onClick:()=>del(trip.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+              canDeleteTrips&&['planning','assigned'].includes(trip.status)&&h('button',{className:'bi','data-scf-action':'delete',onClick:()=>del(trip.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
             )
           ),
           isOpen&&h('div',{className:'trip-card-detail',style:{borderTop:'.5px solid var(--bd)',padding:'1rem 1.25rem'}},
