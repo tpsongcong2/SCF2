@@ -3,7 +3,14 @@
 const SCF_SERVER_AUTH_ENABLED=true;
 
 async function serverFunctionErrorMessage(error,data,fallback){
-  const finish=message=>{const text=String(message||fallback);if(text.includes('Phiên đăng nhập không hợp lệ'))setTimeout(()=>window.dispatchEvent(new CustomEvent('scf-session-replaced')),0);return text;};
+  const finish=message=>{
+    const text=String(message||fallback);
+    if(text.includes('Phiên đăng nhập không hợp lệ')&&!window.__SCF_SESSION_REPLACEMENT_PENDING){
+      window.__SCF_SESSION_REPLACEMENT_PENDING=true;
+      setTimeout(()=>window.dispatchEvent(new CustomEvent('scf-session-replaced')),0);
+    }
+    return text;
+  };
   const messageFrom=body=>{
     if(!body)return'';
     if(typeof body==='string')return body.trim();
@@ -44,6 +51,8 @@ async function serverUsernameLogin(username,password,forceTakeover=false){
   if(!data?.access_token||!data?.refresh_token||!data?.employee)throw new Error(data?.error||'Máy chủ trả về phiên đăng nhập không hợp lệ.');
   const{error:sessionError}=await sb.auth.setSession({access_token:data.access_token,refresh_token:data.refresh_token});
   if(sessionError)throw sessionError;
+  window.__SCF_SESSION_REPLACEMENT_PENDING=false;
+  window.__SCF_SESSION_REPLACEMENT_HANDLED=false;
   return data.employee;
 }
 

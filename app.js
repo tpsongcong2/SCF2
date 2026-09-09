@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V309';
+const SCF_BUILD_VERSION='V310';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -202,7 +202,7 @@ function App(){
   const employeeStorageKey=isFaceMask?'scf_privileged_employees':'scf_employees';
   const homePage=isFaceMask?'workreport_total':'welcome';
   const[session,setSession]=useLS('scf_session',null);
-  useEffect(()=>{const replaced=async()=>{try{await sb?.auth?.signOut({scope:'local'});}catch{}window.scfClearSensitiveLocalData?.();setSession(null);window.showToast?.('Tài khoản đã được đăng nhập trên máy khác. Máy này đã tự đăng xuất.','warn',7000);};window.addEventListener('scf-session-replaced',replaced);return()=>window.removeEventListener('scf-session-replaced',replaced);},[]);
+  useEffect(()=>{const replaced=async()=>{if(window.__SCF_SESSION_REPLACEMENT_HANDLED)return;window.__SCF_SESSION_REPLACEMENT_HANDLED=true;try{await sb?.auth?.signOut({scope:'local'});}catch{}window.scfClearSensitiveLocalData?.();setSession(null);window.showToast?.('Phiên đăng nhập trên máy này không còn hiệu lực. Hãy đăng nhập lại; chỉ chọn đăng xuất máy cũ nếu đúng là tài khoản đang dùng ở máy khác.','warn',8000);};window.addEventListener('scf-session-replaced',replaced);return()=>window.removeEventListener('scf-session-replaced',replaced);},[]);
   useEffect(()=>{if(!SCF_SERVER_AUTH_ENABLED||!session)return;let stopped=false;const touch=()=>serverTouchSession().catch(error=>{if(!stopped&&!String(error?.message||'').includes('Phiên đăng nhập không hợp lệ'))console.warn('Session heartbeat:',error?.message||error);});touch();const timer=setInterval(touch,45000);const visible=()=>{if(document.visibilityState==='visible')touch();};document.addEventListener('visibilitychange',visible);return()=>{stopped=true;clearInterval(timer);document.removeEventListener('visibilitychange',visible);};},[session?.id]);
   const[menuHidden,setMenuHidden]=useLS('scf_topnav_hidden',false);
   const[employees,_se]=useState(SCF_SERVER_AUTH_ENABLED?[]:DEF_EMPS);
@@ -407,9 +407,8 @@ function App(){
         }
       }catch(err){
         if(!cancelled&&String(err?.message||'').includes('Phiên đăng nhập không hợp lệ')){
-          try{await sb?.auth?.signOut({scope:'local'});}catch{}
-          window.scfClearSensitiveLocalData?.();setSession(null);_se([]);setBootError('');
-          window.showToast?.('Tài khoản đã được đăng nhập trên máy khác. Máy này đã tự đăng xuất.','warn',7000);
+          _se([]);setBootError('');
+          window.dispatchEvent(new CustomEvent('scf-session-replaced'));
         }else if(!cancelled)setBootError(err.message||'Không tải được hồ sơ đăng nhập.');
       }
       finally{if(!cancelled){setServerAuthReady(true);setLoading(false);}}
