@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V302';
+const SCF_BUILD_VERSION='V305';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -53,6 +53,36 @@ function scfPageDataKeys(page,allKeys){
   if(PROCESS_POST_KEYS[page])keys.push(PROCESS_POST_KEYS[page].replace(/^scf_/,''));
   else keys.push(...(SCF_PAGE_DATA[page]||[]));
   return [...new Set(keys)];
+}
+function scfAdvanceTripKey(dateVN,shift){
+  const raw=String(shift?.id||shift?.name||'CA').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toUpperCase();
+  const shiftKey=raw.replace(/[^A-Z0-9]/g,'').slice(0,24)||'CA';
+  const dateKey=String(dateVN||'').split('/').reverse().join('');
+  return {planKey:String(dateVN||'')+'|'+shiftKey,id:'CHA'+dateKey+'_'+shiftKey};
+}
+function scfCreateAdvanceTrips(currentTrips,deliveryShifts,targetDate,actorName){
+  const result=(currentTrips||[]).map(trip=>({...trip,orderIds:[...(trip?.orderIds||[])]}));
+  const norm=value=>normalizeLookupText(value||'');
+  let changed=false;
+  (deliveryShifts||[]).filter(shift=>shift&&shift.active!==false).forEach(shift=>{
+    const shiftId=String(shift.id||'').trim(),shiftName=String(shift.name||'').trim();
+    if(!shiftId&&!shiftName)return;
+    const key=scfAdvanceTripKey(targetDate,shift);
+    const exists=result.some(trip=>String(trip?.autoPlanKey||'')===key.planKey||(String(trip?.deliveryDate||'')===targetDate&&(
+      (shiftId&&String(trip?.shiftId||'')===shiftId)||(shiftName&&norm(trip?.shiftName)===norm(shiftName))
+    )));
+    if(exists)return;
+    const driverId=String(shift.defaultDriverId||'').trim(),driverName=String(shift.defaultDriverName||'').trim();
+    const stamp=fmtDT();
+    result.push({
+      id:key.id,deliveryDate:targetDate,deliveryTime:shift.timeStart||shift.startTime||'',shiftId,shiftName:shiftName||shift.area||'Chuyến tự động',area:shift.area||'',
+      driverName,driverId,driverAssignMode:driverId||driverName?'auto':'',orderIds:[],totalWeight:0,status:driverId||driverName?'assigned':'planning',
+      note:'Tự động tạo trước 3 ngày'+(shiftName?': '+shiftName:''),createdAt:stamp,updatedAt:stamp,updatedBy:actorName||'Hệ thống',
+      autoCreated:true,autoPlanned:true,autoPlanKey:key.planKey,plannedDaysAhead:3
+    });
+    changed=true;
+  });
+  return {trips:result,changed};
 }
 function createScfDataLoader(read,apply){
   const loaded=new Set(),pending=new Map();let disposed=false;
@@ -401,7 +431,7 @@ function App(){
     return()=>{stopped=true;clearInterval(tm);document.removeEventListener('visibilitychange',refresh);if(window.scfSyncNow===refresh)delete window.scfSyncNow;};
   },[loading,bootError,cu?.id,page,pageReady]);
 
-  /* ── TỰ TÌM/TẠO CHUYẾN CHỈ KHI CÓ ĐƠN CHƯA XẾP ── */
+  /* ── TẠO CHUYẾN TRƯỚC 3 NGÀY VÀ TỰ XẾP ĐƠN PHÙ HỢP ── */
   useEffect(()=>{
     const automationUser=cu;
     const tripInputsReady=['orders','trips','shifts','prod_shifts','customers'].every(key=>dataLoaderRef.current?.loaded.has(key));
@@ -410,10 +440,13 @@ function App(){
     const sameDate=(a,b)=>String(a||'').trim()===String(b||'').trim();
     const usableTrip=t=>!['active','completion_pending','completed','cancelled'].includes(String(t?.status||''));
     const linkedTripIds=new Set((orders||[]).filter(o=>!['cancelled','done','failed'].includes(String(o?.status||''))).map(o=>String(o?.tripId||'')).filter(Boolean));
-    const keptTrips=(trips||[]).filter(t=>!(t?.autoCreated&&usableTrip(t)&&!(t.orderIds||[]).length&&!linkedTripIds.has(String(t.id||''))));
-    const workingTrips=keptTrips.map(t=>({...t,orderIds:[...(t.orderIds||[])]}));
+    // Chuyến được lập trước theo lịch phải được giữ lại dù chưa có đơn.
+    const keptTrips=(trips||[]).filter(t=>!(t?.autoCreated&&!t?.autoPlanned&&usableTrip(t)&&!(t.orderIds||[]).length&&!linkedTripIds.has(String(t.id||''))));
+    const targetDate=addDaysVN(fmtDate(),3);
+    const advance=scfCreateAdvanceTrips(keptTrips,shifts||[],targetDate,automationUser.name||'Hệ thống');
+    const workingTrips=advance.trips;
     const tripById=new Map(workingTrips.map(t=>[String(t.id||''),t]));
-    let tripsChanged=keptTrips.length!==(trips||[]).length,ordersChanged=false;
+    let tripsChanged=keptTrips.length!==(trips||[]).length||advance.changed,ordersChanged=false;
     const nextOrders=(orders||[]).map(order=>{
       if(order?.tripAssignMode==='manual'||!['','pending','assigned'].includes(String(order?.status||'')))return order;
       const linked=tripById.get(String(order?.tripId||''));

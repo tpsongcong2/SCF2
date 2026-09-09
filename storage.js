@@ -148,7 +148,10 @@ function remoteTimeoutFor(value){return Math.min(DB_REMOTE_MAX_TIMEOUT_MS,DB_REM
 function queueRemoteWrite(key,value,options={}){
   const queue=readSyncQueue();
   const updatedAt=options.updatedAt||new Date().toISOString();
-  queue[key]={value,updatedAt,bytes:syncPayloadBytes(value),attempts:Number(options.attempts)||0,mode:options.mode||''};
+  const previous=queue[key];
+  const expectedUpdatedAt=previous?.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
+  const baseValue=Object.prototype.hasOwnProperty.call(previous||{},'baseValue')?previous.baseValue:syncSnapshot(scfRemoteSnapshots.get(key));
+  queue[key]={value,updatedAt,expectedUpdatedAt,baseValue,bytes:syncPayloadBytes(value),attempts:Number(options.attempts)||0,mode:options.mode||''};
   writeSyncQueue(queue);
   setSyncState(options.syncing?'syncing':(navigator.onLine?'error':'offline'),options.detail||(options.syncing?'Đang gộp thay đổi để đồng bộ':'Thay đổi đang chờ đồng bộ'));
   return updatedAt;
@@ -312,7 +315,10 @@ async function performDbSet(key,val,queuedAt='',mode=''){
   if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
     try{
       setSyncState('syncing','Đang kiểm tra quyền và đồng bộ');
-      const saved=await withRemoteTimeout(serverSavePermittedCollection(key,val,scfRemoteVersions.get(key)||'',scfRemoteSnapshots.get(key)),remoteTimeoutFor(val));
+      const queued=readSyncQueue()[key]||{};
+      const expectedUpdatedAt=queued.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
+      const baseValue=Object.prototype.hasOwnProperty.call(queued,'baseValue')?queued.baseValue:scfRemoteSnapshots.get(key);
+      const saved=await withRemoteTimeout(serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue),remoteTimeoutFor(val));
       const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(val);
       if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));
       scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));removeQueuedWrite(key,queuedAt);setSyncState('synced');
@@ -395,7 +401,9 @@ async function flushPendingWrites(){
       if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees'))await withRemoteTimeout(serverSaveEmployees(item.value),remoteTimeoutFor(item.value));
       else if(serverAuthEnabled()&&key==='scf_trips'&&(item.mode==='auto-trips'||(Array.isArray(item.value)&&item.value.some(trip=>trip?.autoCreated))))await withRemoteTimeout(serverSaveAutoTrips(item.value),remoteTimeoutFor(item.value));
       else if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
-        const saved=await withRemoteTimeout(serverSavePermittedCollection(key,item.value,scfRemoteVersions.get(key)||'',scfRemoteSnapshots.get(key)),remoteTimeoutFor(item.value));
+        const expectedUpdatedAt=item.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
+        const baseValue=Object.prototype.hasOwnProperty.call(item,'baseValue')?item.baseValue:scfRemoteSnapshots.get(key);
+        const saved=await withRemoteTimeout(serverSavePermittedCollection(key,item.value,expectedUpdatedAt,baseValue),remoteTimeoutFor(item.value));
         const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(item.value);
         if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));
         scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));

@@ -399,6 +399,21 @@ function ensureUniqueDeliveryOrderIds(rows){
     return {...order,id,legacyOrderId:current||undefined,updatedAt:fmtDT(),updatedBy:order?.updatedBy||order?.createdBy||'Hệ thống sửa mã trùng'};
   });
 }
+function allocateImportedDeliveryOrderIds(existingOrders,importedOrders,currentUser){
+  const reserved=new Set((existingOrders||[]).map(order=>String(order?.id||'').trim()).filter(Boolean));
+  const creatorCode=String(currentUser?.id||currentUser?.username||'NV').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(-10)||'NV';
+  const nextByPrefix=new Map();
+  return (importedOrders||[]).map(order=>{
+    const match=String(order?.deliveryDate||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    const dateCode=match?match[3].slice(-2)+match[1].padStart(2,'0')+match[2].padStart(2,'0'):'000000';
+    const prefix='DGH'+dateCode+'-'+creatorCode+'-';
+    let sequence=nextByPrefix.get(prefix)||1,id='';
+    do{id=prefix+String(sequence++).padStart(3,'0');}while(reserved.has(id));
+    nextByPrefix.set(prefix,sequence);reserved.add(id);
+    const oldId=String(order?.id||'').trim();
+    return {...order,id,...(oldId&&oldId!==id?{legacyOrderId:oldId}:{})};
+  });
+}
 function customerImportColumnOffset(rawRows){
   const rows=(rawRows||[]).slice(0,100);
   const maxColumns=Math.min(12,Math.max(0,...rows.map(row=>(row||[]).length)));
@@ -718,13 +733,16 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
         }
       });
     });
-    const preparedOrders=importableOrders.map(o=>{
+    const preparedDrafts=importableOrders.map(o=>{
       const {_importRow,...clean}=o;
       return {...clean,createdAt:clean.createdAt||fmtDate(),createdBy:clean.createdBy||currentUser?.name||'',updatedAt:fmtDT(),updatedBy:currentUser?.name||'',lines:(o.lines||[]).map(line=>{
         const mapped=resolvedProductForLine(line);
         return {...line,productId:mapped.id,productName:mapped.name,unit:mapped.unit||line.unit,weightPerUnit:mapped.weightPerUnit||0};
       })};
     });
+    // Mã trong file xem trước chỉ là mã tạm. Khi nhập thật, tạo mã có ngày
+    // và mã nhân viên để hai kế toán hoặc hai lần import không đụng nhau.
+    const preparedOrders=allocateImportedDeliveryOrderIds(orders,preparedDrafts,currentUser);
     const codeCounts=new Map();
     preparedOrders.forEach(order=>{const code=String(order?.id||'').trim();if(code)codeCounts.set(code,(codeCounts.get(code)||0)+1);});
     const duplicateCodes=[...codeCounts.entries()].filter(([code,count])=>count>1||findExistingDeliveryOrderId(orders,code));
