@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V311';
+const SCF_BUILD_VERSION='V312';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -498,8 +498,10 @@ function App(){
       const wantedShiftId=String(plannedShift.tripShiftId||'').trim();
       const wantedShiftName=String(plannedShift.tripShiftName||'').trim();
       if(!tripDate||(!wantedShiftId&&!wantedShiftName))return order;
-      const deliveryShift=(shifts||[]).find(s=>wantedShiftId&&String(s.id||'')===wantedShiftId)
-        ||(shifts||[]).find(s=>wantedShiftName&&norm(s.name)===norm(wantedShiftName));
+      // Dùng chung bộ phân giải với trang Đơn giao hàng. Bộ này ưu tiên tên ca
+      // hiện hành trước ID cũ, tránh cấu hình đã đổi ca nhưng còn lưu tripShiftId
+      // cũ làm đơn YP/QV bị tác vụ nền kéo sang ĐT-20H.
+      const deliveryShift=resolveCurrentDeliveryShift(order,plannedShift);
       if(!deliveryShift)return order;
       const shiftId=String(deliveryShift.id||'').trim();
       const shiftName=String(deliveryShift.name||'').trim();
