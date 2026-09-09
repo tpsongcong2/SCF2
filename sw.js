@@ -1,9 +1,9 @@
-const CACHE = 'scf-v310';
+const CACHE = 'scf-v311';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
-  './runtime.js',
+  './runtime.js?v=311',
   './storage.js?v=304',
   './print-agent.js',
   './helpers.js',
@@ -29,8 +29,8 @@ const ASSETS = [
   './trips.js',
   './production.js',
   './permissions.js',
-  './app.js?v=310',
-  './bootstrap.js',
+  './app.js?v=311',
+  './bootstrap.js?v=311',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
