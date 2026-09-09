@@ -3330,7 +3330,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           const preferredTripDate=o._preferredTripDate||getOrderTripDate(prodShiftCtx,prodShifts||[])||'';
           const preferredTripShiftName=o._preferredTripShiftName||getOrderTripShiftName(prodShiftCtx,prodShifts||[]);
           const autoTrip=o._autoTrip===undefined?autoTripForOrder(prodShiftCtx):o._autoTrip;
-          const tripOptions=tripOptionsForOrder(prodShiftCtx).filter(t=>!closedTrip(t)||String(t.id||'')===String(ctx.tripId||''));
+          // Chọn tay phải đọc toàn bộ kho chuyến đã đồng bộ; ngày được lọc bên trong ManualTripPicker.
+          const tripOptions=(trips||[]).filter(t=>!closedTrip(t)||String(t.id||'')===String(ctx.tripId||''));
           const selectedTripId=tripMode==='manual'?(ctx.tripId||''):(autoTrip?.id||'');
           const currentTrip=orderTrip(ctx);
           const assignmentStarted=dispatchedTrip(currentTrip)||ctx.status==='delivering';
@@ -3437,7 +3438,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         const preferredTripDate=o._preferredTripDate||getOrderTripDate(ctx,prodShifts||[])||'';
         const preferredTripShiftName=o._preferredTripShiftName||getOrderTripShiftName(ctx,prodShifts||[]);
         const autoTrip=o._autoTrip===undefined?autoTripForOrder(ctx):o._autoTrip;
-        const tripOptions=tripOptionsForOrder(ctx).filter(t=>!closedTrip(t)||String(t.id||'')===String(ctx.tripId||''));
+        // Giữ cùng nguồn dữ liệu với giao diện máy tính để mọi ngày đã tạo đều xuất hiện.
+        const tripOptions=(trips||[]).filter(t=>!closedTrip(t)||String(t.id||'')===String(ctx.tripId||''));
         const selectedTripId=tripMode==='manual'?(ctx.tripId||''):(autoTrip?.id||'');
         const currentTrip=orderTrip(ctx);
         const assignmentStarted=dispatchedTrip(currentTrip)||ctx.status==='delivering';
