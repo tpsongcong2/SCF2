@@ -822,7 +822,10 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
   const isDriverCompletionLocked=trip=>isDriver&&!trip?.driverConfirmedAt&&tripAgeDays(trip)>=2;
   const canEditQtyForTrip=trip=>{
     if(!canEnterActualQty)return false;
-    if(isDriver)return isOwnTrip(trip)&&!!trip?.driverDispatchedAt&&['assigned','active'].includes(trip.status)&&!isDriverCompletionLocked(trip);
+    // Quyền nhập thực giao là quyền độc lập. Chuyến tự động đã
+    // gắn đúng lái xe có thể vẫn ở "planning", nên không được bắt
+    // buộc phải có driverDispatchedAt mới cho nhập.
+    if(isDriver)return isOwnTrip(trip)&&!['completed','cancelled'].includes(trip.status)&&!isDriverCompletionLocked(trip);
     return tripAgeDays(trip)<2&&!['completion_pending','completed'].includes(trip.status);
   };
   const canUploadProofForTrip=trip=>{
