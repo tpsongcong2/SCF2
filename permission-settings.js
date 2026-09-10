@@ -13,7 +13,9 @@ const SCF_PERMISSION_SECTIONS=[
 const SCF_PERMISSION_PAGE_KEYS=[...new Set(SCF_PERMISSION_SECTIONS.flatMap(section=>section.pages.map(page=>page[0])))];
 function scfProfile(id,label,role,dept,permissions,readOnly=[]){
   const ro=new Set(readOnly);
-  return{id,label,role,dept,permissions:[...permissions],permLevels:Object.fromEntries(permissions.map(page=>[page,ro.has(page)?'r':(['admin','manager'].includes(role)?'rwd':'rw')]))};
+  const permLevels=Object.fromEntries(permissions.map(page=>[page,ro.has(page)?'r':(['admin','manager'].includes(role)?'rwd':'rw')]));
+  const profile={id,label,role,dept,permissions:[...permissions],permLevels};
+  return{...profile,tripPermissions:defaultTripPermissions(profile)};
 }
 const SCF_PROFILE_COMMON=['company','attendance','attendance_report','leaves','tasks','notifications','userguide'];
 const DEFAULT_PERMISSION_PROFILES={
@@ -32,25 +34,26 @@ function normalizePermissionProfiles(value){
     const base=DEFAULT_PERMISSION_PROFILES[id];const raw=source[id]||{};
     const permissions=(Array.isArray(raw.permissions)?raw.permissions:base.permissions).filter(page=>SCF_PERMISSION_PAGE_KEYS.includes(page)&&page!=='permission_settings');
     const levels={};permissions.forEach(page=>{const level=id==='admin'?'rwd':(raw.permLevels?.[page]||base.permLevels?.[page]||(base.role==='manager'?'rwd':'rw'));levels[page]=['r','rw','rwd'].includes(level)?level:'r';});
-    return[id,{...base,permissions:[...new Set(permissions)],permLevels:levels}];
+    const profile={...base,permissions:[...new Set(permissions)],permLevels:levels};
+    return[id,{...profile,tripPermissions:normalizedTripPermissions({...profile,tripPermissions:raw.tripPermissions||base.tripPermissions})}];
   }));
 }
 function normalizedPermissionProfileLabel(profiles,profileId){return normalizePermissionProfiles(profiles)[profileId]?.label||'';}
 function applyPermissionProfile(employee,profiles,profileId){
   const profile=normalizePermissionProfiles(profiles)[profileId];
   if(!profile)return{...employee,permissionProfileId:''};
-  if(profileId==='admin')return{...employee,permissionProfileId:profileId,dept:profile.dept,role:'admin',permissions:[],permLevels:{}};
-  return{...employee,permissionProfileId:profileId,dept:profile.dept,role:profile.role,permissions:[...profile.permissions],permLevels:{...profile.permLevels}};
+  if(profileId==='admin')return{...employee,permissionProfileId:profileId,dept:profile.dept,role:'admin',permissions:[],permLevels:{},tripPermissions:normalizedTripPermissions(profile)};
+  return{...employee,permissionProfileId:profileId,dept:profile.dept,role:profile.role,permissions:[...profile.permissions],permLevels:{...profile.permLevels},tripPermissions:{...profile.tripPermissions}};
 }
 function PermissionSettingsTab({profiles,setProfiles,employees,setEmployees,currentUser}){
   const normalized=normalizePermissionProfiles(profiles);
   const[selected,setSelected]=useState(PERMISSION_PROFILE_ORDER[0]);
-  const[draft,setDraft]=useState(()=>({...normalized[selected],permissions:[...normalized[selected].permissions],permLevels:{...normalized[selected].permLevels}}));
-  useEffect(()=>{const next=normalizePermissionProfiles(profiles)[selected];setDraft({...next,permissions:[...next.permissions],permLevels:{...next.permLevels}});},[profiles,selected]);
+  const[draft,setDraft]=useState(()=>({...normalized[selected],permissions:[...normalized[selected].permissions],permLevels:{...normalized[selected].permLevels},tripPermissions:{...normalized[selected].tripPermissions}}));
+  useEffect(()=>{const next=normalizePermissionProfiles(profiles)[selected];setDraft({...next,permissions:[...next.permissions],permLevels:{...next.permLevels},tripPermissions:{...next.tripPermissions}});},[profiles,selected]);
   const fixedAdmin=selected==='admin';
   const setLevel=(page,level)=>{if(fixedAdmin)return;setDraft(prev=>{const permissions=level==='none'?prev.permissions.filter(item=>item!==page):[...new Set([...prev.permissions,page])];const permLevels={...prev.permLevels};if(level==='none')delete permLevels[page];else permLevels[page]=level;return{...prev,permissions,permLevels};});};
   const save=()=>{if(fixedAdmin){window.showToast('Admin luôn có toàn quyền và không cần lưu cấu hình.','info');return;}setProfiles(prev=>({...normalizePermissionProfiles(prev),[selected]:{...draft,permissions:[...draft.permissions],permLevels:{...draft.permLevels}}}));window.showToast('Đã lưu quyền mặc định cho '+draft.label+'.','success');};
-  const reset=async()=>{const ok=window.scfConfirm?await window.scfConfirm('Khôi phục bộ quyền ban đầu của '+draft.label+'?','Khôi phục quyền'):window.confirm('Khôi phục quyền mặc định?');if(!ok)return;const base=DEFAULT_PERMISSION_PROFILES[selected];setDraft({...base,permissions:[...base.permissions],permLevels:{...base.permLevels}});};
+  const reset=async()=>{const ok=window.scfConfirm?await window.scfConfirm('Khôi phục bộ quyền ban đầu của '+draft.label+'?','Khôi phục quyền'):window.confirm('Khôi phục quyền mặc định?');if(!ok)return;const base=DEFAULT_PERMISSION_PROFILES[selected];setDraft({...base,permissions:[...base.permissions],permLevels:{...base.permLevels},tripPermissions:{...base.tripPermissions}});};
   const assigned=(employees||[]).filter(employee=>employee.permissionProfileId===selected);
   const applyToAssigned=async()=>{if(!assigned.length)return;const ok=window.scfConfirm?await window.scfConfirm('Ghi đè quyền riêng của '+assigned.length+' nhân viên đang thuộc chức vụ này?','Áp dụng quyền'):window.confirm('Áp dụng cho nhân viên?');if(!ok)return;setEmployees(prev=>(prev||[]).map(employee=>employee.permissionProfileId===selected?{...applyPermissionProfile(employee,{...normalized,[selected]:draft},selected),updatedBy:currentUser?.name||'',updatedAt:fmtDT()}:employee));window.showToast('Đã áp dụng cho '+assigned.length+' nhân viên.','success');};
   return h('div',null,
@@ -61,6 +64,13 @@ function PermissionSettingsTab({profiles,setProfiles,employees,setEmployees,curr
       h('div',{className:'card'},
         h('div',{style:{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:12}},h('div',null,h('div',{style:{fontSize:18,fontWeight:700,color:'var(--pri)'}},draft.label),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:3}},'Bộ phận: '+draft.dept+' · Cấp quyền: '+(ROLES[draft.role]||draft.role)+' · '+draft.permissions.length+' mục được truy cập'),fixedAdmin&&h('div',{style:{fontSize:12,color:'var(--pri)',fontWeight:600,marginTop:5}},'Admin là quyền quản trị cố định và luôn có toàn quyền.')),!fixedAdmin&&h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},h('button',{type:'button',onClick:reset},'Khôi phục mặc định'),h('button',{type:'button',className:'bp',onClick:save},h('i',{className:'ti ti-device-floppy'}),'Lưu cấu hình'))),
         h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(310px,1fr))',gap:'0 18px'}},SCF_PERMISSION_SECTIONS.map(section=>h('div',{key:section.sec,style:{marginBottom:14}},h('div',{style:{fontSize:12,fontWeight:700,color:'var(--pri3)',textTransform:'uppercase',marginBottom:5}},section.sec),section.pages.filter(([page])=>page!=='permission_settings'&&page!=='attendance_settings').map(([page,label])=>{const active=draft.permissions.includes(page);return h('div',{key:page,style:{display:'grid',gridTemplateColumns:'1fr 132px',alignItems:'center',gap:8,padding:'5px 6px',borderRadius:6,background:active?'var(--bg2)':'transparent'}},h('span',{style:{fontSize:13,color:active?'var(--tx)':'var(--tx2)'}},label),h('select',{disabled:fixedAdmin,value:active?(draft.permLevels[page]||'r'):'none',onChange:event=>setLevel(page,event.target.value),style:{fontSize:12,padding:'4px 6px',opacity:fixedAdmin?0.75:1}},h('option',{value:'none'},'Không truy cập'),h('option',{value:'r'},'Chỉ xem'),h('option',{value:'rw'},'Thêm + Xem + Sửa'),h('option',{value:'rwd'},'Thêm + Xem + Sửa + Xóa')));})))),
+        draft.permissions.includes('trips')&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,margin:'2px 0 14px',background:'var(--bg2)'}},
+          h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền nghiệp vụ trong Chuyến giao hàng'),
+          h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:8}},'Tách riêng người lập chuyến, lái xe nhập thực giao và kế toán duyệt.'),
+          h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:6}},SCF_TRIP_PERMISSION_OPTIONS.map(([key,label])=>h('label',{key,style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'6px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6,cursor:fixedAdmin?'default':'pointer'}},
+            h('input',{type:'checkbox',disabled:fixedAdmin,checked:fixedAdmin||!!draft.tripPermissions?.[key],onChange:event=>setDraft(prev=>({...prev,tripPermissions:{...prev.tripPermissions,[key]:event.target.checked}}))}),label
+          )))
+        ),
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,borderTop:'1px solid var(--bd)',paddingTop:12,marginTop:4,flexWrap:'wrap'}},h('span',{style:{fontSize:12,color:'var(--tx2)'}},assigned.length+' nhân viên đang dùng chức vụ này.'),h('button',{type:'button',disabled:!assigned.length,onClick:applyToAssigned},'Áp dụng lại cho nhân viên thuộc chức vụ này'))
       )
     )

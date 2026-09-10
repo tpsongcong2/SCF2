@@ -127,6 +127,44 @@ function getLvl(role, page, lvls) {
 function canWrite(role, page, lvls) { const l=getLvl(role,page,lvls); return l==='rw'||l==='rwd'; }
 function canDel(role, page, lvls)   { return getLvl(role,page,lvls)==='rwd'; }
 
+// Quyền nghiệp vụ bên trong trang Chuyến giao hàng. Không dùng chung
+// mức rw/rwd của trang vì người lập chuyến, lái xe và kế toán có
+// trách nhiệm khác nhau.
+const SCF_TRIP_PERMISSION_OPTIONS=[
+  ['manage','Tạo và sửa thông tin chuyến'],
+  ['delete','Xóa chuyến'],
+  ['dispatch','Giao / thu hồi chuyến của lái xe'],
+  ['actualQty','Nhập số lượng thực giao'],
+  ['driverWorkflow','Nhận chuyến, tải hóa đơn và báo hoàn thành'],
+  ['review','Duyệt hóa đơn và hoàn thành chuyến']
+];
+function defaultTripPermissions(user={}){
+  const role=String(user?.role||'').trim().toLowerCase();
+  const dept=String(user?.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
+  const isAdmin=['admin','administrator'].includes(role),isDriver=role==='driver',isAccounting=dept.includes('ke toan');
+  if(isAdmin)return{manage:true,delete:true,dispatch:true,actualQty:true,driverWorkflow:true,review:true};
+  if(isDriver)return{manage:false,delete:false,dispatch:false,actualQty:true,driverWorkflow:true,review:false};
+  const pageWrite=canWrite(role,'trips',user?.permLevels),pageDelete=canDel(role,'trips',user?.permLevels);
+  return{
+    manage:pageWrite,
+    delete:pageDelete,
+    dispatch:pageWrite&&(isAccounting||role==='manager'),
+    actualQty:false,
+    driverWorkflow:false,
+    review:pageWrite&&(isAccounting||role==='manager')
+  };
+}
+function normalizedTripPermissions(user={}){
+  const defaults=defaultTripPermissions(user),configured=user?.tripPermissions;
+  if(!configured||typeof configured!=='object')return defaults;
+  return Object.fromEntries(SCF_TRIP_PERMISSION_OPTIONS.map(([key])=>[key,Object.prototype.hasOwnProperty.call(configured,key)?configured[key]===true:defaults[key]]));
+}
+function canTripAction(user,action){
+  if(['admin','administrator'].includes(String(user?.role||'').trim().toLowerCase()))return true;
+  if(!canAccess(user?.role,'trips',user?.permissions,user?.dept))return false;
+  return normalizedTripPermissions(user)[action]===true;
+}
+
 function scfControlAction(control){
   if(!control)return'';
   const declared=control.dataset?.scfAction;
