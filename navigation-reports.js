@@ -2209,6 +2209,10 @@ function SalesDebtReportTab({orders,customers,products,trips=[]}){
   }));
   const productRows=[...productMap.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi'));
   const totals=filtered.reduce((sum,order)=>{sum.invoice+=(order.lines||[]).reduce((value,line)=>value+(numFmt(line.qtyInvoice)||0),0);sum.delivered+=(order.lines||[]).reduce((value,line)=>value+deliveredQty(line,order),0);return sum;},{invoice:0,delivered:0});
+  const invoiceRows=filtered.flatMap(order=>{
+    const lines=Array.isArray(order.lines)&&order.lines.length?order.lines:[null];
+    return lines.map((line,lineIndex)=>({order,line,lineIndex}));
+  });
   const qty=value=>(numFmt(value)||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
   const exportExcel=()=>{
     if(!window.XLSX){window.showToast('Công cụ Excel chưa tải xong. Vui lòng thử lại.','warn');return;}
@@ -2263,11 +2267,18 @@ function SalesDebtReportTab({orders,customers,products,trips=[]}){
       h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:10}},'Các hóa đơn đã nhập'),
       h('div',{className:'tw'},h('table',null,
         h('thead',null,h('tr',null,...['Ngày giao','Mã đơn','Khách hàng','Địa điểm','Sản phẩm','SL hóa đơn','SL đã giao'].map(label=>h('th',{key:label},label)))),
-        h('tbody',null,filtered.length?filtered.map(order=>{
-          const invoice=(order.lines||[]).reduce((sum,line)=>sum+(numFmt(line.qtyInvoice)||0),0);
-          const delivered=(order.lines||[]).reduce((sum,line)=>sum+deliveredQty(line,order),0);
-          const detail=(order.lines||[]).map(line=>(line.productName||'Sản phẩm')+': HĐ '+qty(line.qtyInvoice)+' / giao '+qty(deliveredQty(line,order))+(line.unit?' '+line.unit:'')).join('; ');
-          return h('tr',{key:order.id},h('td',null,fmtAnyDate(order.deliveryDate||order.date)||'—'),h('td',null,h('b',null,order.orderId||order.id||'—')),h('td',null,order.customer||'—'),h('td',null,order.pointName||order.address||'—'),h('td',{style:{minWidth:240}},detail||'—'),h('td',null,qty(invoice)),h('td',null,h('b',{style:{color:'var(--pri)'}},qty(delivered))));
+        h('tbody',null,invoiceRows.length?invoiceRows.map(({order,line,lineIndex})=>{
+          const invoice=line?(numFmt(line.qtyInvoice)||0):0;
+          const delivered=line?deliveredQty(line,order):0;
+          return h('tr',{key:(order.id||order.orderId||'order')+'-'+(line?.id||lineIndex)},
+            h('td',null,fmtAnyDate(order.deliveryDate||order.date)||'—'),
+            h('td',null,h('b',null,order.orderId||order.id||'—')),
+            h('td',null,order.customer||'—'),
+            h('td',null,order.pointName||order.address||'—'),
+            h('td',{style:{minWidth:240}},line?.productName||'—'),
+            h('td',null,qty(invoice)),
+            h('td',null,h('b',{style:{color:'var(--pri)'}},qty(delivered)))
+          );
         }):h('tr',null,h('td',{colSpan:7,className:'empty-st'},'Không có hóa đơn đã nhập theo bộ lọc.')))
       ))
     )
