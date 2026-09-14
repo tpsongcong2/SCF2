@@ -130,6 +130,25 @@ const PRINT_TEMPLATES = [
   {id:'youngsun',       name:'YOUGSUN — 送货确认单'},
 ];
 
+function normalizeOrderPrintTemplateText(value){
+  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/Đ/g,'D').replace(/đ/g,'d').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+}
+
+function resolveOrderPrintTemplate(order,customer){
+  order=order||{};customer=customer||{};
+  const customerText=normalizeOrderPrintTemplateText([
+    order.customer,order.customerName,customer.name,customer.code
+  ].filter(Boolean).join(' '));
+  const pointText=normalizeOrderPrintTemplateText([
+    order.pointName,order.address,order.area
+  ].filter(Boolean).join(' '));
+  const allText=(customerText+' '+pointText).trim();
+  if(['WELSTORY','WELSTRORY','WELTORY'].some(name=>allText.includes(name)))return 'welstory';
+  if(['YOUNGSUN','YOUGSUN','YOUSUNG','YOUNG SUN','YOUG SUN'].some(name=>allText.includes(name)))return 'youngsun';
+  if(allText.includes('FOSECA'))return 'foseca';
+  return 'songcong';
+}
+
 const YOUGSUN_PRODUCT_MAP = [
   {code:'B0001',name:'BÁNH CUỐN',aliases:['B.CUON NHAN TRON','B CUON NHAN TRON','BANH CUON NHAN TRON','BANH CUON']},
   {code:'B0005',name:'BÚN TƯƠI SỢI TO',aliases:['BUN TUOI SOI TO','BUN SOI TO','SOI TO']},
@@ -489,8 +508,9 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
   return '';
 }
 
-function PrintTemplateModal({order, company, onClose}) {
-  const [tpl, setTpl] = useState('welstory');
+function PrintTemplateModal({order, company, initialTemplate, onClose}) {
+  const defaultTemplate=PRINT_TEMPLATES.some(item=>item.id===initialTemplate)?initialTemplate:'welstory';
+  const [tpl, setTpl] = useState(defaultTemplate);
   const doPrint = () => {
     const html = buildPrintHTML(tpl, order, company);
     const w = window.open('','_blank','width='+Math.round(screen.availWidth*0.9)+',height='+Math.round(screen.availHeight*0.9)+',left='+Math.round(screen.availWidth*0.05)+',top='+Math.round(screen.availHeight*0.05)+',resizable=yes,scrollbars=yes');

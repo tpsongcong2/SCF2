@@ -1433,7 +1433,12 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
       h('i',{className:'ti ti-steering-wheel',style:{fontSize:56,display:'block',marginBottom:'1rem',color:'var(--pri2)'}}),
       'Chưa có chuyến giao hàng nào.'
     ),
-    printOrder&&h(PrintModal,{order:printOrder,company,onClose:()=>setPrintOrder(null)}),
+    printOrder&&h(PrintTemplateModal,{
+      order:printOrder,
+      company,
+      initialTemplate:resolveOrderPrintTemplate(printOrder,(customers||[]).find(customer=>String(customer.id||'')===String(printOrder.customerId||''))),
+      onClose:()=>setPrintOrder(null)
+    }),
     canManageTrips&&modal==='f'&&h(TripForm,{trip:edit,orders,employees,shifts,customers,products,currentUser,onSave:save,onClose:()=>{sm(null);se(null);}}),
     isDriver&&modal==='additional'&&additionalTrip&&h(AdditionalTripOrderForm,{trip:additionalTrip,customers,products,onSave:createAdditionalOrder,onClose:()=>{sm(null);setAdditionalTrip(null);}}),
     canManageTrips&&modal==='bulk'&&h(BulkTripModal,{orders,employees,shifts,prodShifts,customers,products,trips,currentUser,initialDate:fDate,initialShift:fShift,

@@ -507,7 +507,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
   const [form,setForm]=useState(blankForm(defaultBuyerId));
   const setF=(k,v)=>setForm(p=>{
     const next={...p,[k]:v};
-    next.amount=numFmt(next.liters||0)*numFmt(next.price||0);
+    next.amount=Math.round(numFmt(next.liters||0)*numFmt(next.price||0));
     return next;
   });
   const openAdd=()=>{
@@ -572,54 +572,9 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
     ].map(formatPlateCandidate).filter(Boolean);
     return [...new Set(rawCandidates)].sort((a,b)=>normalizeVehicleKey(b).length-normalizeVehicleKey(a).length)[0]||'';
   };
-  const parseOcrVolume=token=>{
-    const cleaned=String(token||'').replace(/[^\d.,]/g,'');
-    if(!cleaned)return 0;
-    const lastSep=Math.max(cleaned.lastIndexOf('.'),cleaned.lastIndexOf(','));
-    if(lastSep>=0){
-      const before=cleaned.slice(0,lastSep).replace(/[.,]/g,'');
-      const after=cleaned.slice(lastSep+1).replace(/[.,]/g,'');
-      if(after.length>0&&after.length<=3&&before.length<=3)return Number(`${before}.${after}`)||0;
-    }
-    return Number(cleaned.replace(/[.,]/g,''))||0;
-  };
-  const parseOcrMoney=token=>Number(String(token||'').replace(/\D/g,''))||0;
-  const extractFuelDataFromText=text=>{
-    const lines=String(text||'').split(/\n+/).map(raw=>({raw:String(raw||'').trim(),norm:normalizeText(raw)})).filter(x=>x.raw);
-    let liters=0, price=0, amount=0;
-    lines.forEach(line=>{
-      const tokens=line.raw.match(/\d[\d.,]*/g)||[];
-      if(!tokens.length)return;
-      const volumeVals=tokens.map(parseOcrVolume).filter(v=>v>0&&v<300);
-      const moneyVals=tokens.map(parseOcrMoney).filter(v=>v>=1000);
-      if(!liters&&/(so lit|so l|lit|litre|xang)/.test(line.norm)&&volumeVals.length)liters=volumeVals.find(v=>/[.,]/.test(tokens[volumeVals.indexOf(v)]))||volumeVals[0];
-      if(!price&&/(don gia|dg|gia\/l|vnd\/l|gia tien|price)/.test(line.norm)&&moneyVals.length)price=moneyVals.sort((a,b)=>a-b)[0];
-      if(!amount&&/(thanh tien|tong tien|so tien|phai tra|amount|total)/.test(line.norm)&&moneyVals.length)amount=moneyVals.sort((a,b)=>b-a)[0];
-    });
-    const allTokens=String(text||'').match(/\d[\d.,]*/g)||[];
-    const fallbackVolumes=allTokens.map(token=>({raw:token,val:parseOcrVolume(token)})).filter(x=>x.val>0&&x.val<300).sort((a,b)=>a.val-b.val);
-    const fallbackMoney=allTokens.map(parseOcrMoney).filter(v=>v>=1000).sort((a,b)=>a-b);
-    if(!liters&&fallbackVolumes.length)liters=(fallbackVolumes.find(x=>/[.,]/.test(x.raw))||fallbackVolumes[0]).val;
-    if(!price&&fallbackMoney.length)price=fallbackMoney[0];
-    if(!amount&&fallbackMoney.length>1)amount=fallbackMoney[fallbackMoney.length-1];
-    if(liters&&amount&&!price)price=Math.round(amount/liters);
-    if(price&&amount&&!liters)liters=Math.round((amount/price)*100)/100;
-    if(liters&&price&&!amount)amount=Math.round(liters*price);
-    return {
-      liters:liters?Math.round(liters*100)/100:0,
-      price:price||0,
-      amount:amount||0
-    };
-  };
-  const recognizeTextFromImage=async file=>{
-    if(!window.Tesseract)await window.scfLoadExternalScript('tesseract');
-    const img=await resizeImageFile(file,1800,.9);
-    const res=await Tesseract.recognize(img.dataUrl,'vie+eng');
-    return String(res?.data?.text||'');
-  };
   const recognizeFuelWithAi=async(file,kind)=>{
     if(!sb)throw new Error('Chưa kết nối Supabase.');
-    const prepared=await resizeImageFile(file,1800,.86);
+    const prepared=await resizeImageFile(file,2048,.92);
     const{data,error}=await sb.functions.invoke('scf-fuel-vision',{body:{kind,imageDataUrl:prepared.dataUrl}});
     if(error)throw error;
     if(!data?.ok)throw new Error(data?.error||'Cloudflare AI không trả về kết quả hợp lệ.');
@@ -663,7 +618,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
       date:toIsoDate(form.date)||isoDate(),
       liters:numFmt(form.liters||0),
       price:numFmt(form.price||0),
-      amount:numFmt(form.liters||0)*numFmt(form.price||0),
+      amount:Math.round(numFmt(form.liters||0)*numFmt(form.price||0)),
       image:form.meterImage||form.plateImage||form.image||'',
       imageName:form.meterImageName||form.plateImageName||form.imageName||'',
       updatedAt:fmtDT(),
@@ -698,13 +653,10 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
       setUploading('plate');
       const url=await uploadPhoto(file,'fuel-purchases/plates/'+(edit?.id||'new'));
       setForm(p=>({...p,plateImage:url,plateImageName:file.name||'anh-bien-so.jpg'}));
-      let vehicle='',provider='Cloudflare AI';
-      try{const ai=await recognizeFuelWithAi(file,'plate');vehicle=extractPlateFromText(ai.plate)||ai.plate||'';}catch(aiError){
-        provider='OCR dự phòng';
-        try{vehicle=extractPlateFromText(await recognizeTextFromImage(file));}catch(ocrError){console.warn('Fuel plate recognition:',aiError,ocrError);}
-      }
-      if(vehicle){setForm(p=>({...p,plateImage:url,plateImageName:file.name||'anh-bien-so.jpg',vehicle}));window.showToast(provider+' đã nhận diện biển số: '+vehicle,'success');}
-      else window.showToast('Đã lưu ảnh biển số nhưng chưa đọc rõ biển số. Có thể nhập tay nếu cần.','warn');
+      let vehicle='',aiError=null;
+      try{const ai=await recognizeFuelWithAi(file,'plate');vehicle=extractPlateFromText(ai.plate)||ai.plate||'';}catch(error){aiError=error;console.warn('Fuel plate AI recognition:',error);}
+      if(vehicle){setForm(p=>({...p,plateImage:url,plateImageName:file.name||'anh-bien-so.jpg',vehicle}));window.showToast('AI đã nhận diện biển số: '+vehicle+'. Vui lòng kiểm tra lại.','success');}
+      else window.showToast('Đã lưu ảnh nhưng AI chưa đọc được biển số'+(aiError?.message?': '+aiError.message:'.')+' Không dùng OCR để tránh điền sai.','warn');
       return true;
     }catch(e){window.showToast('Chưa tải được ảnh biển số.','error');return false;}finally{setUploading('');}
   };
@@ -714,15 +666,12 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
       setUploading('meter');
       const url=await uploadPhoto(file,'fuel-purchases/meters/'+(edit?.id||'new'));
       setForm(p=>({...p,meterImage:url,meterImageName:file.name||'anh-cay-xang.jpg',image:url,imageName:file.name||'anh-cay-xang.jpg'}));
-      let parsed=null,provider='Cloudflare AI';
-      try{const ai=await recognizeFuelWithAi(file,'meter');parsed={liters:numFmt(ai.liters),price:numFmt(ai.price),amount:numFmt(ai.amount)};}catch(aiError){
-        provider='OCR dự phòng';
-        try{parsed=extractFuelDataFromText(await recognizeTextFromImage(file));}catch(ocrError){console.warn('Fuel meter recognition:',aiError,ocrError);}
-      }
+      let parsed=null,aiError=null;
+      try{const ai=await recognizeFuelWithAi(file,'meter');parsed={liters:numFmt(ai.liters),price:numFmt(ai.price),amount:numFmt(ai.amount),verified:ai.verified!==false,warning:String(ai.warning||'')};}catch(error){aiError=error;console.warn('Fuel meter AI recognition:',error);}
       const filled=[];
-      if(parsed)setForm(p=>{const next={...p,meterImage:url,meterImageName:file.name||'anh-cay-xang.jpg',image:url,imageName:file.name||'anh-cay-xang.jpg'};let liters=parsed.liters||numFmt(next.liters||0),price=parsed.price||numFmt(next.price||0),amount=parsed.amount||numFmt(next.amount||0);if(liters&&amount&&!price)price=Math.round(amount/liters);if(price&&amount&&!liters)liters=Math.round(amount/price*100)/100;if(liters){next.liters=liters;filled.push('số lít');}if(price){next.price=price;filled.push('giá tiền');}next.amount=amount||Math.round((numFmt(next.liters)||0)*(numFmt(next.price)||0));if(next.amount)filled.push('thành tiền');return next;});
-      if(filled.length)window.showToast(provider+' đã đọc và điền '+[...new Set(filled)].join(', ')+'. Vui lòng kiểm tra lại.','success');
-      else window.showToast('Đã lưu ảnh cây xăng nhưng chưa đọc rõ số liệu. Có thể nhập tay nếu cần.','warn');
+      if(parsed&&parsed.verified)setForm(p=>{const next={...p,meterImage:url,meterImageName:file.name||'anh-cay-xang.jpg',image:url,imageName:file.name||'anh-cay-xang.jpg'};let liters=parsed.liters||numFmt(next.liters||0),price=parsed.price||numFmt(next.price||0),amount=parsed.amount||numFmt(next.amount||0);if(liters&&amount&&!price)price=Math.round(amount/liters);if(price&&amount&&!liters)liters=Math.round(amount/price*1000)/1000;if(liters){next.liters=liters;filled.push('số lít');}if(price){next.price=price;filled.push('đơn giá');}next.amount=amount||Math.round((numFmt(next.liters)||0)*(numFmt(next.price)||0));if(next.amount)filled.push('tổng tiền');return next;});
+      if(filled.length)window.showToast('AI đã đọc và kiểm tra chéo: '+[...new Set(filled)].join(', ')+'. Vui lòng kiểm tra lại.','success');
+      else window.showToast('Đã lưu ảnh nhưng AI chưa thể xác nhận số liệu'+(parsed?.warning?': '+parsed.warning:(aiError?.message?': '+aiError.message:'.'))+' Không dùng OCR để tránh điền sai.','warn');
       return true;
     }catch(e){window.showToast('Chưa tải được ảnh cây xăng.','error');return false;}finally{setUploading('');}
   };
@@ -845,7 +794,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
       h('div',{className:'g2'},
         h(F,{label:'Xe / biển số *'},
           h('div',null,
-            h('input',{value:form.vehicle,onChange:e=>setF('vehicle',e.target.value.toUpperCase()),list:'fuel-vehicle-options',placeholder:'Nhập hoặc OCR biển số xe...',style:{fontSize:13}}),
+            h('input',{value:form.vehicle,onChange:e=>setF('vehicle',e.target.value.toUpperCase()),list:'fuel-vehicle-options',placeholder:'Nhập hoặc để AI đọc biển số xe...',style:{fontSize:13}}),
             h('datalist',{id:'fuel-vehicle-options'},vehicleOptions.map(v=>h('option',{key:v,value:v},v)))
           )
         ),
@@ -855,7 +804,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
               form.plateImage&&h('button',{type:'button',onClick:()=>window.open(form.plateImage,'_blank'),style:{fontSize:12,padding:'6px 12px'}},h('i',{className:'ti ti-photo',style:{fontSize:14}}),'Xem ảnh'),
               h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:busyPlate?'wait':'pointer',background:'#fff'}},
                 h('i',{className:'ti '+(busyPlate?'ti-loader-2 spin':'ti-id'),style:{fontSize:14}}),
-                busyPlate?'Đang đọc biển số...':'Chụp biển số',
+                busyPlate?'AI đang đọc biển số...':'Chụp biển số',
                 h('input',{type:'file',accept:'image/*',capture:'environment',style:{display:'none'},disabled:!!uploading,onChange:e=>{const file=e.target.files?.[0];pickPlateImage(file);e.target.value='';}})
               ),
               h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:busyPlate?'wait':'pointer',background:'#fff'}},
@@ -874,7 +823,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
             (form.meterImage||form.image)&&h('button',{type:'button',onClick:()=>window.open(form.meterImage||form.image,'_blank'),style:{fontSize:12,padding:'6px 12px'}},h('i',{className:'ti ti-photo',style:{fontSize:14}}),'Xem ảnh'),
             h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:busyMeter?'wait':'pointer',background:'#fff'}},
               h('i',{className:'ti '+(busyMeter?'ti-loader-2 spin':'ti-gas-station'),style:{fontSize:14}}),
-              busyMeter?'Đang đọc cây xăng...':'Chụp cây xăng',
+              busyMeter?'AI đang đọc cây xăng...':'Chụp cây xăng',
               h('input',{type:'file',accept:'image/*',capture:'environment',style:{display:'none'},disabled:!!uploading,onChange:e=>pickMeterImage(e.target.files?.[0])})
             ),
             h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:busyMeter?'wait':'pointer',background:'#fff'}},
@@ -884,11 +833,11 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
             )
           ),
           (form.meterImageName||form.imageName)&&h('span',{style:{fontSize:12,color:'var(--tx2)'}},form.meterImageName||form.imageName),
-          h('div',{style:{fontSize:12,color:'var(--tx2)'}},'App sẽ cố gắng tự đọc số lít, giá tiền và thành tiền từ ảnh cây xăng.')
+          h('div',{style:{fontSize:12,color:'var(--tx2)'}},'AI sẽ đọc số lít, đơn giá và tổng tiền, sau đó kiểm tra chéo trước khi tự điền. App không dùng OCR dự phòng.')
         )
       ),
       h('div',{className:'g2'},
-        h(F,{label:'Số lít *'},h('input',{type:'number',min:0,step:'0.1',value:form.liters,onChange:e=>setF('liters',e.target.value),placeholder:'0'})),
+        h(F,{label:'Số lít *'},h('input',{type:'number',min:0,step:'0.001',value:form.liters,onChange:e=>setF('liters',e.target.value),placeholder:'0'})),
         h(F,{label:'Giá tiền *'},h(NumInput,{value:form.price,onChange:v=>setF('price',v),placeholder:'0'}))
       ),
       h('div',{className:'g2'},
