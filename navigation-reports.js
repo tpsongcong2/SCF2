@@ -563,7 +563,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
     const compact=normalizeVehicleKey(source);
     const exactVehicle=[...vehicleOptions]
       .sort((a,b)=>normalizeVehicleKey(b).length-normalizeVehicleKey(a).length)
-      .find(v=>compact.includes(normalizeVehicleKey(v)));
+      .find(v=>compact===normalizeVehicleKey(v)&&/^\d{2}[A-Z]{1,2}\d{4,6}$/.test(normalizeVehicleKey(v)));
     if(exactVehicle)return exactVehicle;
     const rawCandidates=[
       ...(source.match(/\d{2}[A-Z]{1,2}-?\d{3}\.?\d{2,3}/g)||[]),
@@ -669,7 +669,17 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
       let parsed=null,aiError=null;
       try{const ai=await recognizeFuelWithAi(file,'meter');parsed={liters:numFmt(ai.liters),price:numFmt(ai.price),amount:numFmt(ai.amount),verified:ai.verified!==false,warning:String(ai.warning||'')};}catch(error){aiError=error;console.warn('Fuel meter AI recognition:',error);}
       const filled=[];
-      if(parsed&&parsed.verified)setForm(p=>{const next={...p,meterImage:url,meterImageName:file.name||'anh-cay-xang.jpg',image:url,imageName:file.name||'anh-cay-xang.jpg'};let liters=parsed.liters||numFmt(next.liters||0),price=parsed.price||numFmt(next.price||0),amount=parsed.amount||numFmt(next.amount||0);if(liters&&amount&&!price)price=Math.round(amount/liters);if(price&&amount&&!liters)liters=Math.round(amount/price*1000)/1000;if(liters){next.liters=liters;filled.push('số lít');}if(price){next.price=price;filled.push('đơn giá');}next.amount=amount||Math.round((numFmt(next.liters)||0)*(numFmt(next.price)||0));if(next.amount)filled.push('tổng tiền');return next;});
+      if(parsed&&parsed.verified){
+        let {liters,price,amount}=parsed;
+        if(liters&&amount&&!price)price=Math.round(amount/liters);
+        if(price&&amount&&!liters)liters=Math.round(amount/price*1000)/1000;
+        if(liters&&price&&!amount)amount=Math.round(liters*price);
+        const values={};
+        if(liters>0){values.liters=liters;filled.push('số lít');}
+        if(price>0){values.price=price;filled.push('đơn giá');}
+        if(amount>0){values.amount=amount;filled.push('tổng tiền');}
+        if(filled.length)setForm(p=>({...p,...values,meterImage:url,meterImageName:file.name||'anh-cay-xang.jpg',image:url,imageName:file.name||'anh-cay-xang.jpg'}));
+      }
       if(filled.length)window.showToast('AI đã đọc và kiểm tra chéo: '+[...new Set(filled)].join(', ')+'. Vui lòng kiểm tra lại.','success');
       else window.showToast('Đã lưu ảnh nhưng AI chưa thể xác nhận số liệu'+(parsed?.warning?': '+parsed.warning:(aiError?.message?': '+aiError.message:'.'))+' Không dùng OCR để tránh điền sai.','warn');
       return true;
