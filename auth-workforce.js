@@ -1238,7 +1238,7 @@ function EmployeeErrorsTab({records,setRecords,employees,currentUser}){
   );
 }
 function EmployeeUniformForm({record,employees,currentUser,onSave,onClose}){
-  const[f,sf]=useState(record?{...record}:{date:isoDate(),empId:'',uniformType:''});
+  const[f,sf]=useState(record?{amount:0,...record}:{date:isoDate(),empId:'',uniformType:'',amount:0});
   const staff=(employees||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi'));
   const uniformTypes=['Bộ đồng phục','Áo đồng phục','Quần đồng phục','Mũ','Tạp dề','Giày / Ủng','Áo khoác'];
   const submit=()=>{
@@ -1247,7 +1247,8 @@ function EmployeeUniformForm({record,employees,currentUser,onSave,onClose}){
     if(!emp){window.showToast('Chọn nhân viên nhận đồng phục.','warn');return;}
     const uniformType=String(f.uniformType||'').trim();
     if(!uniformType){window.showToast('Nhập loại đồng phục.','warn');return;}
-    onSave({...f,date:f.date,empId:emp.id,empName:emp.name||emp.id,dept:emp.dept||'',uniformType,
+    const amount=Math.max(0,numFmt(f.amount));
+    onSave({...f,date:f.date,empId:emp.id,empName:emp.name||emp.id,dept:emp.dept||'',uniformType,amount,
       createdBy:record?.createdBy||currentUser.name,createdAt:record?.createdAt||fmtDT(),updatedBy:currentUser.name,updatedAt:fmtDT()});
   };
   return h(Modal,{title:record?'Sửa thông tin cấp đồng phục':'Cấp đồng phục nhân viên',onClose},
@@ -1261,14 +1262,20 @@ function EmployeeUniformForm({record,employees,currentUser,onSave,onClose}){
     h(F,{label:'Loại đồng phục'},h('input',{list:'employee-uniform-type-options',value:f.uniformType||'',onChange:e=>sf(p=>({...p,uniformType:e.target.value})),placeholder:'Ví dụ: Bộ đồng phục, áo, mũ...'}),
       h('datalist',{id:'employee-uniform-type-options'},uniformTypes.map(type=>h('option',{key:type,value:type})))
     ),
+    h(F,{label:'Giá trị (đ)'},h(NumInput,{value:f.amount||'',onChange:v=>sf(p=>({...p,amount:v})),placeholder:'0'})),
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit},'Lưu'))
   );
 }
 
 function EmployeeUniformsTab({records,setRecords,employees,currentUser,canEdit=true,canDelete=true}){
-  const[modal,setModal]=useState(false);const[edit,setEdit]=useState(null);const[q,setQ]=useState('');const[month,setMonth]=useState(isoDate().slice(0,7));const[empFilter,setEmpFilter]=useState('all');
+  const today=isoDate();
+  const[modal,setModal]=useState(false);const[edit,setEdit]=useState(null);const[q,setQ]=useState('');const[period,setPeriod]=useState('year');const[year,setYear]=useState(today.slice(0,4));const[month,setMonth]=useState(today.slice(0,7));const[empFilter,setEmpFilter]=useState('all');
   const employeeOptions=(employees||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi'));
-  const rows=(records||[]).filter(r=>(!month||String(r.date||'').startsWith(month))&&(empFilter==='all'||String(r.empId)===String(empFilter))&&(!q||[r.empName,r.empId,r.dept,r.uniformType,r.updatedBy].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+  const years=[...new Set([today.slice(0,4),...(records||[]).map(r=>String(r.date||'').slice(0,4)).filter(v=>/^\d{4}$/.test(v))])].sort((a,b)=>b.localeCompare(a));
+  const datePrefix=period==='month'?month:year;
+  const rows=(records||[]).filter(r=>(!datePrefix||String(r.date||'').startsWith(datePrefix))&&(empFilter==='all'||String(r.empId)===String(empFilter))&&(!q||[r.empName,r.empId,r.dept,r.uniformType,r.updatedBy].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+  const totalAmount=rows.reduce((sum,r)=>sum+Math.max(0,numFmt(r.amount)),0);
+  const money=v=>Number(v||0).toLocaleString('vi-VN')+'đ';
   const save=data=>{
     if(edit)setRecords(prev=>(prev||[]).map(row=>row.id===edit.id?{...row,...data}:row));
     else setRecords(prev=>[{...data,id:'DP'+uid()},...(prev||[])]);
@@ -1279,18 +1286,22 @@ function EmployeeUniformsTab({records,setRecords,employees,currentUser,canEdit=t
     if(!ok)return;
     setRecords(prev=>(prev||[]).filter(item=>item.id!==row.id));window.showToast('Đã xóa lịch sử cấp đồng phục.','success');
   };
-  const exportCols=[['date','Ngày phát'],['empId','Mã NV'],['empName','Tên nhân viên'],['dept','Bộ phận'],['uniformType','Loại đồng phục'],['updatedBy','Người cập nhật'],['updatedAt','Thời gian cập nhật']];
+  const exportCols=[['date','Ngày phát'],['empId','Mã NV'],['empName','Tên nhân viên'],['dept','Bộ phận'],['uniformType','Loại đồng phục'],['amount','Giá trị'],['updatedBy','Người cập nhật'],['updatedAt','Thời gian cập nhật']];
   const hasActions=canEdit||canDelete;
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-shirt',style:{fontSize:20}}),'Cấp đồng phục nhân viên'),
     h('div',{className:'att-stat'},
-      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Số lần cấp'),h('div',{style:{fontSize:24,fontWeight:650,color:'var(--pri3)'}},rows.length))
+      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Số lần cấp'),h('div',{style:{fontSize:24,fontWeight:650,color:'var(--pri3)'}},rows.length)),
+      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Tổng chi'),h('div',{style:{fontSize:24,fontWeight:650,color:'var(--pri3)'}},money(totalAmount)))
     ),
     h('div',{className:'card'},
       h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:10}},
         h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
           h(SearchBar,{value:q,onChange:setQ,placeholder:'Tìm nhân viên, loại đồng phục...'}),
-          h('input',{type:'month',value:month,onChange:e=>setMonth(e.target.value),style:{width:145}}),
+          h('select',{value:period,onChange:e=>setPeriod(e.target.value),style:{minWidth:120}},
+            h('option',{value:'year'},'Cả năm'),h('option',{value:'month'},'Theo tháng')
+          ),
+          period==='year'?h('select',{value:year,onChange:e=>setYear(e.target.value),style:{width:105}},years.map(value=>h('option',{key:value,value},value))):h('input',{type:'month',value:month,onChange:e=>setMonth(e.target.value),style:{width:145}}),
           h('select',{value:empFilter,onChange:e=>setEmpFilter(e.target.value),style:{minWidth:190}},
             h('option',{value:'all'},'Tất cả nhân viên'),employeeOptions.map(e=>h('option',{key:e.id,value:e.id},e.name||e.id))
           )
@@ -1301,17 +1312,23 @@ function EmployeeUniformsTab({records,setRecords,employees,currentUser,canEdit=t
         )
       ),
       h('div',{className:'tw'},h('table',null,
-        h('thead',null,h('tr',null,...['Ngày phát','Tên nhân viên','Loại đồng phục','Người cập nhật',hasActions?'':''].map((c,index)=>h('th',{key:c+'-'+index},c)))),
+        h('thead',null,h('tr',null,...['Ngày phát','Tên nhân viên','Loại đồng phục','Giá trị','Người cập nhật',hasActions?'':''].map((c,index)=>h('th',{key:c+'-'+index},c)))),
         h('tbody',null,rows.length?rows.map(r=>h('tr',{key:r.id},
           h('td',null,vnDateFromISO(r.date||'')),
           h('td',null,h('div',{style:{fontWeight:600}},r.empName||'—'),h('div',{style:{fontSize:11,color:'var(--tx2)'}},[r.empId,r.dept].filter(Boolean).join(' · '))),
           h('td',{style:{minWidth:220,fontWeight:600}},r.uniformType||'—'),
+          h('td',{style:{fontWeight:650,whiteSpace:'nowrap'}},money(r.amount)),
           h('td',null,h('div',null,r.updatedBy||r.createdBy||'—'),r.updatedAt&&h('div',{style:{fontSize:11,color:'var(--tx2)'}},r.updatedAt)),
           hasActions&&h('td',null,h('div',{style:{display:'flex',gap:4}},
             canEdit&&h('button',{className:'bi',title:'Sửa',onClick:()=>{setEdit(r);setModal(true);}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
             canDelete&&h('button',{className:'bdel',title:'Xóa',onClick:()=>remove(r)},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
           ))
-        )):h('tr',null,h('td',{colSpan:hasActions?5:4,className:'empty-st'},'Chưa có lịch sử cấp đồng phục.')))
+        )):h('tr',null,h('td',{colSpan:hasActions?6:5,className:'empty-st'},'Chưa có lịch sử cấp đồng phục.'))),
+        h('tfoot',null,h('tr',{style:{background:'var(--bg2)',fontWeight:700}},
+          h('td',{colSpan:3,style:{textAlign:'right'}},'Tổng chi'),
+          h('td',{style:{whiteSpace:'nowrap',color:'var(--pri3)'}},money(totalAmount)),
+          h('td',{colSpan:hasActions?2:1},'')
+        ))
       )),
       modal&&h(EmployeeUniformForm,{record:edit,employees,currentUser,onSave:save,onClose:()=>{setModal(false);setEdit(null);}})
     )
