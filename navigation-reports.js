@@ -600,7 +600,11 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
     if(!sb)throw new Error('Chưa kết nối Supabase.');
     const prepared=await resizeImageFile(file,2048,.92);
     const{data,error}=await sb.functions.invoke('scf-fuel-vision',{body:{kind,imageDataUrl:prepared.dataUrl}});
-    if(error)throw error;
+    if(error){
+      let detail='';
+      try{const body=await error.context?.json();detail=body?.error||body?.message||'';}catch{}
+      throw new Error(detail||error.message||'Không kết nối được dịch vụ AI.');
+    }
     if(!data?.ok)throw new Error(data?.error||'Cloudflare AI không trả về kết quả hợp lệ.');
     return data;
   };
@@ -688,10 +692,11 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
     if(!file)return;
     try{
       setUploading('meter');
+      setForm(p=>({...p,liters:'',price:'',amount:0,meterAiStatus:'Đang đọc ảnh mới — đã bỏ số liệu của ảnh trước.'}));
       const url=await uploadPhoto(file,'fuel-purchases/meters/'+(edit?.id||'new'));
       setForm(p=>({...p,meterImage:url,meterImageName:file.name||'anh-cay-xang.jpg',image:url,imageName:file.name||'anh-cay-xang.jpg'}));
       let parsed=null,aiError=null;
-      try{const ai=await recognizeFuelWithAi(file,'meter');parsed={liters:numFmt(ai.liters),price:numFmt(ai.price),amount:numFmt(ai.amount),verified:ai.verified!==false,warning:String(ai.warning||'')};}catch(error){aiError=error;console.warn('Fuel meter AI recognition:',error);}
+      try{const ai=await recognizeFuelWithAi(file,'meter');parsed={liters:numFmt(ai.liters),price:numFmt(ai.price),amount:numFmt(ai.amount),verified:ai.verified===true&&numFmt(ai.liters)>0&&numFmt(ai.price)>0&&numFmt(ai.amount)>0,warning:String(ai.warning||'')};}catch(error){aiError=error;console.warn('Fuel meter AI recognition:',error);}
       const filled=[];
       if(parsed&&parsed.verified){
         let {liters,price,amount}=parsed;
@@ -702,12 +707,13 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
         if(liters>0){values.liters=liters;filled.push('số lít');}
         if(price>0){values.price=price;filled.push('đơn giá');}
         if(amount>0){values.amount=amount;filled.push('tổng tiền');}
-        if(filled.length)setForm(p=>({...p,...values,meterImage:url,meterImageName:file.name||'anh-cay-xang.jpg',image:url,imageName:file.name||'anh-cay-xang.jpg'}));
+        if(filled.length)setForm(p=>p.meterImage!==url?p:({...p,...values,meterAiStatus:'Đã đọc ảnh này: '+liters+' lít × '+price.toLocaleString('vi-VN')+' đồng/lít; tổng trên ảnh '+amount.toLocaleString('vi-VN')+' đồng. Vui lòng đối chiếu ảnh trước khi lưu.'}));
       }
+      if(!filled.length)setForm(p=>p.meterImage!==url?p:({...p,meterAiStatus:'Chưa xác nhận được ảnh này: '+(parsed?.warning||aiError?.message||'AI chưa đọc rõ đủ ba giá trị. Hãy dán ảnh cận màn hình hoặc nhập tay.')}));
       if(filled.length)window.showToast('AI đã đọc và kiểm tra chéo: '+[...new Set(filled)].join(', ')+'. Vui lòng kiểm tra lại.','success');
       else window.showToast('Đã lưu ảnh nhưng AI chưa thể xác nhận số liệu'+(parsed?.warning?': '+parsed.warning:(aiError?.message?': '+aiError.message:'.'))+' Không dùng OCR để tránh điền sai.','warn');
       return true;
-    }catch(e){window.showToast('Chưa tải được ảnh cây xăng.','error');return false;}finally{setUploading('');}
+    }catch(e){setForm(p=>({...p,meterAiStatus:'Không xử lý được ảnh mới. Hãy thử lại hoặc nhập tay.'}));window.showToast('Chưa tải được ảnh cây xăng.','error');return false;}finally{setUploading('');}
   };
   const captureBothFuelImages=()=>{
     if(uploading)return;
@@ -855,6 +861,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
       h(F,{label:'Ảnh cây xăng'},
         h('div',{style:{display:'grid',gap:8}},
           h(FuelImagePasteZone,{kind:'meter',busy:!!uploading,image:form.meterImage||form.image,onImage:pickMeterImage}),
+          form.meterAiStatus&&h('div',{role:'status',style:{padding:10,background:'var(--bg2)',borderRadius:8,fontSize:13}},form.meterAiStatus),
           h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
             (form.meterImage||form.image)&&h('button',{type:'button',onClick:()=>window.open(form.meterImage||form.image,'_blank'),style:{fontSize:12,padding:'6px 12px'}},h('i',{className:'ti ti-photo',style:{fontSize:14}}),'Xem ảnh'),
             h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 14px',border:'1px solid var(--bd)',borderRadius:'var(--r)',cursor:busyMeter?'wait':'pointer',background:'#fff'}},
