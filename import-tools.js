@@ -125,6 +125,7 @@ function parseProductStr(s){
 
 const PRINT_TEMPLATES = [
   {id:'welstory',       name:'Welstory — Phiếu giao hàng'},
+  {id:'songcong',       name:'Sông Công — Phiếu giao hàng'},
   {id:'foseca',         name:'Foseca — Phiếu giao nhận hàng'},
   {id:'youngsun',       name:'YOUGSUN — 送货确认单'},
 ];
@@ -179,10 +180,11 @@ function buildPrintHTML(template, order, company) {
   const lines = (order.lines || []).filter(l => l.productName);
   const totalQty = lines.reduce((s,l) => s + Number(l.qtyInvoice||l.qtyProd||0), 0);
 
-  if (template === 'welstory') {
+  if (template === 'welstory' || template === 'songcong') {
+    const isSongCong = template === 'songcong';
     const B = 'border:1px solid #333';
     const BC = B+';text-align:center';
-    const emCells = `<td style="${BC}"></td>`.repeat(10);
+    const emCells = `<td style="${BC}"></td>`.repeat(isSongCong ? 2 : 10);
     const rows = lines.map((l,i) => `<tr style="height:42px">
       <td style="${BC};font-size:16px">${i+1}</td>
       <td style="${B};padding:2px 6px;font-size:16px">${l.productName||''}</td>
@@ -266,16 +268,12 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
   <th rowspan="2" style="width:6%" class="th1">Thực nhận</th>
   <th rowspan="2" style="width:3.5%" class="th1">ĐVT</th>
   <th colspan="2" class="th1">Kiểm tra</th>
-  <th colspan="4" class="th1">Xuất đi</th>
-  <th colspan="4" class="th1">Thu về</th>
+  ${isSongCong ? '' : '<th colspan="4" class="th1">Xuất đi</th><th colspan="4" class="th1">Thu về</th>'}
 </tr>
 <tr>
   <th style="width:3.5%" class="th2">Đạt</th>
   <th style="width:5%" class="th2">Không đạt</th>
-  <th style="width:5%" class="th2">T.trắng</th><th style="width:5%" class="th2">T.xanh</th>
-  <th style="width:3.5%" class="th2">Rổ</th><th style="width:4%" class="th2">INOX</th>
-  <th style="width:5%" class="th2">T.trắng</th><th style="width:5%" class="th2">T.xanh</th>
-  <th style="width:3.5%" class="th2">Rổ</th><th style="width:4%" class="th2">INOX</th>
+  ${isSongCong ? '' : '<th style="width:5%" class="th2">T.trắng</th><th style="width:5%" class="th2">T.xanh</th><th style="width:3.5%" class="th2">Rổ</th><th style="width:4%" class="th2">INOX</th><th style="width:5%" class="th2">T.trắng</th><th style="width:5%" class="th2">T.xanh</th><th style="width:3.5%" class="th2">Rổ</th><th style="width:4%" class="th2">INOX</th>'}
 </tr>
 </thead>
 <tbody>${rows}</tbody>
@@ -284,7 +282,7 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
   <td colspan="2" class="tfoot-row" style="text-align:right;border:1px solid #333;padding:4px 6px;font-size:16px;font-weight:700">Tổng</td>
   <td style="text-align:center;border:1px solid #333;padding:4px;font-size:18px;font-weight:700">${totalQty.toLocaleString('vi-VN')}</td>
   <td style="border:1px solid #333"></td>
-  <td colspan="11" style="border:1px solid #333"></td>
+  <td colspan="${isSongCong ? 3 : 11}" style="border:1px solid #333"></td>
 </tr>
 </tfoot>
 </table>
