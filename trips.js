@@ -1257,12 +1257,14 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                   borderRadius:'var(--r)',cursor:'pointer'}
               },h('i',{className:'ti ti-printer',style:{fontSize:13}}),'In chuyến'),
               canCreateAdditionalOrder(trip)&&h('button',{
-                className:'bp mobile-only trip-additional-mobile',
+                className:'bi mobile-only trip-additional-mobile',
+                title:additionalOrderForTrip(trip)?'Đã có đơn phát sinh':'Tạo đơn phát sinh',
+                'aria-label':additionalOrderForTrip(trip)?'Đã có đơn phát sinh':'Tạo đơn phát sinh',
                 'data-scf-action':'write',
                 onClick:()=>openAdditionalOrder(trip),
                 disabled:!!additionalOrderForTrip(trip),
-                style:{minHeight:44,padding:'8px 12px',fontSize:14}
-              },h('i',{className:'ti ti-plus'}),additionalOrderForTrip(trip)?' Đã có đơn phát sinh':' Tạo đơn phát sinh')
+                style:{width:36,minWidth:36,height:38,minHeight:38,padding:4,fontSize:20,flexShrink:0,marginLeft:'auto',color:'var(--pri)'}
+              },h('i',{className:additionalOrderForTrip(trip)?'ti ti-file-check':'ti ti-file-plus','aria-hidden':true}))
             ),
             trip.note&&h('div',{style:{fontSize:13,color:'var(--tx2)',marginBottom:8,padding:'6px 10px',background:'var(--bg2)',borderRadius:'var(--r)'}},
               h('i',{className:'ti ti-notes',style:{marginRight:4}}),'Ghi chú: '+trip.note
