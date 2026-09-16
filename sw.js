@@ -1,4 +1,4 @@
-const CACHE = 'scf-v333';
+const CACHE = 'scf-v334';
 const ASSETS = [
   './',
   './index.html',
@@ -26,12 +26,12 @@ const ASSETS = [
   './quotations.js',
   './finance.js',
   './delivery-orders.js?v=309',
-  './trips.js?v=333',
+  './trips.js?v=334',
   './production.js',
   './permissions.js?v=314',
   './permission-settings.js?v=314',
-  './app.js?v=333',
-  './bootstrap.js?v=333',
+  './app.js?v=334',
+  './bootstrap.js?v=334',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
