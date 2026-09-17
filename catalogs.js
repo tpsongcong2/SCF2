@@ -657,6 +657,20 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
       pt.address+(pt.contact?' • '+pt.contact+' '+pt.phone:''))
   );
 }
+function customerAreaOptions(areas,shifts,customers,points){
+  const values=new Map();
+  const add=value=>{
+    const code=String(value??'').trim();
+    if(!code||/^_+custom_+$/i.test(code))return;
+    const key=code.toLocaleUpperCase('vi');
+    if(!values.has(key))values.set(key,code);
+  };
+  (areas||[]).forEach(area=>add(area?.code));
+  (shifts||[]).forEach(shift=>add(shift?.area));
+  (customers||[]).forEach(customer=>(customer?.points||[]).forEach(point=>add(point?.area)));
+  (points||[]).forEach(point=>add(point?.area));
+  return [...values.values()].sort((a,b)=>a.localeCompare(b,'vi'));
+}
 function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
   const normalize=s=>(s||'').trim().toUpperCase().replace(/\s+/g,' ').replace(/[^A-Z0-9\u00C0-\u024F\u1E00-\u1EFF ]/g,'');
   const normalizeAreaValue=v=>{
@@ -746,7 +760,7 @@ function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
     h('button',{className:'bp',onClick:()=>doSave(true),style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu & Đóng')
   );
   // Add-point form
-  const allAreas=(areas&&areas.length>0)?areas.map(a=>a.code).filter(Boolean).sort((a,b)=>a.localeCompare(b,'vi')):[...new Set([...(shifts||[]).map(s=>s.area),...f.points.map(p=>p.area)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const allAreas=customerAreaOptions(areas,shifts,customers,f.points);
   const AddPtForm=()=>h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:10,marginTop:4}},
     h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500,marginBottom:6}},'Thêm địa điểm mới'),
     h('div',{className:'g2'},

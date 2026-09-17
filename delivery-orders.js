@@ -1990,6 +1990,10 @@ function cleanDeliveryOrderRecord(order){
   Object.entries(order||{}).forEach(([key,value])=>{if(!String(key).startsWith('_'))clean[key]=value;});
   return clean;
 }
+function deliveryOrderStatusForTrip(order,trip){
+  if(!trip||String(order?.tripId||'')!==String(trip.id||'')||order?.status!=='pending')return order?.status;
+  return trip.status==='active'?'delivering':'assigned';
+}
 function deliveryProductTextWidth(text){
   const value=String(text||'');
   const fallback=Array.from(value).reduce((width,char)=>width+(/[MWĐƯƠÔ]/i.test(char)?10:/[il1.,' ]/i.test(char)?4.5:7.5),0);
@@ -2256,6 +2260,13 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       return nextOrders;
     });
   };
+  useEffect(()=>{
+    if(!(orders||[]).some(order=>deliveryOrderStatusForTrip(order,tripById.get(String(order.tripId||'')))!==order.status))return;
+    applyOrdersAndTripSync(prev=>prev.map(order=>{
+      const status=deliveryOrderStatusForTrip(order,(trips||[]).find(trip=>String(trip.id||'')===String(order.tripId||'')));
+      return status===order.status?order:{...order,status,orderHistory:[...(order.orderHistory||[]),historyEntry('Đồng bộ trạng thái xếp chuyến',['Chuyến: '+order.tripId,'Trạng thái: '+(order.status||'—')+' → '+status])],updatedAt:fmtDT(),updatedBy:currentUser?.name||''};
+    }));
+  },[orders,trips]);
   const orderTrip=order=>(trips||[]).find(t=>String(t.id||'')===String(order?.tripId||'')||(t.orderIds||[]).includes(order?.id));
   const startedTrip=trip=>trip?.status==='active';
   const dispatchedTrip=trip=>!!trip?.driverDispatchedAt||startedTrip(trip);
@@ -2281,10 +2292,18 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const assignTripManually=(order,newTripId)=>{
     const oldTrip=orderTrip(order);
     const oldTripId=order.tripId||oldTrip?.id||'';
-    if(String(oldTripId)===String(newTripId||''))return;
+    const sameTrip=String(oldTripId)===String(newTripId||'');
+    const sameTripStatus=newTripId?(oldTrip?.status==='active'?'delivering':'assigned'):'pending';
+    if(sameTrip&&String(order.tripId||'')===String(newTripId||'')&&order.status===sameTripStatus&&order.tripAssignMode==='manual')return;
     if(closedTrip(oldTrip)){window.showToast('Chuyến đã chờ duyệt hoặc hoàn thành nên không thể rút đơn.','warn');return;}
     const targetTrip=(trips||[]).find(t=>String(t.id||'')===String(newTripId||''));
     if(closedTrip(targetTrip)){window.showToast('Không thể chuyển đơn vào chuyến đã chờ duyệt hoặc hoàn thành.','warn');return;}
+    if(sameTrip){
+      const stamp=fmtDT();
+      applyOrdersAndTripSync(prev=>prev.map(x=>x.id===order.id?{...x,tripAssignMode:'manual',tripId:newTripId||null,status:sameTripStatus,orderHistory:[...(x.orderHistory||[]),historyEntry('Đồng bộ trạng thái xếp chuyến',['Chuyến: '+(newTripId||'Chưa xếp'),'Trạng thái: '+(x.status||'—')+' → '+sameTripStatus])],updatedAt:stamp,updatedBy:currentUser?.name||''}:x));
+      window.showToast('Đã đồng bộ trạng thái đơn với chuyến đã chọn.','success');
+      return;
+    }
     const isStarted=dispatchedTrip(oldTrip)||order.status==='delivering';
     if(isStarted&&!canWithdrawStartedOrder){window.showToast('Đơn đã giao lái xe hoặc đang đi giao. Chỉ Kế toán hoặc Admin được rút/chuyển đơn.','warn');return;}
     let reason='';
