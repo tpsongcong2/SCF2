@@ -16,6 +16,20 @@ function deliveryOrderCreator(order){
   const history=Array.isArray(order?.orderHistory)?order.orderHistory:[];
   return order?.createdBy||history[0]?.by||order?.updatedBy||'không rõ người tạo';
 }
+function deliveryOrderAuditEntry(action,currentUser,changes=[]){
+  return {id:'LS'+uid(),action,changes,at:fmtDT(),atIso:new Date().toISOString(),by:currentUser?.name||'Hệ thống',byId:currentUser?.id||''};
+}
+function deliveryOrderWithImportAudit(order,currentUser,source){
+  const importedAt=fmtDT(),importedBy=currentUser?.name||'Hệ thống';
+  return {...order,createdBy:order?.createdBy||importedBy,importSource:source||'Import dữ liệu',importedAt,importedBy,orderHistory:[...(order?.orderHistory||[]),deliveryOrderAuditEntry('Import đơn hàng',currentUser,['Nguồn: '+(source||'Import dữ liệu'),'Địa điểm: '+(order?.pointName||order?.customer||'—')])]};
+}
+function deliveryOrderHistoryItems(order){
+  const history=Array.isArray(order?.orderHistory)?order.orderHistory:[];
+  const by=order?.importedBy||order?.createdBy||order?.updatedBy||'';
+  if(!by||history.some(item=>/^(Import đơn hàng|Tạo đơn hàng|Tạo đơn từ bản sao|Thông tin tạo\/import đơn hàng)/i.test(String(item?.action||''))))return history;
+  const imported=!!(order?.importedBy||order?.importSource||/^Nhập từ/i.test(String(order?.note||'')));
+  return [{id:'legacy-'+String(order?.id||''),action:imported?'Import đơn hàng':'Thông tin tạo/import đơn hàng (dữ liệu cũ)',changes:order?.importSource?['Nguồn: '+order.importSource]:[],at:order?.importedAt||order?.createdAt||order?.updatedAt||'',by,byId:''},...history];
+}
 function duplicateDeliveryOrderMessage(candidate,existing){
   return 'Đơn ngày '+(candidate?.deliveryDate||'chưa có')+', giờ '+(normalizeTimeInput(candidate?.deliveryTime||'')||'chưa có')+', địa điểm '+(candidate?.pointName||candidate?.address||'chưa có')+' đã tồn tại. Người tạo trước đó: '+deliveryOrderCreator(existing)+'.';
 }
@@ -783,10 +797,10 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     });
     const preparedDrafts=importableOrders.map(o=>{
       const {_importRow,...clean}=o;
-      return {...clean,createdAt:clean.createdAt||fmtDate(),createdBy:clean.createdBy||currentUser?.name||'',updatedAt:fmtDT(),updatedBy:currentUser?.name||'',lines:(o.lines||[]).map(line=>{
+      return deliveryOrderWithImportAudit({...clean,createdAt:clean.createdAt||fmtDate(),createdBy:clean.createdBy||currentUser?.name||'',updatedAt:fmtDT(),updatedBy:currentUser?.name||'',lines:(o.lines||[]).map(line=>{
         const mapped=resolvedProductForLine(line);
         return {...line,productId:mapped.id,productName:mapped.name,unit:mapped.unit||line.unit,weightPerUnit:mapped.weightPerUnit||0};
-      })};
+      })},currentUser,'File Excel khách hàng');
     });
     // Mã trong file xem trước chỉ là mã tạm. Khi nhập thật, tạo mã có ngày
     // và mã nhân viên để hai kế toán hoặc hai lần import không đụng nhau.
@@ -1259,7 +1273,7 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,c
     }
     const dup=rows.filter(o=>findExistingDeliveryOrder(orders,o));
     if(dup.length){const first=dup[0],existing=findExistingDeliveryOrder(orders,first);window.showToast(duplicateDeliveryOrderMessage(first,existing)+(dup.length>1?' Và '+(dup.length-1)+' đơn trùng khác đã bị bỏ qua.':''),'warn',10000);}
-    const finalRows=rows.filter(o=>!dup.includes(o)).map(o=>({...o,createdAt:o.createdAt||fmtDate(),createdBy:o.createdBy||currentUser?.name||'',updatedAt:fmtDT(),updatedBy:currentUser?.name||''}));
+    const finalRows=rows.filter(o=>!dup.includes(o)).map(o=>deliveryOrderWithImportAudit({...o,createdAt:o.createdAt||fmtDate(),createdBy:o.createdBy||currentUser?.name||'',updatedAt:fmtDT(),updatedBy:currentUser?.name||''},currentUser,'Ảnh đơn hàng'));
     if(!finalRows.length){window.showToast('Không còn đơn hàng mới để nhập.','info');return;}
     setOrders(p=>[...p,...finalRows]);
     window.showToast('Đã nhập '+finalRows.length+' đơn hàng từ ảnh.','success');
@@ -3150,10 +3164,13 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
               });
             }
           });
-          const imported=Object.values(orderMap).filter(o=>o.customer);
+          const imported=Object.values(orderMap).filter(o=>o.customer).map(o=>deliveryOrderWithImportAudit({...o,createdBy:currentUser?.name||'',updatedBy:currentUser?.name||''},currentUser,'File Excel SCFOOD'));
           setOrders(p=>{
             const map={};p.forEach(x=>{map[x.id]=x;});
-            imported.forEach(x=>{map[x.id]=map[x.id]?{...map[x.id],...x,lines:x.lines.length?x.lines:map[x.id].lines}:x;});
+            imported.forEach(x=>{
+              const existing=map[x.id];
+              map[x.id]=existing?{...existing,...x,createdAt:existing.createdAt||x.createdAt,createdBy:existing.createdBy||x.createdBy,orderHistory:[...(existing.orderHistory||[]),...(x.orderHistory||[])],lines:x.lines.length?x.lines:existing.lines}:x;
+            });
             return Object.values(map);
           });
           window.showToast('Đã nhập/cập nhật '+imported.length+' đơn hàng','success');
@@ -3571,7 +3588,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     ),
     historyView&&h(Modal,{title:'Lịch sử đơn hàng - '+historyView.id,lg:true,onClose:()=>setHistoryView(null)},
       h('div',{className:'order-history-list'},
-        (historyView.orderHistory||[]).length?(historyView.orderHistory||[]).slice().reverse().map(item=>h('div',{key:item.id,className:'order-history-item'},
+        deliveryOrderHistoryItems(historyView).length?deliveryOrderHistoryItems(historyView).slice().reverse().map(item=>h('div',{key:item.id,className:'order-history-item'},
           h('div',{className:'order-history-marker'},h('i',{className:'ti ti-history'})),
           h('div',{className:'order-history-body'},h('b',null,item.action||'Cập nhật đơn hàng'),h('div',{className:'order-history-meta'},(item.at||'')+' · '+(item.by||'Hệ thống')),(item.changes||[]).map((change,index)=>h('div',{key:index,className:'order-history-change'},change)))
         )):h('div',{className:'empty-st',style:{padding:35}},'Đơn hàng cũ chưa có lịch sử được lưu.'),
