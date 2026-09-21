@@ -822,6 +822,14 @@ function FinanceElectricBandChart({title,rows}){
 }
 
 function FinanceReportTab({entries,setEntries,debts,setDebts,openings,setOpenings,customers,nccs,currentUser,orders,products,quotes,purchases,goodsPurchases}){
+  const goodsPaymentEntries=(goodsPurchases||[]).flatMap(order=>(order.supplierPayments||[]).filter(payment=>payment.status!=='void').map(payment=>({
+    id:'goods-payment-'+payment.id,date:payment.date,direction:'out',category:'Trả công nợ nhà cung cấp',
+    partnerType:'supplier_goods',partnerName:order.nccName||'',method:payment.method==='cash'?'cash':'bank',
+    amount:Number(payment.amount)||0,pnlType:'none',reference:payment.reference||payment.id,
+    note:'Đơn '+order.id+(order.invoiceNo?' · HĐ '+order.invoiceNo:'')+(payment.note?' · '+payment.note:''),
+    createdAt:payment.createdAt,createdBy:payment.createdBy,_goodsPayment:true
+  })));
+  const cashEntries=[...(entries||[]),...goodsPaymentEntries];
   const currentMonth=isoDate().slice(0,7);
   const[month,setMonth]=useState(currentMonth);const[tab,setTab]=useState('overview');const[electricMetric,setElectricMetric]=useState('kwh');const[entryModal,setEntryModal]=useState(null);const[debtModal,setDebtModal]=useState(null);const[debtImageModal,setDebtImageModal]=useState(false);
   const[editEntry,setEditEntry]=useState(null);const[editDebt,setEditDebt]=useState(null);
@@ -839,15 +847,15 @@ function FinanceReportTab({entries,setEntries,debts,setDebts,openings,setOpening
     const exact=openings.find(x=>x.month===targetMonth);
     if(exact)return{...exact,auto:false};
     const base=[...openings].filter(x=>x.month<targetMonth).sort((a,b)=>String(b.month).localeCompare(String(a.month)))[0]||{month:'0000-00',cash:0,bank:0};
-    const prior=entries.filter(x=>{const ym=x.category==='Chi phí Điện nước'&&/^\d{4}-\d{2}$/.test(String(x.period||''))?String(x.period):String(x.date||'').slice(0,7);return ym>=base.month&&ym<targetMonth;});
+    const prior=cashEntries.filter(x=>{const ym=x.category==='Chi phí Điện nước'&&/^\d{4}-\d{2}$/.test(String(x.period||''))?String(x.period):String(x.date||'').slice(0,7);return ym>=base.month&&ym<targetMonth;});
     const delta=(method,direction)=>prior.reduce((total,x)=>total+(((method==='cash'?x.method==='cash':x.method!=='cash')&&x.direction===direction)?(Number(x.amount)||0):0),0);
     return{month:targetMonth,cash:(Number(base.cash)||0)+delta('cash','in')-delta('cash','out'),bank:(Number(base.bank)||0)+delta('bank','in')-delta('bank','out'),auto:true};
   };
   const opening=calcOpening(month);
   const[openingEdit,setOpeningEdit]=useState(opening);
-  useEffect(()=>setOpeningEdit(calcOpening(month)),[month,openings,entries]);
+  useEffect(()=>setOpeningEdit(calcOpening(month)),[month,openings,entries,goodsPurchases]);
   const reportMonth=x=>x.category==='Chi phí Điện nước'&&/^\d{4}-\d{2}$/.test(String(x.period||''))?String(x.period):String(x.date||'').slice(0,7);
-  const monthEntries=entries.filter(x=>reportMonth(x)===month).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  const monthEntries=cashEntries.filter(x=>reportMonth(x)===month).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
   const sum=(rows,fn)=>rows.reduce((total,row)=>total+(Number(fn(row))||0),0);
   const inflow=sum(monthEntries,x=>x.direction==='in'?x.amount:0),outflow=sum(monthEntries,x=>x.direction==='out'?x.amount:0);
   const cashIn=sum(monthEntries,x=>x.direction==='in'&&x.method==='cash'?x.amount:0),cashOut=sum(monthEntries,x=>x.direction==='out'&&x.method==='cash'?x.amount:0);
@@ -922,7 +930,7 @@ function FinanceReportTab({entries,setEntries,debts,setDebts,openings,setOpening
   });
   const songCongBandRows=electricBandYearRows(0),thinhNgaBandRows=electricBandYearRows(1);
   const yearRows=Array.from({length:12},(_,i)=>{
-    const ym=year+'-'+String(i+1).padStart(2,'0'),rows=entries.filter(x=>reportMonth(x)===ym),op=calcOpening(ym);
+    const ym=year+'-'+String(i+1).padStart(2,'0'),rows=cashEntries.filter(x=>reportMonth(x)===ym),op=calcOpening(ym);
     const inc=sum(rows,x=>x.direction==='in'?x.amount:0),out=sum(rows,x=>x.direction==='out'?x.amount:0),sales=financeSalesSummary(orders,products,quotes,customers,ym),revDelivered=sales.amount,revInvoice=sales.invoiceAmount,exp=sum(rows,x=>x.pnlType==='expense'&&!automaticExpenseCategories.includes(x.category)?x.amount:0)+financePurchaseExpense(purchases,ym)+financePurchaseExpense(goodsPurchases,ym)+financeMaintenanceExpense(vehicleMaintenance,ym)+financeMaintenanceExpense(machineMaintenance,ym);
     return{month:ym,opening:(Number(op.cash)||0)+(Number(op.bank)||0),inflow:inc,outflow:out,ending:(Number(op.cash)||0)+(Number(op.bank)||0)+inc-out,revenueInvoice:revInvoice,revenueDelivered:revDelivered,expense:exp,profitInvoice:revInvoice-exp,profitDelivered:revDelivered-exp};
   });
@@ -970,7 +978,7 @@ function FinanceReportTab({entries,setEntries,debts,setDebts,openings,setOpening
       h('div',{className:'card'},h('div',{className:'finance-card-title'},'Số dư tiền tháng '+month),opening.auto&&h('div',{className:'finance-auto-opening'},h('i',{className:'ti ti-refresh'}),' Tự chuyển từ số dư cuối tháng trước'),h('div',{className:'g2'},h(F,{label:'Tiền mặt đầu tháng'},h('input',{type:'number',value:openingEdit.cash,onChange:e=>setOpeningEdit(p=>({...p,cash:e.target.value}))})),h(F,{label:'Ngân hàng đầu tháng'},h('input',{type:'number',value:openingEdit.bank,onChange:e=>setOpeningEdit(p=>({...p,bank:e.target.value}))}))),h('button',{className:'bp',onClick:saveOpening},'Lưu tiền đầu tháng'),h('div',{className:'finance-balance-lines'},h('div',null,'Tiền mặt cuối tháng',h('b',null,finMoney(endingCash))),h('div',null,'Ngân hàng cuối tháng',h('b',null,finMoney(endingBank))),h('div',null,'Tổng tiền cuối tháng',h('b',null,finMoney(endingTotal))))),
       h('div',{className:'card'},h('div',{className:'finance-card-title'},'Kết quả kinh doanh'),h('div',{className:'finance-result'},h('div',null,'Doanh thu theo SL HĐ',h('b',null,finMoney(revenueInvoice))),h('div',null,'Doanh thu theo SL giao',h('b',null,finMoney(revenueDelivered))),h('div',null,'Chi phí',h('b',null,finMoney(expense))),h('div',{className:'profit'},'Lợi nhuận theo SL HĐ',h('b',{style:profitInvoice<0?{color:'#A32D2D'}:null},finMoney(profitInvoice))),h('div',{className:'profit'},'Lợi nhuận theo SL giao',h('b',{style:profitDelivered<0?{color:'#A32D2D'}:null},finMoney(profitDelivered)))),h('div',{className:'finance-note'},'Lợi nhuận theo SL HĐ = Doanh thu theo SL HĐ − Chi phí. Lợi nhuận theo SL giao = Doanh thu theo SL giao − Chi phí.'))
     ),
-    tab==='cash'&&h('div',{className:'card'},h('div',{className:'finance-card-title'},'Sổ thu / chi tháng '+month),h('div',{className:'tw'},h('table',null,h('thead',null,h('tr',null,...['Ngày','Dòng tiền','Nhóm','Đối tượng','Phương thức','Số tiền','KQKD','Chứng từ','Ảnh CK','Ghi chú',''].map(x=>h('th',{key:x},x)))),h('tbody',null,monthEntries.length?monthEntries.map(x=>h('tr',{key:x.id},h('td',null,vnDateFromISO(x.date)),h('td',null,h('span',{className:'badge',style:{background:x.direction==='in'?'#EAF3DE':'#FCEBEB',color:x.direction==='in'?'#3B6D11':'#A32D2D'}},x.direction==='in'?'Tiền vào':'Tiền ra')),h('td',null,x.category),h('td',null,x.partnerName||'—'),h('td',null,x.method==='cash'?'Tiền mặt':'Ngân hàng'),h('td',null,h('b',null,finMoney(x.amount))),h('td',null,x.pnlType==='revenue'?'Doanh thu':x.pnlType==='expense'?'Chi phí':'Không tính'),h('td',null,x.reference||'—'),h('td',null,x.transferImage?h('a',{href:x.transferImage,target:'_blank',rel:'noopener',className:'btn',style:{whiteSpace:'nowrap'}},h('i',{className:'ti ti-photo'}),' Xem ảnh'):'—'),h('td',null,x.note||'—'),h('td',null,h('button',{className:'bi',onClick:()=>{setEditEntry(x);setEntryModal(x.direction);}},h('i',{className:'ti ti-edit'})),currentUser.role==='admin'&&h('button',{className:'bi bdel',onClick:()=>delEntry(x.id)},h('i',{className:'ti ti-trash'}))))):h('tr',null,h('td',{colSpan:11,className:'empty-st'},'Tháng này chưa có khoản thu/chi')))))),
+    tab==='cash'&&h('div',{className:'card'},h('div',{className:'finance-card-title'},'Sổ thu / chi tháng '+month),h('div',{className:'tw'},h('table',null,h('thead',null,h('tr',null,...['Ngày','Dòng tiền','Nhóm','Đối tượng','Phương thức','Số tiền','KQKD','Chứng từ','Ảnh CK','Ghi chú',''].map(x=>h('th',{key:x},x)))),h('tbody',null,monthEntries.length?monthEntries.map(x=>h('tr',{key:x.id},h('td',null,vnDateFromISO(x.date)),h('td',null,h('span',{className:'badge',style:{background:x.direction==='in'?'#EAF3DE':'#FCEBEB',color:x.direction==='in'?'#3B6D11':'#A32D2D'}},x.direction==='in'?'Tiền vào':'Tiền ra')),h('td',null,x.category),h('td',null,x.partnerName||'—'),h('td',null,x.method==='cash'?'Tiền mặt':'Ngân hàng'),h('td',null,h('b',null,finMoney(x.amount))),h('td',null,x.pnlType==='revenue'?'Doanh thu':x.pnlType==='expense'?'Chi phí':'Không tính'),h('td',null,x.reference||'—'),h('td',null,x.transferImage?h('a',{href:x.transferImage,target:'_blank',rel:'noopener',className:'btn',style:{whiteSpace:'nowrap'}},h('i',{className:'ti ti-photo'}),' Xem ảnh'):'—'),h('td',null,x.note||'—'),h('td',null,x._goodsPayment?h('span',{title:'Sửa hoặc hủy tại Đơn mua hàng hóa'},'Theo đơn mua'):h('button',{className:'bi',onClick:()=>{setEditEntry(x);setEntryModal(x.direction);}},h('i',{className:'ti ti-edit'})),!x._goodsPayment&&currentUser.role==='admin'&&h('button',{className:'bi bdel',onClick:()=>delEntry(x.id)},h('i',{className:'ti ti-trash'}))))):h('tr',null,h('td',{colSpan:11,className:'empty-st'},'Tháng này chưa có khoản thu/chi')))))),
     tab==='electricity'&&h('div',null,
       h('div',{className:'card',style:{marginBottom:'1rem'}},
         h('div',{className:'finance-card-title'},'Sử dụng điện tháng '+month),
