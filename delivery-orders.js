@@ -3431,7 +3431,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                     ),
                     h('div',{className:'delivery-order-qty delivery-product-qty-value'},numFmt(row.line?.qtyProd).toLocaleString('vi-VN',{minimumFractionDigits:0,maximumFractionDigits:2})),
                     h('div',{className:'delivery-invoice-qty delivery-product-qty-value'},orderLineQty(row.line).toLocaleString('vi-VN',{minimumFractionDigits:0,maximumFractionDigits:2})),
-                    h('div',{className:'delivery-delivered-qty delivery-product-qty-value'},row.line?.qtyDelivered!==undefined&&row.line?.qtyDelivered!==''?numFmt(row.line.qtyDelivered).toLocaleString('vi-VN',{minimumFractionDigits:0,maximumFractionDigits:2}):'—')
+                    h('div',{className:'delivery-delivered-qty delivery-product-qty-value'},(row.line?.qtyDelivered!==undefined&&row.line?.qtyDelivered!==null&&row.line?.qtyDelivered!==''?numFmt(row.line.qtyDelivered):numFmt(row.line?.qtyProd??row.line?.qty??row.line?.quantity??row.line?.qtyInvoice??0)).toLocaleString('vi-VN',{minimumFractionDigits:0,maximumFractionDigits:2}))
                   ))
                   :h('span',{style:{fontSize:11,color:'var(--tx2)'}},'—')
               )

@@ -250,7 +250,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
       curGroup=r.groupKey;groupLabel=r.groupLabel;areaSX=0;areaHD=0;areaDG=0;
       tableRows.push({_hdr:true,label:r.groupLabel});
     }
-    areaSX+=Number(r.qtyProd||0);areaHD+=Number(r.qtyInvoice||0);areaDG+=Number(r.qtyDelivered||0);
+    areaSX+=Number(r.qtyProd||0);areaHD+=Number(r.qtyInvoice||0);areaDG+=r.qtyDelivered!==undefined&&r.qtyDelivered!==null&&r.qtyDelivered!==''?Number(r.qtyDelivered)||0:Number(r.qtyProd)||0;
     tableRows.push(r);
     if(i===sorted.length-1)tableRows.push({_sub:true,label:groupLabel,sx:areaSX,hd:areaHD,dg:areaDG});
   });
@@ -283,8 +283,13 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const updateDeliveredQty=(orderId,lineId,value)=>{
     const order=(orders||[]).find(o=>String(o.id)===String(orderId));
     if(!order||!canEditDeliveredForOrder(order))return;
+    const line=(order.lines||[]).find(l=>String(l.id)===String(lineId));
+    if(!line)return;
     const qty=numFmt(value);
-    const nextOrders=(orders||[]).map(o=>o.id===orderId?{...o,lines:(o.lines||[]).map(l=>l.id===lineId?{...l,qtyDelivered:qty,deliveredAt:fmtDT(),deliveredBy:currentUser?.name||''}:l)}:o);
+    const oldQty=line.qtyDelivered!==undefined&&line.qtyDelivered!==null&&line.qtyDelivered!==''?numFmt(line.qtyDelivered):numFmt(line.qtyProd??line.qty??line.quantity??line.qtyInvoice??0);
+    if(line.qtyDelivered!==undefined&&numFmt(line.qtyDelivered)===qty&&line.deliveredBy)return;
+    const stamp=fmtDT(),actor=currentUser?.name||'Người dùng';
+    const nextOrders=(orders||[]).map(o=>o.id===orderId?{...o,lines:(o.lines||[]).map(l=>l.id===lineId?{...l,qtyDelivered:qty,deliveredAt:stamp,deliveredBy:actor}:l),updatedAt:stamp,updatedBy:actor,orderHistory:[...(o.orderHistory||[]),{id:'LS'+uid(),action:oldQty===qty?'Xác nhận số lượng đã giao':'Sửa số lượng đã giao',changes:[(line.productName||'Sản phẩm')+': '+oldQty+' → '+qty+(line.unit?' '+line.unit:'')],at:stamp,atIso:new Date().toISOString(),by:actor,byId:currentUser?.id||''}]}:o);
     setOrders&&setOrders(nextOrders);
     syncTripReceivables(visibleTripForOrder(order),nextOrders);
   };
@@ -292,7 +297,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const lastOrder=Math.min(safePage*pageSize,totalOrders);
   const totalProd=rows.reduce((s,r)=>s+Number(r.qtyProd||0),0);
   const totalInvoice=rows.reduce((s,r)=>s+Number(r.qtyInvoice||0),0);
-  const totalDelivered=rows.reduce((s,r)=>s+Number(r.qtyDelivered||0),0);
+  const totalDelivered=rows.reduce((s,r)=>s+(r.qtyDelivered!==undefined&&r.qtyDelivered!==null&&r.qtyDelivered!==''?Number(r.qtyDelivered)||0:Number(r.qtyProd)||0),0);
   const diff=totalProd-totalInvoice;
 
   return h('div',null,
@@ -351,11 +356,12 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
           if(r._sub)return h('tr',{key:'s'+i},h('td',{colSpan:4,style:{background:'#e8f5e9',fontWeight:600,fontSize:12,padding:'4px 12px',color:'#2d6a4f',textAlign:'right'}},'Tổng '+r.label+':'),h('td',{style:{background:'#e8f5e9',fontWeight:700,color:'var(--pri)',fontSize:14,padding:'4px 8px'}},r.sx.toLocaleString()),h('td',{style:{background:'#e8f5e9',fontWeight:700,fontSize:14,padding:'4px 8px'}},r.hd.toLocaleString()),h('td',{style:{background:'#e8f5e9',fontWeight:700,color:'#8A5A00',fontSize:14,padding:'4px 8px'}},r.dg.toLocaleString()),h('td',{colSpan:2,style:{background:'#e8f5e9'}}));
           const sourceOrder=(orders||[]).find(o=>String(o.id)===String(r.orderId));
           const canInput=canEditDeliveredForOrder(sourceOrder)&&(r.status==='delivering'||r.status==='done'||r.status==='completed');
+          const sourceLine=(sourceOrder?.lines||[]).find(l=>String(l.id)===String(r.lineId));
           return h('tr',{key:r.orderId+'-'+r.lineId,style:{background:r.prodColor||(r.shift==='night'?'rgba(83,52,131,.04)':'')}},
             h('td',null,h('span',{style:{fontSize:12,fontWeight:r.driverName?600:400,color:r.driverName?'var(--pri3)':'var(--tx2)',whiteSpace:'nowrap'}},r.driverName||'—')),
             h('td',null,h('span',{style:{fontWeight:500}},r.date)),h('td',null,h('div',{style:{fontWeight:600}},r.point||'—')),h('td',null,h('div',{style:{fontWeight:500}},r.product)),
             h('td',null,h('span',{style:{fontWeight:600,color:'var(--pri)',fontSize:15}},r.qtyProd.toLocaleString())),h('td',null,h('span',{style:{fontWeight:600,fontSize:15}},r.qtyInvoice.toLocaleString())),
-            h('td',null,canInput?h('input',{type:'number',min:0,step:'0.01',value:r.qtyDelivered??'',placeholder:String(r.qtyInvoice||0),onChange:e=>updateDeliveredQty(r.orderId,r.lineId,e.target.value),style:{fontSize:13,padding:'4px 6px',width:86,borderColor:(r.qtyDelivered!==undefined&&numFmt(r.qtyDelivered)!==numFmt(r.qtyInvoice))?'#E0A800':'var(--bd)'}}):h('span',{style:{fontWeight:600,color:r.qtyDelivered!==undefined?'#8A5A00':'var(--tx2)',fontSize:15}},r.qtyDelivered!==undefined?numFmt(r.qtyDelivered).toLocaleString():'—')),
+            h('td',null,canInput&&sourceLine?h(TripDeliveredQtyConfirm,{line:sourceLine,onCommit:value=>updateDeliveredQty(r.orderId,r.lineId,value),style:{fontSize:13,padding:'4px 6px',width:76,borderColor:(r.qtyDelivered!==undefined&&numFmt(r.qtyDelivered)!==numFmt(r.qtyProd))?'#E0A800':'var(--bd)'}}):h('span',{style:{fontWeight:600,color:'var(--tx2)',fontSize:15}},sourceLine?tripDeliveredQty(sourceLine):numFmt(r.qtyProd))),
             h('td',null,r.time||'—'),h('td',null,h('span',{style:{fontSize:12,color:'var(--tx2)'}},r.note||'—'))
           );
         }):h('tr',null,h('td',{colSpan:9,className:'empty-st'},'Không có dữ liệu phù hợp.')))

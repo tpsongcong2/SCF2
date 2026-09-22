@@ -303,7 +303,7 @@ function financeTripReceivableDrafts(trip,orders,products,quotes,customers,curre
       const product=(products||[]).find(item=>item.id===line.productId)||{};
       // Công nợ khách hàng luôn theo SL HĐ; doanh thu thực tế theo SL đã giao.
       const quantity=numFmt(line.qtyInvoice)||0;
-      const deliveredQuantity=line.qtyDelivered!==undefined&&line.qtyDelivered!==''?numFmt(line.qtyDelivered):0;
+      const deliveredQuantity=line.qtyDelivered!==undefined&&line.qtyDelivered!==null&&line.qtyDelivered!==''?numFmt(line.qtyDelivered):numFmt(line.qtyProd??line.qty??line.quantity??line.qtyInvoice??0);
       const price=numFmt(line.salePrice||line.sellPrice||line.unitPrice)||quotePrice(order,line)||numFmt(product.salePrice||product.sellPrice||product.priceSale||product.price)||(!line.purchasePrice?numFmt(line.price):0);
       if(!price){missingPrice++;group.missingPrice++;}
       group.amount+=quantity*price;
@@ -588,7 +588,7 @@ function financeSalesSummary(orders,products,quotes,customers,month){
     (order.lines||[]).forEach(line=>{
       const product=(products||[]).find(item=>item.id===line.productId)||{};
       const invoiceQuantity=numFmt(line.qtyInvoice)||0;
-      const deliveredQuantity=line.qtyDelivered!==undefined&&line.qtyDelivered!==''?numFmt(line.qtyDelivered):(actualConfirmed?invoiceQuantity:0);
+      const deliveredQuantity=line.qtyDelivered!==undefined&&line.qtyDelivered!==null&&line.qtyDelivered!==''?numFmt(line.qtyDelivered):(actualConfirmed?numFmt(line.qtyProd??line.qty??line.quantity??line.qtyInvoice??0):0);
       const price=numFmt(line.salePrice||line.sellPrice||line.unitPrice)||quotePrice(order,line)||numFmt(product.salePrice||product.sellPrice||product.priceSale||product.price)||(!line.purchasePrice?numFmt(line.price):0);
       if(!price)missingPrice++;
       invoiceAmount+=invoiceQuantity*price;
