@@ -164,6 +164,13 @@ function canTripAction(user,action){
   if(!canAccess(user?.role,'trips',user?.permissions,user?.dept))return false;
   return normalizedTripPermissions(user)[action]===true;
 }
+// 0 = không giới hạn; tài khoản cũ chưa cấu hình giữ quy tắc khóa từ ngày thứ 2.
+function tripActualQtyLimitDays(user){
+  const raw=user?.tripActualQtyLimitDays;
+  if(raw===undefined||raw===null||raw==='')return 2;
+  const days=Number(raw);
+  return Number.isInteger(days)&&days>=0&&days<=365?days:2;
+}
 
 function scfControlAction(control){
   if(!control)return'';

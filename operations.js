@@ -1090,6 +1090,8 @@ function isPrivilegedEmployeeRecord(employee){
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
   const submit=async()=>{
     if(!f.name||!f.username){window.showToast('Nhập tên và tên đăng nhập!','warn');return;}
+    const actualQtyLimitDays=Number(f.tripActualQtyLimitDays??2);
+    if(f.tripActualQtyLimitDays===''||!Number.isInteger(actualQtyLimitDays)||actualQtyLimitDays<0||actualQtyLimitDays>365){window.showToast('Số ngày giới hạn nhập SL thực giao phải từ 0 đến 365.','warn');return;}
     const requestsAdmin=f.permissionProfileId==='admin'||['admin','administrator'].includes(String(f.role||'').toLowerCase());
     if(requestsAdmin&&!isBoardDirectorDept){window.showToast('Chỉ người thuộc Ban Giám Đốc mới được cấp quyền Admin.','error');return;}
     if(isPrivilegedEmployeeRecord(f)!==isFaceMask){window.showToast(isFaceMask?'FACE MASK chỉ lưu Admin hoặc người thuộc Ban Giám Đốc.':'Tài khoản Admin/Ban Giám Đốc phải được quản lý trên FACE MASK.','error');return;}
@@ -1103,7 +1105,7 @@ function isPrivilegedEmployeeRecord(employee){
       const isFaceMaskPrivilegedProfile=isFaceMask&&privilegedProfileIds.has(f.permissionProfileId);
       const permissions=isFaceMaskPrivilegedProfile?[]:(f.permissions||[]).filter(page=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page));
       const permLevels=isFaceMaskPrivilegedProfile?{}:Object.fromEntries(Object.entries(f.permLevels||{}).filter(([page])=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page)));
-      onSave({...f,dept:isFaceMaskPrivilegedProfile?'Ban Giám Đốc':f.dept,permissions,permLevels,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
+      onSave({...f,dept:isFaceMaskPrivilegedProfile?'Ban Giám Đốc':f.dept,permissions,permLevels,tripActualQtyLimitDays:actualQtyLimitDays,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
     }catch(e){window.showToast(e.message||'Không thể lưu mật khẩu.','error');}
     finally{setBusy(false);}
   };
@@ -1157,7 +1159,7 @@ function isPrivilegedEmployeeRecord(employee){
       h('hr',{className:'divider'}),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
         h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phân quyền chi tiết (có thể chỉnh riêng cho nhân viên này)'),
-        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},tripPermissions:defaultTripPermissions(p)})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
+        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
       ),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = chỉ đọc dữ liệu | Thêm + Xem + Sửa = không được xóa | Thêm + Xem + Sửa + Xóa = toàn quyền'),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 2rem'}},
@@ -1195,7 +1197,9 @@ function isPrivilegedEmployeeRecord(employee){
         h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:8}},'Số lượng thực giao tách khỏi quyền sửa thông tin chuyến.'),
         h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}},SCF_TRIP_PERMISSION_OPTIONS.map(([key,label])=>h('label',{key,style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'6px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer'}},
           h('input',{type:'checkbox',checked:!!normalizedTripPermissions(f)[key],onChange:event=>sf(prev=>({...prev,tripPermissions:{...normalizedTripPermissions(prev),[key]:event.target.checked}}))}),label
-        )))
+        ))),
+        h('label',{style:{display:'flex',alignItems:'center',gap:10,marginTop:10,fontSize:12,fontWeight:600,flexWrap:'wrap'}},'Số ngày giới hạn nhập SL thực giao',h('input',{type:'number',min:0,max:365,step:1,value:f.tripActualQtyLimitDays??2,onChange:event=>s('tripActualQtyLimitDays',event.target.value),style:{width:90}})),
+        h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:4}},'2 = khóa từ ngày thứ 2 sau ngày giao; 0 = không giới hạn ngày. Chỉ có tác dụng khi nhân viên được cấp quyền nhập số lượng thực giao.')
       )
     ),
     h(Row,null,

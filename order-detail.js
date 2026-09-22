@@ -263,9 +263,11 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const canEditDeliveredForOrder=order=>{
     const trip=visibleTripForOrder(order);
     if(!trip)return false;
-    if(currentUser?.role==='admin'||isAccounting)return true;
-    if(currentUser?.role==='manager')return trip.status!=='completion_pending'&&trip.status!=='completed'&&tripAgeDays(trip)<2;
-    if(isDriver)return isOwnTrip(trip)&&trip.status==='active'&&!trip.driverConfirmedAt&&tripAgeDays(trip)<2;
+    const limitDays=tripActualQtyLimitDays(currentUser);
+    const withinLimit=limitDays===0||tripAgeDays(trip)<limitDays;
+    if(currentUser?.role==='admin'||isAccounting)return withinLimit;
+    if(currentUser?.role==='manager')return trip.status!=='completion_pending'&&trip.status!=='completed'&&withinLimit;
+    if(isDriver)return isOwnTrip(trip)&&trip.status==='active'&&!trip.driverConfirmedAt&&withinLimit;
     return false;
   };
   const syncTripReceivables=(trip,nextOrders)=>{
