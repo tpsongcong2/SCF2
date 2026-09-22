@@ -275,7 +275,119 @@ function CameraBox({onCapture,preview,setPreview,template,setTemplate,autoOpenSi
   );
 }
 
-function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,currentUser,company,reportTitle='Báo cáo chấm công'}) {
+function kioskFindEmployee(descriptor,employees){
+  if(!descriptor||descriptor.length<128)return null;
+  const candidates=(employees||[]).filter(employee=>employee.faceTemplate?.descriptor?.length>=128).map(employee=>{
+    const saved=employee.faceTemplate.descriptor;
+    let squared=0;
+    for(let index=0;index<128;index++){const delta=Number(descriptor[index])-Number(saved[index]);squared+=delta*delta;}
+    return {employee,distance:Math.sqrt(squared)};
+  }).sort((a,b)=>a.distance-b.distance);
+  const best=candidates[0];
+  if(!best||best.distance>0.43||candidates[1]&&candidates[1].distance-best.distance<0.08)return null;
+  return best;
+}
+function kioskEyeRatio(points){
+  if(!points||points.length!==6)return 0;
+  const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  const width=distance(points[0],points[3]);
+  return width?(distance(points[1],points[5])+distance(points[2],points[4]))/(2*width):0;
+}
+function kioskPunchDecision(records,employeeId,now){
+  const previous=(records||[]).filter(record=>record.empId===employeeId&&record.status==='valid').map(record=>({record,at:Date.parse(String(record.date||'')+'T'+String(record.time||'00:00'))})).filter(item=>Number.isFinite(item.at)&&item.at<=now).sort((a,b)=>b.at-a.at)[0];
+  if(!previous||now-previous.at>18*3600000)return {type:'in',blocked:false,previous:null};
+  if(now-previous.at<2*3600000)return {type:previous.record.type==='in'?'out':'in',blocked:true,previous:previous.record};
+  return {type:previous.record.type==='in'?'out':'in',blocked:false,previous:previous.record};
+}
+function AttendanceKiosk({employees,attendance,setAttendance,currentUser,attendanceZones,workShifts,onClose}){
+  const videoRef=useRef(null),streamRef=useRef(null),positionRef=useRef(null),attendanceRef=useRef(attendance);
+  const scanRef=useRef({employeeId:'',stable:0,closed:false,lastSavedId:'',lastSavedAt:0});
+  const[active,setActive]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState('Bấm Bắt đầu một lần để cấp quyền camera. Sau đó nhân viên không cần chạm máy.'),[lastResult,setLastResult]=useState(null);
+  useEffect(()=>{attendanceRef.current=attendance;},[attendance]);
+  const stop=()=>{streamRef.current?.getTracks().forEach(track=>track.stop());streamRef.current=null;if(videoRef.current)videoRef.current.srcObject=null;setActive(false);};
+  useEffect(()=>()=>stop(),[]);
+  const start=async()=>{
+    if(busy||active)return;
+    setBusy(true);setMessage('Đang mở camera và tải mô hình nhận diện...');
+    try{
+      if(!navigator.mediaDevices?.getUserMedia)throw new Error('Thiết bị hoặc trang này chưa cho phép camera HTTPS.');
+      await ensureFaceAiModels();
+      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+      streamRef.current=stream;setActive(true);setMessage('Đưa một khuôn mặt vào khung hình, nhắm mắt khoảng 1 giây rồi mở.');
+    }catch(error){setMessage(error.message||'Không mở được camera. Kiểm tra quyền camera rồi thử lại.');stop();}
+    finally{setBusy(false);}
+  };
+  useEffect(()=>{
+    if(active&&videoRef.current&&streamRef.current){videoRef.current.srcObject=streamRef.current;videoRef.current.play?.().catch(()=>{});}
+  },[active]);
+  useEffect(()=>{
+    if(!active)return;
+    if(!navigator.geolocation){setMessage('Thiết bị không hỗ trợ GPS; chưa thể tự ghi chấm công.');return;}
+    const accept=position=>{positionRef.current={lat:position.coords.latitude,lon:position.coords.longitude,acc:position.coords.accuracy,at:Date.now()};};
+    const fail=()=>{positionRef.current=null;};
+    const options={enableHighAccuracy:true,maximumAge:30000,timeout:15000};
+    const watchId=navigator.geolocation.watchPosition(accept,fail,options);
+    const refresh=setInterval(()=>navigator.geolocation.getCurrentPosition(accept,fail,options),120000);
+    return()=>{navigator.geolocation.clearWatch(watchId);clearInterval(refresh);};
+  },[active]);
+  useEffect(()=>{
+    if(!active)return;
+    let cancelled=false,timer;
+    const scan=async()=>{
+      try{
+        if(streamRef.current?.getVideoTracks()[0]?.readyState==='ended'){stop();setMessage('Camera đã ngắt. Bấm Bắt đầu để mở lại.');return;}
+        const video=videoRef.current;
+        if(!video||!video.videoWidth||document.visibilityState!=='visible')return;
+        const faces=await faceapi.detectAllFaces(video,new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:0.65})).withFaceLandmarks(true).withFaceDescriptors();
+        if(cancelled)return;
+        if(faces.length!==1){scanRef.current={...scanRef.current,employeeId:'',stable:0,closed:false};setMessage(faces.length>1?'Chỉ một người đứng trước camera.':'Đưa mặt vào khung hình.');return;}
+        const face=faces[0],box=face.detection.box;
+        if(face.detection.score<0.75||box.width<video.videoWidth*.2||box.height<video.videoHeight*.2){scanRef.current={...scanRef.current,employeeId:'',stable:0,closed:false};setMessage('Hãy đứng gần camera và nhìn thẳng, đủ sáng.');return;}
+        const matched=kioskFindEmployee(face.descriptor,employees);
+        if(!matched){scanRef.current={...scanRef.current,employeeId:'',stable:0,closed:false};setMessage('Chưa nhận diện chắc chắn. Hãy nhìn thẳng hoặc đăng ký lại mẫu mặt.');return;}
+        const state=scanRef.current;
+        if(state.employeeId!==matched.employee.id){state.employeeId=matched.employee.id;state.stable=0;state.closed=false;}
+        state.stable++;
+        const eyes=[face.landmarks.getLeftEye(),face.landmarks.getRightEye()].map(kioskEyeRatio);
+        const eyeRatio=(eyes[0]+eyes[1])/2;
+        if(eyeRatio>0&&eyeRatio<.18)state.closed=true;
+        if(state.stable<2||!state.closed||eyeRatio<.22){setMessage('Đã thấy '+matched.employee.name+'. Nhắm mắt khoảng 1 giây rồi mở để xác nhận.');return;}
+        state.closed=false;state.stable=0;
+        const now=Date.now(),decision=kioskPunchDecision(attendanceRef.current,matched.employee.id,now);
+        if(decision.blocked||state.lastSavedId===matched.employee.id&&now-state.lastSavedAt<120000){setMessage(matched.employee.name+' vừa chấm công; không ghi trùng.');return;}
+        const pos=positionRef.current;
+        if(!pos||now-pos.at>10*60000){setMessage('Chưa có GPS mới. Kiểm tra quyền vị trí trên điện thoại.');return;}
+        const zone=String(matched.employee.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('san xuat')?attendanceZones.production:attendanceZones.office;
+        const gps=gpsStatus(pos,zone);
+        if(!gps.ok){setMessage('Thiết bị ở ngoài vùng chấm công '+zone.name+' ('+gps.distance+'m).');return;}
+        const date=isoDate(),time=timeNow();
+        const toMinutes=value=>{const parts=String(value||'').split(':');return (Number(parts[0])||0)*60+(Number(parts[1])||0);};
+        const minutes=toMinutes(time),currentShift=workShifts.find(item=>{const start=toMinutes(item.start),end=toMinutes(item.end);return start<end?minutes>=start&&minutes<end:minutes>=start||minutes<end;})||workShifts[0];
+        const shift=decision.type==='out'&&decision.previous?(workShifts.find(item=>item.id===decision.previous.workShiftId)||currentShift):currentShift;
+        const shiftStart=toMinutes(shift?.start),shiftEnd=toMinutes(shift?.end),duration=(shiftEnd-shiftStart+1440)%1440||1440,elapsed=(minutes-shiftStart+1440)%1440;
+        const timeStatus=decision.type==='in'?(elapsed>0?'Đi muộn':'Đúng giờ'):(elapsed<duration?'Về sớm':'Đúng giờ');
+        const canvas=videoFrameCanvas(video),photo=canvas.toDataURL('image/jpeg',.72);
+        const record={id:'CC'+uid(),empId:matched.employee.id,empName:matched.employee.name,dept:matched.employee.dept||'',date,time,type:decision.type,workShiftId:shift?.id||'',workShiftName:shift?.name||'',workShiftStart:shift?.start||'',workShiftEnd:shift?.end||'',timeStatus,faceScore:Math.round(100-matched.distance*60),faceOk:true,lat:pos.lat,lon:pos.lon,accuracy:pos.acc,distance:gps.distance,gpsOk:true,attendanceZoneId:zone.id,attendanceZoneName:zone.name,photo,status:'valid',note:'Kiosk tự nhận diện · nhắm/mở mắt',createdBy:currentUser.name,createdAt:fmtDT(),source:'kiosk'};
+        state.lastSavedId=matched.employee.id;state.lastSavedAt=now;
+        attendanceRef.current=[record,...attendanceRef.current];
+        setAttendance(previous=>previous.some(item=>item.id===record.id)?previous:[record,...previous]);
+        setLastResult(record);setMessage((decision.type==='in'?'Vào ca':'Ra ca')+' thành công: '+matched.employee.name+' lúc '+shortTime(time));
+      }catch(error){if(!cancelled)setMessage('Camera đang xử lý hoặc bị gián đoạn. '+(error.message||'Vui lòng thử lại.'));}
+      finally{if(!cancelled)timer=setTimeout(scan,700);}
+    };
+    timer=setTimeout(scan,300);
+    return()=>{cancelled=true;clearTimeout(timer);};
+  },[active,employees,attendanceZones,workShifts,setAttendance,currentUser.name]);
+  return h('div',{className:'attendance-kiosk'},
+    h('div',{className:'attendance-kiosk-head'},h('b',null,'SCFOOD · Chấm công tự động'),h('button',{onClick:()=>{stop();onClose();}},'Thoát & đăng xuất')),
+    h('div',{className:'attendance-kiosk-camera'},h('video',{ref:videoRef,autoPlay:true,playsInline:true,muted:true})),
+    h('div',{className:'attendance-kiosk-message','aria-live':'polite'},message),
+    lastResult&&h('div',{className:'attendance-kiosk-result'},h('b',null,lastResult.empName),h('span',null,(lastResult.type==='in'?'Vào ca':'Ra ca')+' · '+shortTime(lastResult.time))),
+    !active?h('button',{className:'bp',onClick:start,disabled:busy},busy?'Đang chuẩn bị...':'Bắt đầu camera'):h('button',{onClick:stop},'Tạm dừng'),
+    h('p',{className:'attendance-kiosk-hint'},'Bản thử nghiệm có người giám sát. Chỉ lưu khi một khuôn mặt khớp rõ, có thao tác nhắm/mở mắt và GPS hợp lệ. Nhận diện ảnh/video giả chưa thể bảo đảm tuyệt đối; luôn giữ cách chấm công dự phòng.')
+  );
+}
+function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,currentUser,company,reportTitle='Báo cáo chấm công',onKioskExit}) {
   const settingsKey='scf_att_settings';
   const defaultWorkShifts=[
     {id:'night',name:'Ca đêm',start:'22:00',end:'03:00',color:'#EDE7F6',textColor:'#4527A0'},
@@ -294,6 +406,7 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   const[gpsBusy,setGpsBusy]=useState(false);
   const[punchBusy,setPunchBusy]=useState(false);
   const[punchPending,setPunchPending]=useState(false);
+  const[kioskOpen,setKioskOpen]=useState(()=>{try{return sessionStorage.getItem('scf_attendance_kiosk_active')==='1';}catch{return false;}});
   const[lastPunchShare,setLastPunchShare]=useState(null);
   const[cameraAutoOpenSignal,setCameraAutoOpenSignal]=useState(0);
   const[isCompactMobile,setIsCompactMobile]=useState(()=>window.innerWidth<=768);
@@ -816,8 +929,15 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   }
   if(section==='settings'){
     if(!isAdmin)return null;
+    if(kioskOpen)return h(AttendanceKiosk,{employees,attendance,setAttendance,currentUser,attendanceZones,workShifts,onClose:()=>{try{sessionStorage.removeItem('scf_attendance_kiosk_active');}catch{}setKioskOpen(false);onKioskExit?.();}});
     return h('div',{className:'attendance-settings-page'},
       h('div',{className:'ptitle'},h('i',{className:'ti ti-settings'}),'Cài đặt chấm công'),
+      h('div',{className:'card',style:{marginBottom:'1rem'}},
+        h('div',{className:'attendance-manager-title'},'Điện thoại chấm công tại cửa vào'),
+        h('p',{style:{fontSize:13,color:'var(--tx2)'}},'Mở chế độ kiosk trên điện thoại đặt cố định. Cần đăng ký khuôn mặt mẫu cho nhân viên, cấp quyền camera và GPS một lần. Nhân viên chỉ cần đứng trước máy, nhắm mắt khoảng 1 giây rồi mở.'),
+        h('p',{style:{fontSize:13,color:'#92400e',background:'#fffbeb',padding:'9px 12px',borderRadius:8}},'Bản thử nghiệm: cần có người giám sát. Chưa đặt điện thoại đăng nhập Admin ở cửa không người trông; phiên kiosk chuyên dụng và chống ảnh/video giả cần hoàn thiện trước khi vận hành chính thức.'),
+        h('button',{className:'bp',onClick:()=>{try{sessionStorage.setItem('scf_attendance_kiosk_active','1');}catch{}setKioskOpen(true);}},h('i',{className:'ti ti-face-id'}),' Mở kiosk tự nhận diện')
+      ),
       h('div',{className:'att-grid'},
         h('div',{className:'card attendance-face-settings-card'},
           h(F,{label:'Nhân viên đăng ký khuôn mặt'},h('select',{value:empId,onChange:e=>{setEmpId(e.target.value);setPreview('');setCap(null);}},

@@ -385,6 +385,14 @@ th{font-family:var(--ui-header-family)!important}
 .attendance-workshift-times .field{margin-bottom:0}
 .attendance-workshift-range{font-size:11px;color:var(--tx2);margin-top:7px}
 .attendance-settings-page,.attendance-settings-page .att-grid>*,.attendance-config-column{min-width:0}
+.attendance-kiosk{position:fixed;inset:0;z-index:10000;overflow:auto;background:#102c25;color:#fff;display:flex;flex-direction:column;align-items:center;gap:16px;padding:16px 16px 28px;text-align:center}
+.attendance-kiosk-head{width:min(100%,720px);display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:18px}
+.attendance-kiosk-head button{font-size:13px;background:#fff;color:#173e32}
+.attendance-kiosk-camera{width:min(100%,720px);aspect-ratio:4/3;max-height:60vh;border:3px solid #83d6aa;border-radius:20px;overflow:hidden;background:#081b16}
+.attendance-kiosk-camera video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.attendance-kiosk-message{width:min(100%,720px);min-height:52px;font-size:clamp(18px,4vw,27px);font-weight:700;line-height:1.25}
+.attendance-kiosk-result{display:flex;flex-direction:column;gap:4px;padding:12px 24px;border-radius:14px;background:#d9f7e6;color:#155d39;font-size:20px}
+.attendance-kiosk-hint{max-width:720px;font-size:12px;line-height:1.45;color:#c8e5d4;margin:0}
 .attendance-zone-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
 .attendance-zone-card{min-width:0;padding:14px}
 .attendance-zone-fields{grid-template-columns:repeat(3,minmax(0,1fr))}
