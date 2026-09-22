@@ -1,6 +1,44 @@
 /* ─── DELIVERY TRIPS ─── */
 const tripOrderedQty=line=>numFmt(line?.qtyProd??line?.qty??line?.quantity??line?.qtyInvoice??0);
 const tripDeliveredQty=line=>line?.qtyDelivered!==undefined&&line?.qtyDelivered!==null&&line?.qtyDelivered!==''?numFmt(line.qtyDelivered):tripOrderedQty(line);
+function scfIsWarehouseTrip(trip,shifts){
+  const configured=(shifts||[]).find(shift=>String(shift.id||'')===String(trip?.shiftId||''));
+  return [trip?.shiftName,configured?.name,configured?.code].some(value=>{
+    const name=normalizePlainText(value).replace(/[^a-z0-9]+/g,' ').trim();
+    return name==='kv'||name.includes('kho van');
+  });
+}
+function scfTripUnitSummaryHtml(tripOrders,products){
+  const groups=new Map(),unitTotals=new Map();
+  const cleanUnit=value=>{
+    const raw=String(value||'').trim();
+    const plain=normalizePlainText(raw).replace(/[^a-z0-9]+/g,'');
+    if(['kg','kgs','kilogram','kilograms'].includes(plain))return 'kg';
+    if(['goi','pac','pack','packs','packet','packets','pkg','package'].includes(plain))return 'gói';
+    if(['cai','chiec','pcs','piece','pieces'].includes(plain))return 'cái';
+    return raw||'—';
+  };
+  (tripOrders||[]).forEach(order=>(order.lines||[]).forEach(line=>{
+    const qty=tripOrderedQty(line);
+    if(!(qty>0))return;
+    const product=(products||[]).find(item=>String(item.id||'')===String(line.productId||''));
+    const name=String(line.productName||product?.name||'Sản phẩm').trim();
+    const unit=cleanUnit(product?.unit||line.unit);
+    const key=String(line.productId||normalizePlainText(name))+'|'+unit;
+    const group=groups.get(key)||{name,unit,qty:0};
+    group.qty+=qty;
+    groups.set(key,group);
+    unitTotals.set(unit,(unitTotals.get(unit)||0)+qty);
+  }));
+  if(!groups.size)return '';
+  const fmt=value=>Number(value||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
+  const unitOrder=unit=>unit==='kg'?0:unit==='gói'?1:2;
+  const rows=[...groups.values()].sort((a,b)=>unitOrder(a.unit)-unitOrder(b.unit)||a.unit.localeCompare(b.unit,'vi')||a.name.localeCompare(b.name,'vi'))
+    .map(item=>'<tr><td>'+scfEscapePrintHtml(item.name)+'</td><td>'+scfEscapePrintHtml(item.unit)+'</td><td class="num"><b>'+fmt(item.qty)+'</b></td></tr>').join('');
+  const totals=[...unitTotals.entries()].sort((a,b)=>unitOrder(a[0])-unitOrder(b[0])||a[0].localeCompare(b[0],'vi'))
+    .map(([unit,qty])=>'<tr class="summary-row"><td><b>TỔNG '+scfEscapePrintHtml(unit)+'</b></td><td>'+scfEscapePrintHtml(unit)+'</td><td class="num"><b>'+fmt(qty)+'</b></td></tr>').join('');
+  return '<section class="pack-summary"><h3>Tổng số lượng đặt theo sản phẩm</h3><table><thead><tr><th>Sản phẩm</th><th>Đơn vị</th><th>Tổng SL đặt</th></tr></thead><tbody>'+rows+totals+'</tbody></table></section>';
+}
 function TripDeliveredQtyConfirm({line,onCommit,style}){
   const value=tripDeliveredQty(line);
   const [editing,setEditing]=useState(false);
@@ -1185,7 +1223,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
   };
   const printTrip=trip=>{
     const rawTripOrders=sortedTripOrders(trip);
-    const packSummary=tripPackSummaryHtml(rawTripOrders);
+    const packSummary=scfIsWarehouseTrip(trip,shifts)?scfTripUnitSummaryHtml(rawTripOrders,products):tripPackSummaryHtml(rawTripOrders);
     const tripOrders=scfEscapePrintData(rawTripOrders);
     trip=scfEscapePrintData(trip);
     const rows=tripOrders.map(o=>{
