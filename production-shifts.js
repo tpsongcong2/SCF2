@@ -326,9 +326,22 @@ function prodShiftPlansForOrder(order,prodShifts,prodShiftRules){
     return defaultPlan?{...defaultPlan,line:l,index:i,productName:l.productName||('Sản phẩm '+(i+1))}:null;
   }).filter(Boolean);
 }
-function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts}){
+const PROD_SHIFT_AUDIT_FIELDS=[
+  ['location','Địa điểm'],['startTime','Giờ ĐH từ'],['endTime','Giờ ĐH đến'],
+  ['name','Tên ca'],['actualProdTime','Giờ SX'],['prodDateOffset','Ngày sản xuất'],
+  ['tripDateOffset','Ngày chuyến'],['tripShiftName','Ca giao hàng'],
+  ['labelPrintDateOffset','Ngày in tem'],['labelPrintTime','Giờ in tem'],
+  ['active','Trạng thái'],['color','Màu nền'],['textColor','Màu chữ']
+];
+function prodShiftAuditChanges(before,after){
+  const display=(key,value)=>key==='active'?(value?'Đang hoạt động':'Tạm tắt'):String(value??'—');
+  return PROD_SHIFT_AUDIT_FIELDS.filter(([key])=>String(before?.[key]??'')!==String(after?.[key]??''))
+    .map(([key,label])=>label+': '+display(key,before?.[key])+' → '+display(key,after?.[key]));
+}
+function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts,currentUser}){
   const[modal,sm]=useState(null);
   const[edit,se]=useState(null);
+  const[auditShiftId,setAuditShiftId]=useState(null);
   const empty={name:'',location:'',orderTime:'',startTime:'',endTime:'',actualProdTime:'',prodDateOffset:0,tripDateOffset:0,tripShiftId:'',tripShiftName:'',labelPrintTime:'',labelPrintDateOffset:0,color:'#FFF8E1',textColor:'#333',active:true};
   const shiftNamePresets=[
     {name:'Ca sáng',orderTime:'03:00',startTime:'03:00',endTime:'12:00',actualProdTime:'03:00',prodDateOffset:0,tripDateOffset:0,tripShiftId:'',tripShiftName:'',labelPrintTime:'04:00',labelPrintDateOffset:0,color:'#FFF8E1',textColor:'#E65100'},
@@ -489,10 +502,19 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
     const {_missingCount,_missingReason,_missingOrderIds,_missingSummary,...cleanForm}=form;
     const chosenTripShift=(shifts||[]).find(x=>x.id===form.tripShiftId);
     const data={...cleanForm,name:autoName,color:autoRule?.color||form.color,textColor:autoRule?.textColor||form.textColor,orderTime:form.startTime||form.orderTime,startTime:form.startTime||form.orderTime,endTime:form.endTime||form.orderTime,prodDateOffset:Number(form.prodDateOffset||0),tripDateOffset:Number(form.tripDateOffset||0),tripShiftId:String(form.tripShiftId||''),tripShiftName:chosenTripShift?.name||form.tripShiftName||'',labelPrintDateOffset:Number(form.labelPrintDateOffset||0)};
-    if(edit) setProdShifts(p=>p.map(s=>s.id===edit.id?{...s,...data}:s));
-    else setProdShifts(p=>[...p,{...data,id:'PSH'+uid()}]);
+    const stamp=fmtDT(),atIso=new Date().toISOString(),actor=currentUser?.name||'Người dùng',actorId=currentUser?.id||'';
+    if(edit) setProdShifts(p=>p.map(s=>{
+      if(s.id!==edit.id)return s;
+      const changes=prodShiftAuditChanges(normalize(s),data);
+      if(!changes.length)return s;
+      return {...s,...data,id:s.id,createdAt:s.createdAt||'',createdBy:s.createdBy||'',createdById:s.createdById||'',updatedAt:stamp,updatedBy:actor,updatedById:actorId,
+        shiftHistory:[...(s.shiftHistory||[]),{id:'PSHLOG'+uid(),action:'Sửa dòng cài đặt ca',changes,at:stamp,atIso,by:actor,byId:actorId}]};
+    }));
+    else setProdShifts(p=>[...p,{...data,id:'PSH'+uid(),createdAt:stamp,createdBy:actor,createdById:actorId,updatedAt:stamp,updatedBy:actor,updatedById:actorId,
+      shiftHistory:[{id:'PSHLOG'+uid(),action:'Tạo dòng cài đặt ca',changes:['Địa điểm: '+(data.location||'—'),'Giờ ĐH: '+(data.startTime||'—')+' - '+(data.endTime||'—'),'Giờ SX: '+(data.actualProdTime||'—')],at:stamp,atIso,by:actor,byId:actorId}]}]);
     sm(null);
   };
+  const auditShift=(prodShifts||[]).find(s=>s.id===auditShiftId);
   const del=sh=>window.scfConfirm('Bạn có chắc muốn xóa ca "'+sh.name+'"?','Xóa ca sản xuất',true).then(ok=>ok&&setProdShifts(p=>p.filter(s=>s.id!==sh.id)));
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-clock-play',style:{fontSize:20}}),'Cài đặt ca SX + ca GH tự động'),
@@ -575,6 +597,7 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
               h('td',{style:{padding:'10px 12px'}},r.labelPrintTime||'—'),
               h('td',{style:{padding:'10px 12px'}},h('span',{className:'badge',style:{background:r.active?'#E8F5E9':'#F1EFE8',color:r.active?'#1B5E20':'#777'}},r.active?'Đang hoạt động':'Tạm tắt')),
               h('td',{style:{padding:'8px 12px',textAlign:'right',whiteSpace:'nowrap'}},
+                h('button',{className:'bi',onClick:()=>setAuditShiftId(r.id),title:'Xem người tạo và lịch sử sửa'},h('i',{className:'ti ti-history',style:{fontSize:15}})),
                 h('button',{className:'bi',onClick:()=>open(r),title:'Sửa'},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
                 h('button',{className:'bi',onClick:()=>del(r),title:'Xóa',style:{color:'#A32D2D',marginLeft:4}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
               )
@@ -613,11 +636,25 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
             h('div',{className:'prodshift-mobile-item'},h('b',null,'Giờ in tem'),h('span',null,r.labelPrintTime||'—'))
           ),
           h('div',{className:'mobile-data-actions'},
+            h('button',{className:'bi',onClick:()=>setAuditShiftId(r.id),title:'Xem người tạo và lịch sử sửa'},h('i',{className:'ti ti-history',style:{fontSize:15}})),
             h('button',{className:'bi',onClick:()=>open(r),title:'Sửa'},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
             h('button',{className:'bi',onClick:()=>del(r),title:'Xóa',style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
           )
         );
       })
+    ),
+    auditShift&&h(Modal,{title:'Lịch sử cài đặt ca — '+(auditShift.location||auditShift.name||auditShift.id),onClose:()=>setAuditShiftId(null)},
+      h('div',{style:{display:'grid',gap:8,fontSize:13}},
+        h('div',null,h('b',null,'Người tạo: '),auditShift.createdBy||'Chưa ghi nhận (dữ liệu cũ)',auditShift.createdAt?' · '+auditShift.createdAt:''),
+        h('div',null,h('b',null,'Người sửa gần nhất: '),auditShift.updatedBy||'Chưa ghi nhận',auditShift.updatedAt?' · '+auditShift.updatedAt:''),
+        h('div',{style:{borderTop:'1px solid var(--bd)',paddingTop:10,marginTop:4,fontWeight:700}},'Các lần thay đổi'),
+        (auditShift.shiftHistory||[]).length
+          ?[...auditShift.shiftHistory].reverse().map((entry,i)=>h('div',{key:entry.id||i,style:{padding:'9px 12px',background:'var(--bg2)',borderRadius:'var(--r)',border:'1px solid var(--bd)'}},
+            h('div',{style:{fontWeight:700}},entry.action||'Cập nhật',' · ',entry.by||'Không rõ người sửa',' · ',entry.at||'Không rõ thời gian'),
+            (entry.changes||[]).map((change,j)=>h('div',{key:j,style:{marginTop:4,color:'var(--tx2)'}},change))
+          ))
+          :h('div',{style:{color:'var(--tx2)'}},'Dòng này được tạo trước khi bật lịch sử, nên chưa có bản ghi thay đổi.')
+      )
     ),
     modal==='f'&&h(Modal,{title:edit?'Sửa ca sản xuất':'Thêm ca sản xuất',onClose:()=>sm(null)},
       h('div',{style:{marginBottom:10,padding:'8px 12px',background:'#EAF4EF',borderRadius:'var(--r)',fontSize:13,color:'var(--pri3)'}},

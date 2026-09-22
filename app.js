@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V347';
+const SCF_BUILD_VERSION='V348';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -689,7 +689,7 @@ function App(){
         canAccess(cu.role,'products',cu.permissions)&&page==='products'&&h(ProductsTab,{products,setProducts,prodCats,setProdCats}),
         canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers,shifts,orders,areas,cu}),
         canAccess(cu.role,'areas',cu.permissions)&&page==='areas'&&h(AreasTab,{areas,setAreas,customers,setCustomers,orders}),
-        canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts}),
+        canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts,currentUser:cu}),
         canAccess(cu.role,'deliveryrules',cu.permissions)&&page==='deliveryrules'&&h(DeliveryRulesTab,{items:deliveryRules,setItems:setDeliveryRules,currentUser:cu}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats,depts}),
         canAccess(cu.role,'tasks',cu.permissions)&&page==='tasks'&&h(TasksTab,{tasks,setTasks,workcats,employees,currentUser:cu,notify:addNotification}),
