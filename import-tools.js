@@ -192,7 +192,37 @@ function addDays(dateStr, n) {
   return String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear();
 }
 
-function buildPrintHTML(template, order, company) {
+function scfOrderQrPayload(order){
+  order=order||{};
+  const compact=value=>normalizeOrderPrintTemplateText(value).replace(/\s+/g,'-').slice(0,36);
+  const date=String(order.deliveryDate||'').replace(/\D/g,'').slice(0,8);
+  const time=String(order.deliveryTime||'').replace(/\D/g,'').slice(0,4);
+  return ['SCF1','O='+compact(order.id||order.orderId),'D='+date,'P='+compact(order.pointId||order.pointName||order.address),'T='+time,'R='+compact(order.tripId)].join('|');
+}
+
+function scfOrderQrMarkup(order){
+  if(typeof qrcode!=='function'||!(order?.id||order?.orderId))return '';
+  try{
+    const payload=scfOrderQrPayload(order);
+    const escapeHtml=value=>String(value??'').replace(/[&"<>]/g,char=>({'&':'&amp;','"':'&quot;','<':'&lt;','>':'&gt;'}[char]));
+    const qr=qrcode(0,'M');
+    qr.addData(payload,'Byte');
+    qr.make();
+    return '<div class="scf-order-qr" data-qr-payload="'+escapeHtml(payload)+'">'+qr.createSvgTag(4,4)+'<div class="scf-order-qr-label">'+escapeHtml(order.id||order.orderId||'')+'</div></div>';
+  }catch(error){
+    console.warn('Không tạo được QR cho đơn in',error);
+    return '';
+  }
+}
+
+function scfAttachOrderQr(html,order){
+  const markup=scfOrderQrMarkup(order);
+  if(!html||!markup)return html;
+  const style='<style>.print-sheet{position:relative}.print-sheet>.hdr,.print-sheet>h2,.print-sheet>.header-grid,.print-sheet>.legal,.print-sheet>.coinfo,.print-sheet>.title-wrap{padding-right:30mm}.scf-order-qr{position:absolute;right:8mm;top:7mm;width:24mm;text-align:center;background:#fff;padding:1.5mm;z-index:2}.scf-order-qr svg{display:block;width:21mm;height:21mm;margin:0 auto}.scf-order-qr-label{font:700 8px Arial,sans-serif;color:#000;line-height:1.15;margin-top:1mm;overflow-wrap:anywhere}@media print{.scf-order-qr{right:8mm;top:7mm}}</style>';
+  return html.replace('</head>',style+'</head>').replace('<div class="print-sheet">','<div class="print-sheet">'+markup);
+}
+
+function buildPrintHTMLBody(template, order, company) {
   order = scfEscapePrintData(order || {});
   company = scfEscapePrintData(company || {});
   const co = company || {};
@@ -506,6 +536,10 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
 <\/div><\/body><\/html>`;
   }
   return '';
+}
+
+function buildPrintHTML(template,order,company){
+  return scfAttachOrderQr(buildPrintHTMLBody(template,order,company),order);
 }
 
 function PrintTemplateModal({order, company, initialTemplate, onClose}) {
