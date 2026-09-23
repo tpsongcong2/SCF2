@@ -134,6 +134,14 @@ function normalizeOrderPrintTemplateText(value){
   return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/Đ/g,'D').replace(/đ/g,'d').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim().replace(/\s+/g,' ');
 }
 
+function scfOrderPrintProductName(order,line){
+  const originalName=String(line?.productName||'');
+  const customerText=normalizeOrderPrintTemplateText([order?.customer,order?.customerName].filter(Boolean).join(' '));
+  const productText=normalizeOrderPrintTemplateText(originalName);
+  const isSpecialCustomer=['BASAO','FOSECA'].some(name=>customerText.includes(name));
+  return isSpecialCustomer&&productText==='BANH CUON NHAN'?'BÁNH CUỐN':originalName;
+}
+
 function resolveOrderPrintTemplate(order,customer){
   order=order||{};customer=customer||{};
   const customerText=normalizeOrderPrintTemplateText([
@@ -226,7 +234,7 @@ function buildPrintHTMLBody(template, order, company) {
   order = scfEscapePrintData(order || {});
   company = scfEscapePrintData(company || {});
   const co = company || {};
-  const lines = (order.lines || []).filter(l => l.productName);
+  const lines = (order.lines || []).filter(l => l.productName).map(l=>({...l,productName:scfOrderPrintProductName(order,l)}));
   const totalQty = lines.reduce((s,l) => s + Number(l.qtyInvoice||l.qtyProd||0), 0);
 
   if (template === 'welstory' || template === 'songcong') {
