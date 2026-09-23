@@ -1427,7 +1427,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                   borderRadius:'var(--r)',cursor:'pointer'}
               },h('i',{className:'ti ti-printer',style:{fontSize:13}}),'In chuyến'),
               canCreateAdditionalOrder(trip)&&h('button',{
-                className:'bi mobile-only trip-additional-mobile',
+                className:'bi trip-additional-action',
                 title:'Tạo đơn phát sinh',
                 'aria-label':'Tạo đơn phát sinh',
                 'data-scf-action':'write',
@@ -1435,10 +1435,6 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                 style:{width:36,minWidth:36,height:38,minHeight:38,padding:4,fontSize:20,flexShrink:0,marginLeft:'auto',color:'var(--pri)'}
               },h('i',{className:'ti ti-file-plus','aria-hidden':true}))
             ),
-            trip.note&&h('div',{style:{fontSize:13,color:'var(--tx2)',marginBottom:8,padding:'6px 10px',background:'var(--bg2)',borderRadius:'var(--r)'}},
-              h('i',{className:'ti ti-notes',style:{marginRight:4}}),'Ghi chú: '+trip.note
-            ),
-            canEditTripQty&&h('div',{className:'trip-actual-qty-note'},h('i',{className:'ti ti-info-circle'}),' SL đã giao mặc định bằng SL đặt. Nhấn bút để sửa, rồi nhấn ✓ để lưu và khóa lại.'),
             // Bảng đơn hàng
             h('div',{style:{fontWeight:500,fontSize:12,color:'var(--tx2)',marginBottom:6}},'Chi tiết đơn hàng:'),
             tripOrders.length?h('div',{className:'desktop-only tw'},
