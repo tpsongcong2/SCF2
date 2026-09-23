@@ -1,7 +1,14 @@
-const CACHE = 'scf-v357';
+const CACHE = 'scf-v358';
 const ASSETS = [
   './',
   './index.html',
+  './vendor/tabler-icons.min.css?v=358',
+  './vendor/fonts/tabler-icons.ttf?v3.2.0',
+  './vendor/fonts/tabler-icons.woff',
+  './vendor/fonts/tabler-icons.woff2?v3.2.0',
+  './vendor/supabase.min.js?v=358',
+  './vendor/react.production.min.js?v=358',
+  './vendor/react-dom.production.min.js?v=358',
   './styles.css?v=347',
   './runtime.js?v=311',
   './storage.js?v=304',
@@ -31,8 +38,8 @@ const ASSETS = [
   './production.js?v=341',
   './permissions.js?v=352',
   './permission-settings.js?v=352',
-  './app.js?v=357',
-  './bootstrap.js?v=357',
+  './app.js?v=358',
+  './bootstrap.js?v=358',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -64,14 +71,26 @@ self.addEventListener('fetch', e => {
     return assetUrl.pathname === url.pathname;
   });
   if (!isStaticAsset) return;
-  // Network first - luôn lấy bản mới nhất
+  // Network first - luôn lấy bản mới nhất. Giới hạn thời gian chờ để kết nối
+  // chập chờn không giữ ứng dụng ở màn hình trắng vô thời hạn.
   e.respondWith(
-    fetch(e.request)
+    fetchWithTimeout(e.request, 8000)
       .then(res => {
         const clone = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, clone));
         return res;
       })
-      .catch(() => caches.match(e.request))
+      .catch(async error => {
+        const cached = await caches.match(e.request);
+        if (cached) return cached;
+        throw error;
+      })
   );
 });
+
+function fetchWithTimeout(request, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(request, {signal: controller.signal})
+    .finally(() => clearTimeout(timeoutId));
+}
