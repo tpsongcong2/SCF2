@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V364';
+const SCF_BUILD_VERSION='V365';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -203,7 +203,23 @@ function App(){
   const homePage=isFaceMask?'workreport_total':'welcome';
   const[session,setSession]=useLS('scf_session',null);
   useEffect(()=>{const replaced=async()=>{if(window.__SCF_SESSION_REPLACEMENT_HANDLED)return;window.__SCF_SESSION_REPLACEMENT_HANDLED=true;try{await sb?.auth?.signOut({scope:'local'});}catch{}window.scfClearSensitiveLocalData?.();setSession(null);window.showToast?.('Phiên đăng nhập trên máy này không còn hiệu lực. Hãy đăng nhập lại; chỉ chọn đăng xuất máy cũ nếu đúng là tài khoản đang dùng ở máy khác.','warn',8000);};window.addEventListener('scf-session-replaced',replaced);return()=>window.removeEventListener('scf-session-replaced',replaced);},[]);
-  useEffect(()=>{if(!SCF_SERVER_AUTH_ENABLED||!session)return;let stopped=false;const touch=()=>serverTouchSession().catch(error=>{if(!stopped&&!String(error?.message||'').includes('Phiên đăng nhập không hợp lệ'))console.warn('Session heartbeat:',error?.message||error);});touch();const timer=setInterval(touch,45000);const visible=()=>{if(document.visibilityState==='visible')touch();};document.addEventListener('visibilitychange',visible);return()=>{stopped=true;clearInterval(timer);document.removeEventListener('visibilitychange',visible);};},[session?.id]);
+  useEffect(()=>{
+    if(!SCF_SERVER_AUTH_ENABLED||!session)return;
+    let stopped=false,inFlight=null,lastTouch=Date.now();
+    const intervalMs=5*60*1000;
+    const touch=()=>{
+      if(stopped||inFlight||Date.now()-lastTouch<intervalMs)return inFlight;
+      lastTouch=Date.now();
+      inFlight=serverTouchSession().catch(error=>{
+        if(!stopped&&!String(error?.message||'').includes('Phiên đăng nhập không hợp lệ'))console.warn('Session heartbeat:',error?.message||error);
+      }).finally(()=>{inFlight=null;});
+      return inFlight;
+    };
+    const timer=setInterval(touch,intervalMs);
+    const visible=()=>{if(document.visibilityState==='visible')touch();};
+    document.addEventListener('visibilitychange',visible);
+    return()=>{stopped=true;clearInterval(timer);document.removeEventListener('visibilitychange',visible);};
+  },[session?.id]);
   const[menuHidden,setMenuHidden]=useLS('scf_topnav_hidden',false);
   const[employees,_se]=useState(SCF_SERVER_AUTH_ENABLED?[]:DEF_EMPS);
   const[company,_sc]=useState(DEF_COMPANY);

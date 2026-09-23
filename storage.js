@@ -340,11 +340,11 @@ async function performDbSet(key,val,queuedAt='',mode=''){
     }catch{setSyncState('error','Không kiểm tra được phiên đăng nhập');return false;}
   }
   if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees')){
-    try{setSyncState('syncing','Đang lưu danh sách nhân viên');await withRemoteTimeout(serverSaveEmployees(val),remoteTimeoutFor(val));removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
+    try{const timeoutMs=remoteTimeoutFor(val);setSyncState('syncing','Đang lưu danh sách nhân viên');await withRemoteTimeout(serverSaveEmployees(val,timeoutMs),timeoutMs);removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
     catch(e){console.warn('serverSaveEmployees:',e.message);setSyncState('error','Không lưu được danh sách nhân viên');window.showToast&&window.showToast(e.message||'Không lưu được danh sách nhân viên.','error');scheduleSyncRetry();return false;}
   }
   if(serverAuthEnabled()&&key==='scf_trips'&&mode==='auto-trips'){
-    try{setSyncState('syncing','Đang lưu chuyến tự động');await withRemoteTimeout(serverSaveAutoTrips(val),remoteTimeoutFor(val));removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
+    try{const timeoutMs=remoteTimeoutFor(val);setSyncState('syncing','Đang lưu chuyến tự động');await withRemoteTimeout(serverSaveAutoTrips(val,timeoutMs),timeoutMs);removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
     catch(e){console.warn('serverSaveAutoTrips:',e.message);setSyncState('error',e.message||'Không lưu được chuyến tự động');window.showToast&&window.showToast(e.message||'Không lưu được chuyến tự động.','error');scheduleSyncRetry();return false;}
   }
   if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
@@ -355,7 +355,8 @@ async function performDbSet(key,val,queuedAt='',mode=''){
       const baseValue=Object.prototype.hasOwnProperty.call(queued,'baseValue')?queued.baseValue:scfRemoteSnapshots.get(key);
       const patches=Array.isArray(queued.patches)&&queued.patches.length?queued.patches:null;
       const payload=patches?{key,patches,expectedUpdatedAt}:{key,value:val,baseValue,expectedUpdatedAt};
-      const saved=await measuredCollectionSave(key,patches?'patch':'full',payload,()=>withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt):serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue),remoteTimeoutFor(payload)));
+      const timeoutMs=remoteTimeoutFor(payload);
+      const saved=await measuredCollectionSave(key,patches?'patch':'full',payload,()=>withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt,timeoutMs):serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue,timeoutMs),timeoutMs));
       const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(val);
       if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(val));
       scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));removeQueuedWrite(key,queuedAt);setSyncState('synced');
@@ -413,14 +414,19 @@ function dbSetWithMode(key,val,mode='',options={}){
 }
 function dbSet(key,val){return dbSetWithMode(key,val,'');}
 function dbSetAutoTrips(val){return dbSetWithMode('scf_trips',val,'auto-trips');}
-let scfRetryTimer=null,scfRetryAttempt=0;
+let scfRetryTimer=null,scfRetryAttempt=0,scfFlushPromise=null;
+const SCF_MAX_AUTO_RETRIES=6;
 function scheduleSyncRetry(){
   if(scfRetryTimer||!navigator.onLine||!sb)return;
-  const delays=[1500,5000,15000,30000];
+  if(scfRetryAttempt>=SCF_MAX_AUTO_RETRIES){
+    setSyncState('error','Máy chủ phản hồi chậm. Đã tạm dừng tự thử để tránh gửi yêu cầu trùng; dữ liệu vẫn được giữ trên máy.');
+    return;
+  }
+  const delays=[2000,5000,15000,30000,60000,120000];
   const delay=delays[Math.min(scfRetryAttempt,delays.length-1)];scfRetryAttempt++;
   scfRetryTimer=setTimeout(async()=>{scfRetryTimer=null;await flushPendingWrites();},delay);
 }
-async function flushPendingWrites(){
+async function runPendingWrites(){
   if(!navigator.onLine||!sb)return false;
   if(serverAuthEnabled()){
     try{const{data}=await sb.auth.getSession();if(!data?.session)return false;}catch{return false;}
@@ -435,14 +441,15 @@ async function flushPendingWrites(){
       if(debounced){clearTimeout(debounced.timer);waitingResolvers=debounced.resolvers||[];delete scfDebouncedWrites[key];}
       if(scfWriteChains[key])await scfWriteChains[key].catch(()=>false);
       item=readSyncQueue()[key];if(!item){waitingResolvers.forEach(done=>done(true));continue;}
-      if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees'))await withRemoteTimeout(serverSaveEmployees(item.value),remoteTimeoutFor(item.value));
-      else if(serverAuthEnabled()&&key==='scf_trips'&&(item.mode==='auto-trips'||(Array.isArray(item.value)&&item.value.some(trip=>trip?.autoCreated))))await withRemoteTimeout(serverSaveAutoTrips(item.value),remoteTimeoutFor(item.value));
+      if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees')){const timeoutMs=remoteTimeoutFor(item.value);await withRemoteTimeout(serverSaveEmployees(item.value,timeoutMs),timeoutMs);}
+      else if(serverAuthEnabled()&&key==='scf_trips'&&(item.mode==='auto-trips'||(Array.isArray(item.value)&&item.value.some(trip=>trip?.autoCreated)))){const timeoutMs=remoteTimeoutFor(item.value);await withRemoteTimeout(serverSaveAutoTrips(item.value,timeoutMs),timeoutMs);}
       else if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
         const expectedUpdatedAt=item.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
         const baseValue=Object.prototype.hasOwnProperty.call(item,'baseValue')?item.baseValue:scfRemoteSnapshots.get(key);
         const patches=Array.isArray(item.patches)&&item.patches.length?item.patches:null;
         const payload=patches?{key,patches,expectedUpdatedAt}:{key,value:item.value,baseValue,expectedUpdatedAt};
-        const saved=await measuredCollectionSave(key,patches?'patch':'full',payload,()=>withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt):serverSavePermittedCollection(key,item.value,expectedUpdatedAt,baseValue),remoteTimeoutFor(payload)));
+        const timeoutMs=remoteTimeoutFor(payload);
+        const saved=await measuredCollectionSave(key,patches?'patch':'full',payload,()=>withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt,timeoutMs):serverSavePermittedCollection(key,item.value,expectedUpdatedAt,baseValue,timeoutMs),timeoutMs));
         const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(item.value);
         if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(item.value));
         scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));
@@ -475,7 +482,12 @@ async function flushPendingWrites(){
   }
   scfRetryAttempt=0;setSyncState('synced');return true;
 }
-window.scfFlushPendingWrites=flushPendingWrites;
+function flushPendingWrites(){
+  if(scfFlushPromise)return scfFlushPromise;
+  scfFlushPromise=runPendingWrites().finally(()=>{scfFlushPromise=null;});
+  return scfFlushPromise;
+}
+window.scfFlushPendingWrites=function(){scfRetryAttempt=0;return flushPendingWrites();};
 window.addEventListener('online',()=>flushPendingWrites());
 window.addEventListener('offline',()=>setSyncState('offline','Mất kết nối mạng'));
 setSyncState(navigator.onLine?'idle':'offline');

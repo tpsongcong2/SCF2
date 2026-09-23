@@ -1,6 +1,28 @@
 /* Supabase server authentication rollout.
    Keep disabled until the Edge Function and RLS migration are deployed. */
 const SCF_SERVER_AUTH_ENABLED=true;
+const SCF_AUTH_REQUEST_TIMEOUT_MS=30000;
+
+// Supabase Functions supports AbortSignal. Always abort the underlying fetch
+// when a request times out so a slow request cannot continue piling up behind
+// newer retries in the browser and at the Edge Function.
+async function invokeScfAuth(options,timeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
+  if(!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),Math.max(1000,Number(timeoutMs)||SCF_AUTH_REQUEST_TIMEOUT_MS));
+  try{
+    const result=await sb.functions.invoke('scf-auth',{...options,signal:controller.signal});
+    if(result?.error&&controller.signal.aborted){
+      const error=new Error('Supabase timeout');error.code='SCF_REMOTE_TIMEOUT';throw error;
+    }
+    return result;
+  }catch(error){
+    if(controller.signal.aborted||error?.name==='AbortError'){
+      const timeoutError=new Error('Supabase timeout');timeoutError.code='SCF_REMOTE_TIMEOUT';throw timeoutError;
+    }
+    throw error;
+  }finally{clearTimeout(timer);}
+}
 
 async function serverFunctionErrorMessage(error,data,fallback){
   const finish=message=>{
@@ -39,7 +61,7 @@ async function serverFunctionErrorMessage(error,data,fallback){
 
 async function serverUsernameLogin(username,password,forceTakeover=false){
   if(!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{
+  const{data,error}=await invokeScfAuth({
     body:{action:'login',username:String(username||'').trim(),password:String(password||''),deviceId:window.scfDeviceId?.()||'',deviceLabel:window.scfDeviceLabel?.()||'',forceTakeover:forceTakeover===true}
   });
   if(error)throw new Error(await serverFunctionErrorMessage(error,data,'Không thể đăng nhập qua máy chủ.'));
@@ -64,18 +86,18 @@ async function getServerAuthSession(){
 }
 
 async function serverLogout(){
-  if(SCF_SERVER_AUTH_ENABLED&&sb)try{await sb.functions.invoke('scf-auth',{body:{action:'release_session'}});await sb.auth.signOut();}catch(e){console.warn('Server logout:',e.message);}
+  if(SCF_SERVER_AUTH_ENABLED&&sb)try{await invokeScfAuth({body:{action:'release_session'}},10000);await sb.auth.signOut();}catch(e){console.warn('Server logout:',e.message);}
 }
 async function serverTouchSession(){
   if(!SCF_SERVER_AUTH_ENABLED||!sb)return false;
-  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'touch_session'}});
+  const{data,error}=await invokeScfAuth({body:{action:'touch_session'}},10000);
   if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không duy trì được phiên đăng nhập.'));
   return true;
 }
 
 async function serverLoadEmployeeContext(){
   if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'load_employees',appVariant:window.SCF_APP_VARIANT||'scfood'}});
+  const{data,error}=await invokeScfAuth({body:{action:'load_employees',appVariant:window.SCF_APP_VARIANT||'scfood'}},15000);
   if(error||!Array.isArray(data?.employees))throw new Error(await serverFunctionErrorMessage(error,data,'Không tải được danh sách nhân viên.'));
   return data;
 }
@@ -86,7 +108,7 @@ async function serverLoadEmployees(){
 }
 async function serverLoadPermittedCollection(key){
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'load_permitted_collection',key:String(key||'')}});
+  const{data,error}=await invokeScfAuth({body:{action:'load_permitted_collection',key:String(key||'')}});
   if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không tải được dữ liệu.'));
   return{value:data.value,updatedAt:data.updatedAt||''};
 }
@@ -112,28 +134,28 @@ function sanitizeEmployeesForServer(employees){
   }
   return clean;
 }
-async function serverSaveEmployees(employees){
+async function serverSaveEmployees(employees,requestTimeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
   const payload=sanitizeEmployeesForServer(employees);
-  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'save_employees',employees:payload,appVariant:window.SCF_APP_VARIANT||'scfood'}});
+  const{data,error}=await invokeScfAuth({body:{action:'save_employees',employees:payload,appVariant:window.SCF_APP_VARIANT||'scfood'}},requestTimeoutMs);
   if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không lưu được danh sách nhân viên.'));
   return data.employees||employees;
 }
 
-async function serverSaveAutoTrips(trips){
+async function serverSaveAutoTrips(trips,requestTimeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ chuyến tự động.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{
+  const{data,error}=await invokeScfAuth({
     body:{action:'save_auto_trips',trips:Array.isArray(trips)?trips:[]}
-  });
+  },requestTimeoutMs);
   if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không lưu được chuyến tự động.'));
   return data.trips||trips;
 }
 
-async function serverSavePermittedCollection(key,value,expectedUpdatedAt='',baseValue){
+async function serverSavePermittedCollection(key,value,expectedUpdatedAt='',baseValue,requestTimeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{
+  const{data,error}=await invokeScfAuth({
     body:{action:'save_permitted_collection',key:String(key||''),value:value===undefined?null:value,baseValue:baseValue===undefined?undefined:baseValue,enforceVersion:true,expectedUpdatedAt:String(expectedUpdatedAt||'')}
-  });
+  },requestTimeoutMs);
   if(data?.conflict){
     const ids=Array.isArray(data.conflictIds)&&data.conflictIds.length?' Các mã đang bị sửa đồng thời: '+data.conflictIds.join(', ')+'.':'';
     const conflict=new Error('Dữ liệu trên máy chủ vừa thay đổi'+(data.actorName?' bởi '+data.actorName:'')+'. Thay đổi trên máy này vẫn được giữ để kiểm tra.'+ids);
@@ -147,11 +169,11 @@ async function serverSavePermittedCollection(key,value,expectedUpdatedAt='',base
   return{value:data.value||value,updatedAt:data.updatedAt||''};
 }
 
-async function serverPatchPermittedCollection(key,patches,expectedUpdatedAt=''){
+async function serverPatchPermittedCollection(key,patches,expectedUpdatedAt='',requestTimeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{
+  const{data,error}=await invokeScfAuth({
     body:{action:'patch_permitted_collection',key:String(key||''),patches:Array.isArray(patches)?patches:[],enforceVersion:true,expectedUpdatedAt:String(expectedUpdatedAt||'')}
-  });
+  },requestTimeoutMs);
   if(data?.conflict){
     const conflict=new Error('Dữ liệu trên máy chủ vừa thay đổi. App sẽ tự đồng bộ lại thay đổi này.');
     conflict.code='SCF_WRITE_CONFLICT';throw conflict;
@@ -162,14 +184,14 @@ async function serverPatchPermittedCollection(key,patches,expectedUpdatedAt=''){
 
 async function serverLoadSupabaseUsage(){
   if(!sb)throw new Error('Chưa kết nối được máy chủ báo cáo dung lượng.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'load_supabase_usage'}});
+  const{data,error}=await invokeScfAuth({body:{action:'load_supabase_usage'}});
   if(error||!data?.ok||!data?.usage)throw new Error(await serverFunctionErrorMessage(error,data,'Không tải được dung lượng Supabase.'));
   return data.usage;
 }
 
 async function serverChangePassword(employeeId,currentPassword,newPassword,adminReset=false){
   if(!sb)throw new Error('Chưa kết nối được máy chủ đổi mật khẩu.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{
+  const{data,error}=await invokeScfAuth({
     body:{action:'change_password',employeeId:String(employeeId||''),currentPassword:String(currentPassword||''),newPassword:String(newPassword||''),adminReset:!!adminReset}
   });
   if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không đổi được mật khẩu.'));
@@ -178,7 +200,7 @@ async function serverChangePassword(employeeId,currentPassword,newPassword,admin
 
 async function requestAdminPasswordReset(username){
   if(!sb)throw new Error('Chưa kết nối được máy chủ khôi phục mật khẩu.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{
+  const{data,error}=await invokeScfAuth({
     body:{action:'request_admin_reset',username:String(username||'').trim()}
   });
   if(error)throw new Error(await serverFunctionErrorMessage(error,data,'Không thể gửi mã khôi phục.'));
@@ -188,7 +210,7 @@ async function requestAdminPasswordReset(username){
 
 async function confirmAdminPasswordReset(username,code,newPassword){
   if(!sb)throw new Error('Chưa kết nối được máy chủ khôi phục mật khẩu.');
-  const{data,error}=await sb.functions.invoke('scf-auth',{
+  const{data,error}=await invokeScfAuth({
     body:{action:'confirm_admin_reset',username:String(username||'').trim(),code:String(code||'').trim(),newPassword:String(newPassword||'')}
   });
   if(error)throw new Error(await serverFunctionErrorMessage(error,data,'Không thể đặt lại mật khẩu.'));
