@@ -50,6 +50,7 @@ const DB_REMOTE_MAX_TIMEOUT_MS=30000;
 // vừa lưu đơn; vẫn đủ thời gian gom các trường được cập nhật liên tiếp.
 const SCF_SYNC_DEBOUNCE_MS=300;
 const SCF_SYNC_QUEUE_KEY='scf_sync_queue_v1';
+const SCF_SYNC_METRICS_KEY='scf_sync_metrics_v1';
 const SCF_SYNC_LABELS={
   scf_employees:'Nhân viên SCFOOD',scf_privileged_employees:'Admin & Ban Giám Đốc',scf_orders:'Đơn giao hàng',scf_trips:'Chuyến giao hàng',scf_attendance:'Chấm công',
   scf_advances:'Ứng lương',scf_rewards:'Thưởng phạt',scf_employee_errors:'Lỗi nhân viên',scf_employee_uniforms:'Cấp đồng phục',scf_leaves:'Nghỉ phép',scf_finance_entries:'Dòng tiền',
@@ -145,13 +146,45 @@ function reportSyncError(key,error,value){
 }
 function syncPayloadBytes(value){try{return new Blob([JSON.stringify(value??null)]).size;}catch{return 0;}}
 function remoteTimeoutFor(value){return Math.min(DB_REMOTE_MAX_TIMEOUT_MS,DB_REMOTE_TIMEOUT_MS+Math.ceil(syncPayloadBytes(value)/65536)*750);}
+function readSyncMetrics(){try{const value=JSON.parse(localStorage.getItem(SCF_SYNC_METRICS_KEY)||'[]');return Array.isArray(value)?value:[];}catch{return[];}}
+function recordSyncMetric(key,mode,payload,startedAt,ok){
+  const rows=readSyncMetrics();rows.unshift({key,mode,bytes:syncPayloadBytes(payload),durationMs:Math.max(0,Math.round(performance.now()-startedAt)),ok:!!ok,at:new Date().toISOString()});
+  try{localStorage.setItem(SCF_SYNC_METRICS_KEY,JSON.stringify(rows.slice(0,30)));}catch{}
+}
+async function measuredCollectionSave(key,mode,payload,task){
+  const startedAt=performance.now();
+  try{const result=await task();recordSyncMetric(key,mode,payload,startedAt,true);return result;}
+  catch(error){recordSyncMetric(key,mode,payload,startedAt,false);throw error;}
+}
+function mergeRecordPatches(previous,next){
+  const merged=new Map();
+  for(const patch of previous||[])merged.set(String(patch.id),patch);
+  for(const patch of next||[]){
+    const id=String(patch.id),old=merged.get(id),base=old?.base||patch.base,value=patch.value;
+    if(JSON.stringify(base)===JSON.stringify(value))merged.delete(id);else merged.set(id,{id,base,value});
+  }
+  return[...merged.values()];
+}
+function collectionRecordPatches(previous,next){
+  if(!Array.isArray(previous)||!Array.isArray(next)||previous.length!==next.length)return null;
+  const previousMap=new Map();
+  for(const item of previous){const id=String(item?.id||'').trim();if(!id||previousMap.has(id))return null;previousMap.set(id,item);}
+  const patches=[];
+  for(const item of next){const id=String(item?.id||'').trim(),base=previousMap.get(id);if(!id||!base)return null;if(JSON.stringify(base)!==JSON.stringify(item))patches.push({id,base:syncSnapshot(base),value:syncSnapshot(item)});}
+  if(!patches.length||patches.length>25)return null;
+  return syncPayloadBytes(patches)<syncPayloadBytes(next)*0.7?patches:null;
+}
 function queueRemoteWrite(key,value,options={}){
   const queue=readSyncQueue();
   const updatedAt=options.updatedAt||new Date().toISOString();
   const previous=queue[key];
   const expectedUpdatedAt=previous?.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
-  const baseValue=Object.prototype.hasOwnProperty.call(previous||{},'baseValue')?previous.baseValue:syncSnapshot(scfRemoteSnapshots.get(key));
-  queue[key]={value,updatedAt,expectedUpdatedAt,baseValue,bytes:syncPayloadBytes(value),attempts:Number(options.attempts)||0,mode:options.mode||''};
+  // Không được đổi một lần lưu toàn bộ đang chờ thành patch, vì lần lưu toàn
+  // bộ có thể chứa đơn vừa thêm/xóa mà patch kế tiếp không mang theo.
+  const patches=Array.isArray(options.patches)&&(!previous||Array.isArray(previous.patches))?mergeRecordPatches(previous?.patches,options.patches):null;
+  const usePatches=key==='scf_orders'&&patches?.length;
+  const baseValue=usePatches?undefined:(Object.prototype.hasOwnProperty.call(previous||{},'baseValue')?previous.baseValue:syncSnapshot(scfRemoteSnapshots.get(key)));
+  queue[key]={value,updatedAt,expectedUpdatedAt,...(baseValue===undefined?{}:{baseValue}),...(usePatches?{patches}:{}),bytes:syncPayloadBytes(usePatches?patches:value),attempts:Number(options.attempts)||0,mode:options.mode||''};
   writeSyncQueue(queue);
   setSyncState(options.syncing?'syncing':(navigator.onLine?'error':'offline'),options.detail||(options.syncing?'Đang gộp thay đổi để đồng bộ':'Thay đổi đang chờ đồng bộ'));
   return updatedAt;
@@ -171,6 +204,7 @@ window.scfClearSensitiveLocalData=function(){
 window.scfGetSyncState=function(){return window.__SCF_SYNC_STATE||{status:navigator.onLine?'idle':'offline',pending:0};};
 window.scfGetSyncReport=function(){
   const queue=readSyncQueue();
+  const metrics=readSyncMetrics();
   const labels={
     scf_employees:'Nhân viên SCFOOD',scf_privileged_employees:'Admin & Ban Giám Đốc',scf_orders:'Đơn giao hàng',scf_trips:'Chuyến giao hàng',scf_attendance:'Chấm công',
     scf_advances:'Ứng lương',scf_rewards:'Thưởng phạt',scf_employee_errors:'Lỗi nhân viên',scf_employee_uniforms:'Cấp đồng phục',scf_leaves:'Nghỉ phép',scf_finance_entries:'Dòng tiền',
@@ -182,7 +216,8 @@ window.scfGetSyncReport=function(){
     ...window.scfGetSyncState(),
     online:navigator.onLine,
     serverReady:!!sb,
-    items:Object.entries(queue).map(([key,item])=>({key,label:labels[key]||key.replace(/^scf_/,'').replaceAll('_',' '),updatedAt:item?.updatedAt||'',bytes:Number(item?.bytes)||syncPayloadBytes(item?.value),recordCount:Array.isArray(item?.value)?item.value.length:(item?.value&&typeof item.value==='object'?Object.keys(item.value).length:1),attempts:Number(item?.attempts)||0,mode:item?.mode||''}))
+    metrics,
+    items:Object.entries(queue).map(([key,item])=>({key,label:labels[key]||key.replace(/^scf_/,'').replaceAll('_',' '),updatedAt:item?.updatedAt||'',bytes:Number(item?.bytes)||syncPayloadBytes(item?.patches||item?.value),recordCount:Array.isArray(item?.patches)?item.patches.length:(Array.isArray(item?.value)?item.value.length:(item?.value&&typeof item.value==='object'?Object.keys(item.value).length:1)),attempts:Number(item?.attempts)||0,mode:item?.patches?'patch':(item?.mode||'full')}))
   };
 };
 function withRemoteTimeout(promise,ms=DB_REMOTE_TIMEOUT_MS){
@@ -318,9 +353,11 @@ async function performDbSet(key,val,queuedAt='',mode=''){
       const queued=readSyncQueue()[key]||{};
       const expectedUpdatedAt=queued.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
       const baseValue=Object.prototype.hasOwnProperty.call(queued,'baseValue')?queued.baseValue:scfRemoteSnapshots.get(key);
-      const saved=await withRemoteTimeout(serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue),remoteTimeoutFor(val));
+      const patches=Array.isArray(queued.patches)&&queued.patches.length?queued.patches:null;
+      const payload=patches?{key,patches,expectedUpdatedAt}:{key,value:val,baseValue,expectedUpdatedAt};
+      const saved=await measuredCollectionSave(key,patches?'patch':'full',payload,()=>withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt):serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue),remoteTimeoutFor(payload)));
       const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(val);
-      if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));
+      if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(val));
       scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));removeQueuedWrite(key,queuedAt);setSyncState('synced');
       if(merged)setTimeout(()=>window.scfSyncNow?.(),100);return true;
     }catch(e){
@@ -356,10 +393,10 @@ async function performDbSet(key,val,queuedAt='',mode=''){
 }
 const scfWriteChains={};
 const scfDebouncedWrites={};
-function dbSetWithMode(key,val,mode=''){
+function dbSetWithMode(key,val,mode='',options={}){
   scfLocalWrites.set(key,{value:val});
   if(allowPersistentLocalCache(key))try{localStorage.setItem(localCacheKey(key),JSON.stringify(val));}catch(e){console.warn('localStorage save:',e.message);}
-  const queuedAt=queueRemoteWrite(key,val,{syncing:true,detail:'Đang chuẩn bị đồng bộ',mode});
+  const queuedAt=queueRemoteWrite(key,val,{syncing:true,detail:'Đang chuẩn bị đồng bộ',mode,patches:options.patches});
   return new Promise(resolve=>{
     const pending=scfDebouncedWrites[key]||{timer:null,value:val,queuedAt,mode,resolvers:[]};
     pending.value=val;pending.queuedAt=queuedAt;pending.mode=mode;pending.resolvers.push(resolve);
@@ -403,9 +440,11 @@ async function flushPendingWrites(){
       else if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
         const expectedUpdatedAt=item.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
         const baseValue=Object.prototype.hasOwnProperty.call(item,'baseValue')?item.baseValue:scfRemoteSnapshots.get(key);
-        const saved=await withRemoteTimeout(serverSavePermittedCollection(key,item.value,expectedUpdatedAt,baseValue),remoteTimeoutFor(item.value));
+        const patches=Array.isArray(item.patches)&&item.patches.length?item.patches:null;
+        const payload=patches?{key,patches,expectedUpdatedAt}:{key,value:item.value,baseValue,expectedUpdatedAt};
+        const saved=await measuredCollectionSave(key,patches?'patch':'full',payload,()=>withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt):serverSavePermittedCollection(key,item.value,expectedUpdatedAt,baseValue),remoteTimeoutFor(payload)));
         const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(item.value);
-        if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));
+        if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(item.value));
         scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));
         if(merged)setTimeout(()=>window.scfSyncNow?.(),100);
       }
@@ -446,7 +485,7 @@ function mkSet(key,setter){return valOrFn=>{
   if(access?.readOnly){
     return;
   }
-  setter(prev=>{const nextRaw=typeof valOrFn==='function'?valOrFn(prev):valOrFn;const next=key==='scf_orders'?normalizeOrdersForStorage(nextRaw):nextRaw;dbSet(key,next);return next;});
+  setter(prev=>{const nextRaw=typeof valOrFn==='function'?valOrFn(prev):valOrFn;const next=key==='scf_orders'?normalizeOrdersForStorage(nextRaw):nextRaw;const patches=key==='scf_orders'?collectionRecordPatches(prev,next):null;dbSetWithMode(key,next,'',{patches});return next;});
 };}
 function resizeImageFile(file,max=1280,quality=.72){
   return new Promise((resolve,reject)=>{

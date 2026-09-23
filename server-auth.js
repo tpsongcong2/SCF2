@@ -147,6 +147,19 @@ async function serverSavePermittedCollection(key,value,expectedUpdatedAt='',base
   return{value:data.value||value,updatedAt:data.updatedAt||''};
 }
 
+async function serverPatchPermittedCollection(key,patches,expectedUpdatedAt=''){
+  if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
+  const{data,error}=await sb.functions.invoke('scf-auth',{
+    body:{action:'patch_permitted_collection',key:String(key||''),patches:Array.isArray(patches)?patches:[],enforceVersion:true,expectedUpdatedAt:String(expectedUpdatedAt||'')}
+  });
+  if(data?.conflict){
+    const conflict=new Error('Dữ liệu trên máy chủ vừa thay đổi. App sẽ tự đồng bộ lại thay đổi này.');
+    conflict.code='SCF_WRITE_CONFLICT';throw conflict;
+  }
+  if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không đồng bộ được thay đổi của đơn hàng.'));
+  return{items:Array.isArray(data.items)?data.items:[],updatedAt:data.updatedAt||'',patched:true};
+}
+
 async function serverLoadSupabaseUsage(){
   if(!sb)throw new Error('Chưa kết nối được máy chủ báo cáo dung lượng.');
   const{data,error}=await sb.functions.invoke('scf-auth',{body:{action:'load_supabase_usage'}});

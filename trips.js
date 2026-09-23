@@ -103,22 +103,37 @@ function TripOrderNoteConfirm({value,onCommit,style}){
       'aria-label':editing?'Xác nhận chú ý của đơn':'Sửa chú ý của đơn',title:editing?'Xác nhận chú ý của đơn':'Sửa chú ý của đơn',onClick:editing?confirm:begin},
       h('i',{className:editing?'ti ti-check':'ti ti-pencil',style:{fontSize:16}})));
 }
-function TripBasketInput({value,onCommit,label}){
-  const [draft,setDraft]=useState(String(value??''));
-  const dirty=React.useRef(false);
-  useEffect(()=>{if(!dirty.current)setDraft(String(value??''));},[value]);
-  const commit=()=>{
-    if(!dirty.current)return;
-    dirty.current=false;
+function TripNumberConfirm({value,onCommit,label,min=0,integer=false,placeholder='—',width=62}){
+  const current=value===undefined||value===null?'':String(value);
+  const [editing,setEditing]=useState(false);
+  const [draft,setDraft]=useState(current);
+  const inputRef=React.useRef(null);
+  useEffect(()=>{if(!editing)setDraft(current);},[current,editing]);
+  const begin=()=>{setDraft(current);setEditing(true);setTimeout(()=>inputRef.current?.focus(),0);};
+  const cancel=()=>{setDraft(current);setEditing(false);};
+  const confirm=()=>{
     const normalized=draft.trim().replace(',','.');
-    const count=normalized===''?'':Number(normalized);
-    if(count!==''&&(!Number.isFinite(count)||count<0)){setDraft(String(value??''));return;}
-    setDraft(String(count));
-    const previous=value===undefined||value===null||value===''?'':Number(value);
-    if(count!==previous)onCommit(count);
+    const next=normalized===''?'':Number(normalized);
+    if(next!==''&&(!Number.isFinite(next)||next<min||(integer&&!Number.isInteger(next)))){
+      window.showToast?.('Nhập '+label.toLowerCase()+' hợp lệ trước khi xác nhận.','warn');inputRef.current?.focus();return;
+    }
+    const previous=current===''?'':Number(current);
+    if(next!==previous)onCommit(next);
+    setEditing(false);
   };
-  return h('input',{type:'text',inputMode:'decimal',value:draft,placeholder:'—','aria-label':label,title:'Nhập số rổ, nhấn Enter hoặc chuyển ô để lưu',style:{width:62,minHeight:32,padding:'4px 6px',textAlign:'center'},onChange:event=>{if(!/^\d*(?:[.,]\d*)?$/.test(event.target.value))return;dirty.current=true;setDraft(event.target.value);},onBlur:commit,onKeyDown:event=>{if(event.key==='Enter'){event.preventDefault();event.currentTarget.blur();}if(event.key==='Escape'){event.preventDefault();dirty.current=false;setDraft(String(value??''));event.currentTarget.blur();}}});
+  return h('span',{className:'trip-number-confirm',style:{display:'inline-flex',alignItems:'center',gap:3,maxWidth:'100%'}},
+    h('input',{ref:inputRef,type:'text',inputMode:integer?'numeric':'decimal',value:editing?draft:current,readOnly:!editing,placeholder,
+      'aria-label':label,'aria-readonly':!editing,title:editing?'Nhập '+label.toLowerCase()+' rồi nhấn dấu ✓':'Nhấn bút để sửa '+label.toLowerCase(),
+      style:{width,minHeight:32,padding:'4px 6px',textAlign:'center',background:editing?'#fff':'#f3f7f5',cursor:editing?'text':'default',fontWeight:600},
+      onChange:event=>{const pattern=integer?/^\d*$/:/^\d*(?:[.,]\d*)?$/;if(pattern.test(event.target.value))setDraft(event.target.value);},
+      onKeyDown:event=>{if(event.key==='Enter'){event.preventDefault();confirm();}if(event.key==='Escape'){event.preventDefault();cancel();}}
+    }),
+    h('button',{type:'button',className:'bi',style:{padding:'2px 3px',minWidth:24,color:editing?'#0F6E56':current!==''?'#0F6E56':'#858f8a'},
+      'aria-label':editing?'Xác nhận '+label.toLowerCase():'Sửa '+label.toLowerCase(),title:editing?'Xác nhận '+label.toLowerCase():'Sửa '+label.toLowerCase(),onClick:editing?confirm:begin},
+      h('i',{className:editing?'ti ti-check':'ti ti-pencil',style:{fontSize:16}})));
 }
+function TripBasketInput({value,onCommit,label}){return h(TripNumberConfirm,{value,onCommit,label,min:0,width:62});}
+function TripDeliveryOrderConfirm({value,onCommit}){return h(TripNumberConfirm,{value,onCommit,label:'Số thứ tự',min:1,integer:true,placeholder:'...',width:64});}
 function TripForm({trip,orders,employees,shifts,customers,products,currentUser,onSave,onClose}){
   const drivers=employees.filter(e=>e.role==='driver'||e.dept==='Lái xe');
   const[f,sf]=useState(trip?{driverWork:0,weightRate:0,tripAllowance:0,attendanceStatus:'pending',...trip}:{driverName:'',driverId:'',shiftId:'',shiftName:'',deliveryDate:fmtDate(),deliveryTime:'07:00',orderIds:[],note:'',status:'planning',driverWork:0,weightRate:0,tripAllowance:0,attendanceStatus:'pending'});
@@ -1443,7 +1458,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                 h('tbody',null,tripOrders.map(o=>{
                   return h('tr',{key:o.id},
                     h('td',null,canEditDeliveryOrder
-                      ?h('input',{type:'number',min:1,step:1,value:deliveryOrderValue(o)||'',placeholder:'...',onChange:e=>updateDeliveryOrder(o.id,e.target.value),style:{fontSize:12,padding:'4px 6px',width:64,textAlign:'center'}})
+                      ?h(TripDeliveryOrderConfirm,{value:deliveryOrderValue(o)||'',onCommit:value=>updateDeliveryOrder(o.id,value)})
                       :h('span',{style:{fontWeight:600,color:'var(--pri)'}},deliveryOrderValue(o)||'—')
                     ),
                     h('td',null,h('span',{style:{fontWeight:600}},o.pointName||o.customer||'—'),o.isAdditionalTripOrder&&h('div',{className:'additional-order-status '+(o.additionalApprovalStatus||'pending')},o.additionalApprovalStatus==='approved'?'Đơn PS · Đã duyệt':'Đơn PS · Chờ KT duyệt'),canReviewTrips&&o.isAdditionalTripOrder&&o.additionalApprovalStatus==='pending'&&h('button',{className:'bi additional-order-approve',onClick:()=>approveAdditionalOrder(trip,o)},h('i',{className:'ti ti-check'}),' Duyệt đơn')),
@@ -1546,7 +1561,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                   h('div',{className:'trip-order-sequence'},
                     h('b',null,'STT'),
                     canEditDeliveryOrder
-                      ?h('input',{type:'number',min:1,step:1,value:deliveryOrderValue(o)||'',placeholder:'...',onChange:e=>updateDeliveryOrder(o.id,e.target.value)})
+                      ?h(TripDeliveryOrderConfirm,{value:deliveryOrderValue(o)||'',onCommit:value=>updateDeliveryOrder(o.id,value)})
                       :h('span',null,deliveryOrderValue(o)||'—')
                   ),
                   h('div',{style:{display:'grid',gridTemplateColumns:'70px minmax(0,1fr)',alignItems:'center',gap:8,margin:'8px 0'}},h('b',null,'Chú ý'),orderNoteControl(trip,o,{fontSize:12,padding:'5px 7px'})),

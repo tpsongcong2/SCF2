@@ -1925,6 +1925,11 @@ function SyncDataReportTab(){
     finally{setBusy(false);setReport(readReport());}
   };
   const pending=Number(report.pending)||0;
+  const metrics=Array.isArray(report.metrics)?report.metrics:[];
+  const successful=metrics.filter(item=>item.ok);
+  const latestMetric=metrics[0]||null;
+  const averageMs=successful.length?Math.round(successful.reduce((sum,item)=>sum+(Number(item.durationMs)||0),0)/successful.length):0;
+  const patchCount=metrics.filter(item=>item.mode==='patch').length;
   const healthy=report.online&&report.serverReady&&!pending&&report.status!=='error';
   const statusLabel=!report.online?'Ngoại tuyến':pending?'Chờ đồng bộ ('+pending+')':report.status==='syncing'?'Đang đồng bộ':'Đã đồng bộ';
   const statusColor=healthy?'#0F6E56':report.status==='syncing'?'#185FA5':'#8A5A00';
@@ -1945,6 +1950,11 @@ function SyncDataReportTab(){
       h('div',{className:'sc'},h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:5}},'TRẠNG THÁI'),h('div',{style:{fontSize:18,fontWeight:700,color:statusColor}},statusLabel)),
       h('div',{className:'sc'},h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:5}},'KẾT NỐI MẠNG'),h('div',{style:{fontSize:18,fontWeight:700,color:report.online?'#0F6E56':'#A32D2D'}},report.online?'Đang trực tuyến':'Mất kết nối')),
       h('div',{className:'sc'},h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:5}},'MÁY CHỦ DỮ LIỆU'),h('div',{style:{fontSize:18,fontWeight:700,color:report.serverReady?'#0F6E56':'#A32D2D'}},report.serverReady?'Sẵn sàng':'Chưa kết nối'))
+    ),
+    h('div',{className:'g3',style:{marginBottom:'1rem'}},
+      h('div',{className:'sc'},h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:5}},'LẦN LƯU GẦN NHẤT'),h('div',{style:{fontSize:18,fontWeight:700,color:latestMetric?.ok?'#0F6E56':latestMetric?'#A32D2D':'var(--tx2)'}},latestMetric?latestMetric.durationMs+' ms':'Chưa có dữ liệu'),latestMetric&&h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:4}},latestMetric.mode==='patch'?'Chỉ gửi đơn thay đổi':'Gửi toàn bộ nhóm dữ liệu')),
+      h('div',{className:'sc'},h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:5}},'TRUNG BÌNH LƯU'),h('div',{style:{fontSize:18,fontWeight:700}},successful.length?averageMs+' ms':'—'),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:4}},successful.length+' lần thành công gần nhất')),
+      h('div',{className:'sc'},h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:5}},'LƯU NHANH THEO ĐƠN'),h('div',{style:{fontSize:18,fontWeight:700,color:'#185FA5'}},patchCount+' lần'),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:4}},'Trong '+metrics.length+' lần lưu gần nhất'))
     ),
     h('div',{className:'card'},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:12}},
@@ -1967,7 +1977,20 @@ function SyncDataReportTab(){
         )))
       )):h('div',{className:'empty-st',style:{padding:'2rem 1rem'}},h('i',{className:'ti ti-circle-check',style:{fontSize:28,color:'#0F6E56',display:'block',marginBottom:7}}),'Dữ liệu đã được đồng bộ đầy đủ.'),
       report.detail&&h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:10}},'Thông tin gần nhất: '+report.detail)
-    )
+    ),
+    metrics.length?h('div',{className:'card',style:{marginTop:'1rem'}},
+      h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:10}},'30 lần lưu gần nhất'),
+      h('div',{className:'tw'},h('table',null,
+        h('thead',null,h('tr',null,h('th',null,'Thời điểm'),h('th',null,'Cách lưu'),h('th',null,'Dung lượng gửi'),h('th',null,'Phản hồi'),h('th',null,'Kết quả'))),
+        h('tbody',null,metrics.map((item,index)=>h('tr',{key:item.at+'-'+index},
+          h('td',null,formatTime(item.at)),
+          h('td',null,item.mode==='patch'?'Theo đơn thay đổi':'Toàn bộ dữ liệu'),
+          h('td',null,formatBytes(item.bytes)),
+          h('td',null,(Number(item.durationMs)||0)+' ms'),
+          h('td',null,h('span',{className:'badge',style:{background:item.ok?'#DFF3EA':'#FDE2E2',color:item.ok?'#0F6E56':'#A32D2D'}},item.ok?'Thành công':'Lỗi'))
+        )))
+      ))
+    ):null
   );
 }
 
