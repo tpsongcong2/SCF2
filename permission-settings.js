@@ -5,7 +5,7 @@ const SCF_PERMISSION_SECTIONS=[
   {sec:'Nhân sự',pages:[['attendance','Chấm công'],['attendance_settings','Cài đặt chấm công'],['attendance_report','Báo cáo chấm công'],['advances','Ứng lương'],['rewards','Thưởng phạt'],['employee_errors','Ghi lỗi nhân viên'],['employee_uniforms','Cấp đồng phục nhân viên'],['leaves','Xin nghỉ'],['tasks','Giao việc']]},
   {sec:'Báo công & quy trình',pages:[['workreport_vp','Công kế toán'],['workreport_sx','Công sản xuất'],['workreport_lx','Công lái xe'],['workreport_total','Tổng công'],['process_accounting','Quy trình kế toán'],['process_bun','Quy trình sản xuất Bún'],['process_pho','Quy trình sản xuất Phở'],['process_banhcuon','Quy trình sản xuất Bánh cuốn']]},
   {sec:'Danh mục',pages:[['materials','Nguyên vật liệu'],['assets','Tài sản'],['garages','Gara ô tô'],['depts','Bộ phận'],['products','Sản phẩm'],['customers','Khách hàng'],['areas','Khu vực'],['deliveryrules','Quy định giao hàng'],['workcats','Danh mục công việc'],['shifts','Ca giao hàng']]},
-  {sec:'Bán hàng',pages:[['prodshifts','Cài đặt ca SX + ca GH tự động'],['quotes','Báo giá'],['delivery','Đơn giao hàng'],['intem','In tem'],['orderdetail','Chi tiết đơn hàng'],['trips','Chuyến giao hàng'],['marketsales','Báo cáo công nợ'],['invoicereport','Báo cáo hóa đơn'],['powdersales','Bán bột bún']]},
+  {sec:'Bán hàng',pages:[['quotes','Báo giá'],['delivery','Đơn giao hàng'],['intem','In tem'],['orderdetail','Chi tiết đơn hàng'],['trips','Chuyến giao hàng'],['marketsales','Báo cáo công nợ'],['invoicereport','Báo cáo hóa đơn'],['powdersales','Bán bột bún'],['prodshifts','Cài đặt ca SX + ca GH tự động']]},
   {sec:'Mua hàng & bảo dưỡng',pages:[['nccgoods','Nhà cung cấp hàng hóa'],['purchasegoods','Mua hàng hóa'],['fuelpurchases','Mua xăng dầu'],['utilityexpenses','Chi phí điện nước'],['maint_vehicle','Bảo dưỡng xe'],['maint_machine','Bảo dưỡng máy']]},
   {sec:'Sản xuất',pages:[['prodsummary','Tổng hợp sản xuất'],['prodorders','Đơn sản xuất'],['stock','Tồn kho']]},
   {sec:'Chung',pages:[['notifications','Thông báo'],['userguide','Hướng dẫn sử dụng']]}
@@ -15,7 +15,7 @@ function scfProfile(id,label,role,dept,permissions,readOnly=[]){
   const ro=new Set(readOnly);
   const permLevels=Object.fromEntries(permissions.map(page=>[page,ro.has(page)?'r':(['admin','manager'].includes(role)?'rwd':'rw')]));
   const profile={id,label,role,dept,permissions:[...permissions],permLevels};
-  return{...profile,tripPermissions:defaultTripPermissions(profile),tripActualQtyLimitDays:2};
+  return{...profile,tripPermissions:defaultTripPermissions(profile),tripActualQtyLimitDays:2,salesDebtAllCustomers:role==='admin'};
 }
 const SCF_PROFILE_COMMON=['company','attendance','attendance_report','leaves','tasks','notifications','userguide'];
 const DEFAULT_PERMISSION_PROFILES={
@@ -35,15 +35,15 @@ function normalizePermissionProfiles(value){
     const permissions=(Array.isArray(raw.permissions)?raw.permissions:base.permissions).filter(page=>SCF_PERMISSION_PAGE_KEYS.includes(page)&&page!=='permission_settings');
     const levels={};permissions.forEach(page=>{const level=id==='admin'?'rwd':(raw.permLevels?.[page]||base.permLevels?.[page]||(base.role==='manager'?'rwd':'rw'));levels[page]=['r','rw','rwd'].includes(level)?level:'r';});
     const profile={...base,permissions:[...new Set(permissions)],permLevels:levels};
-    return[id,{...profile,tripPermissions:normalizedTripPermissions({...profile,tripPermissions:raw.tripPermissions||base.tripPermissions}),tripActualQtyLimitDays:tripActualQtyLimitDays(raw.tripActualQtyLimitDays===undefined?base:raw)}];
+    return[id,{...profile,tripPermissions:normalizedTripPermissions({...profile,tripPermissions:raw.tripPermissions||base.tripPermissions}),tripActualQtyLimitDays:tripActualQtyLimitDays(raw.tripActualQtyLimitDays===undefined?base:raw),salesDebtAllCustomers:id==='admin'||raw.salesDebtAllCustomers===true}];
   }));
 }
 function normalizedPermissionProfileLabel(profiles,profileId){return normalizePermissionProfiles(profiles)[profileId]?.label||'';}
 function applyPermissionProfile(employee,profiles,profileId){
   const profile=normalizePermissionProfiles(profiles)[profileId];
   if(!profile)return{...employee,permissionProfileId:''};
-  if(profileId==='admin')return{...employee,permissionProfileId:profileId,dept:profile.dept,role:'admin',permissions:[],permLevels:{},tripPermissions:normalizedTripPermissions(profile),tripActualQtyLimitDays:tripActualQtyLimitDays(profile)};
-  return{...employee,permissionProfileId:profileId,dept:profile.dept,role:profile.role,permissions:[...profile.permissions],permLevels:{...profile.permLevels},tripPermissions:{...profile.tripPermissions},tripActualQtyLimitDays:tripActualQtyLimitDays(profile)};
+  if(profileId==='admin')return{...employee,permissionProfileId:profileId,dept:profile.dept,role:'admin',permissions:[],permLevels:{},tripPermissions:normalizedTripPermissions(profile),tripActualQtyLimitDays:tripActualQtyLimitDays(profile),salesDebtAllCustomers:true};
+  return{...employee,permissionProfileId:profileId,dept:profile.dept,role:profile.role,permissions:[...profile.permissions],permLevels:{...profile.permLevels},tripPermissions:{...profile.tripPermissions},tripActualQtyLimitDays:tripActualQtyLimitDays(profile),salesDebtAllCustomers:profile.salesDebtAllCustomers===true};
 }
 function PermissionSettingsTab({profiles,setProfiles,employees,setEmployees,currentUser}){
   const normalized=normalizePermissionProfiles(profiles);
@@ -72,6 +72,14 @@ function PermissionSettingsTab({profiles,setProfiles,employees,setEmployees,curr
           ))),
           h('label',{style:{display:'flex',alignItems:'center',gap:10,marginTop:10,fontSize:12,fontWeight:600,flexWrap:'wrap'}},'Số ngày giới hạn nhập SL thực giao',h('input',{type:'number',min:0,max:365,step:1,disabled:fixedAdmin,value:draft.tripActualQtyLimitDays??2,onChange:event=>setDraft(prev=>({...prev,tripActualQtyLimitDays:event.target.value})),style:{width:90}})),
           h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:4}},'Mặc định 2: khóa từ ngày thứ 2 sau ngày giao. Nhập 0 để không giới hạn ngày. Chỉ áp dụng cho nhân viên sau khi bấm “Áp dụng lại”.')
+        ),
+        draft.permissions.includes('marketsales')&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,margin:'2px 0 14px',background:'var(--bg2)'}},
+          h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền nghiệp vụ trong Báo cáo công nợ'),
+          h('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'7px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6,cursor:fixedAdmin?'default':'pointer'}},
+            h('input',{type:'checkbox',disabled:fixedAdmin,checked:fixedAdmin||draft.salesDebtAllCustomers===true,onChange:event=>setDraft(prev=>({...prev,salesDebtAllCustomers:event.target.checked}))}),
+            'Được chọn và xem tất cả khách hàng'
+          ),
+          h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:5}},'Nếu không cấp quyền, báo cáo mặc định và chỉ hiển thị khách hàng WELSTORY.')
         ),
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,borderTop:'1px solid var(--bd)',paddingTop:12,marginTop:4,flexWrap:'wrap'}},h('span',{style:{fontSize:12,color:'var(--tx2)'}},assigned.length+' nhân viên đang dùng chức vụ này.'),h('button',{type:'button',disabled:!assigned.length,onClick:applyToAssigned},'Áp dụng lại cho nhân viên thuộc chức vụ này'))
       )

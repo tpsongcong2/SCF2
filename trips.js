@@ -2,7 +2,8 @@
 const tripOrderedQty=line=>numFmt(line?.qtyProd??line?.qty??line?.quantity??line?.qtyInvoice??0);
 const tripDeliveredQty=line=>line?.qtyDelivered!==undefined&&line?.qtyDelivered!==null&&line?.qtyDelivered!==''?numFmt(line.qtyDelivered):tripOrderedQty(line);
 function scfIsWarehouseTrip(trip,shifts){
-  const configured=(shifts||[]).find(shift=>String(shift.id||'')===String(trip?.shiftId||''));
+  const shiftId=String(trip?.shiftId||'').trim();
+  const configured=shiftId?(shifts||[]).find(shift=>String(shift.id||'')===shiftId):null;
   return [trip?.shiftName,configured?.name,configured?.code].some(value=>{
     const name=normalizePlainText(value).replace(/[^a-z0-9]+/g,' ').trim();
     return name==='kv'||name.includes('kho van');

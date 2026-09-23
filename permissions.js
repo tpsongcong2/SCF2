@@ -171,6 +171,10 @@ function tripActualQtyLimitDays(user){
   const days=Number(raw);
   return Number.isInteger(days)&&days>=0&&days<=365?days:2;
 }
+function canViewAllDebtCustomers(user){
+  const role=String(user?.role||'').trim().toLowerCase();
+  return ['admin','administrator'].includes(role)||user?.salesDebtAllCustomers===true;
+}
 
 function scfControlAction(control){
   if(!control)return'';

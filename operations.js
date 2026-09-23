@@ -1159,7 +1159,7 @@ function isPrivilegedEmployeeRecord(employee){
       h('hr',{className:'divider'}),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
         h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phân quyền chi tiết (có thể chỉnh riêng cho nhân viên này)'),
-        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
+        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,salesDebtAllCustomers:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
       ),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = chỉ đọc dữ liệu | Thêm + Xem + Sửa = không được xóa | Thêm + Xem + Sửa + Xóa = toàn quyền'),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 2rem'}},
@@ -1200,6 +1200,14 @@ function isPrivilegedEmployeeRecord(employee){
         ))),
         h('label',{style:{display:'flex',alignItems:'center',gap:10,marginTop:10,fontSize:12,fontWeight:600,flexWrap:'wrap'}},'Số ngày giới hạn nhập SL thực giao',h('input',{type:'number',min:0,max:365,step:1,value:f.tripActualQtyLimitDays??2,onChange:event=>s('tripActualQtyLimitDays',event.target.value),style:{width:90}})),
         h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:4}},'2 = khóa từ ngày thứ 2 sau ngày giao; 0 = không giới hạn ngày. Chỉ có tác dụng khi nhân viên được cấp quyền nhập số lượng thực giao.')
+      ),
+      canAccess(f.role,'marketsales',f.permissions,f.dept)&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,marginTop:10,background:'var(--bg2)'}},
+        h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền nghiệp vụ trong Báo cáo công nợ'),
+        h('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'7px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer'}},
+          h('input',{type:'checkbox',checked:!!f.salesDebtAllCustomers,onChange:event=>s('salesDebtAllCustomers',event.target.checked)}),
+          'Được chọn và xem tất cả khách hàng'
+        ),
+        h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:5}},'Không cấp quyền: báo cáo chỉ hiển thị WELSTORY.')
       )
     ),
     h(Row,null,
