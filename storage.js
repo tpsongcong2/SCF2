@@ -48,7 +48,7 @@ const DB_REMOTE_TIMEOUT_MS=10000;
 const DB_REMOTE_MAX_TIMEOUT_MS=30000;
 // Gom các thay đổi rất ngắn để tránh gửi cả danh sách nhiều lần khi người dùng
 // vừa lưu đơn; vẫn đủ thời gian gom các trường được cập nhật liên tiếp.
-const SCF_SYNC_DEBOUNCE_MS=300;
+const SCF_SYNC_DEBOUNCE_MS=120;
 const SCF_SYNC_QUEUE_KEY='scf_sync_queue_v1';
 const SCF_SYNC_METRICS_KEY='scf_sync_metrics_v1';
 const SCF_SYNC_LABELS={
@@ -59,6 +59,7 @@ const SCF_SYNC_LABELS={
 };
 let scfMemorySyncQueue={};
 let scfMemorySyncQueueReady=false;
+let scfQueuePersistHandle=null;
 let scfLastSyncErrorNotice={message:'',at:0};
 const SCF_SENSITIVE_KEYS=new Set([
   'scf_employees','scf_privileged_employees','scf_orders','scf_trips','scf_attendance','scf_advances','scf_rewards','scf_employee_errors','scf_leaves',
@@ -86,11 +87,21 @@ function readSyncQueue(){
   try{scfMemorySyncQueue=JSON.parse(sessionStorage.getItem(SCF_SYNC_QUEUE_KEY)||'{}')||{};}catch{scfMemorySyncQueue={};}
   scfMemorySyncQueueReady=true;return {...scfMemorySyncQueue};
 }
+function persistSyncQueueNow(){
+  scfQueuePersistHandle=null;
+  try{sessionStorage.setItem(SCF_SYNC_QUEUE_KEY,JSON.stringify(scfMemorySyncQueue));}catch(e){console.warn('Sync queue only kept in memory:',e.message);}
+}
+function scheduleSyncQueuePersistence(){
+  if(scfQueuePersistHandle!==null)return;
+  if(typeof requestIdleCallback==='function')scfQueuePersistHandle=requestIdleCallback(persistSyncQueueNow,{timeout:500});
+  else scfQueuePersistHandle=setTimeout(persistSyncQueueNow,50);
+}
 function writeSyncQueue(queue){
   scfMemorySyncQueue={...queue};scfMemorySyncQueueReady=true;
-  try{sessionStorage.setItem(SCF_SYNC_QUEUE_KEY,JSON.stringify(queue));}catch(e){console.warn('Sync queue only kept in memory:',e.message);}
+  scheduleSyncQueuePersistence();
   return Object.keys(queue).length;
 }
+window.addEventListener('pagehide',persistSyncQueueNow);
 let scfSyncedIdleTimer=null;
 function setSyncState(status,detail=''){
   if(scfSyncedIdleTimer){clearTimeout(scfSyncedIdleTimer);scfSyncedIdleTimer=null;}
@@ -170,9 +181,11 @@ function collectionRecordPatches(previous,next){
   const previousMap=new Map();
   for(const item of previous){const id=String(item?.id||'').trim();if(!id||previousMap.has(id))return null;previousMap.set(id,item);}
   const patches=[];
-  for(const item of next){const id=String(item?.id||'').trim(),base=previousMap.get(id);if(!id||!base)return null;if(JSON.stringify(base)!==JSON.stringify(item))patches.push({id,base:syncSnapshot(base),value:syncSnapshot(item)});}
+  for(const item of next){const id=String(item?.id||'').trim(),base=previousMap.get(id);if(!id||!base)return null;if(base===item)continue;if(JSON.stringify(base)!==JSON.stringify(item))patches.push({id,base:syncSnapshot(base),value:syncSnapshot(item)});}
   if(!patches.length||patches.length>25)return null;
-  return syncPayloadBytes(patches)<syncPayloadBytes(next)*0.7?patches:null;
+  // Patch tối đa 25 bản ghi luôn phù hợp hơn việc JSON hóa và gửi lại toàn bộ
+  // danh sách đơn; tránh stringify mảng lớn ngay trong thao tác nhập liệu.
+  return patches;
 }
 function queueRemoteWrite(key,value,options={}){
   const queue=readSyncQueue();
