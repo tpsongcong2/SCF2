@@ -328,6 +328,17 @@ th{font-family:var(--ui-header-family)!important}
 .trip-desktop-tools-right{justify-content:flex-end}
 .trip-desktop-trip-tools .bi{display:inline-flex;align-items:center;justify-content:center;width:32px;min-width:32px;height:32px;min-height:32px;padding:4px;font-size:16px}
 .trip-desktop-tool-meta{color:var(--pri);font-size:12px;font-weight:600;white-space:nowrap}
+.trip-filter-row{display:flex!important;align-items:center;flex-wrap:nowrap!important;gap:6px!important;overflow-x:auto;padding-bottom:2px}
+.trip-filter-row>*{width:auto!important;min-width:0;flex:0 0 auto}
+.trip-filter-row>button{white-space:nowrap}
+.trip-filter-image{min-width:126px!important}
+.trip-filter-period{width:108px!important}
+.trip-filter-date{width:150px!important}
+.trip-filter-trip{width:235px!important}
+.trip-filter-shift{width:155px!important}
+.trip-filter-driver{width:185px!important}
+.trip-filter-orders{width:150px!important}
+.trip-filter-clear{min-width:80px!important}
 .prodshift-pair-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem}
 .prodshift-mobile-card{background:#fff;border:.5px solid var(--bd);border-radius:12px;padding:12px;display:grid;gap:8px;box-shadow:0 2px 8px rgba(18,60,45,.04)}
 .prodshift-mobile-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
@@ -548,11 +559,12 @@ th{font-family:var(--ui-header-family)!important}
   .trip-order-card{padding:10px;gap:7px}
   .trip-order-head-actions{gap:1px}
   .trip-order-head-actions>.bi{width:28px!important;min-width:28px!important;padding:2px!important}
-  .trip-toolbar-actions{display:grid!important;grid-template-columns:1fr 1fr;gap:6px!important;margin-bottom:10px!important}
+  .trip-toolbar-actions{display:grid!important;grid-template-columns:1fr;gap:6px!important;margin-bottom:10px!important}
   .trip-toolbar-actions button{width:100%;min-width:0}
-  .trip-filter-row{display:grid!important;grid-template-columns:1fr 1fr;gap:6px!important;margin-bottom:10px!important}
-  .trip-filter-row>*{width:100%;min-width:0}
-  .trip-filter-row>*:nth-child(n+3){grid-column:1/-1}
+  .trip-filter-row{display:grid!important;grid-template-columns:1fr 1fr;gap:6px!important;margin-bottom:10px!important;overflow:visible}
+  .trip-filter-row>*{width:100%!important;min-width:0!important}
+  .trip-filter-row>.trip-filter-image{grid-column:1/-1}
+  .trip-filter-row>*:nth-child(n+4){grid-column:1/-1}
   th,td{padding:8px 9px}
   .empty-st{padding:2rem 1rem}
   .overlay{align-items:flex-start;padding:10px;overflow:auto}
