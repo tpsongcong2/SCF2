@@ -1408,7 +1408,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                 h(StatusBadge,{s:trip.status}),
                 trip.driverDispatchedAt&&trip.status==='assigned'&&h('span',{className:'badge',style:{background:'#E1F5EE',color:'#0F6E56'}},'Đã giao LX')
               ),
-              h('div',{style:{display:'flex',gap:16,fontSize:12,color:'var(--tx2)',flexWrap:'wrap'}},
+              h('div',{className:'trip-card-meta-line',style:{display:'flex',gap:16,fontSize:12,color:'var(--tx2)',flexWrap:'wrap'}},
                 trip.driverWork?h('span',null,h('i',{className:'ti ti-tools',style:{fontSize:12,marginRight:3}}),'Công: '+trip.driverWork):null,
                 h('span',null,h('i',{className:'ti ti-package',style:{fontSize:12,marginRight:3}}),tripOrders.length+' đơn'),
                 totalW>0&&h('span',{style:{color:'var(--pri)',fontWeight:500}},h('i',{className:'ti ti-weight',style:{fontSize:12,marginRight:3}}),totalW.toFixed(2)+' kg')
@@ -1431,6 +1431,8 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
             ),
             h('div',{className:'desktop-only trip-desktop-trip-tools',onClick:e=>e.stopPropagation()},
               h('div',{className:'trip-desktop-tools-left'},
+                h('span',{className:'trip-desktop-tool-meta'},h('i',{className:'ti ti-package'}),' ',tripOrders.length+' đơn'),
+                totalW>0&&h('span',{className:'trip-desktop-tool-meta'},h('i',{className:'ti ti-weight'}),' ',totalW.toFixed(2)+' kg'),
                 canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'camera')},h('i',{className:trip.summaryInvoiceImage?'ti ti-camera-up':'ti ti-camera-plus'})),
                 canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'upload')},h('i',{className:'ti ti-upload'})),
                 h('button',{className:'bi',title:'In tổng chuyến','aria-label':'In tổng chuyến',onClick:()=>printTrip(trip)},h('i',{className:'ti ti-printer'}))
