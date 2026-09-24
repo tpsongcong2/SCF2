@@ -1554,27 +1554,6 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                 );
               })
             ),
-            h('div',{className:'desktop-only trip-summary-invoice'},
-              h('div',{className:'trip-summary-invoice-head'},
-                h('div',null,
-                  h('b',null,h('i',{className:'ti ti-receipt',style:{marginRight:5}}),'Hóa đơn tổng chuyến'),
-                  h('div',{className:'trip-summary-invoice-note'},'Bắt buộc trước khi lái xe xác nhận hoàn thành chuyến.')
-                ),
-                h('div',{className:'trip-summary-invoice-actions'},
-                  trip.summaryInvoiceImage&&h('button',{className:'bi',title:'Xem hóa đơn tổng',onClick:()=>window.open(trip.summaryInvoiceImage,'_blank')},h('i',{className:'ti ti-photo-check'}),' Xem'),
-                  canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Chụp/tải lại hóa đơn tổng':'Chụp/tải hóa đơn tổng',onClick:()=>pickTripSummaryInvoice(trip)},h('i',{className:trip.summaryInvoiceImage?'ti ti-camera-up':'ti ti-camera-plus'}),' ',trip.summaryInvoiceImage?'Thay ảnh':'Tải ảnh'),
-                  canUploadSummaryInvoice(trip)&&trip.summaryInvoiceImage&&h('button',{className:'bi',title:'Xóa hóa đơn tổng',onClick:()=>removeTripSummaryInvoice(trip),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash'})),
-                  canReviewTrips&&trip.status==='completion_pending'&&trip.summaryInvoiceImage&&h('button',{className:'bi',onClick:()=>reviewTripSummaryInvoice(trip,true),style:{color:'#0F6E56'}},'Duyệt'),
-                  canReviewTrips&&trip.status==='completion_pending'&&trip.summaryInvoiceImage&&h('button',{className:'bi',onClick:()=>reviewTripSummaryInvoice(trip,false),style:{color:'#A32D2D'}},'Chưa duyệt')
-                )
-              ),
-              trip.summaryInvoiceImage
-                ?h('div',{className:'trip-summary-invoice-file'},h('i',{className:'ti ti-circle-check'}),' ',trip.summaryInvoiceImageName||'Đã có hóa đơn tổng')
-                :h('div',{className:'trip-summary-invoice-missing'},h('i',{className:'ti ti-alert-triangle'}),' Chưa có hóa đơn tổng chuyến')
-              ,trip.summaryInvoiceReviewStatus==='approved'&&h('div',{style:{fontSize:12,color:'#0F6E56',marginTop:5}},'✓ Kế toán đã duyệt hóa đơn tổng')
-              ,trip.summaryInvoiceReviewStatus==='rejected'&&h('div',{style:{fontSize:12,color:'#A32D2D',marginTop:5}},'Chưa duyệt: '+(trip.summaryInvoiceReviewReason||'Cần tải lại hóa đơn tổng'))
-              ,trip.summaryInvoiceImage&&(!trip.summaryInvoiceReviewStatus||trip.summaryInvoiceReviewStatus==='pending')&&h('div',{style:{fontSize:12,color:'#8A5A00',marginTop:5}},'Hóa đơn tổng đang chờ duyệt')
-            ),
             isDriver&&isOwnTrip(trip)&&trip.status==='active'&&!completionLocked&&(()=>{
               const check=completionIssues(trip);
               return h('div',{className:check.issues.length?'trip-completion-check incomplete':'trip-completion-check complete'},
