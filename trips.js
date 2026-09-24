@@ -1401,8 +1401,9 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
           h('div',{className:'trip-card-head',style:{display:'flex',alignItems:'center',gap:12,padding:'1rem 1.25rem',cursor:'pointer'},onClick:()=>so(isOpen?null:trip.id)},
             h('i',{className:'ti ti-chevron-'+(isOpen?'up':'down'),style:{fontSize:16,color:'var(--tx2)',flexShrink:0}}),
             h('div',{className:'trip-card-main',style:{flex:1}},
-              h('div',{style:{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}},
+              h('div',{className:'trip-card-title-line',style:{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}},
                 h('span',{style:{fontWeight:500}},trip.deliveryDate&&trip.shiftName?trip.deliveryDate+' — '+trip.shiftName:trip.id),
+                canDispatchTrips&&['planning','assigned'].includes(trip.status)&&!trip.driverDispatchedAt&&h('button',{className:'mobile-only trip-mobile-dispatch',onClick:e=>{e.stopPropagation();dispatchTripToDriver(trip);}},'Giao LX'),
                 h('span',{style:{color:'var(--tx2)'}},trip.driverName||'—'),
                 h(StatusBadge,{s:trip.status}),
                 trip.driverDispatchedAt&&trip.status==='assigned'&&h('span',{className:'badge',style:{background:'#E1F5EE',color:'#0F6E56'}},'Đã giao LX')
@@ -1413,29 +1414,28 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                 totalW>0&&h('span',{style:{color:'var(--pri)',fontWeight:500}},h('i',{className:'ti ti-weight',style:{fontSize:12,marginRight:3}}),totalW.toFixed(2)+' kg')
               )
             ),
+            h('div',{className:'mobile-only trip-mobile-trip-tools',onClick:e=>e.stopPropagation()},
+              canCreateAdditionalOrder(trip)&&h('button',{className:'bi',title:'Tạo đơn phát sinh','aria-label':'Tạo đơn phát sinh','data-scf-action':'write',onClick:()=>openAdditionalOrder(trip)},h('i',{className:'ti ti-file-plus'})),
+              canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'camera')},h('i',{className:trip.summaryInvoiceImage?'ti ti-camera-up':'ti ti-camera-plus'})),
+              canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'upload')},h('i',{className:'ti ti-upload'})),
+              h('button',{className:'bi',title:'In tổng chuyến','aria-label':'In tổng chuyến',onClick:()=>printTrip(trip)},h('i',{className:'ti ti-printer'})),
+              canManageTrips&&h('button',{className:'bi',title:'Sửa chuyến','aria-label':'Sửa chuyến',onClick:()=>{se(trip);sm('f')}},h('i',{className:'ti ti-edit'})),
+              canDeleteTrips&&['planning','assigned'].includes(trip.status)&&h('button',{className:'bi','data-scf-action':'delete',title:'Xóa chuyến','aria-label':'Xóa chuyến',onClick:()=>del(trip.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash'}))
+            ),
             h('div',{className:'trip-card-actions',style:{display:'flex',gap:4},onClick:e=>e.stopPropagation()},
-              canDispatchTrips&&['planning','assigned'].includes(trip.status)&&!trip.driverDispatchedAt&&h('button',{onClick:()=>dispatchTripToDriver(trip),style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},'Giao lái xe'),
+              canDispatchTrips&&['planning','assigned'].includes(trip.status)&&!trip.driverDispatchedAt&&h('button',{className:'desktop-only',onClick:()=>dispatchTripToDriver(trip),style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},'Giao lái xe'),
               canDispatchTrips&&trip.status==='assigned'&&trip.driverDispatchedAt&&h('button',{onClick:()=>resendTripNotification(trip),title:trip.driverNotificationSentAt?'Đã gửi gần nhất: '+trip.driverNotificationSentAt:'Gửi lại thông báo cho lái xe',style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},h('i',{className:'ti ti-bell-ringing'}),' Gửi lại TB'),
               canDispatchTrips&&trip.status==='assigned'&&trip.driverDispatchedAt&&h('button',{'data-scf-action':'write',onClick:()=>cancelDispatchToDriver(trip),style:{fontSize:11,padding:'4px 10px',background:'#FCEBEB',color:'#A32D2D',border:'none',borderRadius:4}},'Hủy giao LX'),
               canUseDriverWorkflow&&isDriver&&isOwnTrip(trip)&&trip.status==='assigned'&&!completionLocked&&h('button',{onClick:()=>acknowledgeTrip(trip),style:{fontSize:11,padding:'4px 10px',background:'#EAF3DE',color:'#3B6D11',border:'none',borderRadius:4}},'Bắt đầu giao'),
               canUseDriverWorkflow&&isDriver&&isOwnTrip(trip)&&trip.status==='active'&&!completionLocked&&h('button',{className:'desktop-only',onClick:()=>openAdditionalOrder(trip),style:{fontSize:11,padding:'4px 10px',background:'#FFF3CD',color:'#8A5A00',border:'none',borderRadius:4}},'+ Đơn phát sinh'),
               canUseDriverWorkflow&&isDriver&&isOwnTrip(trip)&&trip.status==='active'&&!completionLocked&&h('button',{onClick:()=>driverCompleteTrip(trip),style:{fontSize:11,padding:'4px 10px',background:'#E1F5EE',color:'#0F6E56',border:'none',borderRadius:4}},'Giao hoàn thành'),
               canReviewTrips&&trip.status==='completion_pending'&&h('button',{onClick:()=>approveTripCompletion(trip),style:{fontSize:11,padding:'4px 10px',background:'#E1F5EE',color:'#0F6E56',border:'none',borderRadius:4}},'Kế toán duyệt'),
-              h('button',{className:'bi',title:'In chuyến',onClick:()=>printTrip(trip)},h('i',{className:'ti ti-printer',style:{fontSize:15}})),
-              canManageTrips&&h('button',{className:'bi',onClick:()=>{se(trip);sm('f')}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
-              canDeleteTrips&&['planning','assigned'].includes(trip.status)&&h('button',{className:'bi','data-scf-action':'delete',onClick:()=>del(trip.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+              h('button',{className:'bi desktop-only',title:'In chuyến',onClick:()=>printTrip(trip)},h('i',{className:'ti ti-printer',style:{fontSize:15}})),
+              canManageTrips&&h('button',{className:'bi desktop-only',onClick:()=>{se(trip);sm('f')}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
+              canDeleteTrips&&['planning','assigned'].includes(trip.status)&&h('button',{className:'bi desktop-only','data-scf-action':'delete',onClick:()=>del(trip.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
             )
           ),
           isOpen&&h('div',{className:'trip-card-detail',style:{borderTop:'.5px solid var(--bd)',padding:'1rem 1.25rem'}},
-            h('div',{className:'mobile-only trip-summary-invoice trip-summary-invoice-mobile'},
-              h('div',{className:'trip-summary-invoice-head'},
-                h('b',null,h('i',{className:'ti ti-receipt',style:{marginRight:5}}),'HĐ tổng chuyến'),
-                h('div',{className:'trip-summary-invoice-actions'},
-                  canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'camera')},h('i',{className:trip.summaryInvoiceImage?'ti ti-camera-up':'ti ti-camera-plus'})),
-                  canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'upload')},h('i',{className:'ti ti-upload'}))
-                )
-              )
-            ),
             // Tổng KL chuyến
             h('div',{style:{display:'flex',gap:16,marginBottom:10,flexWrap:'wrap',alignItems:'center'}},
               h('span',{className:'desktop-only',style:{fontSize:13,fontWeight:600,color:'var(--pri)'}},
@@ -1452,7 +1452,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                   borderRadius:'var(--r)',cursor:'pointer'}
               },h('i',{className:'ti ti-printer',style:{fontSize:13}}),'In chuyến'),
               canCreateAdditionalOrder(trip)&&h('button',{
-                className:'bi trip-additional-action',
+                className:'bi desktop-only trip-additional-action',
                 title:'Tạo đơn phát sinh',
                 'aria-label':'Tạo đơn phát sinh',
                 'data-scf-action':'write',
@@ -1523,17 +1523,17 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                 return h('div',{key:'mtriporder'+o.id,className:'mobile-data-card trip-order-card'},
                   o.isAdditionalTripOrder&&h('div',{className:'additional-order-mobile-banner '+(o.additionalApprovalStatus||'pending')},o.additionalApprovalStatus==='approved'?'✓ Đơn phát sinh đã được duyệt':'⏳ Đơn phát sinh chờ kế toán duyệt',canReviewTrips&&o.additionalApprovalStatus==='pending'&&h('button',{className:'bi',onClick:()=>approveAdditionalOrder(trip,o)},'Duyệt')),
                   h('div',{className:'mobile-data-head'},
-                    h('div',{style:{minWidth:0}},
-                      h('div',{className:'mobile-data-title'},o.pointName||o.customer||'—'),
-                      h('div',{className:'mobile-data-sub'},o.deliveryTime||'—')
+                    h('div',{className:'trip-order-sequence'},
+                      h('b',null,'STT'),
+                      canEditDeliveryOrder
+                        ?h(TripDeliveryOrderConfirm,{value:deliveryOrderValue(o)||'',onCommit:value=>updateDeliveryOrder(o.id,value)})
+                        :h('span',{className:'trip-order-sequence-value'},deliveryOrderValue(o)||'—')
+                    ),
+                    h('div',{className:'trip-order-location-line'},
+                      h('span',{className:'mobile-data-title'},o.pointName||o.customer||'—'),
+                      h('span',{className:'trip-order-time'},o.deliveryTime||'—')
                     ),
                     h(StatusBadge,{s:o.status})
-                  ),
-                  h('div',{className:'trip-order-sequence'},
-                    h('b',null,'STT'),
-                    canEditDeliveryOrder
-                      ?h(TripDeliveryOrderConfirm,{value:deliveryOrderValue(o)||'',onCommit:value=>updateDeliveryOrder(o.id,value)})
-                      :h('span',null,deliveryOrderValue(o)||'—')
                   ),
                   !hideTripOptionalColumns&&h('div',{style:{display:'grid',gridTemplateColumns:'70px minmax(0,1fr)',alignItems:'center',gap:8,margin:'8px 0'}},h('b',null,'Chú ý'),orderNoteControl(trip,o,{fontSize:12,padding:'5px 7px'})),
                   h('div',{className:'trip-order-lines'},(o.lines||[]).map((l,i)=>

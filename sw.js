@@ -1,4 +1,4 @@
-const CACHE = 'scf-v371';
+const CACHE = 'scf-v374';
 const ASSETS = [
   './',
   './index.html',
@@ -9,7 +9,7 @@ const ASSETS = [
   './vendor/supabase.min.js?v=358',
   './vendor/react.production.min.js?v=358',
   './vendor/react-dom.production.min.js?v=358',
-  './styles.css?v=371',
+  './styles.css?v=374',
   './runtime.js?v=311',
   './storage.js?v=366',
   './print-agent.js',
@@ -34,12 +34,12 @@ const ASSETS = [
   './delivery-orders.js?v=347',
   './qrcode.min.js?v=357',
   './import-tools.js?v=360',
-  './trips.js?v=371',
+  './trips.js?v=374',
   './production.js?v=341',
   './permissions.js?v=352',
   './permission-settings.js?v=352',
-  './app.js?v=371',
-  './bootstrap.js?v=371',
+  './app.js?v=374',
+  './bootstrap.js?v=374',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
