@@ -1398,7 +1398,12 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                 canDispatchTrips&&['planning','assigned'].includes(trip.status)&&!trip.driverDispatchedAt&&h('button',{className:'mobile-only trip-mobile-dispatch',onClick:e=>{e.stopPropagation();dispatchTripToDriver(trip);}},'Giao LX'),
                 h('span',{style:{color:'var(--tx2)'}},trip.driverName||'—'),
                 h(StatusBadge,{s:trip.status}),
-                trip.driverDispatchedAt&&trip.status==='assigned'&&h('span',{className:'badge',style:{background:'#E1F5EE',color:'#0F6E56'}},'Đã giao LX')
+                trip.driverDispatchedAt&&trip.status==='assigned'&&h('span',{className:'desktop-only badge',style:{background:'#E1F5EE',color:'#0F6E56'}},'Đã giao'),
+                canDispatchTrips&&trip.status==='assigned'&&trip.driverDispatchedAt&&h('span',{className:'mobile-only trip-mobile-dispatched-actions',onClick:e=>e.stopPropagation()},
+                  h('span',{className:'badge trip-mobile-dispatched-badge'},'Đã giao'),
+                  h('button',{type:'button',className:'trip-mobile-cancel-dispatch','data-scf-action':'write',onClick:()=>cancelDispatchToDriver(trip)},'Hủy'),
+                  h('button',{type:'button',className:'bi trip-mobile-resend',onClick:()=>resendTripNotification(trip),title:trip.driverNotificationSentAt?'Đã gửi gần nhất: '+trip.driverNotificationSentAt:'Gửi lại thông báo cho lái xe','aria-label':'Gửi lại thông báo cho lái xe'},h('i',{className:'ti ti-bell-ringing'}))
+                )
               ),
               h('div',{className:'trip-card-meta-line',style:{display:'flex',gap:16,fontSize:12,color:'var(--tx2)',flexWrap:'wrap'}},
                 trip.driverWork?h('span',null,h('i',{className:'ti ti-tools',style:{fontSize:12,marginRight:3}}),'Công: '+trip.driverWork):null,
@@ -1440,8 +1445,8 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
             ),
             h('div',{className:'trip-card-actions',style:{display:'flex',gap:4},onClick:e=>e.stopPropagation()},
               canDispatchTrips&&['planning','assigned'].includes(trip.status)&&!trip.driverDispatchedAt&&h('button',{className:'desktop-only',onClick:()=>dispatchTripToDriver(trip),style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},'Giao lái xe'),
-              canDispatchTrips&&trip.status==='assigned'&&trip.driverDispatchedAt&&h('button',{onClick:()=>resendTripNotification(trip),title:trip.driverNotificationSentAt?'Đã gửi gần nhất: '+trip.driverNotificationSentAt:'Gửi lại thông báo cho lái xe',style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},h('i',{className:'ti ti-bell-ringing'}),' Gửi lại TB'),
-              canDispatchTrips&&trip.status==='assigned'&&trip.driverDispatchedAt&&h('button',{'data-scf-action':'write',onClick:()=>cancelDispatchToDriver(trip),style:{fontSize:11,padding:'4px 10px',background:'#FCEBEB',color:'#A32D2D',border:'none',borderRadius:4}},'Hủy giao LX'),
+              canDispatchTrips&&trip.status==='assigned'&&trip.driverDispatchedAt&&h('button',{className:'desktop-only',onClick:()=>resendTripNotification(trip),title:trip.driverNotificationSentAt?'Đã gửi gần nhất: '+trip.driverNotificationSentAt:'Gửi lại thông báo cho lái xe',style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},h('i',{className:'ti ti-bell-ringing'}),' Gửi lại TB'),
+              canDispatchTrips&&trip.status==='assigned'&&trip.driverDispatchedAt&&h('button',{className:'desktop-only','data-scf-action':'write',onClick:()=>cancelDispatchToDriver(trip),style:{fontSize:11,padding:'4px 10px',background:'#FCEBEB',color:'#A32D2D',border:'none',borderRadius:4}},'Hủy giao LX'),
               canUseDriverWorkflow&&isDriver&&isOwnTrip(trip)&&trip.status==='assigned'&&!completionLocked&&h('button',{onClick:()=>acknowledgeTrip(trip),style:{fontSize:11,padding:'4px 10px',background:'#EAF3DE',color:'#3B6D11',border:'none',borderRadius:4}},'Bắt đầu giao'),
               canUseDriverWorkflow&&isDriver&&isOwnTrip(trip)&&trip.status==='active'&&!completionLocked&&h('button',{className:'desktop-only',onClick:()=>openAdditionalOrder(trip),style:{fontSize:11,padding:'4px 10px',background:'#FFF3CD',color:'#8A5A00',border:'none',borderRadius:4}},'+ Đơn phát sinh'),
               canUseDriverWorkflow&&isDriver&&isOwnTrip(trip)&&trip.status==='active'&&!completionLocked&&h('button',{onClick:()=>driverCompleteTrip(trip),style:{fontSize:11,padding:'4px 10px',background:'#E1F5EE',color:'#0F6E56',border:'none',borderRadius:4}},'Giao hoàn thành'),
@@ -1501,6 +1506,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
             tripOrders.length&&h('div',{className:'mobile-only trip-mobile-orders'},
               tripOrders.map(o=>{
                 const w=orderWeight(o);
+                const pointLabel=o.pointName||o.customer||'—';
                 return h('div',{key:'mtriporder'+o.id,className:'mobile-data-card trip-order-card'},
                   o.isAdditionalTripOrder&&h('div',{className:'additional-order-mobile-banner '+(o.additionalApprovalStatus||'pending')},o.additionalApprovalStatus==='approved'?'✓ Đơn phát sinh đã được duyệt':'⏳ Đơn phát sinh chờ kế toán duyệt',canReviewTrips&&o.additionalApprovalStatus==='pending'&&h('button',{className:'bi',onClick:()=>approveAdditionalOrder(trip,o)},'Duyệt')),
                   h('div',{className:'mobile-data-head'},
@@ -1510,7 +1516,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                         :h('span',{className:'trip-order-sequence-value'},deliveryOrderValue(o)||'—')
                     ),
                     h('div',{className:'trip-order-location-line'},
-                      h('span',{className:'mobile-data-title'},o.pointName||o.customer||'—'),
+                      h('span',{className:'mobile-data-title'+(pointLabel.length>18?' very-long-name':pointLabel.length>12?' long-name':'')},pointLabel),
                       h('span',{className:'trip-order-time'},o.deliveryTime||'—'),
                       h('span',{className:'trip-order-head-weight'},h('i',{className:'ti ti-weight'}),' ',w>0?w.toFixed(2)+' kg':'—')
                     ),
