@@ -1415,12 +1415,34 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
               )
             ),
             h('div',{className:'mobile-only trip-mobile-trip-tools',onClick:e=>e.stopPropagation()},
-              canCreateAdditionalOrder(trip)&&h('button',{className:'bi',title:'Tạo đơn phát sinh','aria-label':'Tạo đơn phát sinh','data-scf-action':'write',onClick:()=>openAdditionalOrder(trip)},h('i',{className:'ti ti-file-plus'})),
-              canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'camera')},h('i',{className:trip.summaryInvoiceImage?'ti ti-camera-up':'ti ti-camera-plus'})),
-              canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'upload')},h('i',{className:'ti ti-upload'})),
-              h('button',{className:'bi',title:'In tổng chuyến','aria-label':'In tổng chuyến',onClick:()=>printTrip(trip)},h('i',{className:'ti ti-printer'})),
-              canManageTrips&&h('button',{className:'bi',title:'Sửa chuyến','aria-label':'Sửa chuyến',onClick:()=>{se(trip);sm('f')}},h('i',{className:'ti ti-edit'})),
-              canDeleteTrips&&['planning','assigned'].includes(trip.status)&&h('button',{className:'bi','data-scf-action':'delete',title:'Xóa chuyến','aria-label':'Xóa chuyến',onClick:()=>del(trip.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash'}))
+              h('div',{className:'trip-mobile-tools-left'},
+                canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'camera')},h('i',{className:trip.summaryInvoiceImage?'ti ti-camera-up':'ti ti-camera-plus'})),
+                canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'upload')},h('i',{className:'ti ti-upload'})),
+                h('button',{className:'bi',title:'In tổng chuyến','aria-label':'In tổng chuyến',onClick:()=>printTrip(trip)},h('i',{className:'ti ti-printer'}))
+              ),
+              h('div',{className:'trip-mobile-tools-center'},
+                h('button',{type:'button',className:'bi',onClick:()=>setHideTripOptionalColumns(value=>!value),title:hideTripOptionalColumns?'Hiện Chú ý, Rổ đi và Rổ về':'Ẩn Chú ý, Rổ đi và Rổ về','aria-label':hideTripOptionalColumns?'Hiện Chú ý, Rổ đi và Rổ về':'Ẩn Chú ý, Rổ đi và Rổ về'},h('i',{className:hideTripOptionalColumns?'ti ti-eye':'ti ti-eye-off','aria-hidden':true}))
+              ),
+              h('div',{className:'trip-mobile-tools-right'},
+                canCreateAdditionalOrder(trip)&&h('button',{className:'bi',title:'Tạo đơn phát sinh','aria-label':'Tạo đơn phát sinh','data-scf-action':'write',onClick:()=>openAdditionalOrder(trip)},h('i',{className:'ti ti-file-plus'})),
+                canManageTrips&&h('button',{className:'bi',title:'Sửa chuyến','aria-label':'Sửa chuyến',onClick:()=>{se(trip);sm('f')}},h('i',{className:'ti ti-edit'})),
+                canDeleteTrips&&['planning','assigned'].includes(trip.status)&&h('button',{className:'bi','data-scf-action':'delete',title:'Xóa chuyến','aria-label':'Xóa chuyến',onClick:()=>del(trip.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash'}))
+              )
+            ),
+            h('div',{className:'desktop-only trip-desktop-trip-tools',onClick:e=>e.stopPropagation()},
+              h('div',{className:'trip-desktop-tools-left'},
+                canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Chụp lại HĐ tổng chuyến':'Chụp HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'camera')},h('i',{className:trip.summaryInvoiceImage?'ti ti-camera-up':'ti ti-camera-plus'})),
+                canUploadSummaryInvoice(trip)&&h('button',{className:'bi',title:trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến','aria-label':trip.summaryInvoiceImage?'Tải lại ảnh HĐ tổng chuyến':'Tải ảnh HĐ tổng chuyến',onClick:()=>pickTripSummaryInvoice(trip,'upload')},h('i',{className:'ti ti-upload'})),
+                h('button',{className:'bi',title:'In tổng chuyến','aria-label':'In tổng chuyến',onClick:()=>printTrip(trip)},h('i',{className:'ti ti-printer'}))
+              ),
+              h('div',{className:'trip-desktop-tools-center'},
+                h('button',{type:'button',className:'bi',onClick:()=>setHideTripOptionalColumns(value=>!value),title:hideTripOptionalColumns?'Hiện Chú ý, Rổ đi và Rổ về':'Ẩn Chú ý, Rổ đi và Rổ về','aria-label':hideTripOptionalColumns?'Hiện Chú ý, Rổ đi và Rổ về':'Ẩn Chú ý, Rổ đi và Rổ về'},h('i',{className:hideTripOptionalColumns?'ti ti-eye':'ti ti-eye-off','aria-hidden':true}))
+              ),
+              h('div',{className:'trip-desktop-tools-right'},
+                canCreateAdditionalOrder(trip)&&h('button',{className:'bi',title:'Tạo đơn phát sinh','aria-label':'Tạo đơn phát sinh','data-scf-action':'write',onClick:()=>openAdditionalOrder(trip)},h('i',{className:'ti ti-file-plus'})),
+                canManageTrips&&h('button',{className:'bi',title:'Sửa chuyến','aria-label':'Sửa chuyến',onClick:()=>{se(trip);sm('f')}},h('i',{className:'ti ti-edit'})),
+                canDeleteTrips&&['planning','assigned'].includes(trip.status)&&h('button',{className:'bi','data-scf-action':'delete',title:'Xóa chuyến','aria-label':'Xóa chuyến',onClick:()=>del(trip.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash'}))
+              )
             ),
             h('div',{className:'trip-card-actions',style:{display:'flex',gap:4},onClick:e=>e.stopPropagation()},
               canDispatchTrips&&['planning','assigned'].includes(trip.status)&&!trip.driverDispatchedAt&&h('button',{className:'desktop-only',onClick:()=>dispatchTripToDriver(trip),style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},'Giao lái xe'),
@@ -1429,45 +1451,13 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
               canUseDriverWorkflow&&isDriver&&isOwnTrip(trip)&&trip.status==='assigned'&&!completionLocked&&h('button',{onClick:()=>acknowledgeTrip(trip),style:{fontSize:11,padding:'4px 10px',background:'#EAF3DE',color:'#3B6D11',border:'none',borderRadius:4}},'Bắt đầu giao'),
               canUseDriverWorkflow&&isDriver&&isOwnTrip(trip)&&trip.status==='active'&&!completionLocked&&h('button',{className:'desktop-only',onClick:()=>openAdditionalOrder(trip),style:{fontSize:11,padding:'4px 10px',background:'#FFF3CD',color:'#8A5A00',border:'none',borderRadius:4}},'+ Đơn phát sinh'),
               canUseDriverWorkflow&&isDriver&&isOwnTrip(trip)&&trip.status==='active'&&!completionLocked&&h('button',{onClick:()=>driverCompleteTrip(trip),style:{fontSize:11,padding:'4px 10px',background:'#E1F5EE',color:'#0F6E56',border:'none',borderRadius:4}},'Giao hoàn thành'),
-              canReviewTrips&&trip.status==='completion_pending'&&h('button',{onClick:()=>approveTripCompletion(trip),style:{fontSize:11,padding:'4px 10px',background:'#E1F5EE',color:'#0F6E56',border:'none',borderRadius:4}},'Kế toán duyệt'),
-              h('button',{className:'bi desktop-only',title:'In chuyến',onClick:()=>printTrip(trip)},h('i',{className:'ti ti-printer',style:{fontSize:15}})),
-              canManageTrips&&h('button',{className:'bi desktop-only',onClick:()=>{se(trip);sm('f')}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
-              canDeleteTrips&&['planning','assigned'].includes(trip.status)&&h('button',{className:'bi desktop-only','data-scf-action':'delete',onClick:()=>del(trip.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+              canReviewTrips&&trip.status==='completion_pending'&&h('button',{onClick:()=>approveTripCompletion(trip),style:{fontSize:11,padding:'4px 10px',background:'#E1F5EE',color:'#0F6E56',border:'none',borderRadius:4}},'Kế toán duyệt')
             )
           ),
           isOpen&&h('div',{className:'trip-card-detail',style:{borderTop:'.5px solid var(--bd)',padding:'1rem 1.25rem'}},
-            // Tổng KL chuyến
-            h('div',{style:{display:'flex',gap:16,marginBottom:10,flexWrap:'wrap',alignItems:'center'}},
-              h('span',{className:'desktop-only',style:{fontSize:13,fontWeight:600,color:'var(--pri)'}},
-                h('i',{className:'ti ti-weight',style:{marginRight:4}}),
-                'Tổng KL: '+(totalW>0?totalW.toFixed(2)+' kg':'—')
-              ),
-              h('span',{className:'desktop-only',style:{fontSize:13,color:'var(--tx2)'}},tripOrders.length+' đơn hàng'),
-              // Giữ nút in chi tiết trên máy tính; điện thoại dùng biểu tượng in ở đầu chuyến.
-              h('button',{
-                className:'desktop-only',
-                onClick:()=>printTrip(trip),
-                style:{padding:'4px 12px',fontSize:12,display:'flex',alignItems:'center',gap:4,
-                  border:'1px solid var(--pri)',color:'var(--pri)',background:'transparent',
-                  borderRadius:'var(--r)',cursor:'pointer'}
-              },h('i',{className:'ti ti-printer',style:{fontSize:13}}),'In chuyến'),
-              canCreateAdditionalOrder(trip)&&h('button',{
-                className:'bi desktop-only trip-additional-action',
-                title:'Tạo đơn phát sinh',
-                'aria-label':'Tạo đơn phát sinh',
-                'data-scf-action':'write',
-                onClick:()=>openAdditionalOrder(trip),
-                style:{width:36,minWidth:36,height:38,minHeight:38,padding:4,fontSize:20,flexShrink:0,marginLeft:'auto',color:'var(--pri)'}
-              },h('i',{className:'ti ti-file-plus','aria-hidden':true}))
-            ),
             // Bảng đơn hàng
             h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:6}},
               h('div',{style:{fontWeight:500,fontSize:12,color:'var(--tx2)'}},'Chi tiết đơn hàng:'),
-              h('button',{type:'button',className:'bi',onClick:()=>setHideTripOptionalColumns(value=>!value),
-                title:hideTripOptionalColumns?'Hiện Chú ý, Rổ đi và Rổ về':'Ẩn Chú ý, Rổ đi và Rổ về',
-                'aria-label':hideTripOptionalColumns?'Hiện Chú ý, Rổ đi và Rổ về':'Ẩn Chú ý, Rổ đi và Rổ về',
-                style:{width:32,minWidth:32,height:32,padding:4,fontSize:17}},
-                h('i',{className:hideTripOptionalColumns?'ti ti-eye':'ti ti-eye-off','aria-hidden':true}))
             ),
             tripOrders.length?h('div',{className:'desktop-only tw'},
               h('table',null,
