@@ -1389,7 +1389,6 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
         const totalW=calcTripWeight(trip);
         const completionLocked=isDriverCompletionLocked(trip);
         const canEditTripQty=canEditQtyForTrip(trip);
-        const canUploadTripProof=canUploadProofForTrip(trip);
         return h('div',{key:trip.id,id:'trip-card-'+trip.id,className:'card notification-trip-target',style:{padding:0,overflow:'hidden',scrollMarginTop:120}},
           h('div',{className:'trip-card-head',style:{display:'flex',alignItems:'center',gap:12,padding:'1rem 1.25rem',cursor:'pointer'},onClick:()=>so(isOpen?null:trip.id)},
             h('i',{className:'ti ti-chevron-'+(isOpen?'up':'down'),style:{fontSize:16,color:'var(--tx2)',flexShrink:0}}),
@@ -1583,50 +1582,6 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                 check.issues.length?h('span',null,' '+check.issues.join('; ')+'.'):h('span',null,' Có thể bấm “Giao hoàn thành”.')
               );
             })(),
-            // Phần chụp ảnh sau giao
-            h('div',{style:{marginTop:12,padding:'10px 12px',background:'#f8f9fa',border:'1px solid var(--bd)',borderRadius:'var(--r)'}},
-              h('div',{style:{fontWeight:600,fontSize:12,color:'var(--tx2)',marginBottom:8,display:'flex',alignItems:'center',gap:6}},
-                h('i',{className:'ti ti-camera',style:{fontSize:14}}),'Ảnh xác nhận giao hàng'
-              ),
-              // Hiện ảnh đã upload
-              (trip.photos||[]).length>0&&h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}},
-                (trip.photos||[]).map((ph,i)=>h('div',{key:i,style:{position:'relative'}},
-                  h('img',{src:ph,alt:'Ảnh '+i,
-                    style:{width:100,height:100,objectFit:'cover',borderRadius:'var(--r)',border:'1px solid var(--bd)',cursor:'pointer'},
-                    onClick:()=>window.open(ph,'_blank')
-                  }),
-                  canManageTrips&&h('button',{
-                    onClick:()=>{if(!confirm('Xóa ảnh xác nhận giao hàng này?'))return;setTrips(prev=>prev.map(t=>t.id===trip.id?{...t,photos:(t.photos||[]).filter((_,j)=>j!==i)}:t));},
-                    style:{position:'absolute',top:2,right:2,background:'rgba(163,45,45,.8)',color:'#fff',
-                      border:'none',borderRadius:'50%',width:18,height:18,fontSize:11,cursor:'pointer',
-                      display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}
-                  },'×')
-                ))
-              ),
-              // Nút upload ảnh
-              canUploadTripProof&&h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 14px',
-                border:'1px dashed var(--pri)',color:'var(--pri)',borderRadius:'var(--r)',
-                cursor:'pointer',fontSize:12,fontWeight:500}},
-                h('i',{className:'ti ti-upload',style:{fontSize:14}}),
-                (trip.photos||[]).length>0?'Thêm ảnh':'Chụp / tải ảnh lên',
-                h('input',{type:'file',accept:'image/*',capture:'environment',multiple:true,
-                  style:{display:'none'},
-                  onChange:async e=>{
-                    const files=Array.from(e.target.files);
-                    for(const file of files){
-                      try{
-                        const url=await uploadPhoto(file,'trip-proofs/'+(trip.id||'trip'));
-                        setTrips(prev=>prev.map(t=>t.id===trip.id?{...t,photos:[...(t.photos||[]),url]}:t));
-                      }catch(err){window.showToast('Không đọc được ảnh: '+(err.message||err),'error');}
-                    }
-                    e.target.value='';
-                  }
-                })
-              ),
-              (trip.photos||[]).length>0&&h('span',{style:{fontSize:11,color:'var(--tx2)',marginLeft:8}},
-                (trip.photos||[]).length+' ảnh'
-              )
-            )
           )
         );
       })
