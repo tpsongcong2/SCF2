@@ -1451,9 +1451,6 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
           ),
           isOpen&&h('div',{className:'trip-card-detail',style:{borderTop:'.5px solid var(--bd)',padding:'1rem 1.25rem'}},
             // Bảng đơn hàng
-            h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:6}},
-              h('div',{style:{fontWeight:500,fontSize:12,color:'var(--tx2)'}},'Chi tiết đơn hàng:'),
-            ),
             tripOrders.length?h('div',{className:'desktop-only tw'},
               h('table',null,
                 h('thead',null,h('tr',null,...['STT','Địa điểm','Hàng hóa','SL HĐ','SL đã giao','Giờ',...(hideTripOptionalColumns?[]:['Chú ý','Rổ đi','Rổ về']),'Ảnh HĐ','HĐ LX','In đơn'].map(c=>h('th',{key:c},c)))),
