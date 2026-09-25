@@ -651,7 +651,7 @@ const MemoImportProductSearch=React.memo(ImportProductSearch,(prev,next)=>
 );
 
 /* ─── IMPORT PREVIEW MODAL ─── */
-function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, products=[], prodCats=[], prodShifts, currentUser, onClose}) {
+function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, products=[], prodCats=[], prodShifts, currentUser, onLocateExisting, onClose}) {
   const {newOrders=[], dupOrders=[], unknownPts=[], incompleteOrders=[], columnOffset=0} = data||{};
   const [includeIncomplete, setIncludeIncomplete] = React.useState(false);
   const [ptAssign, setPtAssign] = React.useState({}); // pointName -> customerId
@@ -829,8 +829,8 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     // Summary
     h('div',{style:{display:'flex',gap:10,marginBottom:'1rem',flexWrap:'wrap'}},
       h('div',{style:{background:'#EAF3DE',border:'1px solid #52b788',borderRadius:'var(--r)',padding:'8px 16px',fontSize:13}},
-        h('div',{style:{fontWeight:600,color:'#2D5A0E'}},newOrders.length+' đơn mới'),
-        h('div',{style:{color:'#555'}},newOrders.reduce((s,o)=>s+(o.lines||[]).length,0)+' sản phẩm')
+        h('div',{style:{fontWeight:600,color:'#2D5A0E'}},toImport.length+' đơn có thể import'),
+        h('div',{style:{color:'#555'}},toImport.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng sản phẩm')
       ),
       dupOrders.length>0&&h('div',{style:{background:'#FFF3CD',border:'1px solid #FFC107',borderRadius:'var(--r)',padding:'8px 16px',fontSize:13}},
         h('div',{style:{fontWeight:600,color:'#856404'}},dupOrders.length+' đơn trùng'),
@@ -892,8 +892,19 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     // Duplicate handling
     dupOrders.length>0&&h('div',{style:{background:'#FFFBF0',border:'1px solid #FFC107',borderRadius:'var(--r)',padding:'12px',marginBottom:'1rem'}},
       h('div',{style:{fontWeight:600,marginBottom:8,fontSize:14}},'⚠️ Các đơn trùng:'),
-      dupOrders.map(o=>{const existing=findExistingDeliveryOrder(orders,o);return h('div',{key:o.id,style:{fontSize:12,padding:'3px 0',color:'#666'}},'• '+duplicateDeliveryOrderMessage(o,existing));}),
-      h('div',{style:{marginTop:10,fontSize:12,fontWeight:600,color:'#856404'}},'Các đơn này sẽ không được import thêm.')
+      h('div',{style:{fontSize:12,color:'#856404',marginBottom:6}},'Các đơn dưới đây có thật trong dữ liệu nhưng có thể đang bị ẩn bởi bộ lọc ngày, trạng thái, khu vực hoặc phân trang.'),
+      dupOrders.map(o=>{
+        const existing=findExistingDeliveryOrder(orders,o);
+        const statusText=({pending:'Chờ xếp',assigned:'Đã xếp',delivering:'Đang giao',done:'Đã giao',failed:'Giao lỗi',cancelled:'Hủy'})[existing?.status]||existing?.status||'Chưa có trạng thái';
+        return h('div',{key:o.id,style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,fontSize:12,padding:'6px 0',color:'#666',borderTop:'1px solid rgba(133,100,4,.15)'}},
+          h('div',{style:{minWidth:0}},
+            h('div',null,'• '+duplicateDeliveryOrderMessage(o,existing)),
+            existing&&h('div',{style:{marginTop:2,color:'#856404',fontWeight:600}},'Mã đơn: '+(existing.id||'—')+' · '+statusText+(existing.area?' · '+existing.area:''))
+          ),
+          existing&&onLocateExisting&&h('button',{type:'button',onClick:()=>onLocateExisting(existing),style:{flex:'0 0 auto',padding:'4px 8px',fontSize:11,border:'1px solid #B8860B',borderRadius:'var(--r)',background:'#fff',color:'#6B5200',fontWeight:600,cursor:'pointer'}},'Mở đơn')
+        );
+      }),
+      h('div',{style:{marginTop:10,fontSize:12,fontWeight:600,color:'#856404'}},'Các đơn này sẽ không được import thêm để tránh nhân đôi dữ liệu.')
     ),
 
     // Unknown points handling
@@ -2352,6 +2363,21 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   };
   const hasDateFilter=(dateFilterMode==='day'&&!!fDate)||(dateFilterMode==='range'&&!!(fDate||fDateTo))||(dateFilterMode==='week'&&!!fWeek)||(dateFilterMode==='month'&&!!fMonth);
   const resetDeliveryFilters=()=>{sfDate('');sfDateTo('');sfWeek('');sfMonth('');sfPoint('');sfProduct('');sfTime('');sfArea('');};
+  const locateExistingImportedOrder=order=>{
+    const rawDate=String(order?.deliveryDate||'').trim();
+    const slashDate=rawDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    const inputDate=slashDate?slashDate[3]+'-'+slashDate[2].padStart(2,'0')+'-'+slashDate[1].padStart(2,'0'):rawDate;
+    setDateFilterMode('day');
+    sfDate(inputDate);
+    sfDateTo(inputDate);
+    sfWeek('');sfMonth('');sfPoint('');sfProduct('');sfTime('');sfArea('');
+    sf('all');
+    sq(String(order?.id||order?.pointName||''));
+    setCurrentPage(1);
+    sm(null);
+    delete window._importData;
+    window.showToast('Đã mở đúng đơn '+(order?.id||'đã tồn tại')+' và đặt lại các bộ lọc.','info',6000);
+  };
   const matchesDateFilter=value=>{
     if(!hasDateFilter)return true;
     const key=deliveryOrderDateKey(value);
@@ -3186,7 +3212,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         ),
         modal==='print'&&h(PrintByCustomerModal,{orders,customers,products,company,initialDate:dateFilterMode==='day'?fDate:'',onClose:()=>sm(null)}),
         modal==='printlabels'&&h(PrintLabelsMultiModal,{orders,customers,initialDate:dateFilterMode==='day'?fDate:'',onClose:()=>sm(null),onPrint:printLabelsForOrders}),
-        modal==='importPreview'&&window._importData&&h(ImportPreviewModal,{data:window._importData,customers,setCustomers,orders,setOrders,products,prodCats,prodShifts,currentUser,onClose:()=>{sm(null);delete window._importData;}}),
+        modal==='importPreview'&&window._importData&&h(ImportPreviewModal,{data:window._importData,customers,setCustomers,orders,setOrders,products,prodCats,prodShifts,currentUser,onLocateExisting:locateExistingImportedOrder,onClose:()=>{sm(null);delete window._importData;}}),
         modal==='imageImport'&&h(ImageOrderImportModal,{customers,products,orders,setOrders,prodShifts,currentUser,onClose:()=>sm(null)}),
         h('button',{
           onClick:()=>sm('imageImport'),
