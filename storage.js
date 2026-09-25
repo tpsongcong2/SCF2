@@ -41,9 +41,15 @@ function scfDeviceLabel(){
   const system=ua.includes('Windows')?'Windows':ua.includes('Android')?'Android':/iPhone|iPad/.test(ua)?'iPhone/iPad':ua.includes('Mac OS')?'macOS':'Thiết bị';
   return system+' · '+browser;
 }
-window.scfDeviceId=scfDeviceId;window.scfDeviceLabel=scfDeviceLabel;
+function scfDeviceType(){
+  const ua=String(navigator.userAgent||'');
+  const mobileHint=navigator.userAgentData&&typeof navigator.userAgentData.mobile==='boolean'?navigator.userAgentData.mobile:null;
+  const ipadDesktopMode=/Macintosh|Mac OS/i.test(ua)&&Number(navigator.maxTouchPoints||0)>1;
+  return mobileHint===true||ipadDesktopMode||/Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(ua)?'mobile':'desktop';
+}
+window.scfDeviceId=scfDeviceId;window.scfDeviceLabel=scfDeviceLabel;window.scfDeviceType=scfDeviceType;
 let sb=null;
-try{sb=window.supabase.createClient(SUPA_URL,SUPA_KEY,{global:{headers:{'x-scf-device-id':scfDeviceId()}}});}catch(e){}
+try{sb=window.supabase.createClient(SUPA_URL,SUPA_KEY,{global:{headers:{'x-scf-device-id':scfDeviceId(),'x-scf-device-type':scfDeviceType()}}});}catch(e){}
 const DB_REMOTE_TIMEOUT_MS=10000;
 const DB_REMOTE_MAX_TIMEOUT_MS=30000;
 // Gom các thay đổi rất ngắn để tránh gửi cả danh sách nhiều lần khi người dùng
@@ -199,6 +205,8 @@ function queueRemoteWrite(key,value,options={}){
   const baseValue=usePatches?undefined:(Object.prototype.hasOwnProperty.call(previous||{},'baseValue')?previous.baseValue:syncSnapshot(scfRemoteSnapshots.get(key)));
   queue[key]={value,updatedAt,expectedUpdatedAt,...(baseValue===undefined?{}:{baseValue}),...(usePatches?{patches}:{}),bytes:syncPayloadBytes(usePatches?patches:value),attempts:Number(options.attempts)||0,mode:options.mode||''};
   writeSyncQueue(queue);
+  window.__SCF_COLLECTION_SYNC_RESULTS=window.__SCF_COLLECTION_SYNC_RESULTS||{};
+  window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'pending',updatedAt};
   setSyncState(options.syncing?'syncing':(navigator.onLine?'error':'offline'),options.detail||(options.syncing?'Đang gộp thay đổi để đồng bộ':'Thay đổi đang chờ đồng bộ'));
   return updatedAt;
 }
@@ -372,7 +380,7 @@ async function performDbSet(key,val,queuedAt='',mode=''){
       const saved=await measuredCollectionSave(key,patches?'patch':'full',payload,()=>withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt,timeoutMs):serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue,timeoutMs),timeoutMs));
       const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(val);
       if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(val));
-      scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));removeQueuedWrite(key,queuedAt);setSyncState('synced');
+      scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:queuedAt};setSyncState('synced');
       if(merged)setTimeout(()=>window.scfSyncNow?.(),100);return true;
     }catch(e){
       console.warn('serverSavePermittedCollection:',e.message);
@@ -391,6 +399,12 @@ async function performDbSet(key,val,queuedAt='',mode=''){
         removeQueuedWrite(key,queuedAt);
         return false;
       }
+      if(e?.code==='SCF_DUPLICATE_DELIVERY_ORDER'){
+        setSyncState('error','Đơn hàng đã tồn tại trên máy chủ');
+        window.showToast&&window.showToast(e.message||'Đơn hàng đã tồn tại trên máy chủ; app không tạo thêm đơn trùng.','error',12000);
+        removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'rejected',updatedAt:queuedAt,message:e.message||''};
+        return false;
+      }
       reportSyncError(key,e,val);scheduleSyncRetry();return false;
     }
   }
@@ -402,7 +416,7 @@ async function performDbSet(key,val,queuedAt='',mode=''){
     setSyncState('syncing','Đang gửi thay đổi');
     const{error}=await withRemoteTimeout(sb.from('kv_store').upsert({key,value:val,updated_at:new Date().toISOString()}),remoteTimeoutFor(val));
     if(error)throw error;
-    removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;
+    removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:queuedAt};setSyncState('synced');return true;
   }catch(e){console.warn('dbSet Supabase:',e.message);if(!readSyncQueue()[key])queueRemoteWrite(key,val,{updatedAt:queuedAt});scheduleSyncRetry();return false;}
 }
 const scfWriteChains={};
@@ -472,7 +486,7 @@ async function runPendingWrites(){
         const{error}=await withRemoteTimeout(sb.from('kv_store').upsert({key,value:item.value,updated_at:item.updatedAt||new Date().toISOString()}),remoteTimeoutFor(item.value));
         if(error)throw error;
       }
-      removeQueuedWrite(key,item.updatedAt||'');
+      removeQueuedWrite(key,item.updatedAt||'');window.__SCF_COLLECTION_SYNC_RESULTS=window.__SCF_COLLECTION_SYNC_RESULTS||{};window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:item.updatedAt||''};
       waitingResolvers.forEach(done=>done(true));
     }catch(e){
       console.warn('flushPendingWrites '+key+':',e?.message||e);
@@ -486,6 +500,12 @@ async function runPendingWrites(){
       if(e?.code==='SCF_DUPLICATE_ORDER_CODE'){
         setSyncState('error','Mã đơn hàng bị trùng');
         window.showToast&&window.showToast(e.message||'Mã đơn hàng bị trùng. Vui lòng nhập lại mã khác.','error',10000);
+        removeQueuedWrite(key,item?.updatedAt||'');window.__SCF_COLLECTION_SYNC_RESULTS=window.__SCF_COLLECTION_SYNC_RESULTS||{};window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'rejected',updatedAt:item?.updatedAt||'',message:e.message||''};
+        return false;
+      }
+      if(e?.code==='SCF_DUPLICATE_DELIVERY_ORDER'){
+        setSyncState('error','Đơn hàng đã tồn tại trên máy chủ');
+        window.showToast&&window.showToast(e.message||'Đơn hàng đã tồn tại trên máy chủ; app không tạo thêm đơn trùng.','error',12000);
         removeQueuedWrite(key,item?.updatedAt||'');
         return false;
       }
@@ -501,6 +521,23 @@ function flushPendingWrites(){
   return scfFlushPromise;
 }
 window.scfFlushPendingWrites=function(){scfRetryAttempt=0;return flushPendingWrites();};
+window.scfWaitForCollectionSync=function(key,timeoutMs=35000){
+  const started=Date.now();
+  return new Promise(resolve=>{
+    const check=()=>{
+      const pending=readSyncQueue()[key];
+      const state=window.__SCF_SYNC_STATE||{};
+      if(!pending&&!scfDebouncedWrites[key]){
+        const result=window.__SCF_COLLECTION_SYNC_RESULTS?.[key];
+        resolve(result?.status==='confirmed'||(!result&&state.status!=='error'));
+        return;
+      }
+      if(Date.now()-started>=timeoutMs){resolve(false);return;}
+      setTimeout(check,150);
+    };
+    check();
+  });
+};
 window.addEventListener('online',()=>flushPendingWrites());
 window.addEventListener('offline',()=>setSyncState('offline','Mất kết nối mạng'));
 setSyncState(navigator.onLine?'idle':'offline');

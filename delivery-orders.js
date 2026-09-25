@@ -447,6 +447,12 @@ function isValidCustomerImportDate(value){
   const date=new Date(year,month-1,day);
   return date.getFullYear()===year&&date.getMonth()===month-1&&date.getDate()===day;
 }
+function isPlausibleCustomerImportYear(value,referenceDate=new Date()){
+  const match=String(value??'').trim().match(/^\d{1,2}\/\d{1,2}\/(\d{4})$/);
+  if(!match)return false;
+  const year=Number(match[1]),currentYear=referenceDate.getFullYear();
+  return year>=currentYear-1&&year<=currentYear+1;
+}
 function ensureUniqueDeliveryOrderIds(rows){
   const source=Array.isArray(rows)?rows:[],used=new Set(),nextByDate=new Map();
   const datePrefix=value=>{const m=String(value||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);return m?'D'+m[3].slice(-2)+m[1].padStart(2,'0')+m[2].padStart(2,'0'):'D000000';};
@@ -652,8 +658,9 @@ const MemoImportProductSearch=React.memo(ImportProductSearch,(prev,next)=>
 
 /* ─── IMPORT PREVIEW MODAL ─── */
 function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, products=[], prodCats=[], prodShifts, currentUser, onLocateExisting, onClose}) {
-  const {newOrders=[], dupOrders=[], unknownPts=[], incompleteOrders=[], columnOffset=0} = data||{};
+  const {newOrders=[], dupOrders=[], unknownPts=[], incompleteOrders=[], suspiciousDateRows=[], columnOffset=0} = data||{};
   const [includeIncomplete, setIncludeIncomplete] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
   const [ptAssign, setPtAssign] = React.useState({}); // pointName -> customerId
   const [addToCustomer, setAddToCustomer] = React.useState({}); // pointName -> bool
   const [ptArea, setPtArea] = React.useState({}); // pointName -> area
@@ -740,7 +747,9 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     (addToCustomer[pt]&&!ptArea[pt])
   ));
 
-  const doImport = () => {
+  const doImport = async () => {
+    if(saving)return;
+    if(suspiciousDateRows.length){window.showToast('File có năm giao bất thường. Hãy sửa đúng năm trong Excel rồi import lại; app chưa lưu đơn nào.','error',12000);return;}
     if(unresolvedProductGroups.length){
       if(!confirm('Bạn vẫn bỏ qua các dòng thiếu sản phẩm ở trên?'))return;
     }
@@ -817,9 +826,24 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     if(blockedDuplicates.length){const first=blockedDuplicates[0];window.showToast(duplicateDeliveryOrderMessage(first,findExistingDeliveryOrder(orders,first))+(blockedDuplicates.length>1?' Và '+(blockedDuplicates.length-1)+' đơn trùng khác đã bị bỏ qua.':''),'warn',10000);}
     const cleanOrders=preparedOrders.filter(order=>!blockedDuplicates.includes(order));
     if(!cleanOrders.length){window.showToast('Không còn đơn hàng mới để import.','info');return;}
+    setSaving(true);
     setOrders(p=>ensureUniqueDeliveryOrderIds([...p,...cleanOrders]));
-    window.showToast('Đã import '+cleanOrders.length+' đơn hàng ('+cleanOrders.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng sản phẩm); các dòng không tìm được sản phẩm đã được bỏ qua.','success');
-    onClose();
+    window.showToast('Đang lưu '+cleanOrders.length+' đơn lên máy chủ…','info',5000);
+    const confirmed=await(window.scfWaitForCollectionSync?.('scf_orders',35000)??Promise.resolve(false));
+    if(confirmed){
+      window.showToast('Máy chủ đã xác nhận import '+cleanOrders.length+' đơn hàng ('+cleanOrders.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng sản phẩm).','success',8000);
+      onClose();
+      return;
+    }
+    const stillPending=(window.scfGetSyncReport?.().items||[]).some(item=>item.key==='scf_orders');
+    if(stillPending){
+      window.showToast('Đơn đã được giữ trong hàng chờ nhưng máy chủ chưa xác nhận. Không import lại file; hãy bấm trạng thái đồng bộ để kiểm tra.','warn',12000);
+      onClose();
+      return;
+    }
+    setSaving(false);
+    window.showToast('Máy chủ không chấp nhận lần import này. Trang sẽ tải lại dữ liệu đã được máy chủ xác nhận.','error',10000);
+    setTimeout(()=>location.reload(),1200);
   };
 
   return h(Modal,{title:'Xem trước import đơn hàng',lg:true,onClose},
@@ -848,6 +872,12 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
         h('div',{style:{fontWeight:600,color:'#A32D2D'}},incompleteOrders.length+' đơn thiếu dữ liệu'),
         h('div',{style:{color:'#555'}},'Cần xác nhận trước khi import')
       )
+    ),
+
+    suspiciousDateRows.length>0&&h('div',{style:{background:'#FDECEC',border:'2px solid #D9534F',borderRadius:'var(--r)',padding:'12px',marginBottom:'1rem',color:'#8B1E1E'}},
+      h('div',{style:{fontWeight:700,marginBottom:6}},'⛔ Chưa thể import: năm giao bất thường'),
+      h('div',{style:{fontSize:12,lineHeight:1.5}},'Các dòng '+suspiciousDateRows.slice(0,20).map(item=>item.row+' ('+item.date+')').join(', ')+(suspiciousDateRows.length>20?'…':'')+'. Năm giao chỉ được nằm trong khoảng '+(new Date().getFullYear()-1)+'–'+(new Date().getFullYear()+1)+'. Hãy sửa năm trong file Excel rồi chọn import lại.'),
+      h('div',{style:{fontSize:12,fontWeight:700,marginTop:6}},'App sẽ không tự đổi năm để tránh lưu nhầm đơn sang năm khác.')
     ),
 
     unknownProductGroups.length>0&&h('div',{style:{background:'#FFF5F5',border:'1px solid #D9534F',borderRadius:'var(--r)',padding:'12px',marginBottom:'1rem'}},
@@ -1039,10 +1069,10 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     ),
 
     h(Row,null,
-      h('button',{onClick:onClose},'Hủy'),
-      h('button',{className:'bp',onClick:doImport,disabled:!toImport.length,style:{padding:'8px 20px'}},
-        h('i',{className:'ti ti-file-import',style:{fontSize:14}}),
-        ' Import '+importableOrders.length+' đơn'
+      h('button',{onClick:onClose,disabled:saving},'Hủy'),
+      h('button',{className:'bp',onClick:doImport,disabled:saving||!toImport.length||suspiciousDateRows.length>0,style:{padding:'8px 20px'}},
+        h('i',{className:'ti '+(saving?'ti-loader-2 spin':'ti-file-import'),style:{fontSize:14}}),
+        saving?' Đang chờ máy chủ xác nhận…':' Import '+importableOrders.length+' đơn'
       )
     )
   );
@@ -2376,7 +2406,10 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     setCurrentPage(1);
     sm(null);
     delete window._importData;
-    window.showToast('Đã mở đúng đơn '+(order?.id||'đã tồn tại')+' và đặt lại các bộ lọc.','info',6000);
+    const orderYear=Number((rawDate.match(/(\d{4})$/)||[])[1]||0),currentYear=new Date().getFullYear();
+    window.showToast(orderYear&&Math.abs(orderYear-currentYear)>1
+      ?'Đã mở đúng đơn '+(order?.id||'đã tồn tại')+'. Lưu ý: đơn này đang mang năm '+orderYear+', không phải '+currentYear+'.'
+      :'Đã mở đúng đơn '+(order?.id||'đã tồn tại')+' và đặt lại các bộ lọc.','info',9000);
   };
   const matchesDateFilter=value=>{
     if(!hasDateFilter)return true;
@@ -3236,6 +3269,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                 const columnOffset=customerImportColumnOffset(raw);
                 const orderMap={};
                 const invalidDateRows=[];
+                const suspiciousDateRows=[];
                 raw.forEach((r,idx)=>{
                   const cells=(r||[]).slice(columnOffset);
                   const sourceCells=cells.slice(0,9);
@@ -3267,6 +3301,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                   const validDate=isValidCustomerImportDate(dStr);
                   if(!validDate){
                     invalidDateRows.push(idx+1);
+                  }else if(!isPlausibleCustomerImportYear(dStr)){
+                    suspiciousDateRows.push({row:idx+1,date:dStr});
                   }
                   const yy=validDate?yyyy.slice(-2):'00';
                   const dateCode=validDate?yy+dd+mm:'000000';
@@ -3324,7 +3360,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                 if(invalidDateRows.length){
                   window.showToast('Có '+invalidDateRows.length+' dòng thiếu hoặc sai ngày/năm. Vui lòng kiểm tra trước khi import.','warn');
                 }
-                window._importData={newOrders,dupOrders,unknownPts,incompleteOrders,invalidDateRows,columnOffset};
+                window._importData={newOrders,dupOrders,unknownPts,incompleteOrders,invalidDateRows,suspiciousDateRows,columnOffset};
                 sm('importPreview');
               };
               reader.readAsBinaryString(file);
