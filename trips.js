@@ -813,9 +813,24 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     if(edit){
       const old=trips.find(t=>t.id===edit.id);
       const tripId=edit.id;
+      const oldOrderIds=new Set((old?.orderIds||[]).map(String));
+      const nextOrderIds=new Set((d.orderIds||[]).map(String));
+      const stamp=fmtDT();
+      const actor=currentUser?.name||'Người dùng';
       if(old){setOrders(p=>p.map(o=>{
-        if((old.orderIds||[]).includes(o.id)&&!(d.orderIds||[]).includes(o.id))return {...o,tripId:null,status:'pending'};
-        if((d.orderIds||[]).includes(o.id))return {...o,tripId,status:orderStatusForTrip(d.status)};
+        const orderId=String(o.id||'');
+        if(oldOrderIds.has(orderId)&&!nextOrderIds.has(orderId))return {
+          ...o,tripId:null,tripAssignMode:'manual',status:'pending',updatedAt:stamp,updatedBy:actor,
+          orderHistory:[...(o.orderHistory||[]),{id:'LS'+uid(),action:'Bỏ khỏi chuyến thủ công',changes:['Chuyến: '+tripId+' → Chưa xếp','Cách xếp: Thủ công'],at:stamp,atIso:new Date().toISOString(),by:actor,byId:currentUser?.id||''}]
+        };
+        if(nextOrderIds.has(orderId)){
+          const manuallyChanged=!oldOrderIds.has(orderId)||String(o.tripId||'')!==String(tripId);
+          const next={...o,tripId,status:orderStatusForTrip(d.status)};
+          if(!manuallyChanged)return next;
+          return {...next,tripAssignMode:'manual',updatedAt:stamp,updatedBy:actor,
+            orderHistory:[...(o.orderHistory||[]),{id:'LS'+uid(),action:'Xếp chuyến thủ công',changes:['Chuyến: '+(o.tripId||'Chưa xếp')+' → '+tripId,'Cách xếp: Thủ công'],at:stamp,atIso:new Date().toISOString(),by:actor,byId:currentUser?.id||''}]
+          };
+        }
         return o;
       }));}
       setTrips(p=>p.map(t=>t.id===edit.id?{...edit,...d,id:tripId}:t));
@@ -841,8 +856,14 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
       let id=baseId;
       let seq=2;
       while(trips.find(t=>t.id===id)){id=baseId+'_'+seq;seq++;}
+      const stamp=fmtDT();
+      const actor=currentUser?.name||'Người dùng';
+      const selectedOrderIds=new Set((d.orderIds||[]).map(String));
       setTrips(p=>[...p,{...d,id,createdAt:fmtDate()}]);
-      setOrders(p=>p.map(o=>(d.orderIds||[]).includes(o.id)?{...o,tripId:id,status:orderStatusForTrip(d.status)}:o));
+      setOrders(p=>p.map(o=>selectedOrderIds.has(String(o.id||''))?{
+        ...o,tripId:id,tripAssignMode:'manual',status:orderStatusForTrip(d.status),updatedAt:stamp,updatedBy:actor,
+        orderHistory:[...(o.orderHistory||[]),{id:'LS'+uid(),action:'Xếp chuyến thủ công',changes:['Chuyến: '+(o.tripId||'Chưa xếp')+' → '+id,'Cách xếp: Thủ công'],at:stamp,atIso:new Date().toISOString(),by:actor,byId:currentUser?.id||''}]
+      }:o));
     }
     sm(null);se(null);
   };
