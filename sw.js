@@ -39,7 +39,7 @@ const ASSETS = [
   './permissions.js?v=352',
   './permission-settings.js?v=352',
   './app.js?v=393',
-  './bootstrap.js?v=391',
+  './bootstrap.js?v=393',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',

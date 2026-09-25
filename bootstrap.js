@@ -15,8 +15,14 @@ document.addEventListener('keydown',function(e){
 
 if('serviceWorker' in navigator&&location.protocol!=='file:'){
   window.addEventListener('load',function(){
-    navigator.serviceWorker.register('./sw.js?v=391')
-      .then(function(r){})
+    var reloading=false;
+    navigator.serviceWorker.addEventListener('controllerchange',function(){
+      if(reloading)return;
+      reloading=true;
+      location.reload();
+    });
+    navigator.serviceWorker.register('./sw.js?v=393',{updateViaCache:'none'})
+      .then(function(r){r.update().catch(function(){});})
       .catch(function(e){console.log('SW err:',e);});
   });
 }
