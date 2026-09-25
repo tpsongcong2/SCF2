@@ -733,6 +733,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
   const canDispatchTrips=canOpenTrips&&canTripAction(currentUser,'dispatch');
   const canEnterActualQty=canOpenTrips&&canTripAction(currentUser,'actualQty');
   const canUseDriverWorkflow=canOpenTrips&&canTripAction(currentUser,'driverWorkflow');
+  const canUploadTripSummaryInvoice=canOpenTrips&&canTripAction(currentUser,'summaryInvoice');
   const deptKey=String(currentUser?.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const isAccounting=deptKey.includes('ke toan');
   const canReviewTrips=canOpenTrips&&canTripAction(currentUser,'review');
@@ -1021,6 +1022,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
   };
   const canUploadSummaryInvoice=trip=>{
     if(currentUser?.role==='admin')return trip.status!=='completed';
+    if(!isDriver)return canUploadTripSummaryInvoice&&!['completed','cancelled'].includes(trip.status);
     if(!canUseDriverWorkflow||!isDriver||!isOwnTrip(trip)||isDriverCompletionLocked(trip))return false;
     return trip.status==='active'||(trip.status==='completion_pending'&&trip.summaryInvoiceReviewStatus==='rejected');
   };

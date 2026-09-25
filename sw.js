@@ -1,10 +1,8 @@
-const CACHE = 'scf-v393';
+const CACHE = 'scf-v394';
 const ASSETS = [
   './',
   './index.html',
-  './vendor/tabler-icons.min.css?v=358',
-  './vendor/fonts/tabler-icons.ttf?v3.2.0',
-  './vendor/fonts/tabler-icons.woff',
+  './vendor/tabler-icons.min.css?v=394',
   './vendor/fonts/tabler-icons.woff2?v3.2.0',
   './vendor/supabase.min.js?v=358',
   './vendor/react.production.min.js?v=358',
@@ -34,12 +32,12 @@ const ASSETS = [
   './delivery-orders.js?v=347',
   './qrcode.min.js?v=357',
   './import-tools.js?v=360',
-  './trips.js?v=393',
+  './trips.js?v=394',
   './production.js?v=341',
-  './permissions.js?v=352',
-  './permission-settings.js?v=352',
-  './app.js?v=393',
-  './bootstrap.js?v=393',
+  './permissions.js?v=394',
+  './permission-settings.js?v=394',
+  './app.js?v=394',
+  './bootstrap.js?v=394',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -47,9 +45,17 @@ const ASSETS = [
   './icon-maskable-512.png'
 ];
 
+// Chỉ lưu sẵn phần vỏ nhẹ. Các file nghiệp vụ sẽ được cache khi trình duyệt
+// thật sự cần tới; tránh tải lặp toàn bộ ứng dụng và ba bản font ngay lần mở đầu.
+const PRECACHE_ASSETS = [
+  './index.html',
+  './styles.css?v=393',
+  './vendor/tabler-icons.min.css?v=394'
+];
+
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE).then(c => c.addAll(PRECACHE_ASSETS)).then(() => self.skipWaiting())
   );
 });
 
