@@ -26,7 +26,10 @@ async function invokeScfAuth(options,timeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
 
 async function serverFunctionErrorMessage(error,data,fallback){
   const finish=message=>{
-    const text=String(message||fallback);
+    const raw=String(message||fallback);
+    const text=/Failed to send a request to the Edge Function|Failed to fetch|NetworkError|Load failed/i.test(raw)
+      ?'Không kết nối được máy chủ xác thực. Vui lòng kiểm tra mạng hoặc cập nhật Edge Function rồi thử lại.'
+      :raw;
     if(text.includes('Phiên đăng nhập không hợp lệ')&&!window.__SCF_SESSION_REPLACEMENT_PENDING){
       window.__SCF_SESSION_REPLACEMENT_PENDING=true;
       setTimeout(()=>window.dispatchEvent(new CustomEvent('scf-session-replaced')),0);

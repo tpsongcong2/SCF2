@@ -49,7 +49,10 @@ function scfDeviceType(){
 }
 window.scfDeviceId=scfDeviceId;window.scfDeviceLabel=scfDeviceLabel;window.scfDeviceType=scfDeviceType;
 let sb=null;
-try{sb=window.supabase.createClient(SUPA_URL,SUPA_KEY,{global:{headers:{'x-scf-device-id':scfDeviceId(),'x-scf-device-type':scfDeviceType()}}});}catch(e){}
+// Chỉ dùng header thiết bị đã được Edge Function cũ cho phép. Loại thiết bị
+// được gửi trong body lúc đăng nhập; như vậy web mới vẫn đăng nhập được trong
+// khoảng thời gian máy chủ chưa kịp triển khai bản Edge Function mới.
+try{sb=window.supabase.createClient(SUPA_URL,SUPA_KEY,{global:{headers:{'x-scf-device-id':scfDeviceId()}}});}catch(e){}
 const DB_REMOTE_TIMEOUT_MS=10000;
 const DB_REMOTE_MAX_TIMEOUT_MS=30000;
 // Gom các thay đổi rất ngắn để tránh gửi cả danh sách nhiều lần khi người dùng
