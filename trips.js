@@ -643,8 +643,28 @@ function isDtTrip(trip){
 }
 function renderTripImage(trips,orders,products,title){
   const canvas=document.createElement('canvas');
-  canvas.width=1600;const ctx=canvas.getContext('2d');
-  const widths=[165,270,350,125,85,125,480];
+  const ctx=canvas.getContext('2d');
+  const headers=['Ngày giao','Địa điểm','Sản phẩm','SL đặt','ĐVT','Giờ giao','Chú ý'];
+  const tripData=trips.map(trip=>({trip,rows:tripImageRows(trip,orders,products)}));
+  const allRows=tripData.flatMap(item=>item.rows);
+  const cellText=(value,index)=>typeof value==='number'?value.toLocaleString('vi-VN',{maximumFractionDigits:2}):String(value??'');
+  const measureColumn=(index,minWidth,maxWidth)=>{
+    ctx.font='bold 22px Arial';
+    let widest=ctx.measureText(headers[index]).width;
+    ctx.font='22px Arial';
+    allRows.forEach(row=>{widest=Math.max(widest,ctx.measureText(cellText(row[index],index)).width);});
+    return Math.ceil(Math.max(minWidth,Math.min(maxWidth,widest+24)));
+  };
+  const dateWidth=measureColumn(0,125,180);
+  const pointWidth=measureColumn(1,130,420);
+  const productWidth=measureColumn(2,140,460);
+  const qtyWidth=measureColumn(3,90,150);
+  const unitWidth=measureColumn(4,70,110);
+  const timeWidth=measureColumn(5,100,145);
+  const hasNotes=allRows.some(row=>String(row[6]??'').trim());
+  const noteWidth=hasNotes?measureColumn(6,timeWidth*2,560):timeWidth*2;
+  const widths=[dateWidth,pointWidth,productWidth,qtyWidth,unitWidth,timeWidth,noteWidth];
+  canvas.width=widths.reduce((sum,width)=>sum+width,0);
   const wrap=(value,width)=>{
     const lines=[];let current='';
     for(const char of String(value??'')){
@@ -654,8 +674,7 @@ function renderTripImage(trips,orders,products,title){
   };
   ctx.font='22px Arial';
   const blocks=[];
-  trips.forEach(trip=>{
-    const rows=tripImageRows(trip,orders,products);
+  tripData.forEach(({trip,rows})=>{
     const driverName=tripImageDriverName(trip.driverName);
     const shiftName=String(trip.shiftName||trip.shiftId||'').trim()||'Chưa có ca giao';
     const ids=new Set((trip.orderIds||[]).map(String));
@@ -669,18 +688,18 @@ function renderTripImage(trips,orders,products,title){
   });
   blocks.forEach(block=>{
     ctx.font=(block.bold?'bold ':'')+'22px Arial';
-    block.lines=Array.isArray(block.cells)?block.cells.map((cell,i)=>wrap(typeof cell==='number'?cell.toLocaleString('vi-VN',{maximumFractionDigits:2}):cell,widths[i])):[wrap(block.cells,1600)];
+    block.lines=Array.isArray(block.cells)?block.cells.map((cell,i)=>wrap(cellText(cell,i),widths[i])):[wrap(block.cells,canvas.width)];
     block.height=Math.max(48,Math.max(...block.lines.map(lines=>lines.length))*28+20);
   });
   const height=70+blocks.reduce((sum,block)=>sum+block.height,0);
   if(height>24000)throw Error('Quá nhiều dòng cho một ảnh. Hãy chia chuyến sang ảnh khác hoặc chọn ít chuyến hơn.');
-  canvas.height=height;ctx.fillStyle='#fff';ctx.fillRect(0,0,1600,height);
+  canvas.height=height;ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,height);
   ctx.fillStyle='#173d30';ctx.font='bold 28px Arial';ctx.fillText(title,16,44);
   let y=70;
   blocks.forEach(block=>{
     ctx.fillStyle=block.fill;ctx.fillRect(0,y,1600,block.height);ctx.font=(block.bold?'bold ':'')+'22px Arial';let x=0;
     block.lines.forEach((lines,index)=>{
-      const width=Array.isArray(block.cells)?widths[index]:1600;
+      const width=Array.isArray(block.cells)?widths[index]:canvas.width;
       ctx.strokeStyle='#6b7377';ctx.lineWidth=1;ctx.strokeRect(x+.5,y+.5,width,block.height);
       ctx.fillStyle=Array.isArray(block.cells)&&index===6&&!block.bold?'#b51e20':'#17251d';
       lines.forEach((line,i)=>ctx.fillText(line,x+10,y+30+i*28));x+=width;
