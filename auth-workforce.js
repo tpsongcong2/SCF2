@@ -387,7 +387,7 @@ function AttendanceKiosk({employees,attendance,setAttendance,currentUser,attenda
     h('p',{className:'attendance-kiosk-hint'},'Bản thử nghiệm có người giám sát. Chỉ lưu khi một khuôn mặt khớp rõ, có thao tác nhắm/mở mắt và GPS hợp lệ. Nhận diện ảnh/video giả chưa thể bảo đảm tuyệt đối; luôn giữ cách chấm công dự phòng.')
   );
 }
-function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,currentUser,company,reportTitle='Báo cáo chấm công',onKioskExit}) {
+function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,replaceEmployees,currentUser,company,reportTitle='Báo cáo chấm công',onKioskExit}) {
   const settingsKey='scf_att_settings';
   const defaultWorkShifts=[
     {id:'night',name:'Ca đêm',start:'22:00',end:'03:00',color:'#EDE7F6',textColor:'#4527A0'},
@@ -603,6 +603,13 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     if(!template)return;
     setEmployees(list=>list.map(e=>e.id===emp.id?{...e,faceTemplate:template}:e));
   };
+  const registerOwnFaceTemplate=async template=>{
+    if(!template||canManage||String(emp?.id||'')!==String(currentUser?.id||''))throw new Error('Chỉ được tự đăng ký khuôn mặt cho chính tài khoản đang đăng nhập.');
+    const updated=await serverRegisterOwnFace(template);
+    replaceEmployees?.(list=>(list||[]).map(employee=>String(employee.id)===String(updated.id)?{...employee,...updated}:employee));
+    window.__SCF_CURRENT_EMPLOYEE=updated;
+    return updated.faceTemplate||template;
+  };
   const clearFaceTemplate=()=>{
     if(!ensureSelfAttendance())return;
     if(needEmp()){window.showToast('Hãy chọn nhân viên trước.','warn');return;}
@@ -645,9 +652,32 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
         if(!ok)return;
       }
       let workingTemplate=tpl;
-      if(!workingTemplate){
-        window.showToast('Tài khoản chưa có khuôn mặt mẫu. Hãy liên hệ quản lý để đăng ký.','error',6000);
-        return;
+      let workingPos=isAdmin?pos:null;
+      const firstFaceEnrollment=!workingTemplate;
+      if(firstFaceEnrollment){
+        if(canManage||String(emp.id)!==String(currentUser.id)){
+          window.showToast('Nhân viên này chưa có khuôn mặt mẫu. Hãy đăng ký tại Cài đặt chấm công.','error',6000);
+          return;
+        }
+        if(!workingPos)workingPos=await requestGps('attendance',{silentSuccess:true});
+        if(!workingPos){
+          window.showToast('Lần đăng ký đầu cần GPS hợp lệ. Hãy bật vị trí rồi thử lại.','warn',6000);
+          return;
+        }
+        const enrollmentGps=gpsStatus(workingPos,activeAttendanceZone);
+        if(!enrollmentGps.ok){
+          window.showToast('Chỉ được đăng ký khuôn mặt lần đầu tại '+activeAttendanceZone.name+'.','error',6500);
+          return;
+        }
+        const confirmed=await window.scfConfirm('Dùng ảnh vừa chụp làm khuôn mặt mẫu của '+String(emp.name||'tài khoản này')+'? Sau khi đăng ký, chỉ Admin mới có thể thay đổi mẫu mặt.','Đăng ký khuôn mặt lần đầu');
+        if(!confirmed)return;
+        try{
+          workingTemplate=await registerOwnFaceTemplate(buildFaceTemplate());
+          window.showToast('Đã đăng ký khuôn mặt lần đầu cho '+emp.name+'.','success',4500);
+        }catch(error){
+          window.showToast(error?.message||'Không đăng ký được khuôn mặt. Hãy thử lại.','error',6500);
+          return;
+        }
       }
       const workingMatch=faceMatchResult(cap,workingTemplate);
       const workingScore=workingMatch.score;
@@ -657,7 +687,6 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
         setPreview('');setCap(null);
         return;
       }
-      let workingPos=isAdmin?pos:null;
       if(!workingPos){
         workingPos=await requestGps('attendance',{silentSuccess:true});
         if(!workingPos){
@@ -696,7 +725,8 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
         attendanceZoneName:activeAttendanceZone.name,
         photo:cap.image,
         status:'valid',
-        note:buildNote(tStatus,workingFaceOk,g),
+        note:[buildNote(tStatus,workingFaceOk,g),firstFaceEnrollment?'Đăng ký khuôn mặt lần đầu':''].filter(Boolean).join(' • '),
+        faceEnrollment:firstFaceEnrollment,
         createdBy:currentUser.name,
         createdAt:fmtDT()
       };
@@ -998,6 +1028,7 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     const ownTimes=myToday.filter(r=>r.status==='valid');
     return h('div',{className:'attendance-employee-simple'},
       h('div',{className:'attendance-employee-camera'},
+        !tpl&&h('div',{style:{marginBottom:10,padding:'9px 11px',border:'1px solid #F0CF7A',borderRadius:8,background:'#FFF8E1',color:'#6D4B00',fontSize:12,lineHeight:1.45}},h('b',null,'Đăng ký lần đầu: '),'Ảnh đầu tiên sẽ được lưu làm khuôn mặt mẫu sau khi GPS xác nhận bạn đang ở đúng vùng chấm công. Từ lần sau hệ thống chỉ chấp nhận khuôn mặt này.'),
         h(CameraBox,{preview,setPreview,template:tpl,onCapture:handleFaceCapture,autoOpenSignal:cameraAutoOpenSignal,simple:true})
       ),
       punchBusy&&h('div',{className:'attendance-employee-working'},h('i',{className:'ti ti-loader-2 spin'}),' Đang xác nhận khuôn mặt và GPS...'),

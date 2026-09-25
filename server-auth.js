@@ -106,6 +106,12 @@ async function serverLoadEmployees(){
   window.__SCF_CURRENT_EMPLOYEE=data.currentEmployee||null;
   return data.employees;
 }
+async function serverRegisterOwnFace(faceTemplate){
+  if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
+  const{data,error}=await invokeScfAuth({body:{action:'register_own_face',faceTemplate}},20000);
+  if(error||!data?.ok||!data?.employee)throw new Error(await serverFunctionErrorMessage(error,data,'Không đăng ký được khuôn mặt.'));
+  return data.employee;
+}
 async function serverLoadPermittedCollection(key){
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
   const{data,error}=await invokeScfAuth({body:{action:'load_permitted_collection',key:String(key||'')}});
