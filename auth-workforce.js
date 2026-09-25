@@ -408,6 +408,7 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   const[punchPending,setPunchPending]=useState(false);
   const[kioskOpen,setKioskOpen]=useState(()=>{try{return sessionStorage.getItem('scf_attendance_kiosk_active')==='1';}catch{return false;}});
   const[lastPunchShare,setLastPunchShare]=useState(null);
+  const[faceViewer,setFaceViewer]=useState(null);
   const[cameraAutoOpenSignal,setCameraAutoOpenSignal]=useState(0);
   const[isCompactMobile,setIsCompactMobile]=useState(()=>window.innerWidth<=768);
   const[quickPunchMode,setQuickPunchMode]=useState(()=>window.innerWidth<=768);
@@ -1019,6 +1020,37 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
               h('button',{onClick:shareZalo},h('i',{className:'ti ti-share'}),' Chia sẻ'),
               h('button',{className:'bp',onClick:sendWebhook},h('i',{className:'ti ti-send'}),' Gửi webhook')
             )
+          )
+        )
+      ),
+      h('div',{className:'card attendance-face-register-card'},
+        h('div',{className:'attendance-face-register-head'},
+          h('div',null,
+            h('div',{className:'attendance-manager-title'},'Danh sách khuôn mặt nhân viên'),
+            h('div',{className:'attendance-report-note'},'Ảnh được lưu cùng mẫu nhận diện. Bấm vào ảnh nhỏ để xem rõ hơn.')
+          ),
+          h('span',{className:'badge',style:{background:'#EAF3DE',color:'#3B6D11'}},employees.filter(employee=>employee.faceTemplate?.image).length+'/'+employees.length+' đã có ảnh')
+        ),
+        h('div',{className:'tw attendance-face-register-table'},h('table',null,
+          h('thead',null,h('tr',null,h('th',null,'Mã NV'),h('th',null,'Nhân viên'),h('th',null,'Bộ phận'),h('th',null,'Khuôn mặt đăng ký'),h('th',null,'Trạng thái'),h('th',null,'Cập nhật'))),
+          h('tbody',null,employees.slice().sort((a,b)=>Number(!!b.faceTemplate?.image)-Number(!!a.faceTemplate?.image)||String(a.name||'').localeCompare(String(b.name||''),'vi')).map(employee=>{
+            const face=employee.faceTemplate,image=face?.image||'';
+            return h('tr',{key:employee.id},
+              h('td',null,employee.id),
+              h('td',null,h('b',null,employee.name||'—')),
+              h('td',null,employee.dept||'—'),
+              h('td',null,image
+                ?h('button',{type:'button',className:'attendance-face-thumb-button',onClick:()=>setFaceViewer(employee),title:'Xem khuôn mặt đã đăng ký của '+employee.name,'aria-label':'Xem khuôn mặt đã đăng ký của '+employee.name},h('img',{src:image,alt:'Khuôn mặt '+employee.name}))
+                :h('span',{className:'attendance-face-empty'},h('i',{className:'ti ti-user-question'}),' Chưa có ảnh')),
+              h('td',null,h('span',{className:'badge',style:{background:face?'#EAF3DE':'#FAEEDA',color:face?'#3B6D11':'#854F0B'}},face?(image?'Đã đăng ký':'Có mẫu, thiếu ảnh'):'Chưa đăng ký')),
+              h('td',null,h('div',{style:{fontSize:12}},face?.updatedAt||'—'),face?.selfRegistered&&h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:3}},'Nhân viên tự đăng ký'))
+            );
+          }))
+        )),
+        faceViewer&&h(Modal,{title:'Khuôn mặt đã đăng ký · '+faceViewer.name,onClose:()=>setFaceViewer(null)},
+          h('div',{className:'attendance-face-viewer'},
+            h('img',{src:faceViewer.faceTemplate?.image,alt:'Khuôn mặt '+faceViewer.name}),
+            h('div',null,h('b',null,faceViewer.id+' · '+faceViewer.name),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:4}},(faceViewer.dept||'')+(faceViewer.faceTemplate?.updatedAt?' · Cập nhật '+faceViewer.faceTemplate.updatedAt:'')))
           )
         )
       )
