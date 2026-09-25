@@ -259,7 +259,7 @@ th{font-family:var(--ui-header-family)!important}
 .mobile-data-card{background:#fff;border:.5px solid var(--bd);border-radius:12px;padding:12px;display:grid;gap:8px;box-shadow:0 2px 8px rgba(18,60,45,.04)}
 .mobile-data-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 .mobile-data-title{font-size:15px;font-weight:700;color:var(--pri3);line-height:1.25}
-.trip-order-card .mobile-data-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:5px}
+.trip-order-card .mobile-data-head{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:5px}
 .trip-order-location-line{display:flex;align-items:center;gap:8px;min-width:0;min-height:34px;flex:1;font-family:inherit}
 .trip-order-location-line .mobile-data-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:inherit;font-size:15px;font-weight:700;line-height:34px}
 .trip-order-location-line .mobile-data-title.long-name{font-size:13px}
@@ -312,9 +312,13 @@ th{font-family:var(--ui-header-family)!important}
 .trip-order-line input{width:100%;min-height:34px;padding:4px 7px;font-size:12px}
 .trip-order-ordered-qty{display:flex;align-items:center;justify-content:center;width:100%;min-height:34px;padding:4px 7px;border:1px solid var(--bd);border-radius:8px;background:#f3f7f5;color:var(--tx);font-size:12px;font-variant-numeric:tabular-nums}
 .trip-order-ordered .trip-order-ordered-qty{width:72px;max-width:72px}
+.trip-order-line-note{grid-column:1/-1;display:grid;grid-template-columns:62px minmax(0,1fr);align-items:center;gap:8px;margin-top:2px;padding-top:7px;border-top:1px dashed var(--bd)}
+.trip-order-line-note>b{font-size:11px;color:var(--tx2)}
+.trip-line-notes-desktop{display:grid;gap:4px;min-width:150px}
+.trip-line-note-desktop{min-height:30px;display:flex;align-items:center}
 .trip-order-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--pri);font-size:12px;font-weight:700}
 .trip-order-invoice-view{margin-right:0}
-.trip-order-head-actions{flex:0 0 auto;gap:3px}
+.trip-order-head-actions{grid-column:1/-1;grid-row:2;display:flex;justify-content:flex-end;flex:0 0 auto;gap:3px;padding-top:2px}
 .trip-order-head-actions>.bi{display:inline-flex;align-items:center;justify-content:center;width:30px!important;min-width:30px!important;height:34px;min-height:34px!important;padding:3px!important}
 .trip-card-head{display:grid!important;grid-template-columns:auto minmax(0,1fr) auto;align-items:center}
 .trip-card-main{grid-column:2;min-width:0}
@@ -559,6 +563,7 @@ th{font-family:var(--ui-header-family)!important}
   .trip-order-card{padding:10px;gap:7px}
   .trip-order-head-actions{gap:1px}
   .trip-order-head-actions>.bi{width:28px!important;min-width:28px!important;padding:2px!important}
+  .trip-order-note-confirm input,.trip-number-confirm input,.trip-delivered-confirm input{font-size:16px!important;touch-action:manipulation}
   .trip-toolbar-actions{display:grid!important;grid-template-columns:1fr;gap:6px!important;margin-bottom:10px!important}
   .trip-toolbar-actions button{width:100%;min-width:0}
   .trip-filter-row{display:grid!important;grid-template-columns:1fr 1fr;gap:6px!important;margin-bottom:10px!important;overflow:visible}
