@@ -639,6 +639,7 @@ const NAV=[
   {key:'invoicereport',icon:'ti-file-alert',label:'Báo cáo hóa đơn'},
   {key:'powdersales',icon:'ti-bowl',label:'Bán bột bún'},
   {key:'prodshifts',icon:'ti-clock-play',label:'Cài đặt ca SX + ca GH tự động'},
+  {key:'deliverysequence',icon:'ti-list-numbers',label:'Cài đặt thứ tự giao'},
   {sec:'Mua hàng'},
   {key:'nccs',icon:'ti-building-store',label:'Nhà CC NVL'},
   {key:'nccgoods',icon:'ti-building-store',label:'Nhà CC Hàng hóa'},

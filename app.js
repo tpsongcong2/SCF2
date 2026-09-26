@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V404';
+const SCF_BUILD_VERSION='V405';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -7,7 +7,7 @@ const PTITLES = {
   customers:'Khách hàng', workcats:'Danh mục công việc', tasks:'Giao việc', notifications:'Thông báo', userguide:'HDSD SCFOOD', shifts:'Ca giao hàng',
   workreport_vp:'Công kế toán', workreport_sx:'Công sản xuất', workreport_lx:'Công lái xe', workreport_total:'Tổng công',
   process_accounting:'QUY TRÌNH KẾ TOÁN', process_bun:'QT SẢN XUẤT BÚN', process_pho:'QT SX PHỞ', process_banhcuon:'QT SX BÁNH CUỐN',
-  quotes:'Báo giá', delivery:'Đơn giao hàng', intem:'Intem', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng',
+  quotes:'Báo giá', delivery:'Đơn giao hàng', intem:'Intem', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng', deliverysequence:'Cài đặt thứ tự giao',
   salesreport:'Báo cáo bán hàng', cashflowreport:'Báo cáo dòng tiền', fuelreport:'Báo cáo mua xăng dầu', marketsales:'Báo cáo công nợ', invoicereport:'Báo cáo hóa đơn', powdersales:'Bán bột bún',
   nccs:'Nhà CC NVL', nccgoods:'Nhà CC Hàng hóa', purchaseorders:'Đơn mua hàng NVL', purchasegoods:'Đơn mua hàng hàng hóa', fuelpurchases:'Đơn mua xăng dầu', utilityexpenses:'Chi phí điện nước', purchasereport:'Báo cáo mua hàng', maintreport:'Báo cáo sửa chữa', materialusage:'Báo cáo NVL tồn và tiêu dùng', powderdebtreport:'Báo cáo công nợ', syncreport:'Đồng bộ dữ liệu', dbusage:'Dung lượng Supabase',
   maint_vehicle:'Bảo dưỡng xe', maint_machine:'Bảo dưỡng máy',
@@ -27,7 +27,7 @@ const SCF_PAGE_DATA={
   materials:['materials','purchases'],assets:['assets'],garages:['garages'],
   products:['products','prodcats'],depts:['depts','workcats'],workcats:['workcats','depts'],
   customers:['customers','shifts','orders','areas'],areas:['areas','customers','orders'],
-  prodshifts:['prod_shifts','prod_shift_rules','orders','customers','shifts'],deliveryrules:['delivery_rules'],
+  prodshifts:['prod_shifts','prod_shift_rules','orders','customers','shifts'],deliveryrules:['delivery_rules'],deliverysequence:['customers','areas'],
   tasks:['tasks','workcats'],notifications:[],userguide:[],
   nccs:['nccs','purchases'],nccgoods:['ncc_goods','goods_purchases'],
   purchaseorders:['purchases','nccs','materials','products','prodcats'],
@@ -156,7 +156,7 @@ function scfLoadOptionalScript(name,url){
 function scfEnsurePageTools(page){
   // Chuyến giao hàng không dùng thư viện Excel/ZIP. Không chặn giao diện bằng
   // hai gói CDN lớn chỉ để mở trang này.
-  if(['welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
+  if(['welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','deliverysequence'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
   return Promise.all([
     scfLoadOptionalScript('JSZip','https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'),
     scfLoadOptionalScript('XLSX','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js')
@@ -169,7 +169,7 @@ const PICONS = {
   prodorders:'ti-building-factory', stock:'ti-package', attendance:'ti-face-id', attendance_settings:'ti-settings', attendance_report:'ti-report-analytics', advances:'ti-cash-banknote', rewards:'ti-scale', employee_errors:'ti-alert-triangle', employee_uniforms:'ti-shirt', permission_settings:'ti-shield-lock', leaves:'ti-calendar-minus', assets:'ti-building-warehouse', appearance:'ti-typography', printtemplates:'ti-file-spreadsheet',
   workreport_vp:'ti-building', workreport_sx:'ti-building-factory', workreport_lx:'ti-steering-wheel', workreport_total:'ti-report-analytics',
   process_accounting:'ti-file-invoice', process_bun:'ti-tools-kitchen-2', process_pho:'ti-bowl', process_banhcuon:'ti-cookie',
-  marketsales:'ti-report-money', invoicereport:'ti-file-alert', powdersales:'ti-bowl', intem:'ti-printer',
+  marketsales:'ti-report-money', invoicereport:'ti-file-alert', powdersales:'ti-bowl', intem:'ti-printer', deliverysequence:'ti-list-numbers',
   cashflowreport:'ti-cash-banknote', powderdebtreport:'ti-report-money', syncreport:'ti-cloud-data-connection', dbusage:'ti-database', purchasegoods:'ti-packages', fuelpurchases:'ti-gas-station', utilityexpenses:'ti-bolt', fuelreport:'ti-gas-station', maintreport:'ti-tool', materialusage:'ti-chart-histogram',
   maint_vehicle:'ti-car', maint_machine:'ti-settings'
 };
@@ -709,6 +709,7 @@ function App(){
         canAccess(cu.role,'areas',cu.permissions)&&page==='areas'&&h(AreasTab,{areas,setAreas,customers,setCustomers,orders}),
         canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts,currentUser:cu}),
         canAccess(cu.role,'deliveryrules',cu.permissions)&&page==='deliveryrules'&&h(DeliveryRulesTab,{items:deliveryRules,setItems:setDeliveryRules,currentUser:cu}),
+        canAccess(cu.role,'deliverysequence',cu.permissions,cu.dept)&&page==='deliverysequence'&&h(DeliverySequenceSettingsTab,{customers,setCustomers,currentUser:cu}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats,depts}),
         canAccess(cu.role,'tasks',cu.permissions)&&page==='tasks'&&h(TasksTab,{tasks,setTasks,workcats,employees,currentUser:cu,notify:addNotification}),
         canAccess(cu.role,'notifications',cu.permissions)&&page==='notifications'&&h(NotificationsTab,{notifications,setNotifications,currentUser:cu,setPage}),
