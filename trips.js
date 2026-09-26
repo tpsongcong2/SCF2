@@ -1605,8 +1605,8 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
               h('div',{className:'trip-desktop-tools-center'},
                 h('button',{type:'button',className:'bi',onClick:()=>setHideTripOptionalColumns(value=>!value),title:hideTripOptionalColumns?'Hiện Chú ý, Rổ đi và Rổ về':'Ẩn Chú ý, Rổ đi và Rổ về','aria-label':hideTripOptionalColumns?'Hiện Chú ý, Rổ đi và Rổ về':'Ẩn Chú ý, Rổ đi và Rổ về'},h('i',{className:hideTripOptionalColumns?'ti ti-eye':'ti ti-eye-off','aria-hidden':true})),
                 canEditDeliveryOrder&&h('span',{className:'trip-order-mode-toggle'},
-                  h('button',{type:'button',className:tripManualOrderEnabled(trip)?'':'on',title:'Tự động theo bảng Cài đặt thứ tự giao',onClick:()=>setTripDeliveryOrderMode(trip,'auto')},'TĐ'),
-                  h('button',{type:'button',className:tripManualOrderEnabled(trip)?'on':'',title:'Nhập thứ tự bằng tay cho chuyến này',onClick:()=>setTripDeliveryOrderMode(trip,'manual')},'B.tay')
+                  h('button',{type:'button',className:'auto '+(tripManualOrderEnabled(trip)?'':'on'),title:'Sắp xếp tự động theo bảng thứ tự giao','aria-label':'Sắp xếp tự động',onClick:()=>setTripDeliveryOrderMode(trip,'auto')},h('i',{className:'ti ti-arrows-sort'})),
+                  h('button',{type:'button',className:'manual '+(tripManualOrderEnabled(trip)?'on':''),title:'Nhập thứ tự bằng tay cho chuyến này','aria-label':'Sắp xếp bằng tay',onClick:()=>setTripDeliveryOrderMode(trip,'manual')},h('i',{className:'ti ti-hand-finger'}))
                 )
               ),
               h('div',{className:'trip-desktop-tools-right'},
@@ -1617,8 +1617,8 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
             ),
             h('div',{className:'trip-card-actions',style:{display:'flex',gap:4},onClick:e=>e.stopPropagation()},
               canEditDeliveryOrder&&h('span',{className:'mobile-only trip-order-mode-toggle'},
-                h('button',{type:'button',className:tripManualOrderEnabled(trip)?'':'on',onClick:()=>setTripDeliveryOrderMode(trip,'auto')},'TĐ'),
-                h('button',{type:'button',className:tripManualOrderEnabled(trip)?'on':'',onClick:()=>setTripDeliveryOrderMode(trip,'manual')},'B.tay')
+                h('button',{type:'button',className:'auto '+(tripManualOrderEnabled(trip)?'':'on'),'aria-label':'Sắp xếp tự động',title:'Sắp xếp tự động',onClick:()=>setTripDeliveryOrderMode(trip,'auto')},h('i',{className:'ti ti-arrows-sort'})),
+                h('button',{type:'button',className:'manual '+(tripManualOrderEnabled(trip)?'on':''),'aria-label':'Sắp xếp bằng tay',title:'Sắp xếp bằng tay',onClick:()=>setTripDeliveryOrderMode(trip,'manual')},h('i',{className:'ti ti-hand-finger'}))
               ),
               canDispatchTrips&&['planning','assigned'].includes(trip.status)&&!trip.driverDispatchedAt&&h('button',{className:'desktop-only',onClick:()=>dispatchTripToDriver(trip),style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},'Giao lái xe'),
               canDispatchTrips&&trip.status==='assigned'&&trip.driverDispatchedAt&&h('button',{className:'desktop-only',onClick:()=>resendTripNotification(trip),title:trip.driverNotificationSentAt?'Đã gửi gần nhất: '+trip.driverNotificationSentAt:'Gửi lại thông báo cho lái xe',style:{fontSize:11,padding:'4px 10px',background:'#E6F1FB',color:'#185FA5',border:'none',borderRadius:4}},h('i',{className:'ti ti-bell-ringing'}),' Gửi lại TB'),

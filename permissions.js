@@ -84,7 +84,6 @@ function canAccess(role, page, perms, dept='') {
   if(!isFaceMask&&faceMaskPages.includes(page))return false;
   if(page==='permission_settings')return role==='admin';
   const isAccounting=String(dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('ke toan');
-  if(page==='deliverysequence')return role==='admin'||isAccounting;
   if(page==='garages'&&role==='admin') return true;
   if(page==='deliveryrules') return true;
   // Admin luôn được quản trị lỗi nhân viên. Quản lý phải tuân theo quyền
