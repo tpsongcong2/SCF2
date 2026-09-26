@@ -646,10 +646,18 @@ function DeliverySequenceSettingsTab({customers,setCustomers,currentUser}){
       return next;
     });
   },[rows.map(row=>row.customerId+'\u001f'+row.pointId).join('\u0001')]);
-  const visibleRows=rows.filter(row=>!area||row.area===area);
+  const visibleRows=rows.filter(row=>!area||row.area===area).sort((a,b)=>{
+    const aKey=a.customerId+'\u001f'+a.pointId,bKey=b.customerId+'\u001f'+b.pointId;
+    const av=numFmt(draft[aKey]),bv=numFmt(draft[bKey]);
+    const ao=av>0?av:Number.MAX_SAFE_INTEGER,bo=bv>0?bv:Number.MAX_SAFE_INTEGER;
+    return a.area.localeCompare(b.area,'vi',{numeric:true,sensitivity:'base'})||ao-bo||a.pointName.localeCompare(b.pointName,'vi',{numeric:true,sensitivity:'base'});
+  });
   const setValue=(row,value)=>setDraft(previous=>({...previous,[row.customerId+'\u001f'+row.pointId]:String(value||'').replace(/[^\d]/g,'')}));
   const renumberArea=areaName=>{
-    const group=rows.filter(row=>row.area===areaName);
+    const group=rows.filter(row=>row.area===areaName).sort((a,b)=>{
+      const av=numFmt(draft[a.customerId+'\u001f'+a.pointId]),bv=numFmt(draft[b.customerId+'\u001f'+b.pointId]);
+      return (av>0?av:Number.MAX_SAFE_INTEGER)-(bv>0?bv:Number.MAX_SAFE_INTEGER)||a.pointName.localeCompare(b.pointName,'vi',{numeric:true,sensitivity:'base'});
+    });
     setDraft(previous=>{
       const next={...previous};group.forEach((row,index)=>{next[row.customerId+'\u001f'+row.pointId]=String(index+1);});return next;
     });
@@ -1062,7 +1070,9 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
   };
   const deliveryOrderValue=o=>numFmt(o.deliveryOrder??o.deliverySeq??o.deliveryIndex);
   const sortedTripOrders=trip=>sortTripOrdersByDeliveryOrder(trip,orders.filter(o=>(trip.orderIds||[]).includes(o.id)),customers);
-  const displayedDeliveryOrder=(trip,order,index)=>tripOrderSortValue(trip,order,customers)||index+1;
+  // Ở chế độ tự động, số trong danh mục chỉ là độ ưu tiên. Sau khi lọc ra
+  // các bếp thực sự có trong chuyến, luôn đánh lại STT liên tục 1..N.
+  const displayedDeliveryOrder=(trip,order,index)=>tripManualOrderEnabled(trip)?(deliveryOrderValue(order)||index+1):index+1;
   const updateDeliveryOrder=(orderId,value)=>{
     const v=numFmt(value);
     setOrders(prev=>prev.map(o=>o.id===orderId?{...o,deliveryOrder:v||'',deliverySeq:v||'',updatedBy:currentUser?.name||'',updatedAt:fmtDT()}:o));
