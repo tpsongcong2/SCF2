@@ -331,12 +331,8 @@ th{font-family:var(--ui-header-family)!important}
 .trip-desktop-tools-center{justify-content:center}
 .trip-desktop-tools-right{justify-content:flex-end}
 .trip-desktop-trip-tools .bi{display:inline-flex;align-items:center;justify-content:center;width:32px;min-width:32px;height:32px;min-height:32px;padding:4px;font-size:16px}
-.trip-order-mode-toggle{display:inline-flex;align-items:center;padding:2px;border:1px solid var(--bd);border-radius:999px;background:var(--bg2);gap:1px;white-space:nowrap}
-.trip-order-mode-toggle button{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;border:0;border-radius:999px;padding:0;font-size:14px;line-height:1;cursor:pointer}
-.trip-order-mode-toggle button.auto{background:#e1f5ee;color:#0f6e56}
-.trip-order-mode-toggle button.auto.on{background:#16845f;color:#fff;box-shadow:0 0 0 1px #0f6e56 inset}
-.trip-order-mode-toggle button.manual{background:#fff4cc;color:#9a6700}
-.trip-order-mode-toggle button.manual.on{background:#f2b824;color:#503500;box-shadow:0 0 0 1px #c98a00 inset}
+.trip-order-mode-button.auto{background:#e1f5ee!important;color:#0f6e56!important;border-color:#9bd8c4!important}
+.trip-order-mode-button.manual{background:#f2b824!important;color:#503500!important;border-color:#c98a00!important}
 .trip-desktop-tool-meta{color:var(--pri);font-size:12px;font-weight:600;white-space:nowrap}
 .trip-filter-row{display:flex!important;align-items:center;flex-wrap:nowrap!important;gap:6px!important;overflow-x:auto;padding-bottom:2px}
 .trip-filter-row>*{width:auto!important;min-width:0;flex:0 0 auto}
