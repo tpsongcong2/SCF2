@@ -340,6 +340,7 @@ th{font-family:var(--ui-header-family)!important}
 .trip-filter-image{min-width:126px!important}
 .trip-filter-period{width:108px!important}
 .trip-filter-date{width:150px!important}
+.trip-filter-group{width:165px!important}
 .trip-filter-trip{width:235px!important}
 .trip-filter-shift{width:155px!important}
 .trip-filter-driver{width:185px!important}
