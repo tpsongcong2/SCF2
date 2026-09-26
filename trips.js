@@ -1219,7 +1219,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     const tripMonth=dateParts.length===3?dateParts[2]+'-'+dateParts[1]:'';
     return fPeriod==='month'?(!fMonth||tripMonth===fMonth):(!fDate||t.deliveryDate===fDate.split('-').reverse().join('/'));
   };
-  const samsungTripShiftOrder=['SS T1','VP ĐÊM','SS T2','YP QV','SS S1','SS S2','VP NGÀY','SS C'];
+  const samsungTripShiftOrder=['SS T1','VP ĐÊM','SS T2','YP QV','SS S1','SS S2','VP NGÀY','SS C','SS C1','SS C2','KV'];
   const samsungTripShiftRank=new Map(samsungTripShiftOrder.map((name,index)=>[normalizeLookupText(name),index]));
   const tripSamsungRank=trip=>samsungTripShiftRank.get(normalizeLookupText(trip?.shiftName||''));
   const tripMatchesSelectedGroup=trip=>!fTripGroup||(fTripGroup==='samsung'?tripSamsungRank(trip)!==undefined:tripSamsungRank(trip)===undefined);
