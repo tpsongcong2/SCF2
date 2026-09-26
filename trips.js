@@ -1123,10 +1123,13 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     syncTripReceivables(approved,nextOrders,true);
     window.showToast('Đã duyệt hoàn thành chuyến '+trip.id+'.','success');
   };
-  const filteredTrips=visibleTrips.filter(t=>{
+  const tripMatchesSelectedPeriod=t=>{
     const dateParts=String(t.deliveryDate||'').split('/');
     const tripMonth=dateParts.length===3?dateParts[2]+'-'+dateParts[1]:'';
-    const dateMatched=fPeriod==='month'?(!fMonth||tripMonth===fMonth):(!fDate||t.deliveryDate===fDate.split('-').reverse().join('/'));
+    return fPeriod==='month'?(!fMonth||tripMonth===fMonth):(!fDate||t.deliveryDate===fDate.split('-').reverse().join('/'));
+  };
+  const filteredTrips=visibleTrips.filter(t=>{
+    const dateMatched=tripMatchesSelectedPeriod(t);
     const tripMatched=!fTrip||String(t.id||'')===fTrip;
     const shiftMatched=!fShift||String(t.shiftId||t.shiftName||'')===fShift;
     const hasDriver=!!String(t.driverId||t.driverName||'').trim();
@@ -1138,8 +1141,13 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     const orderStateMatched=fOrderState==='all'||(fOrderState==='with'?hasOrders:!hasOrders);
     return dateMatched&&tripMatched&&shiftMatched&&driverMatched&&orderStateMatched;
   });
-  const tripFilterOptions=[...visibleTrips].sort((a,b)=>String(a.deliveryDate||'').localeCompare(String(b.deliveryDate||''))||String(a.shiftName||a.id||'').localeCompare(String(b.shiftName||b.id||''),'vi'));
-  const shiftFilterOptions=[...new Map([...(shifts||[]).map(shift=>[String(shift.id||shift.name||''),shift.name||shift.id]),...visibleTrips.map(trip=>[String(trip.shiftId||trip.shiftName||''),trip.shiftName||trip.shiftId])].filter(([key])=>key)).entries()];
+  // Ngày/tháng đã có bộ lọc riêng; danh sách này chỉ cần hiện ca giao hàng
+  // thực sự có trong khoảng thời gian đang chọn.
+  const shiftFilterOptions=[...new Map(visibleTrips.filter(tripMatchesSelectedPeriod).map(trip=>[String(trip.shiftId||trip.shiftName||''),trip.shiftName||trip.shiftId]).filter(([key])=>key)).entries()]
+    .sort((a,b)=>String(a[1]||'').localeCompare(String(b[1]||''),'vi',{numeric:true,sensitivity:'base'}));
+  useEffect(()=>{
+    if(fShift&&!shiftFilterOptions.some(([value])=>value===fShift))sfShift('');
+  },[fShift,fPeriod,fDate,fMonth,shiftFilterOptions.map(([value])=>value).join('\u0001')]);
   const tripAreaText=trip=>{
     if(trip?.area)return trip.area;
     const areas=[...new Set(sortedTripOrders(trip).map(order=>{
@@ -1426,19 +1434,15 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     h('div',{className:'ptitle'},h('i',{className:'ti ti-steering-wheel',style:{fontSize:20}}),'Chuyến giao hàng'),
     h('div',{className:'trip-filter-row',style:{display:'flex',gap:8,marginBottom:'1rem',flexWrap:'wrap'}},
       h('button',{className:'trip-filter-image','data-scf-action':'view',disabled:!filteredTrips.length,onClick:()=>sm('images')},h('i',{className:'ti ti-photo'}),' Tạo ảnh chuyến'),
-      h('select',{className:'trip-filter-period',value:fPeriod,onChange:e=>sfPeriod(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},
+      h('select',{className:'trip-filter-period',value:fPeriod,onChange:e=>{sfTrip('');sfPeriod(e.target.value);},style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},
         h('option',{value:'day'},'Theo ngày'),
         h('option',{value:'month'},'Theo tháng')
       ),
       fPeriod==='month'
-        ?h('input',{className:'trip-filter-date',type:'month',value:fMonth,onChange:e=>sfMonth(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}})
-        :h('input',{className:'trip-filter-date',type:'date',value:fDate,onChange:e=>sfDate(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}}),
-      h('select',{className:'trip-filter-trip',value:fTrip,onChange:e=>sfTrip(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},
-        h('option',{value:''},'Tất cả chuyến'),
-        tripFilterOptions.map(trip=>h('option',{key:trip.id,value:trip.id},(trip.deliveryDate||'')+' — '+(trip.shiftName||trip.id)+(trip.driverName?' — '+trip.driverName:'')))
-      ),
-      h('select',{className:'trip-filter-shift',value:fShift,onChange:e=>sfShift(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},
-        h('option',{value:''},'Tất cả ca giao'),
+        ?h('input',{className:'trip-filter-date',type:'month',value:fMonth,onChange:e=>{sfTrip('');sfMonth(e.target.value);},style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}})
+        :h('input',{className:'trip-filter-date',type:'date',value:fDate,onChange:e=>{sfTrip('');sfDate(e.target.value);},style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}}),
+      h('select',{className:'trip-filter-shift',value:fShift,onChange:e=>{sfTrip('');sfShift(e.target.value);},style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},
+        h('option',{value:''},'Tất cả ca giao hàng'),
         shiftFilterOptions.map(([value,label])=>h('option',{key:value,value},label))
       ),
       !isDriver&&h('select',{className:'trip-filter-driver',value:fDriver,onChange:e=>sfDriver(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},

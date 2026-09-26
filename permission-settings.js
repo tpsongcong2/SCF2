@@ -77,9 +77,9 @@ function PermissionSettingsTab({profiles,setProfiles,employees,setEmployees,curr
           h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền nghiệp vụ trong Báo cáo công nợ'),
           h('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'7px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6,cursor:fixedAdmin?'default':'pointer'}},
             h('input',{type:'checkbox',disabled:fixedAdmin,checked:fixedAdmin||draft.salesDebtAllCustomers===true,onChange:event=>setDraft(prev=>({...prev,salesDebtAllCustomers:event.target.checked}))}),
-            'Được chọn và xem tất cả khách hàng'
+            'Được xem tổng hợp Tất cả khách hàng'
           ),
-          h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:5}},'Nếu không cấp quyền, báo cáo mặc định và chỉ hiển thị khách hàng WELSTORY.')
+          h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:5}},'Nếu không cấp quyền, kế toán vẫn chọn xem từng khách hàng nhưng không có lựa chọn Tất cả khách hàng.')
         ),
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,borderTop:'1px solid var(--bd)',paddingTop:12,marginTop:4,flexWrap:'wrap'}},h('span',{style:{fontSize:12,color:'var(--tx2)'}},assigned.length+' nhân viên đang dùng chức vụ này.'),h('button',{type:'button',disabled:!assigned.length,onClick:applyToAssigned},'Áp dụng lại cho nhân viên thuộc chức vụ này'))
       )

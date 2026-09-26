@@ -2186,20 +2186,23 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
   const customerOptions=scfSalesDebtCustomerOptions(customers,orders);
   const welstoryCustomerId=scfSalesDebtWelstoryCustomerId(customerOptions);
   const canSelectAllCustomers=canViewAllDebtCustomers(currentUser);
+  const defaultCustomerId=welstoryCustomerId||customerOptions[0]?.id||'';
   const [fromDate,setFromDate]=useState(today.slice(0,7)+'-01');
   const [toDate,setToDate]=useState(today);
   const [dateMode,setDateMode]=useState('range');
   const [selectedDate,setSelectedDate]=useState(today);
   const [selectedMonth,setSelectedMonth]=useState(today.slice(0,7));
   const [invoiceImageFilter,setInvoiceImageFilter]=useState('all');
-  const [customerId,setCustomerId]=useState(()=>welstoryCustomerId||'__WELSTORY__');
+  const [customerId,setCustomerId]=useState(()=>defaultCustomerId||'__WELSTORY__');
   const [pointKey,setPointKey]=useState('');
   const [productId,setProductId]=useState('');
   const [driverName,setDriverName]=useState('');
   useEffect(()=>{
-    if(!welstoryCustomerId)return;
-    setCustomerId(current=>current==='__WELSTORY__'||(!canSelectAllCustomers&&current!==welstoryCustomerId)?welstoryCustomerId:current);
-  },[welstoryCustomerId,canSelectAllCustomers]);
+    if(!defaultCustomerId)return;
+    // Người không có quyền xem tổng hợp vẫn được chọn từng khách hàng. Chỉ
+    // ngăn trạng thái rỗng (Tất cả khách hàng) khi quyền tổng hợp bị tắt.
+    setCustomerId(current=>current==='__WELSTORY__'||(!canSelectAllCustomers&&!current)?defaultCustomerId:current);
+  },[defaultCustomerId,canSelectAllCustomers]);
   const dateValue=value=>{const text=String(value||'').trim();const vn=text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);const iso=text.match(/^(\d{4})-(\d{2})-(\d{2})/);return vn?new Date(+vn[3],+vn[2]-1,+vn[1]).getTime():iso?new Date(+iso[1],+iso[2]-1,+iso[3]).getTime():NaN;};
   const dateKey=value=>{const text=String(value||'').trim();const vn=text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);const iso=text.match(/^(\d{4})-(\d{2})-(\d{2})/);return vn?`${vn[3]}-${String(vn[2]).padStart(2,'0')}-${String(vn[1]).padStart(2,'0')}`:iso?`${iso[1]}-${iso[2]}-${iso[3]}`:'';};
   const completedTrips=trips.filter(trip=>['completion_pending','completed'].includes(trip.status));
@@ -2227,7 +2230,7 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
   }))).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
   const visibleLines=order=>(order?.lines||[]).filter(line=>!productId||productIdentity(line)===productId);
   const driverOptions=[...new Set(invoiceOrders.map(driverFor).filter(name=>name&&name!=='—'))].sort((a,b)=>a.localeCompare(b,'vi'));
-  const customerChoices=canSelectAllCustomers?customerOptions:(welstoryCustomerId?customerOptions.filter(item=>item.id===welstoryCustomerId):[{id:'__WELSTORY__',label:'WELSTORY'}]);
+  const customerChoices=customerOptions;
   const pointIdentity=order=>{
     const customer=customerFor(order);
     const point=(customer?.points||[]).find(point=>order.pointId?String(point.id)===String(order.pointId):String(point.name||'').trim()===String(order.pointName||'').trim());
@@ -2314,7 +2317,7 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
         dateMode==='range'?h(F,{label:'Đến ngày'},h('input',{type:'date',value:toDate,onChange:event=>setToDate(event.target.value)})):h('div',null)
       ),
       h('div',{className:'g3'},
-        h(F,{label:'Khách hàng'},h('select',{value:customerId,disabled:!canSelectAllCustomers,title:canSelectAllCustomers?'Được phép chọn tất cả khách hàng':'Tài khoản này chỉ được xem WELSTORY',onChange:event=>{setCustomerId(event.target.value);setPointKey('');}},canSelectAllCustomers&&h('option',{value:''},'Tất cả khách hàng'),customerChoices.map(item=>h('option',{key:item.id,value:item.id},item.label)))),
+        h(F,{label:'Khách hàng'},h('select',{value:customerId,title:canSelectAllCustomers?'Được chọn từng khách hàng hoặc xem tất cả khách hàng':'Được chọn từng khách hàng; không được xem tổng hợp tất cả',onChange:event=>{setCustomerId(event.target.value);setPointKey('');}},canSelectAllCustomers&&h('option',{value:''},'Tất cả khách hàng'),customerChoices.map(item=>h('option',{key:item.id,value:item.id},item.label)))),
         h(F,{label:'Địa điểm'},h('select',{value:pointKey,onChange:event=>setPointKey(event.target.value)},h('option',{value:''},'Tất cả địa điểm'),pointOptions.map(item=>h('option',{key:item.key,value:item.key},item.label)))),
         h(F,{label:'Ảnh hóa đơn'},h('select',{value:invoiceImageFilter,onChange:event=>setInvoiceImageFilter(event.target.value)},
           h('option',{value:'all'},'Tất cả'),h('option',{value:'with'},'Có ảnh hóa đơn'),h('option',{value:'without'},'Không có ảnh hóa đơn')

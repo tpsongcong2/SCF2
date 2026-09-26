@@ -2281,6 +2281,29 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       return currentScore(b)-currentScore(a)||(String(a.id||'').localeCompare(String(b.id||''),'vi'));
     })[0]||null;
   };
+  // Hai bộ lọc SS TN / ĐT được phân loại theo ca của chuyến, không theo khu
+  // vực điểm giao. Nhờ vậy đơn thuộc khu vực SS TN nhưng đang nằm trong một
+  // chuyến ĐT sẽ không còn xuất hiện sai nhóm.
+  const samsungTripShiftOrder=['SS T1','VP ĐÊM','SS T2','YP QV','SS S1','SS S2','VP NGÀY','SS C'];
+  const samsungTripShiftRank=new Map(samsungTripShiftOrder.map((name,index)=>[normalizeLookupText(name),index]));
+  const deliveryTripForOrder=o=>{
+    const ctx=orderContext(o);
+    const storedTrip=ctx.tripId?tripById.get(String(ctx.tripId)):null;
+    const automaticTrip=autoTripForOrder({...ctx,tripId:null});
+    return ctx.tripAssignMode==='manual'?(storedTrip||automaticTrip||null):(automaticTrip||null);
+  };
+  const deliveryTripShiftName=o=>{
+    const ctx=orderContext(o);
+    return String(deliveryTripForOrder(ctx)?.shiftName||getOrderTripShiftName(ctx,prodShifts||[])||'').trim();
+  };
+  const samsungTripOrder=o=>samsungTripShiftRank.get(normalizeLookupText(deliveryTripShiftName(o)));
+  const matchesAreaOrTripGroup=o=>{
+    if(!fArea)return true;
+    const selectedArea=areaKey(fArea);
+    if(selectedArea==='SSTN')return samsungTripOrder(o)!==undefined;
+    if(selectedArea==='DT')return samsungTripOrder(o)===undefined;
+    return getArea(o)===fArea;
+  };
   const prepareAutomaticTripForSave=d=>{
     if(d?.tripAssignMode==='manual'||!['pending','assigned',''].includes(String(d?.status||'')))return d;
     const ctx=orderContext(d);
@@ -2446,7 +2469,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       if(!(x.lines||[]).some(line=>normalizeLookupText(line.productName||'')===selectedName))return false;
     }
     if(fTime&&normalizeTimeInput(x.deliveryTime||'')!==fTime) return false;
-    if(fArea&&getArea(x)!==fArea) return false;
+    if(!matchesAreaOrTripGroup(x)) return false;
     return true;
   });
   const pointOptions=[...new Set(listWithoutPoint.map(x=>String(x.pointName||x.address||'').trim()).filter(Boolean))]
@@ -2458,7 +2481,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     if(!matchesDateFilter(x.deliveryDate))return false;
     if(fProduct&&!(x.lines||[]).some(line=>normalizeLookupText(line.productName||'')===normalizeLookupText(fProduct)))return false;
     if(fTime&&normalizeTimeInput(x.deliveryTime||'')!==fTime)return false;
-    if(fArea&&getArea(x)!==fArea)return false;
+    if(!matchesAreaOrTripGroup(x))return false;
     if(fPoint&&String(x.pointName||x.address||'').trim()!==fPoint)return false;
     return true;
   });
@@ -2584,13 +2607,15 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         const label=tripGroupLabel(o._effectiveTrip);
         const tripDateObj=parseAnyDate(o._effectiveTrip.deliveryDate||'');
         const shiftMeta=matchShiftSchedule({shiftId:o._effectiveTrip.shiftId,shiftName:o._effectiveTrip.shiftName,area:o._effectiveTrip.area,deliveryTime:o._effectiveTrip.deliveryTime});
+        const selectedArea=areaKey(fArea);
+        const samsungRank=samsungTripShiftRank.get(normalizeLookupText(o._effectiveTrip.shiftName||''));
         return {
           key:'trip:'+(o._effectiveTrip.id||tripGroupLabel(o._effectiveTrip)),
           label,
           summaryLabel:label,
           mode:'trip',
           sortDate:tripDateObj?tripDateObj.getTime():Number.MAX_SAFE_INTEGER,
-          sortShiftOrder:shiftMeta?shiftMeta._order:Number.MAX_SAFE_INTEGER,
+          sortShiftOrder:selectedArea==='SSTN'?(samsungRank??Number.MAX_SAFE_INTEGER):(selectedArea==='DT'?0:(shiftMeta?shiftMeta._order:Number.MAX_SAFE_INTEGER)),
           sortShiftTime:shiftMeta?shiftMeta._startMin:(String(o._effectiveTrip.deliveryTime||'').trim()?timeToMin(o._effectiveTrip.deliveryTime):Number.MAX_SAFE_INTEGER),
           sortText:label
         };
@@ -2600,13 +2625,15 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       const label=(pendingLabel?pendingLabel+' · ':'')+'Chưa tạo chuyến';
       const pendingDateObj=parseAnyDate(o._preferredTripDate||'');
       const shiftMeta=matchShiftSchedule({shiftName:o._preferredTripShiftName,area:o._area,deliveryTime:o._ctx?.deliveryTime});
+      const selectedArea=areaKey(fArea);
+      const samsungRank=samsungTripShiftRank.get(normalizeLookupText(o._preferredTripShiftName||''));
       return {
         key:'trip:pending:'+pendingKey,
         label,
         summaryLabel:label,
         mode:'trip',
         sortDate:pendingDateObj?pendingDateObj.getTime():Number.MAX_SAFE_INTEGER,
-        sortShiftOrder:shiftMeta?shiftMeta._order:Number.MAX_SAFE_INTEGER,
+        sortShiftOrder:selectedArea==='SSTN'?(samsungRank??Number.MAX_SAFE_INTEGER):(selectedArea==='DT'?0:(shiftMeta?shiftMeta._order:Number.MAX_SAFE_INTEGER)),
         sortShiftTime:shiftMeta?shiftMeta._startMin:(String(o._ctx?.deliveryTime||'').trim()?timeToMin(o._ctx.deliveryTime):Number.MAX_SAFE_INTEGER),
         sortText:pendingLabel||'Chưa tạo chuyến'
       };

@@ -1205,9 +1205,9 @@ function isPrivilegedEmployeeRecord(employee){
         h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền nghiệp vụ trong Báo cáo công nợ'),
         h('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'7px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer'}},
           h('input',{type:'checkbox',checked:!!f.salesDebtAllCustomers,onChange:event=>s('salesDebtAllCustomers',event.target.checked)}),
-          'Được chọn và xem tất cả khách hàng'
+          'Được xem tổng hợp Tất cả khách hàng'
         ),
-        h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:5}},'Không cấp quyền: báo cáo chỉ hiển thị WELSTORY.')
+        h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:5}},'Không cấp quyền: vẫn chọn xem từng khách hàng, nhưng không được xem tổng hợp Tất cả khách hàng.')
       )
     ),
     h(Row,null,
