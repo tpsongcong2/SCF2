@@ -83,7 +83,9 @@ function canAccess(role, page, perms, dept='') {
   if(isFaceMask&&!faceMaskPages.includes(page)&&!sharedVariantPages.includes(page))return false;
   if(!isFaceMask&&faceMaskPages.includes(page))return false;
   if(page==='permission_settings')return role==='admin';
-  const isAccounting=String(dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('ke toan');
+  const deptText=(Array.isArray(dept)?dept:[dept]).map(value=>String(value||'')).join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
+  const isAccounting=deptText.includes('ke toan');
+  const isDriverDepartment=deptText.includes('lai xe');
   if(page==='garages'&&role==='admin') return true;
   if(page==='deliveryrules') return true;
   // Admin luôn được quản trị lỗi nhân viên. Quản lý phải tuân theo quyền
@@ -93,7 +95,8 @@ function canAccess(role, page, perms, dept='') {
   if(page==='notifications') return ['admin','manager','staff','driver'].includes(role);
   if(page==='userguide') return ['admin','manager','staff','driver'].includes(role);
   if(page==='company') return ['admin','manager','staff','driver'].includes(role);
-  if(page==='trips'&&(role==='admin'||isAccounting)) return true;
+  if(page==='trips'&&(role==='admin'||isAccounting||isDriverDepartment)) return true;
+  if(page==='fuelpurchases'&&isDriverDepartment) return true;
   if(['nccgoods','purchasegoods'].includes(page)&&(role==='admin'||isAccounting)) return true;
   if(['nccs','purchaseorders','utilityexpenses','purchasereport'].includes(page)&&role!=='admin') return false;
   if(page==='utilityexpenses'&&role==='admin') return true;
@@ -142,8 +145,7 @@ const SCF_TRIP_PERMISSION_OPTIONS=[
 ];
 function defaultTripPermissions(user={}){
   const role=String(user?.role||'').trim().toLowerCase();
-  const dept=String(user?.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
-  const isAdmin=['admin','administrator'].includes(role),isDriver=role==='driver',isAccounting=dept.includes('ke toan');
+  const isAdmin=['admin','administrator'].includes(role),isDriver=role==='driver'||employeeHasDepartment(user,'Lái xe'),isAccounting=employeeDepartmentIncludes(user,'Kế toán');
   if(isAdmin)return{manage:true,delete:true,dispatch:true,actualQty:true,driverWorkflow:true,summaryInvoice:true,review:true};
   if(isDriver)return{manage:false,delete:false,dispatch:false,actualQty:true,driverWorkflow:true,summaryInvoice:true,review:false};
   const pageWrite=canWrite(role,'trips',user?.permLevels),pageDelete=canDel(role,'trips',user?.permLevels);

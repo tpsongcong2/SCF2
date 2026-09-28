@@ -1076,9 +1076,10 @@ function isPrivilegedEmployeeRecord(employee){
   const availableProfileIds=PERMISSION_PROFILE_ORDER.filter(id=>isFaceMask?privilegedProfileIds.has(id):!privilegedProfileIds.has(id));
   const scopedDeptNames=isFaceMask?[...new Set([...deptNames.filter(d=>normalizeEmployeeDept(d)==='ban giam doc'),'Ban Giám Đốc'])]:[...new Set([...deptNames.filter(d=>normalizeEmployeeDept(d)!=='ban giam doc'),...availableProfileIds.map(id=>normalizedProfiles[id].dept)])];
   const[busy,setBusy]=useState(false);
+  const defaultDept=scopedDeptNames[0]||(isFaceMask?'Ban Giám Đốc':'');
   const[f,sf]=useState(emp
-    ?{...emp,password:isPasswordHash(emp.password)?'':String(emp.password||''),gender:normalizeGenderValue(emp?.gender,emp?.female),female:isFemaleGender(emp?.gender,emp?.female)}
-    :{id:'NV'+String(Date.now()).slice(-4),name:'',birthday:'',gender:'male',female:false,dept:scopedDeptNames[0]||(isFaceMask?'Ban Giám Đốc':''),role:isFaceMask?'manager':'staff',username:'',password:'',phone:'',email:'',note:'',startDate:'',bhxh:false}
+    ?{...emp,departments:employeeDepartments(emp),password:isPasswordHash(emp.password)?'':String(emp.password||''),gender:normalizeGenderValue(emp?.gender,emp?.female),female:isFemaleGender(emp?.gender,emp?.female)}
+    :{id:'NV'+String(Date.now()).slice(-4),name:'',birthday:'',gender:'male',female:false,dept:defaultDept,departments:defaultDept?[defaultDept]:[],role:isFaceMask?'manager':'staff',username:'',password:'',phone:'',email:'',note:'',startDate:'',bhxh:false}
   );
   const isBoardDirectorDept=normalizeEmployeeDept(f.dept)==='ban giam doc';
   const selectableProfileIds=availableProfileIds.filter(id=>id!=='admin'||isBoardDirectorDept);
@@ -1088,8 +1089,24 @@ function isPrivilegedEmployeeRecord(employee){
     return true;
   });
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
+  const selectedDepartments=employeeDepartments(f);
+  const setPrimaryDepartment=dept=>sf(prev=>{
+    const departments=[dept,...employeeDepartments(prev).filter(value=>normalizeEmployeeDept(value)!==normalizeEmployeeDept(dept))].filter(Boolean);
+    return normalizeEmployeeDept(dept)==='ban giam doc'
+      ?{...prev,dept,departments}
+      :{...prev,dept,departments,permissionProfileId:prev.permissionProfileId==='admin'?'':prev.permissionProfileId,role:['admin','administrator'].includes(String(prev.role||'').toLowerCase())?'manager':prev.role,permissions:prev.permissionProfileId==='admin'?[]:prev.permissions,permLevels:prev.permissionProfileId==='admin'?{}:prev.permLevels};
+  });
+  const toggleAdditionalDepartment=(dept,checked)=>sf(prev=>{
+    const primary=String(prev.dept||'').trim();
+    const current=employeeDepartments(prev).filter(value=>normalizeEmployeeDept(value)!==normalizeEmployeeDept(primary));
+    const next=checked
+      ?[...current.filter(value=>normalizeEmployeeDept(value)!==normalizeEmployeeDept(dept)),dept]
+      :current.filter(value=>normalizeEmployeeDept(value)!==normalizeEmployeeDept(dept));
+    return{...prev,departments:[primary,...next].filter(Boolean)};
+  });
   const submit=async()=>{
     if(!f.name||!f.username){window.showToast('Nhập tên và tên đăng nhập!','warn');return;}
+    if(!f.dept){window.showToast('Chọn bộ phận chính!','warn');return;}
     const actualQtyLimitDays=Number(f.tripActualQtyLimitDays??2);
     if(f.tripActualQtyLimitDays===''||!Number.isInteger(actualQtyLimitDays)||actualQtyLimitDays<0||actualQtyLimitDays>365){window.showToast('Số ngày giới hạn nhập SL thực giao phải từ 0 đến 365.','warn');return;}
     const requestsAdmin=f.permissionProfileId==='admin'||['admin','administrator'].includes(String(f.role||'').toLowerCase());
@@ -1105,7 +1122,11 @@ function isPrivilegedEmployeeRecord(employee){
       const isFaceMaskPrivilegedProfile=isFaceMask&&privilegedProfileIds.has(f.permissionProfileId);
       const permissions=isFaceMaskPrivilegedProfile?[]:(f.permissions||[]).filter(page=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page));
       const permLevels=isFaceMaskPrivilegedProfile?{}:Object.fromEntries(Object.entries(f.permLevels||{}).filter(([page])=>!FACEMASK_ONLY_PERMISSION_PAGES.has(page)));
-      onSave({...f,dept:isFaceMaskPrivilegedProfile?'Ban Giám Đốc':f.dept,permissions,permLevels,tripActualQtyLimitDays:actualQtyLimitDays,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
+      const dept=isFaceMaskPrivilegedProfile?'Ban Giám Đốc':f.dept;
+      const departments=isFaceMaskPrivilegedProfile?['Ban Giám Đốc']:[dept,...selectedDepartments.filter(value=>normalizeEmployeeDept(value)!==normalizeEmployeeDept(dept))];
+      const driverDepartment=departments.some(value=>normalizeEmployeeDept(value)==='lai xe');
+      const tripPermissions=driverDepartment?{...normalizedTripPermissions({...f,dept,departments}),actualQty:true,driverWorkflow:true,summaryInvoice:true}:f.tripPermissions;
+      onSave({...f,dept,departments,tripPermissions,permissions,permLevels,tripActualQtyLimitDays:actualQtyLimitDays,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
     }catch(e){window.showToast(e.message||'Không thể lưu mật khẩu.','error');}
     finally{setBusy(false);}
   };
@@ -1116,11 +1137,11 @@ function isPrivilegedEmployeeRecord(employee){
       h(F,{label:'Ngày sinh (DD/MM/YYYY)'},h('input',{value:f.birthday,onChange:e=>s('birthday',e.target.value),placeholder:'15/03/1990'})),
     ),
     h('div',{className:'g2'},
-      h(F,{label:'Chức vụ / bộ quyền mặc định'},h('select',{value:f.permissionProfileId||'',onChange:e=>{const id=e.target.value;if(id==='admin'&&!isBoardDirectorDept){window.showToast('Chỉ Ban Giám Đốc mới được chọn quyền Admin.','warn');return;}sf(prev=>id?applyPermissionProfile(prev,normalizedProfiles,id):{...prev,permissionProfileId:''});}},h('option',{value:''},'— Chọn chức vụ —'),selectableProfileIds.map(id=>h('option',{key:id,value:id},normalizedProfiles[id].label)))),
+      h(F,{label:'Chức vụ / bộ quyền mặc định'},h('select',{value:f.permissionProfileId||'',onChange:e=>{const id=e.target.value;if(id==='admin'&&!isBoardDirectorDept){window.showToast('Chỉ Ban Giám Đốc mới được chọn quyền Admin.','warn');return;}sf(prev=>{if(!id)return{...prev,permissionProfileId:''};const next=applyPermissionProfile(prev,normalizedProfiles,id);return{...next,departments:[next.dept,...employeeDepartments(prev).filter(value=>normalizeEmployeeDept(value)!==normalizeEmployeeDept(next.dept))].filter(Boolean)};});}},h('option',{value:''},'— Chọn chức vụ —'),selectableProfileIds.map(id=>h('option',{key:id,value:id},normalizedProfiles[id].label)))),
       h('div',{style:{fontSize:12,color:'var(--tx2)',paddingTop:25}},f.permissionProfileId?'Đã áp dụng quyền mặc định. Admin có thể chỉnh riêng ở phần bên dưới.':'Chưa gắn bộ quyền theo chức vụ.')
     ),
     h('div',{className:'g3'},
-      h(F,{label:'Bộ phận'},h('select',{value:f.dept,onChange:e=>{const dept=e.target.value;sf(prev=>normalizeEmployeeDept(dept)==='ban giam doc'?{...prev,dept}:{...prev,dept,permissionProfileId:prev.permissionProfileId==='admin'?'':prev.permissionProfileId,role:['admin','administrator'].includes(String(prev.role||'').toLowerCase())?'manager':prev.role,permissions:prev.permissionProfileId==='admin'?[]:prev.permissions,permLevels:prev.permissionProfileId==='admin'?{}:prev.permLevels});}},scopedDeptNames.map(d=>h('option',{key:d,value:d},d)))),
+      h(F,{label:'Bộ phận chính'},h('select',{value:f.dept,onChange:e=>setPrimaryDepartment(e.target.value)},scopedDeptNames.map(d=>h('option',{key:d,value:d},d)))),
       h(F,{label:'Phân quyền'},h('select',{value:f.role,onChange:e=>s('role',e.target.value)},roleOptions.map(([v,l])=>h('option',{key:v,value:v},l)))),
       h(F,{label:'Ngày vào làm (DD/MM/YYYY)'},h('input',{value:f.startDate||'',onChange:e=>s('startDate',e.target.value),placeholder:'01/01/2024'})),
     ),
@@ -1142,6 +1163,17 @@ function isPrivilegedEmployeeRecord(employee){
         h('input',{type:'checkbox',checked:!!f.bhxh,onChange:e=>s('bhxh',e.target.checked),style:{cursor:'pointer',accentColor:'var(--pri)',width:15,height:15}}),
         h('span',{style:{fontSize:13,fontWeight:500,color:f.bhxh?'var(--pri)':'var(--tx2)'}},'Đóng BHXH'),
         f.bhxh&&h('i',{className:'ti ti-shield-check',style:{fontSize:14,color:'var(--pri)'}})
+      )
+    ),
+    !isFaceMask&&h(F,{label:'Bộ phận kiêm nhiệm (có thể tích nhiều)'},
+      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:7,padding:'9px 10px',border:'1px solid var(--bd)',borderRadius:'var(--r)',background:'#fff'}},
+        scopedDeptNames.map(dept=>{
+          const primary=normalizeEmployeeDept(dept)===normalizeEmployeeDept(f.dept);
+          const checked=selectedDepartments.some(value=>normalizeEmployeeDept(value)===normalizeEmployeeDept(dept));
+          return h('label',{key:dept,title:primary?'Đây là bộ phận chính':'Tích để nhân viên kiêm nhiệm bộ phận này',style:{display:'flex',alignItems:'center',gap:7,cursor:primary?'default':'pointer',fontSize:12,fontWeight:checked?600:400,padding:'5px 7px',borderRadius:6,background:checked?'#eef8f2':'var(--bg2)',color:checked?'var(--pri3)':'var(--tx)'}},
+            h('input',{type:'checkbox',checked,disabled:primary,onChange:event=>toggleAdditionalDepartment(dept,event.target.checked),style:{width:16,height:16,accentColor:'var(--pri)'}}),dept,primary&&h('span',{style:{fontSize:9,color:'var(--tx2)'}},'(chính)')
+          );
+        })
       )
     ),
     h('hr',{className:'divider'}),
@@ -1192,7 +1224,7 @@ function isPrivilegedEmployeeRecord(employee){
           })
         ))
       ),
-      canAccess(f.role,'trips',f.permissions,f.dept)&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,marginTop:10,background:'var(--bg2)'}},
+      canAccess(f.role,'trips',f.permissions,selectedDepartments)&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,marginTop:10,background:'var(--bg2)'}},
         h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền nghiệp vụ trong Chuyến giao hàng'),
         h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:8}},'Số lượng thực giao tách khỏi quyền sửa thông tin chuyến.'),
         h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}},SCF_TRIP_PERMISSION_OPTIONS.map(([key,label])=>h('label',{key,style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'6px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer'}},
@@ -1201,7 +1233,7 @@ function isPrivilegedEmployeeRecord(employee){
         h('label',{style:{display:'flex',alignItems:'center',gap:10,marginTop:10,fontSize:12,fontWeight:600,flexWrap:'wrap'}},'Số ngày giới hạn nhập SL thực giao',h('input',{type:'number',min:0,max:365,step:1,value:f.tripActualQtyLimitDays??2,onChange:event=>s('tripActualQtyLimitDays',event.target.value),style:{width:90}})),
         h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:4}},'2 = khóa từ ngày thứ 2 sau ngày giao; 0 = không giới hạn ngày. Chỉ có tác dụng khi nhân viên được cấp quyền nhập số lượng thực giao.')
       ),
-      canAccess(f.role,'marketsales',f.permissions,f.dept)&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,marginTop:10,background:'var(--bg2)'}},
+      canAccess(f.role,'marketsales',f.permissions,selectedDepartments)&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,marginTop:10,background:'var(--bg2)'}},
         h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền nghiệp vụ trong Báo cáo công nợ'),
         h('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'7px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer'}},
           h('input',{type:'checkbox',checked:!!f.salesDebtAllCustomers,onChange:event=>s('salesDebtAllCustomers',event.target.checked)}),
@@ -1292,12 +1324,12 @@ function EmployeeTab({employees,setEmployees,cu,depts,permissionProfiles}){
     .filter(e=>{
       if(q&&!e.name.toLowerCase().includes(q.toLowerCase())&&!e.username.toLowerCase().includes(q.toLowerCase())&&!(e.id||'').toLowerCase().includes(q.toLowerCase()))return false;
       if(fRole&&e.role!==fRole)return false;
-      if(fDept&&e.dept!==fDept)return false;
+      if(fDept&&!employeeHasDepartment(e,fDept))return false;
       return true;
     })
     .sort((a,b)=>{
       if(sortBy==='role') return (ROLE_ORDER[a.role]??9)-(ROLE_ORDER[b.role]??9);
-      if(sortBy==='dept') return (a.dept||'').localeCompare(b.dept||'','vi');
+      if(sortBy==='dept') return employeeDepartmentLabel(a).localeCompare(employeeDepartmentLabel(b),'vi');
       return (a.id||'').localeCompare(b.id||'','vi',{numeric:true});
     });
   return h('div',null,
@@ -1323,20 +1355,20 @@ function EmployeeTab({employees,setEmployees,cu,depts,permissionProfiles}){
       h('div',{style:{display:'flex',gap:6}},
         h(ExportBtn,{onClick:()=>{
           const cols=[['id','Mã NV'],['name','Họ tên'],['birthday','Ngày sinh'],['gender','Giới tính'],['dept','Bộ phận'],['role','Phân quyền'],['username','Đăng nhập'],['phone','SĐT'],['email','Email'],['note','Ghi chú']];
-          const data=employees.map(e=>Object.fromEntries(cols.map(([k,l])=>[l,k==='gender'?fmtGender(e):(e[k]||'')])));
+          const data=employees.map(e=>Object.fromEntries(cols.map(([k,l])=>[l,k==='gender'?fmtGender(e):k==='dept'?employeeDepartmentLabel(e):(e[k]||'')])));
           const ws=XLSX.utils.json_to_sheet(data);const wb=XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb,ws,'Nhan vien');
           XLSX.writeFile(wb,'Nhan_vien_'+fmtDate().split('/').join('-')+'.xlsx');
         }}),
         canEdit&&h(ImportBtn,{onFile:async rows=>{
           const ROLE_MAP={'Admin':'admin','Quản lý':'manager','Nhân viên':'staff','Lái xe':'driver','admin':'admin','manager':'manager','staff':'staff','driver':'driver'};
-          const imported=rows.map(r=>({
+          const imported=rows.map(r=>{const departments=String(r['Bộ phận']||'').split(/[;,|]/).map(value=>value.trim()).filter(Boolean);return({
             id:(r['Mã NV']||'NV'+uid()).toString().trim(),
             name:r['Họ tên']||'',
             birthday:r['Ngày sinh']||'',
             gender:parseGenderValue(r['Giới tính']||r['Nữ giới']),
             female:isFemaleGender(parseGenderValue(r['Giới tính']||r['Nữ giới'])),
-            dept:r['Bộ phận']||(depts&&depts.length?depts[0].name:DEPTS[0]),
+            dept:departments[0]||(depts&&depts.length?depts[0].name:DEPTS[0]),departments:departments.length?departments:[(depts&&depts.length?depts[0].name:DEPTS[0])],
             role:ROLE_MAP[r['Phân quyền']]||'staff',
             username:(r['Đăng nhập']||'').toString().trim(),
             password:String(r['Mật khẩu']||generateTemporaryPassword()),mustChangePw:true,
@@ -1344,7 +1376,7 @@ function EmployeeTab({employees,setEmployees,cu,depts,permissionProfiles}){
             email:r['Email']||'',
             note:r['Ghi chú']||'',
             updatedBy:cu.name,updatedAt:fmtDT()
-          })).filter(r=>r.name&&r.username);
+          })}).filter(r=>r.name&&r.username);
           const added=imported.filter(r=>isPrivilegedEmployeeRecord(r)===isFaceMask);
           const rejected=imported.length-added.length;
           setEmployees(p=>{
@@ -1380,7 +1412,7 @@ function EmployeeTab({employees,setEmployees,cu,depts,permissionProfiles}){
             h('td',null,e.birthday||'—'),
             h('td',null,h('span',{className:'badge',style:genderStyle},isFemale?'Nữ':'Nam')),
             h('td',null,e.startDate||'—'),
-            h('td',null,e.dept),
+            h('td',null,employeeDepartmentLabel(e)||'—'),
             h('td',null,h('span',{className:'badge '+(RCLS[e.role]||'chip-staff')},ROLES[e.role]||e.role),e.permissionProfileId&&normalizedPermissionProfileLabel(permissionProfiles,e.permissionProfileId)&&h('div',{style:{fontSize:10,color:'var(--tx2)',marginTop:3}},normalizedPermissionProfileLabel(permissionProfiles,e.permissionProfileId))),
             h('td',null,e.bhxh
               ?h('span',{style:{color:'#2d6a4f',fontWeight:600,fontSize:12,display:'flex',alignItems:'center',gap:4}},h('i',{className:'ti ti-shield-check',style:{fontSize:13}}),'Có')
@@ -1607,8 +1639,7 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
     .filter(emp=>{
       if(isVehicle) return true;
       const role=String(emp?.role||'').trim().toLowerCase();
-      const dept=normalizeText(emp?.dept);
-      return role==='staff' && dept.includes('san xuat') && !isFemaleGender(emp?.gender,emp?.female);
+      return role==='staff' && employeeDepartmentIncludes(emp,'Sản xuất') && !isFemaleGender(emp?.gender,emp?.female);
     })
     .map(emp=>{
       const id=String(emp?.id||emp?.code||emp?.username||emp?.name||'').trim();
@@ -2062,7 +2093,7 @@ function PowderSalesTab({customers,trips,employees,setPage}){
   const [uploading,setUploading]=useState(false);
   const [form,setForm]=useState(makeForm({date:''}));
   const customerOptions=[...new Set((customers||[]).map(c=>c.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
-  const driverOptions=(employees||[]).filter(e=>e.role==='driver'||e.dept==='Lái xe').map(e=>({id:e.id,label:(e.id||'')+' - '+(e.name||'')})).sort((a,b)=>a.label.localeCompare(b.label,'vi'));
+  const driverOptions=(employees||[]).filter(e=>e.role==='driver'||employeeHasDepartment(e,'Lái xe')).map(e=>({id:e.id,label:(e.id||'')+' - '+(e.name||'')})).sort((a,b)=>a.label.localeCompare(b.label,'vi'));
   const normalizeMoney=v=>String(v||'').replace(/[^\d]/g,'');
   const isInvoiceImage=v=>/^(data:image\/|blob:|https?:\/\/)/i.test(String(v||'').trim());
   const invoiceExportValue=r=>r.invoiceImage||r.invoice||'';

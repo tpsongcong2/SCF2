@@ -288,10 +288,15 @@ async function dbGetRequired(key,def){
   const pending=readSyncQueue()[key];
   if(pending)return pending.value;
   if(SCF_EDGE_WRITE_KEYS.has(key)){
+    const before=scfLocalWrites.get(key);
     try{
       setSyncState('syncing','Đang nhận '+syncCollectionLabel(key));
       const loaded=await serverLoadPermittedCollection(key);
+      const latest=scfLocalWrites.get(key),queued=readSyncQueue()[key];
+      if(queued)return queued.value;
+      if(latest!==before)return latest.value;
       const value=loaded&&Object.prototype.hasOwnProperty.call(loaded,'value')&&loaded.value!==undefined?loaded.value:def;
+      if(Array.isArray(def)&&!Array.isArray(value))throw new Error('Dữ liệu trả về không đúng định dạng.');
       scfRemoteVersions.set(key,String(loaded?.updatedAt||''));
       scfRemoteSnapshots.set(key,syncSnapshot(value));setSyncState('synced');return value;
     }catch(error){setSyncState('error','Không tải được '+syncCollectionLabel(key));throw new Error('Không tải được '+key+': '+(error.message||'Lỗi kết nối'));}
@@ -318,6 +323,10 @@ async function dbGetRequired(key,def){
 async function dbGetChangedKeys(keys){
   const wanted=[...new Set((keys||[]).map(String).filter(Boolean))];
   if(!wanted.length||!sb)return[];
+  if(serverAuthEnabled()){
+    const versions=await withRemoteTimeout(serverLoadPermittedCollectionVersions(wanted),10000);
+    return versions.filter(row=>String(row?.updatedAt||'')!==String(scfRemoteVersions.get(String(row?.key||''))||'')).map(row=>String(row.key));
+  }
   const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('key,updated_at').in('key',wanted),10000);
   if(error)throw error;
   return (data||[]).filter(row=>String(row?.updated_at||'')!==String(scfRemoteVersions.get(String(row?.key||''))||'')).map(row=>String(row.key));

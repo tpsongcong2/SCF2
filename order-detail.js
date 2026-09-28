@@ -77,7 +77,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const tripIsDispatched=t=>!!t?.driverDispatchedAt||['active','completion_pending','completed'].includes(t?.status);
   const dispatchedDriverName=t=>tripIsDispatched(t)?String(t?.driverName||'').trim():'';
 
-  const isDriver=currentUser?.role==='driver';
+  const isDriver=currentUser?.role==='driver'||employeeHasDepartment(currentUser,'Lái xe');
   const deptKey=String(currentUser?.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const isAccounting=deptKey.includes('ke toan');
   const cleanName=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');

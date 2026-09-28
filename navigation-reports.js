@@ -584,13 +584,13 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
   const [uploading,setUploading]=useState('');
   const [quickCaptureStep,setQuickCaptureStep]=useState('meter');
   const normalizeText=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const canOpen=canAccess(currentUser?.role,'fuelpurchases',currentUser?.permissions,currentUser?.dept);
+  const canOpen=canAccess(currentUser?.role,'fuelpurchases',currentUser?.permissions,employeeDepartments(currentUser));
   const canManage=canOpen&&canWrite(currentUser?.role,'fuelpurchases',currentUser?.permLevels);
   const canRemove=canOpen&&canDel(currentUser?.role,'fuelpurchases',currentUser?.permLevels);
-  const isDriver=currentUser?.role==='driver';
+  const isDriver=currentUser?.role==='driver'||employeeHasDepartment(currentUser,'Lái xe');
   const selfOption=currentUser?{id:currentUser.id,name:currentUser.name||currentUser.id,label:(currentUser.name||currentUser.id)+(currentUser.id?' - '+currentUser.id:'')}:null;
   const driverOptions=(employees||[])
-    .filter(e=>e.role==='driver'||normalizeText(e.dept)==='lai xe')
+    .filter(e=>e.role==='driver'||employeeHasDepartment(e,'Lái xe'))
     .map(e=>({id:e.id,name:e.name||e.id,label:(e.name||e.id)+(e.id?' - '+e.id:'')}))
     .sort((a,b)=>a.label.localeCompare(b.label,'vi'));
   const buyerOptions=(selfOption?[selfOption,...driverOptions.filter(d=>d.id!==selfOption.id)]:driverOptions);

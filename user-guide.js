@@ -35,7 +35,7 @@ const SCF_GUIDES={
 function UserGuideTab({currentUser}){
   const dept=String(currentUser?.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const isProduction=dept.includes('san xuat')||dept.includes('bep')||dept.includes('dong goi')||dept.includes('che bien');
-  const defaultRole=currentUser?.role==='driver'?'driver':dept.includes('ke toan')?'accounting':isProduction?'production':'attendance';
+  const defaultRole=(currentUser?.role==='driver'||employeeHasDepartment(currentUser,'Lái xe'))?'driver':employeeDepartmentIncludes(currentUser,'Kế toán')?'accounting':isProduction?'production':'attendance';
   const canViewAll=currentUser?.role==='admin';
   const allowedRoles=canViewAll?Object.keys(SCF_GUIDES):[defaultRole];
   const[role,setRole]=useState(defaultRole);const[q,setQ]=useState('');

@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V410';
+const SCF_BUILD_VERSION='V427';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -339,6 +339,7 @@ function App(){
   const[page,setPage]=useLS(isFaceMask?'facemask_last_page':'scf_last_page',homePage);
   const[authEmployee,setAuthEmployee]=useState(null);
   const[bootError,setBootError]=useState('');
+  const[bootStatus,setBootStatus]=useState('');
   const[bootAttempt,setBootAttempt]=useState(0);
   const[pageError,setPageError]=useState('');
   const[pageAttempt,setPageAttempt]=useState(0);
@@ -348,6 +349,7 @@ function App(){
   const cu=SCF_SERVER_AUTH_ENABLED
     ?(authEmployee&&(employees.find(e=>String(e.id)===String(authEmployee.id))||authEmployee))
     :(session?employees.find(e=>String(e.id)===String(session.id)):null);
+  const cuAccessDepartments=employeeDepartments(cu);
   const resources={
     company:[DEF_COMPANY,_sc,v=>({...DEF_COMPANY,...v})],ui_settings:[DEF_UI_SETTINGS,_sui,normalizeUiSettings],
     materials:[[],_sm],assets:[[],_sas],garages:[[],_sg],prodcats:[[],_spc],
@@ -396,7 +398,7 @@ function App(){
   };
   useEffect(()=>{
     let cancelled=false;
-    setLoading(true);setBootError('');setServerAuthReady(false);setAuthEmployee(null);setReadyPage(null);
+    setLoading(true);setBootError('');setBootStatus('Đang kiểm tra phiên đăng nhập...');setServerAuthReady(false);setAuthEmployee(null);setReadyPage(null);
     window.__SCF_CURRENT_EMPLOYEE=null;
     dataLoaderRef.current?.dispose();
     const loader=createScfDataLoader(
@@ -407,12 +409,32 @@ function App(){
     (async()=>{
       try{
         if(SCF_SERVER_AUTH_ENABLED){
-          const authSession=await withRemoteTimeout(getServerAuthSession(),15000);
+          const retryableRemoteError=error=>{
+            const message=String(error?.message||'');
+            return error?.code==='SCF_REMOTE_TIMEOUT'||/Supabase timeout|Failed to fetch|Failed to send a request|NetworkError|Load failed|không kết nối được máy chủ|Máy chủ xác thực đang gặp lỗi|Không tải được danh sách nhân viên/i.test(message);
+          };
+          const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+          const retryRemote=async(task,label)=>{
+            const maxAttempts=3;
+            let lastError;
+            for(let attempt=1;attempt<=maxAttempts;attempt++){
+              if(cancelled)return null;
+              setBootStatus(attempt===1?label:(label+' — đang thử lại '+attempt+'/'+maxAttempts+'...'));
+              try{return await task();}
+              catch(error){
+                lastError=error;
+                if(!retryableRemoteError(error)||attempt===maxAttempts)throw error;
+                await wait(attempt*1200);
+              }
+            }
+            throw lastError;
+          };
+          const authSession=await retryRemote(()=>withRemoteTimeout(getServerAuthSession(),12000),'Đang kiểm tra phiên đăng nhập...');
           if(cancelled)return;
           if(!authSession){setSession(null);_se([]);return;}
           const employeeId=String(authSession.user?.app_metadata?.employee_id||'');
           if(!employeeId)throw new Error('Phiên đăng nhập thiếu mã nhân viên. Vui lòng đăng nhập lại.');
-          const context=await withRemoteTimeout(serverLoadEmployeeContext(),15000);
+          const context=await retryRemote(()=>serverLoadEmployeeContext(12000),'Đang tải hồ sơ từ máy chủ...');
           if(cancelled)return;
           const current=context.currentEmployee;
           if(!current||String(current.id)!==employeeId)throw new Error('Chưa tải được hồ sơ của tài khoản đang đăng nhập.');
@@ -427,16 +449,28 @@ function App(){
         if(!cancelled&&String(err?.message||'').includes('Phiên đăng nhập không hợp lệ')){
           _se([]);setBootError('');
           window.dispatchEvent(new CustomEvent('scf-session-replaced'));
-        }else if(!cancelled)setBootError(err.message||'Không tải được hồ sơ đăng nhập.');
+        }else if(!cancelled){
+          const message=String(err?.message||'');
+          setBootError(/Supabase timeout|Failed to fetch|Failed to send a request|NetworkError|Load failed|không kết nối được máy chủ|Máy chủ xác thực đang gặp lỗi|Không tải được danh sách nhân viên/i.test(message)
+            ?'Máy chủ phản hồi chậm sau 3 lần thử. Phiên đăng nhập vẫn được giữ và app sẽ tự thử lại.'
+            :(message||'Không tải được hồ sơ đăng nhập.'));
+        }
       }
-      finally{if(!cancelled){setServerAuthReady(true);setLoading(false);}}
+      finally{if(!cancelled){setBootStatus('');setServerAuthReady(true);setLoading(false);}}
     })();
     return()=>{cancelled=true;loader.dispose();};
   },[bootAttempt]);
   useEffect(()=>{
+    if(!bootError)return;
+    const retry=()=>setBootAttempt(value=>value+1);
+    const timer=navigator.onLine?setTimeout(retry,30000):null;
+    window.addEventListener('online',retry,{once:true});
+    return()=>{if(timer)clearTimeout(timer);window.removeEventListener('online',retry);};
+  },[bootError]);
+  useEffect(()=>{
     if(!serverAuthReady||bootError||!cu)return;
     if(isFaceMask&&!['admin','administrator'].includes(String(cu.role||'').toLowerCase()))return;
-    if(!canAccess(cu.role,page,cu.permissions,cu.dept))return;
+    if(!canAccess(cu.role,page,cu.permissions,cuAccessDepartments))return;
     let cancelled=false;
     setReadyPage(null);setPageError('');
     const loader=dataLoaderRef.current;
@@ -595,12 +629,13 @@ function App(){
     }
   },[cu?.id,cu?.mustChangePw]);
   useEffect(()=>{
-    if(cu&&!canAccess(cu.role,page,cu.permissions,cu.dept))setPage(homePage);
-  },[cu?.id,cu?.role,cu?.dept,page]);
+    if(cu&&!canAccess(cu.role,page,cu.permissions,cuAccessDepartments))setPage(homePage);
+  },[cu?.id,cu?.role,employeeDepartmentLabel(cu),page]);
   if(bootError)return h('div',{className:'login-bg'},h('div',{className:'login-card',role:'alert'},
     h('h2',null,'Chưa tải được hồ sơ đăng nhập'),
     h('p',null,'App chưa xác định được hồ sơ của bạn. Không cần thay đổi quyền hay nhập lại đơn hàng.'),
     h('p',null,bootError),
+    h('p',{style:{fontSize:12,color:'var(--tx2)'}},'App sẽ tự thử lại sau 30 giây hoặc ngay khi mạng được kết nối lại.'),
     h('button',{className:'bp',onClick:()=>setBootAttempt(v=>v+1)},'Thử tải lại'),
     h('button',{className:'bb',onClick:async()=>{await serverLogout();setSession(null);setBootAttempt(v=>v+1);}},'Đăng nhập lại')
   ));
@@ -609,7 +644,7 @@ function App(){
       h('img',{src:'icon-192.png',className:'load-logo',alt:'Logo Thực Phẩm Sông Công'})
     ),
     h('div',{style:{fontSize:17,fontWeight:600,color:'var(--pri3)',marginBottom:4}},isFaceMask?'FACE MASK':'Thực Phẩm Sông Công'),
-    h('div',{style:{fontSize:13,color:'var(--pri2)',display:'flex',alignItems:'center',gap:6}},h('i',{className:'ti ti-loader-2 spin',style:{fontSize:16}}),'Đang tải dữ liệu...')
+    h('div',{style:{fontSize:13,color:'var(--pri2)',display:'flex',alignItems:'center',gap:6}},h('i',{className:'ti ti-loader-2 spin',style:{fontSize:16}}),bootStatus||'Đang tải dữ liệu...')
   );
   const hasConfiguredAdmin=employees.some(employee=>employee.role==='admin'&&String(employee.username||'').trim()&&String(employee.password||'').length>0);
   if(!SCF_SERVER_AUTH_ENABLED&&!hasConfiguredAdmin)return h(InitialAdminSetup,{onSetup:async({username,password})=>{
@@ -637,7 +672,7 @@ function App(){
       h('button',{className:'bp',style:{width:'100%',justifyContent:'center'},onClick:async()=>{await serverLogout();window.scfClearSensitiveLocalData&&window.scfClearSensitiveLocalData();setSession(null);}},h('i',{className:'ti ti-logout'}),'Đăng xuất')
     )
   );
-  const isAccounting=String(cu.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('ke toan');
+  const isAccounting=employeeDepartmentIncludes(cu,'Kế toán');
   const activeLevel=getLvl(cu.role,page,cu.permLevels);
   const readOnly=activeLevel==='r';
   window.__SCF_ACCESS_CONTEXT={role:cu.role,page,level:activeLevel,readOnly};
@@ -668,7 +703,7 @@ function App(){
             h('button',{className:'topbar-logout',onClick:logout,style:{fontSize:12,padding:'5px 10px',color:'#A32D2D',borderColor:'#F7C1C1'},title:'Đăng xuất','aria-label':'Đăng xuất'},h('i',{className:'ti ti-logout',style:{fontSize:14}}),h('span',{className:'topbar-logout-label'},'Đăng xuất'))
           )
         ),
-        h(TopNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cu.dept})
+        h(TopNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments})
       ),
       page!=='welcome'&&h('div',{className:'mobile-page-backbar'},
         h('button',{className:'mobile-page-back',onClick:goBackPage,'aria-label':'Quay lại trang trước'},
@@ -685,7 +720,7 @@ function App(){
           pageError&&h('button',{className:'bp',onClick:()=>setPageAttempt(v=>v+1)},'Thử tải lại')
         ):h(React.Fragment,null,
         canAccess(cu.role,page)&&page==='welcome'&&h(WelcomePage,{emp:cu,employees,company,uiSettings,news:companyNews,setNews:setCompanyNews,messages:internalMessages,setMessages:setInternalMessages,onRefresh:refreshCommunityData}),
-        canAccess(cu.role,'company',cu.permissions,cu.dept)&&page==='company'&&h(CompanySettings,{company,setCompany,canEdit:canWrite(cu.role,'company',cu.permLevels)}),
+        canAccess(cu.role,'company',cu.permissions,cuAccessDepartments)&&page==='company'&&h(CompanySettings,{company,setCompany,canEdit:canWrite(cu.role,'company',cu.permLevels)}),
         canAccess(cu.role,'appearance',cu.permissions)&&page==='appearance'&&h(AppearanceSettingsTab,{uiSettings,setUiSettings}),
         canAccess(cu.role,'printtemplates',cu.permissions)&&page==='printtemplates'&&h(PrintTemplateSettingsTab,{templateSettings:printTemplateSettings,setTemplateSettings:setPrintTemplateSettings,products,customers}),
         canAccess(cu.role,'employees',cu.permissions)&&page==='employees'&&h(EmployeeTab,{employees,setEmployees,cu,depts,permissionProfiles}),
@@ -693,7 +728,7 @@ function App(){
         canAccess(cu.role,'attendance',cu.permissions)&&page==='attendance'&&h(AttendanceTab,{section:'punch',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company}),
         canAccess(cu.role,'attendance_settings',cu.permissions)&&page==='attendance_settings'&&h(AttendanceTab,{section:'settings',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,onKioskExit:logout}),
         canAccess(cu.role,'attendance_report',cu.permissions)&&page==='attendance_report'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company}),
-        canAccess(cu.role,'workreport_total',cu.permissions,cu.dept)&&page==='workreport_total'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,reportTitle:'Tổng công'}),
+        canAccess(cu.role,'workreport_total',cu.permissions,cuAccessDepartments)&&page==='workreport_total'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,reportTitle:'Tổng công'}),
         canAccess(cu.role,'advances',cu.permissions)&&page==='advances'&&h(MoneyTab,{mode:'advance',records:advances,setRecords:setAdvances,employees,currentUser:cu}),
         canAccess(cu.role,'rewards',cu.permissions)&&page==='rewards'&&h(MoneyTab,{mode:'reward',records:rewards,setRecords:setRewards,employees,currentUser:cu}),
         canAccess(cu.role,'employee_errors',cu.permissions)&&page==='employee_errors'&&h(EmployeeErrorsTab,{records:employeeErrors,setRecords:setEmployeeErrors,employees,currentUser:cu}),
@@ -709,15 +744,15 @@ function App(){
         canAccess(cu.role,'areas',cu.permissions)&&page==='areas'&&h(AreasTab,{areas,setAreas,customers,setCustomers,orders}),
         canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts,currentUser:cu}),
         canAccess(cu.role,'deliveryrules',cu.permissions)&&page==='deliveryrules'&&h(DeliveryRulesTab,{items:deliveryRules,setItems:setDeliveryRules,currentUser:cu}),
-        canAccess(cu.role,'deliverysequence',cu.permissions,cu.dept)&&page==='deliverysequence'&&h(DeliverySequenceSettingsTab,{customers,setCustomers,currentUser:cu}),
+        canAccess(cu.role,'deliverysequence',cu.permissions,cuAccessDepartments)&&page==='deliverysequence'&&h(DeliverySequenceSettingsTab,{customers,setCustomers,currentUser:cu}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats,depts}),
         canAccess(cu.role,'tasks',cu.permissions)&&page==='tasks'&&h(TasksTab,{tasks,setTasks,workcats,employees,currentUser:cu,notify:addNotification}),
         canAccess(cu.role,'notifications',cu.permissions)&&page==='notifications'&&h(NotificationsTab,{notifications,setNotifications,currentUser:cu,setPage}),
         canAccess(cu.role,'userguide',cu.permissions)&&page==='userguide'&&h(UserGuideTab,{currentUser:cu}),
         canAccess(cu.role,'nccs',cu.permissions)&&page==='nccs'&&h(NCCTab,{nccs,setNCCs,purchases,setPurchases,title:'Nhà CC NVL',fileName:'Nha_CC_NVL'}),
-        canAccess(cu.role,'nccgoods',cu.permissions,cu.dept)&&page==='nccgoods'&&h(NCCTab,{nccs:nccGoods,setNCCs:setNccGoods,purchases:goodsPurchases,setPurchases:setGoodsPurchases,title:'Nhà CC Hàng hóa',fileName:'Nha_CC_Hang_hoa',readOnly:!canWrite(cu.role,'nccgoods',cu.permLevels)}),
+        canAccess(cu.role,'nccgoods',cu.permissions,cuAccessDepartments)&&page==='nccgoods'&&h(NCCTab,{nccs:nccGoods,setNCCs:setNccGoods,purchases:goodsPurchases,setPurchases:setGoodsPurchases,title:'Nhà CC Hàng hóa',fileName:'Nha_CC_Hang_hoa',readOnly:!canWrite(cu.role,'nccgoods',cu.permLevels)}),
         canAccess(cu.role,'purchaseorders',cu.permissions)&&page==='purchaseorders'&&h(PurchaseTab,{purchases,setPurchases,nccs,setNCCs,materials,products,prodCats,cu,setPage,mode:'material'}),
-        canAccess(cu.role,'purchasegoods',cu.permissions,cu.dept)&&page==='purchasegoods'&&h(PurchaseTab,{purchases:goodsPurchases,setPurchases:setGoodsPurchases,nccs:nccGoods,setNCCs:setNccGoods,materials,products,prodCats,cu,setPage,mode:'goods'}),
+        canAccess(cu.role,'purchasegoods',cu.permissions,cuAccessDepartments)&&page==='purchasegoods'&&h(PurchaseTab,{purchases:goodsPurchases,setPurchases:setGoodsPurchases,nccs:nccGoods,setNCCs:setNccGoods,materials,products,prodCats,cu,setPage,mode:'goods'}),
         canAccess(cu.role,'fuelpurchases',cu.permissions)&&page==='fuelpurchases'&&h(FuelPurchaseTab,{rows:fuelPurchases,setRows:setFuelPurchases,employees,assets,currentUser:cu}),
         canAccess(cu.role,'utilityexpenses',cu.permissions)&&page==='utilityexpenses'&&h(UtilityExpenseTab,{entries:financeEntries,setEntries:setFinanceEntries,currentUser:cu}),
         canAccess(cu.role,'fuelreport',cu.permissions)&&page==='fuelreport'&&h(FuelPurchaseReportTab,{rows:fuelPurchases}),
@@ -731,8 +766,8 @@ function App(){
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
         canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify:addNotification}),
         canAccess(cu.role,'intem',cu.permissions)&&page==='intem'&&h(IntemTab,{products,company}),
-        canAccess(cu.role,'trips',cu.permissions,cu.dept)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,quotes,financeDebts,setFinanceDebts,company,currentUser:cu,notify:addNotification}),
-        canAccess(cu.role,'workreport_lx',cu.permissions,cu.dept)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,orders,products,customers,currentUser:cu}),
+        canAccess(cu.role,'trips',cu.permissions,cuAccessDepartments)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,quotes,financeDebts,setFinanceDebts,company,currentUser:cu,notify:addNotification}),
+        canAccess(cu.role,'workreport_lx',cu.permissions,cuAccessDepartments)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,orders,products,customers,currentUser:cu}),
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,trips,currentUser:cu,prodShifts,quotes,financeDebts,setFinanceDebts,menuHidden,setMenuHidden}),
         canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),
         canAccess(cu.role,'marketsales',cu.permissions)&&page==='marketsales'&&h(SalesDebtReportTab,{orders,customers,products,trips,currentUser:cu}),
@@ -748,7 +783,7 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         wips.includes(page)&&h(PlaceholderTab,{title:PTITLES[page],icon:PICONS[page]||'ti-clock'})
         )
       ),
-      (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cu.dept,onLogout:logout})
+      (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,onLogout:logout})
     ),
     cu.mustChangePw&&h(CpwModal,{
       emp:cu,cu,forced:true,onClose:()=>{},

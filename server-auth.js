@@ -98,9 +98,9 @@ async function serverTouchSession(){
   return true;
 }
 
-async function serverLoadEmployeeContext(){
+async function serverLoadEmployeeContext(requestTimeoutMs=15000){
   if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
-  const{data,error}=await invokeScfAuth({body:{action:'load_employees',appVariant:window.SCF_APP_VARIANT||'scfood'}},15000);
+  const{data,error}=await invokeScfAuth({body:{action:'load_employees',appVariant:window.SCF_APP_VARIANT||'scfood'}},requestTimeoutMs);
   if(error||!Array.isArray(data?.employees))throw new Error(await serverFunctionErrorMessage(error,data,'Không tải được danh sách nhân viên.'));
   return data;
 }
@@ -120,6 +120,15 @@ async function serverLoadPermittedCollection(key){
   const{data,error}=await invokeScfAuth({body:{action:'load_permitted_collection',key:String(key||'')}});
   if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không tải được dữ liệu.'));
   return{value:data.value,updatedAt:data.updatedAt||''};
+}
+
+async function serverLoadPermittedCollectionVersions(keys){
+  if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
+  const requested=[...new Set((keys||[]).map(String).filter(Boolean))];
+  if(!requested.length)return[];
+  const{data,error}=await invokeScfAuth({body:{action:'load_permitted_collection_versions',keys:requested}});
+  if(error||!data?.ok||!Array.isArray(data?.versions))throw new Error(await serverFunctionErrorMessage(error,data,'Không kiểm tra được phiên bản dữ liệu.'));
+  return data.versions;
 }
 
 function serverEmployeeIsPrivileged(employee){

@@ -40,7 +40,7 @@ function DeliveryShiftForm({s,allShifts,drivers,onSave,onClose}) {
   );
 }
 function ShiftsTab({shifts,setShifts,employees=[],trips=[],setTrips}) {
-  const drivers=(employees||[]).filter(e=>e.role==='driver'||e.dept==='Lái xe');
+  const drivers=(employees||[]).filter(e=>e.role==='driver'||employeeHasDepartment(e,'Lái xe'));
   const [modal,sm]=useState(null); const [edit,se]=useState(null); const [q,sq]=useState(''); const [sortBy,setSortBy]=useState('area');
   const save=d=>{
     if(edit)setShifts(p=>p.map(x=>x.id===edit.id?{...d}:x));else setShifts(p=>[...p,d]);

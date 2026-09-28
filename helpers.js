@@ -61,6 +61,25 @@ const fmtAnyDate=s=>{
   return pad2(d.getDate())+'/'+pad2(d.getMonth()+1)+'/'+d.getFullYear();
 };
 const normalizePlainText=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const normalizeDepartmentName=s=>normalizePlainText(s).replace(/đ/g,'d').replace(/[^a-z0-9]+/g,' ').trim();
+function employeeDepartments(employee){
+  const values=[...(Array.isArray(employee?.departments)?employee.departments:[]),employee?.dept];
+  const seen=new Set();
+  return values.map(value=>String(value||'').trim()).filter(value=>{
+    const key=normalizeDepartmentName(value);
+    if(!key||seen.has(key))return false;
+    seen.add(key);return true;
+  });
+}
+function employeeHasDepartment(employee,department){
+  const target=normalizeDepartmentName(department);
+  return !!target&&employeeDepartments(employee).some(value=>normalizeDepartmentName(value)===target);
+}
+function employeeDepartmentIncludes(employee,text){
+  const target=normalizeDepartmentName(text);
+  return !!target&&employeeDepartments(employee).some(value=>normalizeDepartmentName(value).includes(target));
+}
+const employeeDepartmentLabel=employee=>employeeDepartments(employee).join(', ');
 const normalizeGenderValue=(gender,femaleFallback)=>{
   if(gender===true||gender===false) return gender?'female':'male';
   const raw=normalizePlainText(gender);

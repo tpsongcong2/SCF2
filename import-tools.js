@@ -151,7 +151,7 @@ function resolveOrderPrintTemplate(order,customer){
     order.pointName,order.address,order.area
   ].filter(Boolean).join(' '));
   const allText=(customerText+' '+pointText).trim();
-  if(['WELSTORY','WELSTRORY','WELTORY'].some(name=>allText.includes(name)))return 'welstory';
+  if(['WELSTORY','WELSTRORY','WELTORY'].some(name=>allText.includes(name))||/(^| )WEL( |$)/.test(allText))return 'welstory';
   if(['YOUNGSUN','YOUGSUN','YOUSUNG','YOUNG SUN','YOUG SUN'].some(name=>allText.includes(name)))return 'youngsun';
   if(allText.includes('FOSECA'))return 'foseca';
   return 'songcong';

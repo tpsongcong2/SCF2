@@ -357,7 +357,7 @@ function AttendanceKiosk({employees,attendance,setAttendance,currentUser,attenda
         if(decision.blocked||state.lastSavedId===matched.employee.id&&now-state.lastSavedAt<120000){setMessage(matched.employee.name+' vừa chấm công; không ghi trùng.');return;}
         const pos=positionRef.current;
         if(!pos||now-pos.at>10*60000){setMessage('Chưa có GPS mới. Kiểm tra quyền vị trí trên điện thoại.');return;}
-        const zone=String(matched.employee.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('san xuat')?attendanceZones.production:attendanceZones.office;
+        const zone=employeeDepartmentIncludes(matched.employee,'Sản xuất')?attendanceZones.production:attendanceZones.office;
         const gps=gpsStatus(pos,zone);
         if(!gps.ok){setMessage('Thiết bị ở ngoài vùng chấm công '+zone.name+' ('+gps.distance+'m).');return;}
         const date=isoDate(),time=timeNow();
@@ -421,7 +421,7 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     office:{...defaultAttendanceZones.office,lat:settings.lat??W_LAT,lon:settings.lon??W_LON,radius:settings.radius??300,...(settings.zones?.office||{})},
     production:{...defaultAttendanceZones.production,...(settings.zones?.production||{})}
   };
-  const attendanceZoneForEmployee=employee=>normalizeDept(employee?.dept).includes('san xuat')?attendanceZones.production:attendanceZones.office;
+  const attendanceZoneForEmployee=employee=>employeeDepartmentIncludes(employee,'Sản xuất')?attendanceZones.production:attendanceZones.office;
   useEffect(()=>{
     if(settings.zones?.office&&settings.zones?.production)return;
     setSettings(prev=>({...prev,zones:{

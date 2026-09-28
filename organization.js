@@ -184,7 +184,7 @@ function DeptsTab({depts,setDepts,employees,workcats}){
   const withCodes=(depts||[]).map((d,i)=>({...d,code:d.code||deptCode(i)}));
   const save=d=>{if(edit)setDepts(p=>p.map(x=>x.id===edit.id?d:x));else setDepts(p=>[...p,d]);sm(null);se(null);};
   const del=(id,name)=>{
-    const empCount=(employees||[]).filter(e=>e.dept===name).length;
+    const empCount=(employees||[]).filter(e=>employeeHasDepartment(e,name)).length;
     const wcCount=(workcats||[]).filter(w=>w.dept===name).length;
     if(empCount>0||wcCount>0){window.showToast('Bộ phận này đang được dùng cho '+empCount+' nhân viên và '+wcCount+' công việc, không thể xóa!','error');return;}
     window.scfConfirm('Bạn có chắc muốn xóa bộ phận này?','Xóa bộ phận',true).then(ok=>{if(ok){setDepts(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa bộ phận','success');}});
@@ -202,7 +202,7 @@ function DeptsTab({depts,setDepts,employees,workcats}){
       rows:list.map(x=>h('tr',{key:x.id},
         h('td',null,h('span',{className:'badge',style:{background:'var(--bg2)',color:'var(--pri3)',fontWeight:700}},x.code||'—')),
         h('td',null,h('div',{style:{fontWeight:500}},x.name)),
-        h('td',null,h('span',{className:'badge',style:{background:'var(--bg2)',color:'var(--tx)'}},(employees||[]).filter(e=>e.dept===x.name).length)),
+        h('td',null,h('span',{className:'badge',style:{background:'var(--bg2)',color:'var(--tx)'}},(employees||[]).filter(e=>employeeHasDepartment(e,x.name)).length)),
         h('td',null,h('span',{className:'badge',style:{background:'var(--bg2)',color:'var(--tx)'}},(workcats||[]).filter(w=>w.dept===x.name).length)),
         h('td',null,x.note||'—'),
         h('td',null,h('div',{style:{display:'flex',gap:2}},
@@ -273,13 +273,13 @@ function WorkCatsTab({workcats,setWorkcats,depts}){
 function TaskForm({task,workcats,employees,currentUser,onSave,onClose}){
   const canManage=currentUser.role==='admin'||currentUser.role==='manager';
   const staff=employees.filter(e=>e.role!=='admin'||e.id===currentUser.id);
-  const deptOptions=[...new Set([...(workcats||[]).map(w=>w.dept).filter(Boolean),...(staff||[]).map(e=>e.dept).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'vi'));
+  const deptOptions=[...new Set([...(workcats||[]).map(w=>w.dept).filter(Boolean),...(staff||[]).flatMap(employeeDepartments)])].sort((a,b)=>a.localeCompare(b,'vi'));
   const taskEmp=task?employees.find(e=>e.id===task.empId):null;
   const taskWc=task?workcats.find(w=>w.id===task.workCatId||w.code===task.workCatId):null;
   const initialDept=task?(task.dept||taskEmp?.dept||taskWc?.dept||''):(canManage?'':(currentUser.dept||''));
   const[f,sf]=useState(task?{...task,dept:initialDept}:{date:fmtDate(),dept:initialDept,empId:canManage?'':currentUser.id,workCatId:'',qtyAssign:0,dueDate:fmtDate(),shift:'',location:'',note:'',status:'assigned'});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
-  const groupStaff=staff.filter(e=>!f.dept||e.dept===f.dept);
+  const groupStaff=staff.filter(e=>!f.dept||employeeHasDepartment(e,f.dept));
   const groupWorkcats=workcats.filter(w=>!f.dept||w.dept===f.dept);
   const setDept=v=>sf(p=>({...p,dept:v,empId:canManage?'':p.empId,workCatId:''}));
   const emp=employees.find(e=>e.id===f.empId)||{};
