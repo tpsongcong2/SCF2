@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V427';
+const SCF_BUILD_VERSION='V430';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -124,6 +124,12 @@ function scfReconcileTripOrderLinks(currentTrips,currentOrders,products){
 }
 function createScfDataLoader(read,apply){
   const loaded=new Set(),pending=new Map();let disposed=false;
+  let active=0;const waiting=[];
+  const drain=()=>{while(active<3&&waiting.length){active++;waiting.shift()();}};
+  const limitedRead=key=>new Promise((resolve,reject)=>{
+    waiting.push(()=>Promise.resolve().then(()=>disposed?undefined:read(key)).then(resolve,reject).finally(()=>{active--;drain();}));
+    drain();
+  });
   return {
     loaded,
     dispose(){disposed=true;},
@@ -131,7 +137,7 @@ function createScfDataLoader(read,apply){
       if(disposed)return Promise.resolve();
       if(pending.has(key))return pending.get(key);
       if(loaded.has(key)&&!refresh)return Promise.resolve();
-      const task=Promise.resolve().then(()=>read(key)).then(value=>{
+      const task=limitedRead(key).then(value=>{
         if(disposed)return;
         apply(key,value);loaded.add(key);
       }).finally(()=>pending.delete(key));

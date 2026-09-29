@@ -7,6 +7,20 @@ const SCF_AUTH_REQUEST_TIMEOUT_MS=30000;
 // when a request times out so a slow request cannot continue piling up behind
 // newer retries in the browser and at the Edge Function.
 async function invokeScfAuth(options,timeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
+  const readOnly=['load_employees','load_permitted_collection','load_permitted_collection_versions'].includes(options?.body?.action);
+  for(let attempt=0;;attempt++){
+    try{
+      const result=await invokeScfAuthOnce(options,timeoutMs);
+      const status=Number(result?.error?.context?.status||0);
+      const transient=result?.error&&(status===408||status===429||status>=500||(!status&&/fetch|network|send a request|load failed/i.test(result.error.message||'')));
+      if(!readOnly||!transient||attempt>=1)return result;
+    }catch(error){
+      if(!readOnly||attempt>=1||!(error?.code==='SCF_REMOTE_TIMEOUT'||/fetch|network|load failed/i.test(error?.message||'')))throw error;
+    }
+    await new Promise(resolve=>setTimeout(resolve,700));
+  }
+}
+async function invokeScfAuthOnce(options,timeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),Math.max(1000,Number(timeoutMs)||SCF_AUTH_REQUEST_TIMEOUT_MS));

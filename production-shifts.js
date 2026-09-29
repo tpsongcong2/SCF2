@@ -41,10 +41,14 @@ function normalizeOrderForStorage(order){
   const raw=String(order.deliveryTime??'').trim();
   const deliveryTime=/^\d{1,2}:\d{2}$/.test(raw)?raw:normalizeTimeInput(raw);
   const prodShiftAssignMode=order.prodShiftAssignMode==='manual'?'manual':'auto';
+  if(order.deliveryTime===deliveryTime&&order.prodShiftAssignMode===prodShiftAssignMode)return order;
   return {...order,deliveryTime,prodShiftAssignMode};
 }
 function normalizeOrdersForStorage(list){
-  return Array.isArray(list)?list.map(normalizeOrderForStorage):list;
+  if(!Array.isArray(list))return list;
+  let changed=false;
+  const next=list.map(order=>{const normalized=normalizeOrderForStorage(order);if(normalized!==order)changed=true;return normalized;});
+  return changed?next:list;
 }
 function ordersNeedTimeNormalization(list){
   return Array.isArray(list)&&list.some(o=>{

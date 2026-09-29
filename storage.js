@@ -191,20 +191,22 @@ function collectionRecordPatches(previous,next){
   for(const item of previous){const id=String(item?.id||'').trim();if(!id||previousMap.has(id))return null;previousMap.set(id,item);}
   const patches=[];
   for(const item of next){const id=String(item?.id||'').trim(),base=previousMap.get(id);if(!id||!base)return null;if(base===item)continue;if(JSON.stringify(base)!==JSON.stringify(item))patches.push({id,base:syncSnapshot(base),value:syncSnapshot(item)});}
-  if(!patches.length||patches.length>25)return null;
+  if(patches.length>25)return null;
   // Patch tối đa 25 bản ghi luôn phù hợp hơn việc JSON hóa và gửi lại toàn bộ
   // danh sách đơn; tránh stringify mảng lớn ngay trong thao tác nhập liệu.
   return patches;
 }
+let scfLastQueueStamp=0;
 function queueRemoteWrite(key,value,options={}){
   const queue=readSyncQueue();
-  const updatedAt=options.updatedAt||new Date().toISOString();
+  scfLastQueueStamp=Math.max(Date.now(),scfLastQueueStamp+1);
+  const updatedAt=options.updatedAt||new Date(scfLastQueueStamp).toISOString();
   const previous=queue[key];
   const expectedUpdatedAt=previous?.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
   // Không được đổi một lần lưu toàn bộ đang chờ thành patch, vì lần lưu toàn
   // bộ có thể chứa đơn vừa thêm/xóa mà patch kế tiếp không mang theo.
   const patches=Array.isArray(options.patches)&&(!previous||Array.isArray(previous.patches))?mergeRecordPatches(previous?.patches,options.patches):null;
-  const usePatches=key==='scf_orders'&&patches?.length;
+  const usePatches=key==='scf_orders'&&patches?.length&&patches.length<=25;
   const baseValue=usePatches?undefined:(Object.prototype.hasOwnProperty.call(previous||{},'baseValue')?previous.baseValue:syncSnapshot(scfRemoteSnapshots.get(key)));
   queue[key]={value,updatedAt,expectedUpdatedAt,...(baseValue===undefined?{}:{baseValue}),...(usePatches?{patches}:{}),bytes:syncPayloadBytes(usePatches?patches:value),attempts:Number(options.attempts)||0,mode:options.mode||''};
   writeSyncQueue(queue);
@@ -324,7 +326,7 @@ async function dbGetChangedKeys(keys){
   const wanted=[...new Set((keys||[]).map(String).filter(Boolean))];
   if(!wanted.length||!sb)return[];
   if(serverAuthEnabled()){
-    const versions=await withRemoteTimeout(serverLoadPermittedCollectionVersions(wanted),10000);
+    const versions=await serverLoadPermittedCollectionVersions(wanted);
     return versions.filter(row=>String(row?.updatedAt||'')!==String(scfRemoteVersions.get(String(row?.key||''))||'')).map(row=>String(row.key));
   }
   const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('key,updated_at').in('key',wanted),10000);
@@ -364,6 +366,20 @@ async function dbGet(key,def){
   if(allowPersistentLocalCache(key))try{const ls=localStorage.getItem(localCacheKey(key));if(ls)return JSON.parse(ls);}catch{}
   return def;
 }
+function scfVerifyInvoiceSave(key,saved,value,patches){
+  if(key!=='scf_orders')return;
+  const rows=Array.isArray(saved?.items)?saved.items:saved?.value;
+  const changed=patches||((value||[]).map(item=>({id:item.id,value:item})));
+  for(const patch of changed){
+    for(const field of ['invoiceImage','driverInvoiceImage']){
+      if(!patch.value?.[field]||patch.base?.[field]===patch.value[field])continue;
+      const row=rows?.find(item=>String(item.id)===String(patch.id));
+      if(row?.[field]!==patch.value[field])throw new Error('Máy chủ chưa xác nhận ảnh hóa đơn của đơn '+patch.id+'. Ảnh vẫn đang chờ đồng bộ.');
+    }
+  }
+  window.__SCF_CONFIRMED_INVOICES=window.__SCF_CONFIRMED_INVOICES||{};
+  for(const row of rows||[])window.__SCF_CONFIRMED_INVOICES[String(row.id)]=row.invoiceImage||'';
+}
 async function performDbSet(key,val,queuedAt='',mode=''){
   if(serverAuthEnabled()){
     if(!sb){if(!readSyncQueue()[key])queueRemoteWrite(key,val,{updatedAt:queuedAt});return false;}
@@ -384,12 +400,16 @@ async function performDbSet(key,val,queuedAt='',mode=''){
     try{
       setSyncState('syncing','Đang kiểm tra quyền và đồng bộ');
       const queued=readSyncQueue()[key]||{};
+      // A newer edit owns its own scheduled save. Never mix an old value/token
+      // with patches belonging to that newer edit after awaiting authentication.
+      if(queued.updatedAt!==queuedAt)return false;
       const expectedUpdatedAt=queued.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
       const baseValue=Object.prototype.hasOwnProperty.call(queued,'baseValue')?queued.baseValue:scfRemoteSnapshots.get(key);
       const patches=Array.isArray(queued.patches)&&queued.patches.length?queued.patches:null;
       const payload=patches?{key,patches,expectedUpdatedAt}:{key,value:val,baseValue,expectedUpdatedAt};
       const timeoutMs=remoteTimeoutFor(payload);
       const saved=await measuredCollectionSave(key,patches?'patch':'full',payload,()=>withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt,timeoutMs):serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue,timeoutMs),timeoutMs));
+      scfVerifyInvoiceSave(key,saved,val,patches);
       const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(val);
       if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(val));
       scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:queuedAt};setSyncState('synced');
@@ -489,6 +509,7 @@ async function runPendingWrites(){
         const payload=patches?{key,patches,expectedUpdatedAt}:{key,value:item.value,baseValue,expectedUpdatedAt};
         const timeoutMs=remoteTimeoutFor(payload);
         const saved=await measuredCollectionSave(key,patches?'patch':'full',payload,()=>withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt,timeoutMs):serverSavePermittedCollection(key,item.value,expectedUpdatedAt,baseValue,timeoutMs),timeoutMs));
+        scfVerifyInvoiceSave(key,saved,item.value,patches);
         const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(item.value);
         if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(item.value));
         scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));
@@ -552,6 +573,8 @@ window.scfWaitForCollectionSync=function(key,timeoutMs=35000){
 };
 window.addEventListener('online',()=>flushPendingWrites());
 window.addEventListener('offline',()=>setSyncState('offline','Mất kết nối mạng'));
+window.addEventListener('pagehide',persistSyncQueueNow);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)persistSyncQueueNow();});
 setSyncState(navigator.onLine?'idle':'offline');
 if(navigator.onLine&&Object.keys(readSyncQueue()).length)setTimeout(()=>flushPendingWrites(),1500);
 function mkSet(key,setter){return valOrFn=>{
@@ -559,36 +582,63 @@ function mkSet(key,setter){return valOrFn=>{
   if(access?.readOnly){
     return;
   }
-  setter(prev=>{const nextRaw=typeof valOrFn==='function'?valOrFn(prev):valOrFn;const next=key==='scf_orders'?normalizeOrdersForStorage(nextRaw):nextRaw;const patches=key==='scf_orders'?collectionRecordPatches(prev,next):null;dbSetWithMode(key,next,'',{patches});return next;});
+  setter(prev=>{
+    const nextRaw=typeof valOrFn==='function'?valOrFn(prev):valOrFn;
+    if(nextRaw===prev)return prev;
+    const next=key==='scf_orders'?normalizeOrdersForStorage(nextRaw):nextRaw;
+    const patches=key==='scf_orders'?collectionRecordPatches(prev,next):null;
+    // An empty diff means no edit, not a request to rewrite the collection.
+    if(Array.isArray(patches)&&!patches.length)return prev;
+    dbSetWithMode(key,next,'',{patches});return next;
+  });
 };}
+// Keep the native picker attached until camera selection is delivered on mobile.
+function scfPickPhoto(onFile,source='camera'){
+  const input=document.createElement('input');
+  input.type='file';input.accept='image/*';
+  if(source==='camera')input.capture='environment';
+  input.style.cssText='position:fixed;left:-9999px;width:1px;height:1px;opacity:0';
+  const cleanup=()=>input.remove();
+  input.oncancel=cleanup;
+  input.onchange=()=>{
+    const file=input.files&&input.files[0];
+    cleanup();
+    if(file)Promise.resolve(onFile(file)).catch(error=>window.showToast(error.message||'Không lưu được ảnh.','error'));
+  };
+  document.body.appendChild(input);
+  try{input.click();}catch(error){cleanup();throw error;}
+}
 function resizeImageFile(file,max=1280,quality=.72){
   return new Promise((resolve,reject)=>{
-    const reader=new FileReader();
-    reader.onload=ev=>{
+    const objectUrl=URL.createObjectURL(file);
+    const release=()=>URL.revokeObjectURL(objectUrl);
+    try{
       const img=new Image();
       img.onload=()=>{
+        try{
         const scale=Math.min(1,max/Math.max(img.width,img.height));
         const canvas=document.createElement('canvas');
         canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));
         const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);
-        canvas.toBlob(blob=>blob?resolve({blob,dataUrl:canvas.toDataURL('image/jpeg',quality)}):reject(new Error('Không nén được ảnh.')),'image/jpeg',quality);
+        const dataUrl=canvas.toDataURL('image/jpeg',quality);
+        canvas.toBlob(blob=>{canvas.width=canvas.height=1;blob?resolve({blob,dataUrl}):reject(new Error('Không nén được ảnh.'));},'image/jpeg',quality);
+        }catch(error){reject(error);}finally{release();}
       };
-      img.onerror=()=>reject(new Error('Không đọc được ảnh.'));
-      img.src=ev.target.result;
-    };
-    reader.onerror=()=>reject(new Error('Không đọc được file ảnh.'));
-    reader.readAsDataURL(file);
+      img.onerror=()=>{release();reject(new Error('Không đọc được ảnh.'));};
+      img.src=objectUrl;
+    }catch(error){release();reject(error);}
   });
 }
 async function uploadPhoto(file,folder='delivery',options={}){
   const img=await resizeImageFile(file,options.max||1280,options.quality||.72);
+  if(options.onPrepared)await options.onPrepared(img.dataUrl);
   if(!sb)return img.dataUrl;
   const clean=(file.name||'photo.jpg').toLowerCase().replace(/[^a-z0-9.]+/g,'-').replace(/-+/g,'-');
   const path=folder+'/'+new Date().toISOString().slice(0,10)+'/'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)+'-'+clean.replace(/\.[^.]+$/,'')+'.jpg';
   try{
-    const{error}=await sb.storage.from(SUPA_PHOTO_BUCKET).upload(path,img.blob,{contentType:'image/jpeg',upsert:false});
+    const{error}=await withRemoteTimeout(sb.storage.from(SUPA_PHOTO_BUCKET).upload(path,img.blob,{contentType:'image/jpeg',upsert:false}),30000);
     if(error)throw error;
-    const signedUrl=await createPrivatePhotoUrl(path);
+    const signedUrl=await withRemoteTimeout(createPrivatePhotoUrl(path),15000);
     if(!signedUrl)throw new Error('Không tạo được đường dẫn ảnh bảo mật.');
     return signedUrl;
   }catch(e){
