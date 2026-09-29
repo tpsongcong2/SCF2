@@ -632,7 +632,10 @@ function resizeImageFile(file,max=1280,quality=.72){
 async function uploadPhoto(file,folder='delivery',options={}){
   const img=await resizeImageFile(file,options.max||1280,options.quality||.72);
   if(options.onPrepared)await options.onPrepared(img.dataUrl);
-  if(!sb)return img.dataUrl;
+  if(!sb){
+    if(options.requireRemote)throw new Error('Chưa kết nối được kho ảnh. Vui lòng kiểm tra mạng rồi thử lại.');
+    return img.dataUrl;
+  }
   const clean=(file.name||'photo.jpg').toLowerCase().replace(/[^a-z0-9.]+/g,'-').replace(/-+/g,'-');
   const path=folder+'/'+new Date().toISOString().slice(0,10)+'/'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)+'-'+clean.replace(/\.[^.]+$/,'')+'.jpg';
   try{
@@ -643,6 +646,7 @@ async function uploadPhoto(file,folder='delivery',options={}){
     return signedUrl;
   }catch(e){
     console.warn('Upload Supabase Storage:',e.message||e);
+    if(options.requireRemote)throw new Error('Không tải được ảnh lên kho lưu trữ: '+(e.message||e));
     window.showToast('Chưa upload được ảnh lên Supabase Storage. App tạm lưu ảnh trên máy này. Kiểm tra bucket '+SUPA_PHOTO_BUCKET+' và policy upload/read.','error');
     return img.dataUrl;
   }

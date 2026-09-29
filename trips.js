@@ -857,12 +857,17 @@ function TripMobileSelectionSummary({trip,orders}){
 }
 
 const scfInvoiceUploads=new Set();
+const scfInvoiceRetryFiles=new Map();
 function scfInvoiceStatus(order){
   const queue=readSyncQueue().scf_orders;
-  const pending=scfInvoiceUploads.has(String(order.id))||(queue&&(Array.isArray(queue.patches)?queue.patches.some(patch=>String(patch.id)===String(order.id)&&patch.base?.invoiceImage!==patch.value?.invoiceImage):true));
-  return pending?'◷ HĐ đang chờ lưu':order.invoiceImage?'✓ Đã có HĐ':'○ Chưa có HĐ';
+  const id=String(order.id);
+  const queuedPatch=queue&&Array.isArray(queue.patches)?queue.patches.find(patch=>String(patch.id)===id):null;
+  const queuedOrder=queue&&!Array.isArray(queue.patches)&&Array.isArray(queue.value)?queue.value.find(item=>String(item.id)===id):null;
+  const baseOrder=queuedOrder&&Array.isArray(queue.baseValue)?queue.baseValue.find(item=>String(item.id)===id):null;
+  const pending=scfInvoiceUploads.has(id)||!!(queuedPatch&&queuedPatch.base?.invoiceImage!==queuedPatch.value?.invoiceImage)||!!(queuedOrder&&baseOrder&&queuedOrder.invoiceImage!==baseOrder.invoiceImage);
+  return pending?'◷ HĐ đang chờ lưu':scfInvoiceRetryFiles.has(String(order.id))?'! Ảnh chưa tải lên':order.invoiceImage?'✓ Đã có HĐ':'○ Chưa có HĐ';
 }
-function TripMobileQuickUpdateModal({trip,orders,customers,canEditTrip,onDeliveredQty,onInvoice,renderLineNote,renderBasket,onClose}){
+function TripMobileQuickUpdateModal({trip,orders,customers,canEditTrip,onDeliveredQty,onInvoice,onRetryLocalInvoice,renderLineNote,renderBasket,onClose}){
   const [,refreshSync]=useState(0);
   useEffect(()=>{const refresh=()=>refreshSync(value=>value+1);window.addEventListener('scf-sync-state',refresh);return()=>window.removeEventListener('scf-sync-state',refresh);},[]);
   const selectedTrip=trip||null;
@@ -882,6 +887,8 @@ function TripMobileQuickUpdateModal({trip,orders,customers,canEditTrip,onDeliver
         h('div',{className:'trip-quick-invoice-actions'},
           h('button',{type:'button',className:'bi trip-quick-optional-toggle',title:optionalVisible?'Ẩn chú ý, Rổ đi và Rổ về':'Hiện chú ý, Rổ đi và Rổ về','aria-label':optionalVisible?'Ẩn chú ý, Rổ đi và Rổ về':'Hiện chú ý, Rổ đi và Rổ về',onClick:()=>setOptionalVisible(value=>!value)},h('i',{className:optionalVisible?'ti ti-eye':'ti ti-eye-off'})),
           selectedOrder.invoiceImage&&h('button',{type:'button',className:'bi',title:'Xem ảnh hóa đơn',onClick:()=>window.open(selectedOrder.invoiceImage,'_blank')},h('i',{className:'ti ti-photo-check'})),
+          /^data:image\//.test(selectedOrder.invoiceImage||'')&&!scfInvoiceRetryFiles.has(String(selectedOrder.id))&&h('button',{type:'button',className:'btn trip-quick-retry',onClick:()=>onRetryLocalInvoice(selectedOrder)},'Tải ảnh chờ lên máy chủ'),
+          scfInvoiceRetryFiles.has(String(selectedOrder.id))&&h('button',{type:'button',className:'btn trip-quick-retry',onClick:()=>onInvoice(selectedOrder,scfInvoiceRetryFiles.get(String(selectedOrder.id)))},'Thử lưu ảnh lại'),
           h('button',{type:'button',className:'bi',title:selectedOrder.invoiceImage?'Chụp lại hóa đơn':'Chụp ảnh hóa đơn','aria-label':selectedOrder.invoiceImage?'Chụp lại hóa đơn':'Chụp ảnh hóa đơn',onClick:()=>onInvoice(selectedOrder)},h('i',{className:selectedOrder.invoiceImage?'ti ti-camera-up':'ti ti-camera-plus'}))
         )
       ),
@@ -1387,23 +1394,30 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     if(!file)return;
     const uploadId=String(order.id);
     if(scfInvoiceUploads.has(uploadId)){window.showToast('Ảnh của đơn này đang được lưu. Vui lòng chờ.','warn');return;}
+    scfInvoiceRetryFiles.set(uploadId,file);
     scfInvoiceUploads.add(uploadId);
     window.dispatchEvent(new CustomEvent('scf-sync-state'));
     const saveImage=url=>setOrders(prev=>prev.map(x=>x.id===order.id?{...x,invoiceImage:url,invoiceImageName:file.name||'hoa-don.jpg',invoiceUploadedAt:fmtDT(),invoiceUploadedBy:currentUser?.name||''}:x));
     try{
-      window.showToast('Đang xử lý và lưu ảnh hóa đơn…','info');
-      const url=await uploadPhoto(file,'order-invoices/'+(order.id||'order'),{onPrepared:async dataUrl=>{
-        saveImage(dataUrl);
-        await new Promise(resolve=>setTimeout(resolve,0));
-        persistSyncQueueNow();
-      }});
+      window.showToast('Đang tải ảnh hóa đơn lên máy chủ…','info');
+      const url=await uploadPhoto(file,'order-invoices/'+(order.id||'order'),{requireRemote:true});
+      scfInvoiceRetryFiles.delete(uploadId);
       saveImage(url);
       await new Promise(resolve=>setTimeout(resolve,0));
       persistSyncQueueNow();
       const synced=await window.scfWaitForCollectionSync('scf_orders')&&window.__SCF_CONFIRMED_INVOICES?.[uploadId]===url;
-      window.showToast(synced?'Đã lưu ảnh hóa đơn lên máy chủ.':'Ảnh hóa đơn đang chờ đồng bộ. Giữ app mở và kiểm tra kết nối. ',synced?'success':'warn',7000);
-    }catch(e){window.showToast('Chưa lưu được ảnh hóa đơn: '+(e.message||e),'error');}
+      window.showToast(synced?'Đã lưu ảnh hóa đơn lên máy chủ.':'Ảnh đã tải lên nhưng đơn hàng chưa được máy chủ xác nhận. Hãy kiểm tra trạng thái đồng bộ.',synced?'success':'warn',7000);
+    }catch(e){window.showToast('Chưa lưu được ảnh hóa đơn: '+(e.message||e)+(scfInvoiceRetryFiles.has(uploadId)?'. Có thể bấm Thử lưu ảnh lại.':'. Hãy kiểm tra trạng thái đồng bộ.'),'error',10000);}
     finally{scfInvoiceUploads.delete(uploadId);window.dispatchEvent(new CustomEvent('scf-sync-state'));}
+  };
+  const retryLocalOrderInvoiceImage=async order=>{
+    try{
+      const response=await fetch(order.invoiceImage);
+      const blob=await response.blob();
+      if(!blob.type.startsWith('image/'))throw new Error('Ảnh tạm không đúng định dạng.');
+      const file=new File([blob],order.invoiceImageName||'hoa-don.jpg',{type:blob.type});
+      await saveOrderInvoiceImage(order,file);
+    }catch(error){window.showToast('Không đọc được ảnh đang chờ: '+(error.message||error),'error');}
   };
   const saveDriverInvoiceImage=async(order,file)=>{
     if(!file)return;
@@ -1430,7 +1444,8 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     setOrders(prev=>prev.map(x=>x.id===order.id?{...x,driverInvoiceReviewStatus:approved?'approved':'rejected',driverInvoiceReviewReason:reason,driverInvoiceReviewedAt:stamp,driverInvoiceReviewedBy:currentUser?.name||''}:x));
     window.showToast(approved?'Đã duyệt HĐ LX.':'Đã trả lại HĐ LX cho lái xe tải lại.','success');
   };
-  const pickOrderInvoiceImage=order=>{
+  const pickOrderInvoiceImage=(order,retryFile)=>{
+    if(retryFile){saveOrderInvoiceImage(order,retryFile);return;}
     scfPickPhoto(file=>saveOrderInvoiceImage(order,file));
   };
   const removeOrderInvoiceImage=async order=>{
@@ -1707,7 +1722,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
     ),
     canCreateTripImages&&modal==='images'&&h(TripImagesModal,{trips:filteredTrips.filter(trip=>trip.status!=='cancelled'),orders,products,customers,onClose:()=>sm(null)}),
     canCreateTripImages&&fPeriod==='day'&&modal==='day-image'&&h(TripDayImageModal,{trips:filteredTrips.filter(trip=>trip.status!=='cancelled'),orders,products,customers,date:fDate?fDate.split('-').reverse().join('/'):fmtDate(),onClose:()=>sm(null)}),
-    canCreateTripImages&&modal==='quick-update'&&h(TripMobileQuickUpdateModal,{trip:filteredTrips[0]||null,orders,customers,canEditTrip:canEditQtyForTrip,onDeliveredQty:updateDeliveredQty,onInvoice:pickOrderInvoiceImage,renderLineNote:(trip,order,line,index)=>lineNoteControl(trip,order,line,index,{fontSize:13,padding:'6px 8px'}),renderBasket:(trip,order,field,label)=>orderBasketControl(trip,order,field,label,canEditQtyForTrip(trip)),onClose:()=>sm(null)}),
+    canCreateTripImages&&modal==='quick-update'&&h(TripMobileQuickUpdateModal,{trip:filteredTrips[0]||null,orders,customers,canEditTrip:canEditQtyForTrip,onDeliveredQty:updateDeliveredQty,onInvoice:pickOrderInvoiceImage,onRetryLocalInvoice:retryLocalOrderInvoiceImage,renderLineNote:(trip,order,line,index)=>lineNoteControl(trip,order,line,index,{fontSize:13,padding:'6px 8px'}),renderBasket:(trip,order,field,label)=>orderBasketControl(trip,order,field,label,canEditQtyForTrip(trip)),onClose:()=>sm(null)}),
     canCreateTripImages&&modal==='mobile-print'&&h(TripMobilePrintModal,{trip:filteredTrips[0]||null,orders,customers,onPrintTrip:trip=>{sm(null);printTrip(trip);},onPrintOrder:order=>{sm(null);setPrintOrder(order);},onClose:()=>sm(null)}),
     filteredTrips.length?h('div',{style:{display:'flex',flexDirection:'column',gap:'1rem'}},
       filteredTrips.map(trip=>{

@@ -2185,17 +2185,14 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const saveInvoiceImage=async(order,file)=>{
     if(!file)return;
     try{
-      const url=await uploadPhoto(file,'order-invoices/'+(order.id||'order'));
+      const url=await uploadPhoto(file,'order-invoices/'+(order.id||'order'),{requireRemote:true});
       const imageData={invoiceImage:url,invoiceImageName:file.name||'hoa-don.jpg',invoiceUploadedAt:fmtDT(),invoiceUploadedBy:currentUser?.name||''};
       setOrders(prev=>prev.map(x=>x.id===order.id?{...x,...imageData,orderHistory:[...(x.orderHistory||[]),historyEntry(x.invoiceImage?'Thay ảnh hóa đơn':'Thêm ảnh hóa đơn',[file.name||'hoa-don.jpg'])],updatedAt:fmtDT(),updatedBy:currentUser?.name||''}:x));
       setInvoiceView(prev=>prev?.id===order.id?{...prev,...imageData}:prev);
-    }catch(e){window.showToast('Không đọc được ảnh hóa đơn: '+(e.message||e),'error');}
+    }catch(e){window.showToast('Chưa tải được ảnh hóa đơn lên máy chủ: '+(e.message||e),'error');}
   };
   const pickInvoiceImage=order=>{
-    const inp=document.createElement('input');
-    inp.type='file';inp.accept='image/*';inp.capture='environment';
-    inp.onchange=e=>saveInvoiceImage(order,e.target.files&&e.target.files[0]);
-    inp.click();
+    scfPickPhoto(file=>saveInvoiceImage(order,file));
   };
   const removeInvoiceImage=async order=>{
     if(!order?.invoiceImage)return;

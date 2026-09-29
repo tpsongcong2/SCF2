@@ -423,21 +423,36 @@ function StockForm({entry,currentUser,onSave,onClose}){
       h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'}},'Cập nhật tồn kho'))
     );
   }
+function applyStockQuickEdits(stock,rows,drafts,actor,stamp){
+  const map=new Map((stock||[]).map(item=>[String(item.productId),item]));
+  rows.forEach(row=>{
+    const draft=drafts[row.productId];if(!draft)return;
+    const current=map.get(String(row.productId))||{};
+    const next={...current,productId:row.productId,productName:row.productName,unit:row.unit,updatedBy:actor,updatedAt:stamp};
+    for(const field of ['stockMorning','stockEvening']){
+      if(Object.prototype.hasOwnProperty.call(draft,field)){
+        const raw=String(draft[field]).trim().replace(',','.');
+        if(raw!==''&&!/^\d+(?:\.\d*)?$/.test(raw))throw new Error('Số tồn phải là số không âm.');
+        const value=raw===''?0:Number(raw);
+        if(!Number.isFinite(value))throw new Error('Số tồn không hợp lệ.');
+        next[field]=value;
+      }else next[field]=current[field]??row[field]??0;
+    }
+    map.set(String(row.productId),next);
+  });
+  return [...map.values()];
+}
 function StockTab({stock,setStock,products,prodCats,currentUser}){
-  const[modal,sm]=useState(null);const[edit,se]=useState(null);const[q,sq]=useState('');
+  const[q,sq]=useState('');
   const[stockType,setStockType]=useState('finished');
   const[goodsGroup,setGoodsGroup]=useState('all');
   const[quickEdits,setQuickEdits]=useState({});
+  const canEdit=canWrite(currentUser?.role,'stock',currentUser?.permLevels);
 
   // Ensure all products have a stock entry
   const stockMap={};(stock||[]).forEach(s=>{stockMap[s.productId]=s;});
 
 
-
-  const saveStock=d=>{
-    setStock(p=>{const idx=p.findIndex(x=>x.productId===d.productId);if(idx>=0){const n=[...p];n[idx]=d;return n;}return[...p,d];});
-    sm(null);se(null);
-  };
 
   const exportCols=[['stockTypeName','Loại'],['goodsGroup','Nhóm hàng hóa'],['productId','Mã SP'],['productName','Tên SP'],['unit','ĐVT'],['stockMorning','Tồn 9h sáng'],['stockEvening','Tồn 1h đêm'],['updatedBy','Người cập nhật'],['updatedAt','Thời gian']];
   const allStockRows=(products||[]).map(p=>{
@@ -451,21 +466,24 @@ function StockTab({stock,setStock,products,prodCats,currentUser}){
   const finishedCount=allStockRows.filter(x=>x.stockType==='finished').length;
   const goodsCount=allStockRows.length-finishedCount;
   const quickValue=(row,field)=>Object.prototype.hasOwnProperty.call(quickEdits[row.productId]||{},field)?quickEdits[row.productId][field]:row[field]||0;
-  const changeQuick=(row,field,value)=>setQuickEdits(prev=>({...prev,[row.productId]:{...(prev[row.productId]||{}),[field]:value===''?'':numFmt(value)}}));
+  const changeQuick=(row,field,value)=>{
+    if(!canEdit||!/^\d*(?:[.,]\d*)?$/.test(value))return;
+    setQuickEdits(prev=>({...prev,[row.productId]:{...(prev[row.productId]||{}),[field]:value}}));
+  };
+  const pendingCount=allStockRows.filter(row=>quickEdits[row.productId]).length;
+  const stockInput=(row,field,label)=>h('input',{type:'text',inputMode:'decimal','aria-label':label+' — '+row.productName,readOnly:!canEdit,value:quickValue(row,field),onChange:e=>changeQuick(row,field,e.target.value),onFocus:e=>e.target.select(),className:'stock-quick-input'});
   const saveQuick=()=>{
-    const changed=filtered.filter(row=>quickEdits[row.productId]);
+    if(!canEdit)return;
+    const changed=allStockRows.filter(row=>quickEdits[row.productId]);
     if(!changed.length){window.showToast('Chưa có số tồn kho nào được thay đổi','warning');return;}
     const now=fmtDT();
-    setStock(prev=>{
-      const map={};(prev||[]).forEach(item=>{map[item.productId]=item;});
-      changed.forEach(row=>{const draft=quickEdits[row.productId]||{};map[row.productId]={...(map[row.productId]||{}),productId:row.productId,productName:row.productName,unit:row.unit,stockMorning:numFmt(draft.stockMorning===''?0:(draft.stockMorning??row.stockMorning??0)),stockEvening:numFmt(draft.stockEvening===''?0:(draft.stockEvening??row.stockEvening??0)),updatedBy:currentUser?.name||'',updatedAt:now};});
-      return Object.values(map);
-    });
+    try{applyStockQuickEdits(stock,changed,quickEdits,currentUser?.name||'',now);}catch(error){window.showToast(error.message,'warn');return;}
+    setStock(prev=>applyStockQuickEdits(prev,changed,quickEdits,currentUser?.name||'',now));
     setQuickEdits(prev=>{const next={...prev};changed.forEach(row=>delete next[row.productId]);return next;});
-    window.showToast('Đã cập nhật nhanh '+changed.length+' hàng hóa','success');
+    window.showToast('Đã cập nhật '+changed.length+' sản phẩm. Xem trạng thái đồng bộ ở đầu màn hình.','success');
   };
 
-  return h('div',null,
+  return h('div',{className:'stock-page'},
     h('div',{className:'ptitle'},h('i',{className:'ti ti-package',style:{fontSize:20}}),'Quản lý tồn kho'),
     h('div',{style:{display:'flex',gap:8,marginBottom:'1rem',flexWrap:'wrap'}},
       h('button',{className:'pill'+(stockType==='finished'?' on':''),onClick:()=>{setStockType('finished');setGoodsGroup('all');}},'Thành phẩm ('+finishedCount+')'),
@@ -475,7 +493,7 @@ function StockTab({stock,setStock,products,prodCats,currentUser}){
       h(SearchBar,{value:q,onChange:sq,placeholder:stockType==='goods'?'Tìm hàng hóa...':'Tìm thành phẩm...'}),
       h('div',{style:{display:'flex',gap:6}},
         h(ExportBtn,{onClick:()=>xlsxExport(allStockRows,exportCols,'Ton_kho')}),
-        h(ImportBtn,{onFile:rows=>{
+        canEdit&&h(ImportBtn,{onFile:rows=>{
           const updated=rows.map(r=>({productId:r['Mã SP']||'',productName:r['Tên SP']||'',unit:r['ĐVT']||'',stockMorning:numFmt(r['Tồn 9h sáng']||0),stockEvening:numFmt(r['Tồn 1h đêm']||0),updatedBy:currentUser?.name||'',updatedAt:fmtDT()})).filter(r=>r.productId);
           setStock(p=>{const map={};p.forEach(x=>{map[x.productId]=x;});updated.forEach(x=>{map[x.productId]=x;});return Object.values(map);});
           window.showToast('Đã cập nhật '+updated.length+' sản phẩm','success');
@@ -492,11 +510,17 @@ function StockTab({stock,setStock,products,prodCats,currentUser}){
         ...goodsGroups.map(group=>h('option',{key:group,value:group},group)),
         allStockRows.some(x=>x.stockType==='goods'&&!x.goodsGroup)&&h('option',{value:'__ungrouped__'},'Chưa có nhóm')
       )),
-      h('button',{className:'bp',onClick:saveQuick},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu nhập nhanh')
+      h('span',{style:{fontSize:12,color:'var(--tx2)'}},filtered.length+' sản phẩm')
     ),
-    h('div',{className:'tw'},
+    h('div',{className:'stock-entry-help'},canEdit?'Nhập trực tiếp số tồn, sau đó bấm Lưu thay đổi. Ô để trống được lưu là 0.':'Bạn đang xem tồn kho.'),
+    h('div',{className:'stock-mobile-list'},filtered.length?filtered.map(row=>h('article',{key:row.productId,className:'stock-mobile-card'+(quickEdits[row.productId]?' is-dirty':'')},
+      h('div',{className:'stock-card-heading'},h('div',null,h('strong',null,row.productName),h('small',null,[row.productCode,row.goodsGroup].filter(Boolean).join(' · '))),h('span',{className:'badge'},row.unit||'—')),
+      h('div',{className:'stock-card-fields'},h('label',null,h('span',null,'Tồn 9h sáng'),stockInput(row,'stockMorning','Tồn 9h sáng')),h('label',null,h('span',null,'Tồn 1h đêm'),stockInput(row,'stockEvening','Tồn 1h đêm'))),
+      h('div',{className:'stock-card-footer'},quickEdits[row.productId]?h('b',null,'Chưa lưu'):h('span',null,row.updatedAt||'Chưa cập nhật'),h('span',null,row.updatedBy||'—'))
+    )):h('p',{className:'empty-st'},'Không có sản phẩm phù hợp.')),
+    h('div',{className:'tw stock-desktop-table'},
       h('table',null,
-        h('thead',null,h('tr',null,...[...(stockType==='goods'?['Nhóm hàng hóa']:[]),stockType==='goods'?'Hàng hóa':'Thành phẩm','Đơn vị','Tồn 9h sáng','Tồn 1h đêm','Cập nhật lúc','Người cập nhật',''].map(c=>h('th',{key:c},c)))),
+        h('thead',null,h('tr',null,...[...(stockType==='goods'?['Nhóm hàng hóa']:[]),stockType==='goods'?'Hàng hóa':'Thành phẩm','Đơn vị','Tồn 9h sáng','Tồn 1h đêm','Cập nhật lúc','Người cập nhật'].map(c=>h('th',{key:c},c)))),
         h('tbody',null,filtered.length?filtered.map(row=>{
           const s=stockMap[row.productId];
           const morning=s?s.stockMorning:0;
@@ -506,16 +530,15 @@ function StockTab({stock,setStock,products,prodCats,currentUser}){
             stockType==='goods'&&h('td',null,h('span',{className:'badge',style:{background:'var(--bg2)',color:'var(--tx)'}},row.goodsGroup||'Chưa có nhóm')),
             h('td',null,h('div',{style:{fontWeight:500}},row.productName),(low&&(morning>0||evening>0))&&h('span',{className:'badge',style:{background:'#FCEBEB',color:'#A32D2D',marginLeft:6,fontSize:10}},'Sắp hết')),
             h('td',null,h('span',{className:'badge',style:{background:'var(--bg2)',color:'var(--tx)'}},row.unit)),
-            h('td',null,stockType==='goods'?h('input',{type:'number',min:0,value:quickValue(row,'stockMorning'),onChange:e=>changeQuick(row,'stockMorning',e.target.value),style:{width:110}}):h('span',{style:{fontSize:16,fontWeight:600,color:morning<50&&morning>0?'#A32D2D':'var(--pri)'}},morning.toLocaleString())),
-            h('td',null,stockType==='goods'?h('input',{type:'number',min:0,value:quickValue(row,'stockEvening'),onChange:e=>changeQuick(row,'stockEvening',e.target.value),style:{width:110}}):h('span',{style:{fontSize:16,fontWeight:600,color:evening<50&&evening>0?'#A32D2D':'var(--tx)'}},evening.toLocaleString())),
+            h('td',null,stockInput(row,'stockMorning','Tồn 9h sáng')),
+            h('td',null,stockInput(row,'stockEvening','Tồn 1h đêm')),
             h('td',null,h('span',{style:{fontSize:11,color:'var(--tx2)'}},s?.updatedAt||'Chưa cập nhật')),
             h('td',null,h('span',{style:{fontSize:12}},s?.updatedBy||'—')),
-            h('td',null,h('button',{className:'bi',onClick:()=>{se({...row,stockMorning:morning,stockEvening:evening,...(s||{})});sm('f');}},h('i',{className:'ti ti-edit',style:{fontSize:15}})))
           );
-        }):h('tr',null,h('td',{colSpan:stockType==='goods'?8:7,className:'empty-st'},stockType==='goods'?'Chưa có hàng hóa trong nhóm này.':'Chưa có thành phẩm nào.')))
+        }):h('tr',null,h('td',{colSpan:stockType==='goods'?7:6,className:'empty-st'},stockType==='goods'?'Chưa có hàng hóa trong nhóm này.':'Chưa có thành phẩm nào.')))
       )
     ),
-    modal==='f'&&edit&&h(StockForm,{entry:edit,currentUser,onSave:saveStock,onClose:()=>{sm(null);se(null);}})
+    canEdit&&h('div',{className:'stock-save-bar'},h('span',{role:'status'},pendingCount?pendingCount+' sản phẩm chưa lưu (tất cả nhóm)':'Chưa có thay đổi'),h('button',{className:'bp',disabled:!pendingCount,onClick:saveQuick},'Lưu thay đổi'+(pendingCount?' ('+pendingCount+')':''))),
   );
 }
 

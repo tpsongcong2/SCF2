@@ -574,6 +574,7 @@ function fuelPurchaseAmount(liters,price){
   return Math.round(Math.round(numFmt(liters||0)*1000)*numFmt(price||0)/1000);
 }
 function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
+  const [filtersOpen,setFiltersOpen]=useState(false);
   const [modal,setModal]=useState(false);
   const [edit,setEdit]=useState(null);
   const [q,sq]=useState('');
@@ -753,7 +754,8 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
   const pickMeterImage=file=>pickFuelPhoto(file,'meter');
   const photoField=(kind,label)=>{
     const photo=kind==='plate'?form.plateImage:(form.meterImage||form.image);
-    return h('div',null,
+    return h('div',{className:'fuel-photo-field'},
+      photo&&h('img',{src:photo,alt:kind==='plate'?'Ảnh xe và biển số đã chọn':'Ảnh cây xăng đã chọn',className:'fuel-photo-preview'}),
       h('label',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:14,minHeight:54,border:'1px solid var(--pri)',borderRadius:10,fontSize:18,fontWeight:600,cursor:'pointer'}},
         h('i',{className:'ti ti-camera'}),uploading===kind?'Đang lưu ảnh…':label,
         h('input',{type:'file',accept:'image/*',capture:'environment',disabled:!!uploading,style:{display:'none'},onChange:e=>{pickFuelPhoto(e.target.files?.[0],kind);e.target.value='';}})
@@ -794,8 +796,12 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
     input.addEventListener('cancel',cleanup,{once:true});
     input.click();
   };
-  return h('div',null,
+  return h('div',{className:'fuel-purchase-page'},
     h('div',{className:'ptitle'},h('i',{className:'ti ti-gas-station',style:{fontSize:20}}),'Đơn mua xăng dầu'),
+    h('div',{className:'mobile-only fuel-overview'},
+      h('div',null,h('span',null,'Tổng tiền theo bộ lọc'),h('strong',null,visible.reduce((sum,row)=>sum+numFmt(row.amount||0),0).toLocaleString('vi-VN')+' đ')),
+      h('div',null,h('b',null,visible.length+' đơn'),h('span',null,visible.reduce((sum,row)=>sum+numFmt(row.liters||0),0).toLocaleString('vi-VN')+' lít'))
+    ),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Lọc theo ngày, người đổ và xe để xem nhanh trên điện thoại.'),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
@@ -803,7 +809,8 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
         canManage&&h(AddBtn,{onClick:openAdd,label:'Thêm đơn mua xăng dầu'})
       )
     ),
-    h('div',{className:'card',style:{marginBottom:'1rem',padding:'12px 14px'}},
+    h('button',{type:'button',className:'mobile-only fuel-filter-toggle','aria-expanded':filtersOpen,'aria-controls':'fuel-filter-panel',onClick:()=>setFiltersOpen(value=>!value)},h('i',{className:'ti ti-filter'}),'Tìm kiếm và bộ lọc',h('span',null,[q,df,dt,buyerFilter,vehicleFilter].filter(Boolean).length?'Đang lọc':filtersOpen?'Thu gọn':'Mở')),
+    h('div',{id:'fuel-filter-panel',className:'card fuel-filter-panel'+(filtersOpen?' is-open':''),style:{marginBottom:'1rem',padding:'12px 14px'}},
       h('div',{className:'responsive-filter-grid'},
         h(F,{label:'Tìm nhanh'},
           h(SearchBar,{value:q,onChange:sq,placeholder:'Tên, xe, ghi chú...'})
@@ -844,7 +851,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
           h('div',{className:'fuel-mobile-card-date'},fmtAnyDate(r.date)||'—')
         ),
         h('div',{className:'fuel-mobile-meta'},
-          h('div',{className:'fuel-mobile-meta-item'},h('b',null,'Số lít'),h('span',null,numFmt(r.liters||0)||'—')),
+          h('div',{className:'fuel-mobile-meta-item'},h('b',null,'Số lít'),h('span',null,numFmt(r.liters||0)?numFmt(r.liters).toLocaleString('vi-VN',{maximumFractionDigits:3}):'—')),
           h('div',{className:'fuel-mobile-meta-item'},h('b',null,'Giá tiền'),h('span',null,numFmt(r.price||0)?Number(r.price).toLocaleString('vi-VN'):'—')),
           h('div',{className:'fuel-mobile-meta-item'},h('b',null,'Thành tiền'),h('span',null,numFmt(r.amount||0)?Number(r.amount).toLocaleString('vi-VN'):'—')),
           h('div',{className:'fuel-mobile-meta-item'},h('b',null,'Ảnh'),h('span',null,countImages(r)?(countImages(r)+' ảnh'):'Chưa có ảnh'))
@@ -852,8 +859,8 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
         r.note&&h('div',{className:'fuel-mobile-note'},r.note),
         h('div',{className:'fuel-mobile-actions'},
           (()=>{const imgs=renderImageActions(r);return imgs==='—'?null:imgs;})(),
-          canEditRow(r)&&h('button',{className:'bi',onClick:()=>openEdit(r)},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
-          canDeleteRow(r)&&h('button',{className:'bi',onClick:()=>del(r.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
+          canEditRow(r)&&h('button',{className:'bi',title:'Sửa đơn',onClick:()=>openEdit(r)},h('i',{className:'ti ti-edit',style:{fontSize:15}}),' Sửa'),
+          canDeleteRow(r)&&h('button',{className:'bi',title:'Xóa đơn','aria-label':'Xóa đơn xăng dầu của xe '+r.vehicle,onClick:()=>del(r.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
         )
       )):h('div',{className:'card',style:{textAlign:'center',color:'var(--tx2)'}},'Chưa có đơn mua xăng dầu nào.')
     ),
@@ -874,22 +881,24 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
         ))
       )):h('tr',null,h('td',{colSpan:9,className:'empty-st'},'Chưa có đơn mua xăng dầu nào.')))
     )),
-    canManage&&modal&&h(Modal,{title:edit?'Sửa đơn xăng dầu':'Thêm đơn xăng dầu',onClose:()=>{if(!uploading){setModal(false);setEdit(null);}}},
+    canManage&&modal&&h(Modal,{className:'fuel-entry-modal',title:edit?'Sửa đơn xăng dầu':'Thêm đơn xăng dầu',onClose:()=>{if(!uploading){setModal(false);setEdit(null);}}},
+      h('div',{className:'fuel-form-heading'},'Thông tin lần đổ nhiên liệu'),
       h('div',{style:{fontSize:14,color:'var(--tx2)',marginBottom:12}},'Người đổ: '+(form.buyerName||currentUser.name||'')),
-      h(F,{label:'Số lít *'},h('input',{type:'text',inputMode:'decimal',value:form.liters||'',onChange:e=>{if(/^\d*[.,]?\d{0,3}$/.test(e.target.value))setF('liters',e.target.value);},placeholder:'Ví dụ: 18,025',style:{fontSize:28,fontWeight:700,minHeight:60,padding:12}})),
-      h(F,{label:'Đơn giá (đồng/lít) *'},h('input',{type:'text',inputMode:'numeric',value:form.price||'',onChange:e=>{if(/^\d*$/.test(e.target.value))setF('price',e.target.value);},placeholder:'Ví dụ: 27740',style:{fontSize:28,fontWeight:700,minHeight:60,padding:12}})),
-      h('div',{role:'status',style:{background:'var(--bg2)',padding:14,borderRadius:10,marginBottom:14}},
+      h(F,{label:'Xe / biển số *'},h('input',{value:form.vehicle,onChange:e=>setF('vehicle',e.target.value.toUpperCase()),list:'fuel-vehicle-options',placeholder:'Chọn hoặc nhập biển số',style:{fontSize:20,minHeight:48}})),
+      h('datalist',{id:'fuel-vehicle-options'},vehicleOptions.map(v=>h('option',{key:v,value:v},v))),
+      h(F,{label:'Số lít *'},h('input',{type:'text',inputMode:'decimal',value:form.liters||'',onChange:e=>{if(/^\d*[.,]?\d{0,3}$/.test(e.target.value))setF('liters',e.target.value);},placeholder:'18,025',style:{fontSize:28,fontWeight:700,minHeight:60,padding:12}})),
+      h(F,{label:'Đơn giá (đồng/lít) *'},h('input',{type:'text',inputMode:'numeric',value:form.price||'',onChange:e=>{if(/^\d*$/.test(e.target.value))setF('price',e.target.value);},placeholder:'27740',style:{fontSize:28,fontWeight:700,minHeight:60,padding:12}})),
+      h('div',{className:'fuel-form-total',role:'status',style:{background:'var(--bg2)',padding:14,borderRadius:10,marginBottom:14}},
         h('div',{style:{fontSize:16}},'Thành tiền'),
         h('div',{style:{fontSize:30,fontWeight:700,color:'var(--pri)'}},fuelPurchaseAmount(form.liters,form.price).toLocaleString('vi-VN')+' đ')
       ),
-      h(F,{label:'Xe / biển số *'},h('input',{value:form.vehicle,onChange:e=>setF('vehicle',e.target.value.toUpperCase()),list:'fuel-vehicle-options',placeholder:'Chọn hoặc nhập biển số',style:{fontSize:20,minHeight:48}})),
-      h('datalist',{id:'fuel-vehicle-options'},vehicleOptions.map(v=>h('option',{key:v,value:v},v))),
-      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:10,marginBottom:12}},photoField('plate','Chụp ảnh xe'),photoField('meter','Chụp cây xăng')),
+      h('div',{className:'fuel-form-heading'},'Ảnh đối chiếu',h('small',null,((form.plateImage?1:0)+((form.meterImage||form.image)?1:0))+'/2 ảnh đã chọn')),
+      h('div',{className:'fuel-photo-grid',style:{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:10,marginBottom:12}},photoField('meter','Chụp cây xăng'),photoField('plate','Chụp biển số')),
       h('details',null,h('summary',{style:{padding:'10px 0',fontSize:16,cursor:'pointer'}},'Ngày mua: '+(fmtAnyDate(form.date)||'')+' · Ghi chú'),
         h(F,{label:'Ngày mua *'},h('input',{type:'date',value:toIsoDate(form.date),onChange:e=>setF('date',e.target.value),style:{fontSize:18}})),
         h(F,{label:'Ghi chú'},h('textarea',{value:form.note,onChange:e=>setF('note',e.target.value),rows:2,style:{fontSize:18}}))
       ),
-      h('button',{className:'bp',disabled:!!uploading,onClick:save,style:{width:'100%',minHeight:56,fontSize:22,fontWeight:700,marginTop:12}},uploading?'Đang lưu ảnh…':'Lưu đơn')
+      h('div',{className:'fuel-save-bar'},h('button',{className:'bp',disabled:!!uploading,onClick:save,style:{width:'100%',minHeight:56,fontSize:22,fontWeight:700,marginTop:12}},uploading?'Đang lưu ảnh…':'Lưu đơn'))
     )
   );
 }
