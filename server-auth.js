@@ -2,12 +2,32 @@
    Keep disabled until the Edge Function and RLS migration are deployed. */
 const SCF_SERVER_AUTH_ENABLED=true;
 const SCF_AUTH_REQUEST_TIMEOUT_MS=30000;
+function scfRecordAuthDiagnostic(entry){
+  if(typeof window==='undefined')return;
+  let rows=window.__SCF_AUTH_DIAGNOSTICS;
+  if(!rows)try{rows=JSON.parse(sessionStorage.getItem('scf_auth_diagnostics')||'[]');}catch{}
+  if(!Array.isArray(rows))rows=[];
+  window.__SCF_AUTH_DIAGNOSTICS=[entry,...rows].slice(0,40);
+  try{sessionStorage.setItem('scf_auth_diagnostics',JSON.stringify(window.__SCF_AUTH_DIAGNOSTICS));}catch{}
+}
+async function scfMeasureAuthStage(stage,task){
+  const start=Date.now();let ok=false;
+  try{const result=await task();ok=!result?.error;return result;}
+  finally{scfRecordAuthDiagnostic({stage,ms:Date.now()-start,ok,at:new Date().toISOString()});}
+}
+if(typeof window!=='undefined')window.scfDownloadAuthDiagnostics=()=>{
+  let rows=window.__SCF_AUTH_DIAGNOSTICS;
+  if(!rows)try{rows=JSON.parse(sessionStorage.getItem('scf_auth_diagnostics')||'[]');}catch{}
+  const url=URL.createObjectURL(new Blob([JSON.stringify({version:typeof SCF_BUILD_VERSION==='undefined'?'':SCF_BUILD_VERSION,entries:rows||[]},null,2)],{type:'application/json'}));
+  const link=document.createElement('a');link.href=url;link.download='SCFOOD-kiem-tra-dang-nhap.json';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
 
 // Supabase Functions supports AbortSignal. Always abort the underlying fetch
 // when a request times out so a slow request cannot continue piling up behind
 // newer retries in the browser and at the Edge Function.
 async function invokeScfAuth(options,timeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
-  const readOnly=['load_employees','load_permitted_collection','load_permitted_collection_versions'].includes(options?.body?.action);
+  // Startup owns retries for employee context; never multiply its three attempts.
+  const readOnly=['load_permitted_collection','load_permitted_collection_versions'].includes(options?.body?.action);
   for(let attempt=0;;attempt++){
     try{
       const result=await invokeScfAuthOnce(options,timeoutMs);
@@ -23,19 +43,28 @@ async function invokeScfAuth(options,timeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
 async function invokeScfAuthOnce(options,timeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');
   const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),Math.max(1000,Number(timeoutMs)||SCF_AUTH_REQUEST_TIMEOUT_MS));
+  const started=Date.now(),action=String(options?.body?.action||'request');
+  const diagnosticId='scf-'+started.toString(36)+'-'+Math.random().toString(36).slice(2,10);
+  let timer,status=0,outcome='error',server;
+  const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();const error=new Error('Supabase timeout — '+action+' — mã '+diagnosticId);error.code='SCF_REMOTE_TIMEOUT';reject(error);},Math.max(1000,Number(timeoutMs)||SCF_AUTH_REQUEST_TIMEOUT_MS));});
   try{
-    const result=await sb.functions.invoke('scf-auth',{...options,signal:controller.signal});
+    const result=await Promise.race([sb.functions.invoke('scf-auth',{...options,body:{...options.body,diagnosticId},signal:controller.signal}),timeout]);
+    status=Number(result?.error?.context?.status||(!result?.error?200:0));
+    server=result?.data?.diagnostic;
+    if(!server&&result?.error?.context?.clone)try{server=(await result.error.context.clone().json())?.diagnostic;}catch{}
     if(result?.error&&controller.signal.aborted){
       const error=new Error('Supabase timeout');error.code='SCF_REMOTE_TIMEOUT';throw error;
     }
-    return result;
+    outcome=result?.error?'error':'ok';return result;
   }catch(error){
     if(controller.signal.aborted||error?.name==='AbortError'){
-      const timeoutError=new Error('Supabase timeout');timeoutError.code='SCF_REMOTE_TIMEOUT';throw timeoutError;
+      outcome='timeout';const timeoutError=new Error('Supabase timeout — '+action+' — mã '+diagnosticId);timeoutError.code='SCF_REMOTE_TIMEOUT';throw timeoutError;
     }
     throw error;
-  }finally{clearTimeout(timer);}
+  }finally{
+    clearTimeout(timer);
+    scfRecordAuthDiagnostic({id:diagnosticId,stage:action,ms:Date.now()-started,status,outcome,at:new Date().toISOString(),server:server?{ms:server.ms,steps:(server.steps||[]).map(step=>({stage:step.stage,ms:step.ms,ok:step.ok,code:step.code}))}:undefined});
+  }
 }
 
 async function serverFunctionErrorMessage(error,data,fallback){
@@ -88,7 +117,7 @@ async function serverUsernameLogin(username,password,forceTakeover=false){
     throw activeError;
   }
   if(!data?.access_token||!data?.refresh_token||!data?.employee)throw new Error(data?.error||'Máy chủ trả về phiên đăng nhập không hợp lệ.');
-  const{error:sessionError}=await sb.auth.setSession({access_token:data.access_token,refresh_token:data.refresh_token});
+  const{error:sessionError}=await scfMeasureAuthStage('install_session',()=>withRemoteTimeout(sb.auth.setSession({access_token:data.access_token,refresh_token:data.refresh_token}),12000));
   if(sessionError)throw sessionError;
   window.__SCF_SESSION_REPLACEMENT_PENDING=false;
   window.__SCF_SESSION_REPLACEMENT_HANDLED=false;
@@ -97,7 +126,7 @@ async function serverUsernameLogin(username,password,forceTakeover=false){
 
 async function getServerAuthSession(){
   if(!SCF_SERVER_AUTH_ENABLED||!sb)return null;
-  const{data,error}=await sb.auth.getSession();
+  const{data,error}=await scfMeasureAuthStage('read_local_session',()=>withRemoteTimeout(sb.auth.getSession(),12000));
   if(error)throw error;
   return data?.session||null;
 }

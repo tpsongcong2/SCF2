@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V430';
+const SCF_BUILD_VERSION='V431';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -641,6 +641,7 @@ function App(){
     h('h2',null,'Chưa tải được hồ sơ đăng nhập'),
     h('p',null,'App chưa xác định được hồ sơ của bạn. Không cần thay đổi quyền hay nhập lại đơn hàng.'),
     h('p',null,bootError),
+    window.scfDownloadAuthDiagnostics&&h('button',{type:'button',className:'btn',onClick:()=>window.scfDownloadAuthDiagnostics()},'Tải thông tin kiểm tra đăng nhập'),
     h('p',{style:{fontSize:12,color:'var(--tx2)'}},'App sẽ tự thử lại sau 30 giây hoặc ngay khi mạng được kết nối lại.'),
     h('button',{className:'bp',onClick:()=>setBootAttempt(v=>v+1)},'Thử tải lại'),
     h('button',{className:'bb',onClick:async()=>{await serverLogout();setSession(null);setBootAttempt(v=>v+1);}},'Đăng nhập lại')
