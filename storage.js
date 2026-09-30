@@ -380,6 +380,20 @@ function scfVerifyInvoiceSave(key,saved,value,patches){
   window.__SCF_CONFIRMED_INVOICES=window.__SCF_CONFIRMED_INVOICES||{};
   for(const row of rows||[])window.__SCF_CONFIRMED_INVOICES[String(row.id)]=row.invoiceImage||'';
 }
+function scfVerifyOrderTripSave(key,saved,value,patches){
+  if(key!=='scf_orders')return;
+  const rows=Array.isArray(saved?.items)?saved.items:saved?.value;
+  const changed=patches||((value||[]).map(item=>({id:item.id,value:item})));
+  for(const patch of changed){
+    if(patch.base&&String(patch.base.tripId||'')===String(patch.value?.tripId||'')&&patch.base.tripAssignMode===patch.value?.tripAssignMode)continue;
+    const row=rows?.find(item=>String(item.id)===String(patch.id));
+    if(!row||String(row.tripId||'')!==String(patch.value?.tripId||'')||row.tripAssignMode!==patch.value?.tripAssignMode){
+      throw new Error('Máy chủ chưa xác nhận chuyến của đơn '+patch.id+'. Thay đổi vẫn đang chờ đồng bộ.');
+    }
+  }
+  window.__SCF_CONFIRMED_ORDER_TRIPS=window.__SCF_CONFIRMED_ORDER_TRIPS||{};
+  for(const row of rows||[])window.__SCF_CONFIRMED_ORDER_TRIPS[String(row.id)]={tripId:String(row.tripId||''),tripAssignMode:row.tripAssignMode||''};
+}
 async function performDbSet(key,val,queuedAt='',mode=''){
   if(serverAuthEnabled()){
     if(!sb){if(!readSyncQueue()[key])queueRemoteWrite(key,val,{updatedAt:queuedAt});return false;}
@@ -410,6 +424,7 @@ async function performDbSet(key,val,queuedAt='',mode=''){
       const timeoutMs=remoteTimeoutFor(payload);
       const saved=await measuredCollectionSave(key,patches?'patch':'full',payload,()=>withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt,timeoutMs):serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue,timeoutMs),timeoutMs));
       scfVerifyInvoiceSave(key,saved,val,patches);
+      scfVerifyOrderTripSave(key,saved,val,patches);
       const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(val);
       if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(val));
       scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:queuedAt};setSyncState('synced');
@@ -510,6 +525,7 @@ async function runPendingWrites(){
         const timeoutMs=remoteTimeoutFor(payload);
         const saved=await measuredCollectionSave(key,patches?'patch':'full',payload,()=>withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt,timeoutMs):serverSavePermittedCollection(key,item.value,expectedUpdatedAt,baseValue,timeoutMs),timeoutMs));
         scfVerifyInvoiceSave(key,saved,item.value,patches);
+        scfVerifyOrderTripSave(key,saved,item.value,patches);
         const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(item.value);
         if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(item.value));
         scfRemoteVersions.set(key,merged?'':String(saved?.updatedAt||''));

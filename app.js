@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V435';
+const SCF_BUILD_VERSION='V438';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -781,7 +781,7 @@ function App(){
         canAccess(cu.role,'invoicereport',cu.permissions)&&page==='invoicereport'&&h(InvoiceUploadReportTab,{orders,customers,products,trips,setPage}),
 canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(FinanceReportTab,{entries:financeEntries,setEntries:setFinanceEntries,debts:financeDebts,setDebts:setFinanceDebts,openings:financeOpenings,setOpenings:setFinanceOpenings,customers,nccs,currentUser:cu,orders,products,quotes,purchases,goodsPurchases}),
         canAccess(cu.role,'powdersales',cu.permissions)&&page==='powdersales'&&h(PowderSalesTab,{customers,trips,employees,setPage}),
-        canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products,prodShifts,prodShiftRules,prodActuals,setProdActuals,currentUser:cu}),
+        canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products,prodShifts,prodShiftRules,prodActuals,setProdActuals,stock,currentUser:cu}),
         canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,products,currentUser:cu}),
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,prodCats,currentUser:cu}),
         canAccess(cu.role,'syncreport',cu.permissions)&&page==='syncreport'&&h(SyncDataReportTab),

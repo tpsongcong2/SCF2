@@ -52,17 +52,35 @@ function filterManualTripOptions(trips,date,query){
     return normalizeLookupText([trip?.deliveryDate,trip?.shiftName,trip?.driverName,trip?.area,trip?.id].filter(Boolean).join(' ')).includes(wantedText);
   });
 }
-function ManualTripPicker({trips,selectedTripId,defaultDate,disabled,title,onSelect,compact=false}){
+function manualTripForOrder(trips,order){
+  const tripId=String(order?.tripId||'');
+  if(tripId)return (trips||[]).find(trip=>String(trip.id||'')===tripId)||null;
+  if(order?.tripAssignMode==='manual')return null;
+  return (trips||[]).find(trip=>(trip.orderIds||[]).some(id=>String(id)===String(order?.id||'')))||null;
+}
+function ManualTripPicker({trips,selectedTripId,defaultDate,disabled,title,onConfirm,compact=false}){
   const selectedTrip=(trips||[]).find(trip=>String(trip?.id||'')===String(selectedTripId||''))||null;
   const initialDate=manualTripDateToISO(selectedTrip?.deliveryDate||defaultDate||(trips||[])[0]?.deliveryDate||'');
   const [date,setDate]=useState(initialDate);
   const [query,setQuery]=useState('');
+  const [draftTripId,setDraftTripId]=useState(selectedTripId||'');
+  const [saving,setSaving]=useState(false);
+  const [saveState,setSaveState]=useState('');
   useEffect(()=>{
     const next=manualTripDateToISO(selectedTrip?.deliveryDate||defaultDate||'');
     if(next&&next!==date)setDate(next);
+    setDraftTripId(selectedTripId||'');
   },[selectedTripId,defaultDate]);
   const filtered=filterManualTripOptions(trips,date,query);
-  const selectedVisible=filtered.some(trip=>String(trip?.id||'')===String(selectedTripId||''));
+  const selectedVisible=filtered.some(trip=>String(trip?.id||'')===String(draftTripId||''));
+  const hasChange=String(draftTripId||'')!==String(selectedTripId||'');
+  const confirm=async()=>{
+    if(disabled||saving||(!hasChange&&saveState!=='error'))return;
+    setSaving(true);setSaveState('');
+    try{setSaveState(await onConfirm(draftTripId)?'confirmed':'error');}
+    catch(error){setSaveState('error');window.showToast(error?.message||'Chưa lưu được chuyến đã chọn.','error');}
+    finally{setSaving(false);}
+  };
   const inputStyle={fontSize:12,padding:compact?'5px 6px':'4px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',width:'100%',minWidth:0,background:disabled?'var(--bg2)':'#fff'};
   return h('div',{className:'manual-trip-picker',style:{display:'grid',gap:4}},
     h('div',{style:{display:'grid',gridTemplateColumns:compact?'minmax(124px,.9fr) minmax(130px,1.1fr)':'minmax(118px,.9fr) minmax(110px,1.1fr)',gap:4}},
@@ -70,15 +88,17 @@ function ManualTripPicker({trips,selectedTripId,defaultDate,disabled,title,onSel
       h('input',{type:'search',value:query,disabled,placeholder:'Tìm ca, lái xe, khu vực…',title:'Tìm theo ca, lái xe hoặc khu vực',onChange:e=>setQuery(e.target.value),style:inputStyle,'aria-label':'Tìm chuyến giao hàng'})
     ),
     h('select',{
-      value:selectedVisible?selectedTripId:'',
-      disabled,
+      value:selectedVisible?draftTripId:'',
+      disabled:disabled||saving,
       title,
-      onChange:e=>onSelect(e.target.value),
-      style:{...inputStyle,color:selectedTripId?'var(--pri)':'var(--tx2)',cursor:disabled?'not-allowed':'pointer'}
+      onChange:e=>{setDraftTripId(e.target.value);setSaveState('')},
+      style:{...inputStyle,color:draftTripId?'var(--pri)':'var(--tx2)',cursor:disabled?'not-allowed':'pointer'}
     },
       h('option',{value:''},filtered.length?'— Chọn chuyến trong ngày —':'— Không có chuyến phù hợp —'),
       filtered.map(trip=>h('option',{key:trip.id,value:trip.id},manualTripText(trip)))
-    )
+    ),
+    (hasChange||saving||saveState==='error')&&h('button',{type:'button',className:'bp',disabled:disabled||saving,onClick:confirm,style:{width:'100%',padding:'7px 8px',fontSize:12}},saving?'Đang xác nhận trên máy chủ…':saveState==='error'?'Thử xác nhận lại':'Xác nhận chuyển xong'),
+    saveState==='error'&&h('span',{role:'alert',style:{fontSize:11,color:'#A32D2D'}},'Máy chủ chưa xác nhận. Chuyến đang chờ đồng bộ; vui lòng thử lại.')
   );
 }
 function OrderDetailLine({line,products,prodCats,prodShifts,deliveryDate,deliveryTime,pointName,area,inheritedShift,inheritedTiming,inheritedMode,onChange,onRemove}){
@@ -2343,7 +2363,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       return status===order.status?order:{...order,status,orderHistory:[...(order.orderHistory||[]),historyEntry('Đồng bộ trạng thái xếp chuyến',['Chuyến: '+order.tripId,'Trạng thái: '+(order.status||'—')+' → '+status])],updatedAt:fmtDT(),updatedBy:currentUser?.name||''};
     }));
   },[orders,trips]);
-  const orderTrip=order=>(trips||[]).find(t=>String(t.id||'')===String(order?.tripId||'')||(t.orderIds||[]).includes(order?.id));
+  const orderTrip=order=>manualTripForOrder(trips,order);
   const startedTrip=trip=>trip?.status==='active';
   const dispatchedTrip=trip=>!!trip?.driverDispatchedAt||startedTrip(trip);
   const closedTrip=trip=>['completion_pending','completed'].includes(trip?.status);
@@ -2365,27 +2385,39 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const autoTrip=autoTripForOrder({...order,tripId:null,tripAssignMode:'auto'});
     applyOrdersAndTripSync(prev=>prev.map(x=>x.id===order.id?{...x,tripAssignMode:'auto',tripId:autoTrip?.id||null,status:autoTrip?'assigned':'pending',orderHistory:[...(x.orderHistory||[]),historyEntry('Đổi cách xếp chuyến',['Thủ công → Tự động','Chuyến: '+(order.tripId||'—')+' → '+(autoTrip?.id||'Chưa xếp')])],updatedAt:fmtDT(),updatedBy:currentUser?.name||''}:x));
   };
-  const assignTripManually=(order,newTripId)=>{
+  const confirmManualTripSave=async(orderId,newTripId)=>{
+    // Chờ React ghi thay đổi vào hàng đồng bộ trước khi kiểm tra kết quả.
+    await new Promise(resolve=>setTimeout(resolve,0));
+    const confirmed=await(window.scfWaitForCollectionSync?.('scf_orders',35000)??Promise.resolve(false));
+    const saved=window.__SCF_CONFIRMED_ORDER_TRIPS?.[String(orderId)];
+    const exact=!serverAuthEnabled()||String(saved?.tripId||'')===String(newTripId||'')&&saved?.tripAssignMode==='manual';
+    if(confirmed&&exact){window.showToast(newTripId?'Máy chủ đã xác nhận chuyển chuyến.':'Máy chủ đã xác nhận rút đơn khỏi chuyến.','success');return true;}
+    window.showToast('Máy chủ chưa xác nhận chuyển chuyến. Thay đổi vẫn đang chờ đồng bộ; hãy thử xác nhận lại.','warn',10000);
+    return false;
+  };
+  const assignTripManually=async(order,newTripId)=>{
     const oldTrip=orderTrip(order);
     const oldTripId=order.tripId||oldTrip?.id||'';
     const sameTrip=String(oldTripId)===String(newTripId||'');
     const sameTripStatus=newTripId?(oldTrip?.status==='active'?'delivering':'assigned'):'pending';
-    if(sameTrip&&String(order.tripId||'')===String(newTripId||'')&&order.status===sameTripStatus&&order.tripAssignMode==='manual')return;
-    if(closedTrip(oldTrip)){window.showToast('Chuyến đã chờ duyệt hoặc hoàn thành nên không thể rút đơn.','warn');return;}
+    if(sameTrip&&String(order.tripId||'')===String(newTripId||'')&&order.status===sameTripStatus&&order.tripAssignMode==='manual'){
+      await window.scfFlushPendingWrites?.();
+      return confirmManualTripSave(order.id,newTripId);
+    }
+    if(closedTrip(oldTrip)){window.showToast('Chuyến đã chờ duyệt hoặc hoàn thành nên không thể rút đơn.','warn');return false;}
     const targetTrip=(trips||[]).find(t=>String(t.id||'')===String(newTripId||''));
-    if(closedTrip(targetTrip)){window.showToast('Không thể chuyển đơn vào chuyến đã chờ duyệt hoặc hoàn thành.','warn');return;}
+    if(closedTrip(targetTrip)){window.showToast('Không thể chuyển đơn vào chuyến đã chờ duyệt hoặc hoàn thành.','warn');return false;}
     if(sameTrip){
       const stamp=fmtDT();
       applyOrdersAndTripSync(prev=>prev.map(x=>x.id===order.id?{...x,tripAssignMode:'manual',tripId:newTripId||null,status:sameTripStatus,orderHistory:[...(x.orderHistory||[]),historyEntry('Đồng bộ trạng thái xếp chuyến',['Chuyến: '+(newTripId||'Chưa xếp'),'Trạng thái: '+(x.status||'—')+' → '+sameTripStatus])],updatedAt:stamp,updatedBy:currentUser?.name||''}:x));
-      window.showToast('Đã đồng bộ trạng thái đơn với chuyến đã chọn.','success');
-      return;
+      return confirmManualTripSave(order.id,newTripId);
     }
     const isStarted=dispatchedTrip(oldTrip)||order.status==='delivering';
-    if(isStarted&&!canWithdrawStartedOrder){window.showToast('Đơn đã giao lái xe hoặc đang đi giao. Chỉ Kế toán hoặc Admin được rút/chuyển đơn.','warn');return;}
+    if(isStarted&&!canWithdrawStartedOrder){window.showToast('Đơn đã giao lái xe hoặc đang đi giao. Chỉ Kế toán hoặc Admin được rút/chuyển đơn.','warn');return false;}
     let reason='';
     if(isStarted){
       reason=String(window.prompt('Nhập lý do '+(newTripId?'chuyển đơn sang chuyến khác':'rút đơn khỏi chuyến đang giao')+':','')||'').trim();
-      if(!reason){window.showToast('Kế toán phải nhập lý do để rút hoặc chuyển đơn đang giao.','warn');return;}
+      if(!reason){window.showToast('Kế toán phải nhập lý do để rút hoặc chuyển đơn đang giao.','warn');return false;}
     }
     const stamp=fmtDT();
     const nextStatus=!newTripId?'pending':targetTrip?.status==='active'?'delivering':'assigned';
@@ -2398,9 +2430,12 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       const transfer={id:'DC'+uid(),fromTripId:oldTripId||'',toTripId:newTripId||'',reason,fromTripStatus:oldTrip?.status||'',toTripStatus:targetTrip?.status||'',at:stamp,by:currentUser?.name||'',byId:currentUser?.id||''};
       return {...x,tripAssignMode:'manual',tripId:newTripId||null,status:nextStatus,tripTransferHistory:[...(x.tripTransferHistory||[]),transfer],orderHistory:[...(x.orderHistory||[]),historyEntry(action,changes)],updatedAt:stamp,updatedBy:currentUser?.name||''};
     }));
-    notifyTripDriverChange(oldTrip,newTripId?'Đơn đã được chuyển khỏi chuyến':'Đơn đã được rút khỏi chuyến',order,'Lý do: '+(reason||'Điều chỉnh chuyến'));
-    if(targetTrip)notifyTripDriverChange(targetTrip,'Có đơn được chuyển vào chuyến',order,'Từ chuyến '+(oldTripId||'—')+(reason?' · Lý do: '+reason:''));
-    window.showToast(newTripId?'Đã chuyển đơn và lưu lịch sử.':'Đã rút đơn và lưu lịch sử.','success');
+    const confirmed=await confirmManualTripSave(order.id,newTripId);
+    if(confirmed){
+      notifyTripDriverChange(oldTrip,newTripId?'Đơn đã được chuyển khỏi chuyến':'Đơn đã được rút khỏi chuyến',order,'Lý do: '+(reason||'Điều chỉnh chuyến'));
+      if(targetTrip)notifyTripDriverChange(targetTrip,'Có đơn được chuyển vào chuyến',order,'Từ chuyến '+(oldTripId||'—')+(reason?' · Lý do: '+reason:''));
+    }
+    return confirmed;
   };
   const changeDateFilterMode=mode=>{
     setDateFilterMode(mode);
@@ -3508,7 +3543,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
               },tripMode==='manual'?'Về T.Đ':'Đ.Tay')
             ),
             tripMode==='manual'
-              ?h(ManualTripPicker,{trips:tripOptions,selectedTripId,defaultDate:preferredTripDate||ctx.deliveryDate,disabled:assignmentLocked,title:assignmentTitle,onSelect:tripId=>assignTripManually(o,tripId)})
+              ?h(ManualTripPicker,{trips:tripOptions,selectedTripId,defaultDate:preferredTripDate||ctx.deliveryDate,disabled:assignmentLocked,title:assignmentTitle,onConfirm:tripId=>assignTripManually(o,tripId)})
               :h('div',{className:'delivery-table-text',style:{color:selectedTripId?'var(--pri3)':'var(--tx2)',lineHeight:1.4,padding:'2px 0',whiteSpace:'nowrap'}},manualTripText(autoTrip))
           );
           const productionShiftName=firstPlanForDisplay
@@ -3667,7 +3702,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
               },tripMode==='manual'?'Về T.Đ':'Đ.Tay')
             ),
             tripMode==='manual'
-              ?h(ManualTripPicker,{trips:tripOptions,selectedTripId,defaultDate:preferredTripDate||ctx.deliveryDate,disabled:assignmentLocked,title:assignmentTitle,onSelect:tripId=>assignTripManually(o,tripId),compact:true})
+              ?h(ManualTripPicker,{trips:tripOptions,selectedTripId,defaultDate:preferredTripDate||ctx.deliveryDate,disabled:assignmentLocked,title:assignmentTitle,onConfirm:tripId=>assignTripManually(o,tripId),compact:true})
               :h('div',{style:{fontSize:12,color:selectedTripId?'var(--pri3)':'var(--tx2)',lineHeight:1.45}},manualTripText(autoTrip))
           ),
           h('div',{className:'mobile-data-actions'},

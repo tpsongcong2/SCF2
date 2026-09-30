@@ -1,10 +1,21 @@
 /* ─── Tổng hợp sản xuất ─── */
-function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodActuals,setProdActuals,currentUser}){
+function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodActuals,setProdActuals,stock,currentUser}){
   const[date,setDate]=useState(fmtDate());
   const[shift,setShift]=useState('all');
   const[openOrderRows,setOpenOrderRows]=useState(()=>new Set());
   const toggleOrderRow=key=>setOpenOrderRows(prev=>{const next=new Set(prev);next.has(key)?next.delete(key):next.add(key);return next;});
   const rules=(prodShiftRules&&prodShiftRules.length?prodShiftRules:DEF_PROD_SHIFT_RULES);
+  const orderById=new Map((orders||[]).map(order=>[String(order.id),order]));
+  const stockByProductId=new Map((stock||[]).map(item=>[String(item.productId),item]));
+  const orderLabel=id=>{
+    const order=orderById.get(String(id));
+    if(!order)return 'Không còn thông tin đơn hàng';
+    const fullDate=String(order.deliveryDate||'');
+    const dateParts=fullDate.match(/^(\d{1,2})\/(\d{1,2})\/\d{4}$/);
+    const shortDate=dateParts?dateParts[1]+'/'+dateParts[2]:(fullDate||'Chưa có ngày');
+    return [shortDate,order.pointName||order.address||order.customer||'Chưa có địa điểm',normalizeTimeInput(order.deliveryTime||'')||'Chưa có giờ'].join(' · ');
+  };
+  const stockFieldForShift=rule=>rule.id==='N_EARLY'?'stockEvening':rule.id==='A_EARLY'?'stockMorning':null;
   const actualKey=(prodDate,shiftId,productId)=>[prodDate||'',shiftId||'',productId||''].join('|');
   const readActualQty=(prodDate,shiftId,productId)=>{
     const rec=(prodActuals||{})[actualKey(prodDate,shiftId,productId)];
@@ -228,9 +239,9 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
                   )
                 )
               ),
-              h('div',{className:'tw'},
+              h('div',{className:'tw production-summary-table'},
                 h('table',null,
-                  h('thead',null,h('tr',null,...['Sản phẩm','ĐVT','SL Đặt','SL SX','SL hàng lỗi','SL đạt','Tỷ lệ lỗi','Đơn hàng'].map(c=>h('th',{key:c},c)))),
+                  h('thead',null,h('tr',null,...['Sản phẩm','ĐVT','SL Đặt',...(stockFieldForShift(rule)?[stockFieldForShift(rule)==='stockEvening'?'Tồn 1h':'Tồn 9h']:[]),'SL SX','SL hàng lỗi','SL đạt','Tỷ lệ lỗi','Đơn hàng'].map(c=>h('th',{key:c,title:c.startsWith('Tồn ')?'Số tồn mới nhất trong mục Tồn kho':undefined},c)))),
                   h('tbody',null,groupRows.map((r,i)=>{
                     const rowInvalid=isInvalidActualRow(r.prodDate,r.shift,r.productId);
                     const rowActualQty=numFmt(readActualQty(r.prodDate,r.shift,r.productId));
@@ -244,6 +255,7 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
                     h('td',null,h('div',{style:{fontWeight:500}},r.productName)),
                     h('td',null,h('span',{className:'badge',style:{background:rule.color||'#EAF3DE',color:rule.textColor||'#3B6D11'}},r.unit)),
                     h('td',null,h('span',{style:{fontSize:16,fontWeight:600,color:'var(--pri)'}},r.qtyProd.toLocaleString())),
+                    stockFieldForShift(rule)&&h('td',{className:'production-summary-stock',title:'Số tồn mới nhất trong mục Tồn kho'},numFmt(stockByProductId.get(String(r.productId))?.[stockFieldForShift(rule)]||0).toLocaleString('vi-VN')),
                     h('td',null,h('input',{
                       type:'number',
                       min:0,
@@ -275,8 +287,8 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
                         title:ordersOpen?'Ẩn danh sách đơn hàng':'Xem danh sách đơn hàng',
                         style:{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 8px',border:'1px solid var(--bd)',borderRadius:'var(--r)',background:ordersOpen?'var(--bg2)':'#fff',color:'var(--pri)',fontSize:11,fontWeight:600,whiteSpace:'nowrap',cursor:'pointer'}
                       },h('i',{className:'ti '+(ordersOpen?'ti-eye-off':'ti-eye'),style:{fontSize:13}}),(ordersOpen?'Ẩn':'Xem')+' ('+orderIds.length+')'),
-                      ordersOpen&&h('div',{style:{marginTop:6,maxHeight:150,overflowY:'auto',minWidth:120,padding:'6px 8px',border:'1px solid var(--bd)',borderRadius:'var(--r)',background:'#fff',fontSize:11,color:'var(--tx2)',lineHeight:1.55}},
-                        orderIds.map(id=>h('div',{key:id,style:{whiteSpace:'nowrap'}},id))
+                      ordersOpen&&h('div',{className:'production-summary-orders'},
+                        orderIds.map(id=>h('div',{key:id},orderLabel(id)))
                       )
                     )
                   )}))
