@@ -174,6 +174,15 @@ async function serverLoadPermittedCollectionVersions(keys){
   return data.versions;
 }
 
+async function serverLoadOrderSyncRecords(ids,requestTimeoutMs=15000){
+  if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
+  const requested=[...new Set((ids||[]).map(String).filter(Boolean))];
+  if(!requested.length)return{items:[],updatedAt:''};
+  const{data,error}=await invokeScfAuth({body:{action:'load_order_sync_records',ids:requested}},requestTimeoutMs);
+  if(error||!data?.ok||!Array.isArray(data?.items))throw new Error(await serverFunctionErrorMessage(error,data,'Không kiểm tra được trạng thái lưu đơn hàng.'));
+  return{items:data.items,updatedAt:data.updatedAt||''};
+}
+
 function serverEmployeeIsPrivileged(employee){
   const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').trim().toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const role=normalize(employee?.role).replace(/\s+/g,'');

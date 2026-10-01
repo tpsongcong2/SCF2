@@ -273,7 +273,7 @@ function PrintModal({order,company,onClose}){
     )
   );
 }
-function OrderForm({order,copyMode=false,customers,products,quotes,employees,currentUser,prodShifts,prodCats,onSave,onClose}){
+function OrderForm({order,copyMode=false,customers,products,quotes,employees,currentUser,prodShifts,prodCats,onSave,onClose,lockStatus=false,lockedTripLabel='',saving=false}){
   const[f,sf]=useState(order?{...order,prodShiftAssignMode:order.prodShiftAssignMode==='manual'?'manual':'auto'}:{orderId:'',customerId:'',customer:'',pointId:'',pointName:'',address:'',deliveryDate:fmtDate(),deliveryTime:'08:00',prodShiftAssignMode:'auto',note:'',status:'pending',invoiceNo:'',workOut:'',workReturn:'',lines:[]});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
   const selCust=customers.find(c=>c.id===f.customerId);
@@ -347,6 +347,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
     labelDate:f.labelDate||defaultTiming.labelDate
   }:defaultTiming;
   const submit=()=>{
+    if(saving)return;
     if(!f.customerId){window.showToast('Vui lòng chọn khách hàng!','warn');return;}
     const prodShiftAssignMode=hasLineOverrides?'auto':(f.prodShiftAssignMode==='manual'?'manual':'auto');
     const selectedShift=prodShiftAssignMode==='manual'?manualShift:autoShift;
@@ -374,6 +375,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
       lines,updatedBy:currentUser.name,updatedAt:fmtDT()});
   };
   return h(Modal,{title:copyMode?'Tạo đơn từ bản sao'+(order?.copySourceId?' · '+order.copySourceId:''):(order?'Sửa đơn '+order.id:'Tạo đơn giao hàng mới'),onClose,lg:true},
+    lockedTripLabel&&h('div',{className:'order-copy-notice'},h('i',{className:'ti ti-truck-delivery'}),' Đơn thuộc chuyến '+lockedTripLabel+'. Khi lưu, app giữ nguyên chuyến và trạng thái giao.'),
     copyMode&&h('div',{className:'order-copy-notice'},h('i',{className:'ti ti-copy'}),' Nội dung đã được sao chép từ đơn cũ. Kiểm tra ngày giao, số lượng rồi lưu để tạo mã đơn mới.'),
     h(F,{label:'Địa điểm giao * ('+customers.reduce((n,c)=>n+(c.points||[]).length,0)+' điểm)'},h('div',null,
       h('div',{className:'order-point-picker'},
@@ -401,7 +403,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
     h('div',{className:'order-form-main-grid',style:{display:'grid',gridTemplateColumns:'140px 100px 100px 90px 90px 1fr',gap:'0 8px'}},
       h(F,{label:'Ngày giao'},h('input',{type:'date',value:toIsoDate(f.deliveryDate),onChange:e=>s('deliveryDate',e.target.value?vnDateFromISO(e.target.value):''),title:'Chọn ngày giao'})),
       h(F,{label:'Giờ giao'},h('input',{value:f.deliveryTime,onChange:e=>s('deliveryTime',e.target.value),placeholder:'08:00'})),
-      h(F,{label:'Trạng thái'},h('select',{value:f.status,onChange:e=>s('status',e.target.value),style:{fontSize:12}},
+      h(F,{label:'Trạng thái'},h('select',{value:f.status,disabled:lockStatus,onChange:e=>s('status',e.target.value),style:{fontSize:12}},
         [['pending','Chờ xếp'],['assigned','Đã xếp'],['delivering','Đang giao'],['done','Đã giao'],['failed','Giao lỗi'],['cancelled','Hủy']].map(([v,l])=>h('option',{key:v,value:v},l))
       )),
       h(F,{label:'Công đi'},h('input',{type:'number',min:0,step:.5,value:f.workOut,onChange:e=>s('workOut',e.target.value),placeholder:'0'})),
@@ -455,7 +457,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
         inheritedMode:hasLineOverrides?'auto':prodShiftMode,
         onChange:data=>updLine(l.id,data),onRemove:()=>delLine(l.id)})),
     h('button',{onClick:addLine,style:{fontSize:12,padding:'5px 12px',marginBottom:8}},h('i',{className:'ti ti-plus',style:{fontSize:13,marginRight:4}}),'Thêm hàng hóa'),
-    h('div',{className:'form-actions order-form-actions'},h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu đơn hàng'))
+    h('div',{className:'form-actions order-form-actions'},h('button',{onClick:onClose,disabled:saving},'Hủy'),h('button',{className:'bp',onClick:submit,disabled:saving,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),saving?'Đang lưu…':'Lưu đơn hàng'))
   );
 }
 
@@ -2388,7 +2390,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const confirmManualTripSave=async(orderId,newTripId)=>{
     // Chờ React ghi thay đổi vào hàng đồng bộ trước khi kiểm tra kết quả.
     await new Promise(resolve=>setTimeout(resolve,0));
-    const confirmed=await(window.scfWaitForCollectionSync?.('scf_orders',35000)??Promise.resolve(false));
+    const confirmed=await(window.scfWaitForCollectionSync?.('scf_orders',50000)??Promise.resolve(false));
     const saved=window.__SCF_CONFIRMED_ORDER_TRIPS?.[String(orderId)];
     const exact=!serverAuthEnabled()||String(saved?.tripId||'')===String(newTripId||'')&&saved?.tripAssignMode==='manual';
     if(confirmed&&exact){window.showToast(newTripId?'Máy chủ đã xác nhận chuyển chuyến.':'Máy chủ đã xác nhận rút đơn khỏi chuyến.','success');return true;}

@@ -311,6 +311,21 @@ th{font-family:var(--ui-header-family)!important}
 .delivery-mobile-product-row>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .delivery-mobile-product-row>b{white-space:nowrap;color:var(--pri3)}
 .trip-attendance-list,.trip-mobile-orders{display:grid;gap:8px}
+.trip-edit-orders-button{display:inline-flex;align-items:center;justify-content:center;width:27px;min-width:27px;height:27px;padding:3px;color:var(--pri)}
+.trip-product-ps-badge{display:inline-block;margin-left:5px;padding:1px 5px;border-radius:5px;background:#fff3cd;color:#805500;font-size:10px;font-weight:800;vertical-align:middle}
+.trip-quick-add-product{padding:10px 12px;border-top:1px solid var(--bd)}
+.trip-quick-add-product>button{width:100%;min-height:38px;color:var(--pri);font-weight:700}
+.trip-quick-add-product-form{display:grid;gap:9px;padding:11px;border:1px solid var(--bd);border-radius:10px;background:var(--bg2)}
+.trip-quick-add-product-form select,.trip-quick-add-product-form input{width:100%;min-height:40px;padding:7px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff;font-size:14px}
+.trip-quick-add-product-form small{color:var(--tx2);line-height:1.4}
+.trip-quick-product-search{display:grid;gap:5px}
+.trip-quick-product-selected{color:var(--pri)!important;font-weight:700}
+.trip-quick-product-results{max-height:200px;overflow-y:auto;border:1px solid var(--bd);border-radius:8px;background:#fff;overscroll-behavior:contain}
+.trip-quick-product-results button{display:block;width:100%;min-height:42px;padding:9px 11px;border:0;border-bottom:1px solid var(--bd);border-radius:0;background:#fff;color:var(--tx);text-align:left;font-size:14px}
+.trip-quick-product-results button:last-child{border-bottom:0}
+.trip-quick-product-results button:hover,.trip-quick-product-results button:focus-visible{background:var(--bg2)}
+.trip-quick-product-empty{padding:12px;color:var(--tx2);font-size:14px}
+.trip-quick-add-product-actions{display:flex;justify-content:flex-end;gap:8px}
 .trip-order-sequence{display:flex;align-items:center;justify-content:flex-start;gap:5px;flex:0 0 auto;min-height:34px;color:var(--pri3);font-family:inherit;font-size:15px;font-weight:700;line-height:34px}
 .trip-order-sequence>b{font-family:inherit;font-size:15px;font-weight:700;line-height:34px}
 .trip-order-sequence .trip-number-confirm{width:38px}
