@@ -4,6 +4,63 @@ const D_SHIFTS = [
   {id:'CA02',name:'Ca chiều',area:'Khu vực 1',timeStart:'12:00',timeEnd:'18:00',note:''},
   {id:'CA03',name:'Ca tối',area:'Khu vực 2',timeStart:'18:00',timeEnd:'22:00',note:''},
 ];
+// Trip start times and effective driver changes use Vietnam time, independent of device timezone.
+function scfShiftTripStartAt(trip,shift){
+  const date=String(trip?.deliveryDate||'').trim();
+  const vn=date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/),iso=date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!vn&&!iso)return NaN;
+  const year=Number(vn?vn[3]:iso[1]),month=Number(vn?vn[2]:iso[2]),day=Number(vn?vn[1]:iso[3]);
+  const valid=new Date(Date.UTC(year,month-1,day));
+  if(valid.getUTCFullYear()!==year||valid.getUTCMonth()!==month-1||valid.getUTCDate()!==day)return NaN;
+  const raw=String(trip?.deliveryTime||shift?.timeStart||shift?.startTime||'').trim();
+  const time=raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if(raw&&!time)return NaN;
+  const hour=time?Number(time[1]):0,minute=time?Number(time[2]):0,second=time?Number(time[3]||0):0;
+  if(hour>23||minute>59||second>59)return NaN;
+  return Date.UTC(year,month-1,day,hour-7,minute,second);
+}
+function scfShiftDriverAt(shift,trip){
+  const current={driverId:String(shift?.defaultDriverId||''),driverName:String(shift?.defaultDriverName||'')};
+  const history=Array.isArray(shift?.defaultDriverHistory)?shift.defaultDriverHistory:[];
+  if(!history.length)return current;
+  const when=scfShiftTripStartAt(trip,shift);
+  const baseline=history.find(entry=>entry?.effectiveAt==='');
+  let chosen=baseline||current,last=-Infinity;
+  if(!Number.isFinite(when))return{driverId:String(chosen.driverId||''),driverName:String(chosen.driverName||'')};
+  history.forEach(entry=>{
+    const at=Date.parse(entry?.effectiveAt||'');
+    if(Number.isFinite(at)&&at<=when&&at>=last){chosen=entry;last=at;}
+  });
+  return{driverId:String(chosen.driverId||''),driverName:String(chosen.driverName||'')};
+}
+function scfRecordShiftDriverChange(previous,draft,actor,atIso=new Date().toISOString()){
+  const history=[...(Array.isArray(previous?.defaultDriverHistory)?previous.defaultDriverHistory:[])];
+  const before={driverId:String(previous?.defaultDriverId||''),driverName:String(previous?.defaultDriverName||'')};
+  const after={driverId:String(draft?.defaultDriverId||''),driverName:String(draft?.defaultDriverName||'')};
+  const changed=!previous||before.driverId!==after.driverId||before.driverName!==after.driverName;
+  if(changed){
+    if(!history.length)history.push({effectiveAt:'',...before,initial:true});
+    history.push({effectiveAt:atIso,...after,previousDriverId:before.driverId,previousDriverName:before.driverName,by:actor?.name||'Người dùng',byId:actor?.id||'',atIso,action:previous?'Đổi lái xe tự động':'Tạo ca giao hàng'});
+  }
+  return{shift:{...draft,defaultDriverHistory:history,updatedAt:atIso,updatedBy:actor?.name||'Người dùng'},changed};
+}
+function scfRefreshShiftTripDrivers(trips,previous,shift,atIso){
+  const cutoff=Date.parse(atIso);
+  return(trips||[]).map(trip=>{
+    const matches=String(trip.shiftId||'')===String(previous?.id||shift.id||'');
+    const automatic=trip.driverAssignMode==='auto'||(!trip.driverAssignMode&&!trip.driverId&&!trip.driverName);
+    const when=scfShiftTripStartAt(trip,previous||shift);
+    if(!matches||!automatic||trip.driverDispatchedAt||!['planning','assigned'].includes(trip.status||'planning')||!Number.isFinite(when)||when<cutoff)return trip;
+    const driver=scfShiftDriverAt(shift,trip),hasDriver=!!(driver.driverId||driver.driverName);
+    if(String(trip.driverId||'')===driver.driverId&&String(trip.driverName||'')===driver.driverName)return trip;
+    return{...trip,...driver,driverAssignMode:'auto',status:hasDriver?'assigned':'planning',updatedAt:atIso,updatedBy:shift.updatedBy||''};
+  });
+}
+function scfShiftHistoryTime(value){
+  if(!value)return 'Trước lần thay đổi đầu tiên';
+  const date=new Date(value);
+  return Number.isFinite(date.getTime())?date.toLocaleString('vi-VN',{timeZone:'Asia/Bangkok',hour12:false}):'Không rõ thời điểm';
+}
 function DeliveryShiftForm({s,allShifts,drivers,onSave,onClose}) {
   const [f,sf]=useState(s?{defaultDriverId:'',defaultDriverName:'',...s}:{id:'',name:'',area:'',timeStart:'',timeEnd:'',note:'',defaultDriverId:'',defaultDriverName:''});
   const dupId = f.id && allShifts.some(x=>x.id===f.id && x.id!==(s&&s.id));
@@ -26,6 +83,7 @@ function DeliveryShiftForm({s,allShifts,drivers,onSave,onClose}) {
       h('option',{value:''},'— Không tự động gán —'),
       drivers.map(driver=>h('option',{key:driver.id,value:driver.id},driver.name))
     )),
+    h('p',{className:'shift-driver-effective-note'},'Lái xe mới áp dụng từ thời điểm lưu ca. Giữ nguyên chuyến trước thời điểm đó, chuyến chọn lái bằng tay và chuyến đã giao cho lái xe.'),
     h(F,{label:'Ghi chú'},h('input',{value:f.note,onChange:e=>sf(p=>({...p,note:e.target.value}))})),
     h(Row,null,
       h('button',{onClick:onClose},'Hủy'),
@@ -39,18 +97,16 @@ function DeliveryShiftForm({s,allShifts,drivers,onSave,onClose}) {
     )
   );
 }
-function ShiftsTab({shifts,setShifts,employees=[],trips=[],setTrips}) {
+function ShiftsTab({shifts,setShifts,employees=[],trips=[],setTrips,currentUser}) {
   const drivers=(employees||[]).filter(e=>e.role==='driver'||employeeHasDepartment(e,'Lái xe'));
   const [modal,sm]=useState(null); const [edit,se]=useState(null); const [q,sq]=useState(''); const [sortBy,setSortBy]=useState('area');
+  const[historyShiftId,setHistoryShiftId]=useState(null);
+  const historyShift=(shifts||[]).find(shift=>shift.id===historyShiftId);
   const save=d=>{
-    if(edit)setShifts(p=>p.map(x=>x.id===edit.id?{...d}:x));else setShifts(p=>[...p,d]);
-    if(typeof setTrips==='function')setTrips(previous=>(previous||[]).map(trip=>{
-      const matchesShift=String(trip.shiftId||'')===String(d.id||'');
-      const canRefreshDriver=['planning','assigned'].includes(trip.status||'planning')&&(!trip.driverId&&!trip.driverName||trip.driverAssignMode==='auto');
-      if(!matchesShift||!canRefreshDriver)return trip;
-      const hasDefault=!!(d.defaultDriverId||d.defaultDriverName);
-      return {...trip,driverId:d.defaultDriverId||'',driverName:d.defaultDriverName||'',driverAssignMode:hasDefault?'auto':'',status:hasDefault?'assigned':'planning',updatedAt:fmtDT()};
-    }));
+    const old=(shifts||[]).find(shift=>shift.id===edit?.id),stamp=new Date().toISOString();
+    const result=scfRecordShiftDriverChange(old,d,currentUser,stamp);
+    if(edit)setShifts(p=>p.map(x=>x.id===edit.id?result.shift:x));else setShifts(p=>[...p,result.shift]);
+    if(result.changed&&typeof setTrips==='function')setTrips(previous=>scfRefreshShiftTripDrivers(previous,old,result.shift,stamp));
     sm(null);se(null);
   };
   const del=id=>window.scfConfirm('Bạn có chắc muốn xóa ca giao hàng này?','Xóa ca giao hàng',true).then(ok=>ok&&setShifts(p=>p.filter(x=>x.id!==id)));
@@ -104,6 +160,7 @@ function ShiftsTab({shifts,setShifts,employees=[],trips=[],setTrips}) {
               h('td',null,x.defaultDriverName?h('span',{className:'badge',style:{background:'#E1F5EE',color:'#0F6E56'}},x.defaultDriverName):'—'),
               h('td',null,x.note||'—'),
               h('td',null,h('div',{style:{display:'flex',gap:2}},
+                h('button',{type:'button',className:'bi','data-scf-action':'view',title:'Lịch sử lái xe tự động','aria-label':'Lịch sử lái xe tự động '+x.name,onClick:()=>setHistoryShiftId(x.id)},h('i',{className:'ti ti-history',style:{fontSize:15}})),
                 h('button',{className:'bi',onClick:()=>{se(x);sm('f')}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
                 h('button',{className:'bi',onClick:()=>del(x.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
               ))
@@ -111,6 +168,17 @@ function ShiftsTab({shifts,setShifts,employees=[],trips=[],setTrips}) {
           ))
         );});
       })()
+    ),
+    historyShift&&h(Modal,{title:'Lịch sử lái xe tự động — '+historyShift.name,onClose:()=>setHistoryShiftId(null)},
+      h('div',{className:'shift-driver-history'},
+        h('p',null,'Lái hiện tại: ',h('b',null,historyShift.defaultDriverName||'Không tự động gán')),
+        (historyShift.defaultDriverHistory||[]).length?[...historyShift.defaultDriverHistory].reverse().map((entry,index)=>h('div',{key:index,className:'shift-driver-history-entry'},
+          h('b',null,scfShiftHistoryTime(entry.effectiveAt)),
+          h('div',null,entry.initial?'Lái xe trước khi ghi lịch sử: ':'Lái xe áp dụng: ',h('b',null,entry.driverName||'Không tự động gán')),
+          !entry.initial&&h('div',null,'Lái trước: ',entry.previousDriverName||'Không tự động gán'),
+          !entry.initial&&h('small',null,entry.action||'Đổi lái xe tự động',' · Người sửa: ',entry.by||'Chưa ghi nhận')
+        )):h('p',null,'Ca này chưa có lịch sử thay đổi lái xe. Lịch sử được ghi từ lần lưu tiếp theo.')
+      )
     ),
     modal==='f'&&h(DeliveryShiftForm,{s:edit,allShifts:shifts,drivers,onSave:save,onClose:()=>{sm(null);se(null);}})
   );

@@ -28,7 +28,7 @@ window.onerror = function(msg, src, line) {
 };
 
 const SCF_EXTERNAL_SCRIPTS={
-  tesseract:'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
+  tesseract:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
   faceapi:'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js'
 };
 const scfScriptPromises={};

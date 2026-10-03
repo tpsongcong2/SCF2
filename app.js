@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V450';
+const SCF_BUILD_VERSION='V458';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -72,7 +72,7 @@ function scfCreateAdvanceTrips(currentTrips,deliveryShifts,targetDate,actorName)
       (shiftId&&String(trip?.shiftId||'')===shiftId)||(!shiftId&&shiftName&&norm(trip?.shiftName)===norm(shiftName))
     )));
     if(exists)return;
-    const driverId=String(shift.defaultDriverId||'').trim(),driverName=String(shift.defaultDriverName||'').trim();
+    const {driverId,driverName}=scfShiftDriverAt(shift,{deliveryDate:targetDate});
     const stamp=fmtDT();
     result.push({
       id:key.id,deliveryDate:targetDate,deliveryTime:shift.timeStart||shift.startTime||'',shiftId,shiftName:shiftName||shift.area||'Chuyến tự động',area:shift.area||'',
@@ -162,7 +162,7 @@ function scfPlanAutomaticOrders(orders,trips,prodShifts,customers,actorName,limi
         // thêm đơn vào chuyến đó. Để Chờ xếp cho người có quyền xử lý.
         const existing=shiftId?occupiedIds.has(occupiedKey(tripDate,shiftId)):occupiedNames.has(occupiedKey(tripDate,normalizeLookupText(shiftName)));
         if(!trip&&!existing){
-          const driverId=String(deliveryShift.defaultDriverId||'').trim(),driverName=String(deliveryShift.defaultDriverName||'').trim();
+          const {driverId,driverName}=scfShiftDriverAt(deliveryShift,{deliveryDate:tripDate});
           const key=scfAdvanceTripKey(tripDate,deliveryShift),stamp=fmtDT();
           trip={id:key.id,deliveryDate:tripDate,deliveryTime:deliveryShift.timeStart||deliveryShift.startTime||order.deliveryTime||'',shiftId,shiftName,area:deliveryShift.area||order.area||'',
             driverId,driverName,driverAssignMode:driverId||driverName?'auto':'',orderIds:[],totalWeight:0,status:driverId||driverName?'assigned':'planning',
@@ -799,12 +799,12 @@ function App(){
         canAccess(cu.role,'powderdebtreport',cu.permissions)&&page==='powderdebtreport'&&h(PowderDebtReportTab,{customers}),
         canAccess(cu.role,'maint_vehicle',cu.permissions)&&page==='maint_vehicle'&&h(MaintenanceTab,{title:'Bảo dưỡng xe',icon:'ti-car',assets,employees,garages,setPage}),
         canAccess(cu.role,'maint_machine',cu.permissions)&&page==='maint_machine'&&h(MaintenanceTab,{title:'Bảo dưỡng máy',icon:'ti-settings',assets,employees}),
-        canAccess(cu.role,'shifts',cu.permissions)&&page==='shifts'&&h(ShiftsTab,{shifts,setShifts,employees,trips,setTrips}),
+        canAccess(cu.role,'shifts',cu.permissions)&&page==='shifts'&&h(ShiftsTab,{shifts,setShifts,employees,trips,setTrips,currentUser:cu}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
         canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify:addNotification}),
         canAccess(cu.role,'intem',cu.permissions)&&page==='intem'&&h(IntemTab,{products,company}),
         canAccess(cu.role,'trips',cu.permissions,cuAccessDepartments)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,prodCats,quotes,financeDebts,setFinanceDebts,company,currentUser:cu,notify:addNotification}),
-        canAccess(cu.role,'workreport_lx',cu.permissions,cuAccessDepartments)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,orders,products,customers,currentUser:cu}),
+        canAccess(cu.role,'workreport_lx',cu.permissions,cuAccessDepartments)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,orders,products,customers,employees,currentUser:cu,onOpenTrips:()=>setPage('trips')}),
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,trips,currentUser:cu,prodShifts,quotes,financeDebts,setFinanceDebts,menuHidden,setMenuHidden}),
         canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),
         canAccess(cu.role,'marketsales',cu.permissions)&&page==='marketsales'&&h(SalesDebtReportTab,{orders,customers,products,trips,currentUser:cu}),

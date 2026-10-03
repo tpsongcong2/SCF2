@@ -182,6 +182,10 @@ function canViewAllDebtCustomers(user){
   const role=String(user?.role||'').trim().toLowerCase();
   return ['admin','administrator'].includes(role)||user?.salesDebtAllCustomers===true;
 }
+function canViewDriverReportMonthlyWeight(user){
+  const role=String(user?.role||'').trim().toLowerCase();
+  return ['admin','administrator'].includes(role)||user?.driverReportMonthlyWeight===true;
+}
 
 function scfControlAction(control){
   if(!control)return'';

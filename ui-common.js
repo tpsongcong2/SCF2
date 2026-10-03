@@ -52,3 +52,100 @@ function ImportBtn({onFile}){
     h('button',{onClick:()=>ref.current.click(),'data-scf-action':'write',style:{fontSize:12,padding:'6px 12px'}},h('i',{className:'ti ti-upload',style:{fontSize:14}}),'Nhập Excel')
   );
 }
+
+function InvoiceImageSizeSelect({value,onChange}){
+  return h('label',{className:'invoice-image-size-control'},
+    h('span',null,'Cỡ ảnh'),
+    h('select',{'aria-label':'Cỡ ảnh hóa đơn','data-scf-action':'view',value,onChange:event=>onChange(event.target.value)},
+      h('option',{value:'small'},'Nhỏ'),h('option',{value:'medium'},'Vừa'),h('option',{value:'large'},'Lớn')
+    )
+  );
+}
+function InvoiceLandscapeToggle({value,onChange}){
+  return h('button',{type:'button',className:'bs invoice-landscape-toggle'+(value?' active':''),'data-scf-action':'view','aria-pressed':!!value,title:'Nhận diện hướng chữ và tự xoay đúng chiều; có thể chỉnh từng ảnh bằng nút xoay',onClick:()=>onChange(!value)},h('i',{className:'ti ti-rotate-2'}),' Tự xoay đúng chiều');
+}
+function scfInvoiceImageLayout(width,height,angle){
+  const w=Number(width)>0?Number(width):3,h=Number(height)>0?Number(height):4;
+  const rotation=((Number(angle)||0)%360+360)%360,sideways=rotation===90||rotation===270;
+  return{rotation,sideways,ratio:sideways?h/w:w/h,imageWidth:(sideways?w/h:1)*100+'%',imageHeight:(sideways?h/w:1)*100+'%'};
+}
+function TripInvoicePreview({src,label,size='medium',landscape=false}){
+  const safeSize=['small','medium','large'].includes(size)?size:'medium';
+  const[url,setUrl]=useState(src);
+  const[phase,setPhase]=useState('ready');
+  const[reload,setReload]=useState(0);
+  const[natural,setNatural]=useState({width:0,height:0});
+  const[manualRotation,setManualRotation]=useState(null);
+  const[viewer,setViewer]=useState(false);
+  const[recognitionImage,setRecognitionImage]=useState(null);
+  const[orientation,setOrientation]=useState(null);
+  const[recognitionRetry,setRecognitionRetry]=useState(0);
+  const autoRotation=landscape&&orientation?.src===src&&orientation.status==='ready'?orientation.angle:0;
+  const angle=manualRotation?.src===src&&manualRotation?.landscape===landscape?manualRotation.angle:autoRotation;
+  const layout=scfInvoiceImageLayout(natural.width,natural.height,angle);
+  const rotate=delta=>setManualRotation({src,landscape,angle:(layout.rotation+delta+360)%360});
+  const original=()=>setManualRotation({src,landscape,angle:0});
+  const attempt=React.useRef(false),generation=React.useRef(0);
+  useEffect(()=>()=>{generation.current++;},[]);
+  useEffect(()=>{
+    if(!landscape||!recognitionImage||typeof window.scfDetectInvoiceOrientation!=='function')return;
+    let active=true,started=false,observer;
+    const run=()=>{
+      if(started||!active)return;started=true;observer?.disconnect();
+      setOrientation({src,status:'working',angle:0});
+      window.scfDetectInvoiceOrientation(url,{isActive:()=>active,retry:recognitionRetry>0}).then(result=>{
+        if(active&&result.status!=='cancelled')setOrientation({src,...result});
+      }).catch(()=>{if(active)setOrientation({src,status:'failed',angle:0});});
+    };
+    if(typeof IntersectionObserver==='function'){
+      observer=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting))run();},{threshold:0.01});observer.observe(recognitionImage);
+    }else if(recognitionImage.getClientRects?.().length)run();
+    return()=>{active=false;observer?.disconnect();};
+  },[landscape,recognitionImage,url,src,recognitionRetry]);
+  const refresh=async()=>{
+    if(attempt.current){setPhase('failed');return;}
+    attempt.current=true;
+    const path=storagePhotoPathFromUrl(url);
+    if(!path){setPhase('failed');return;}
+    const version=generation.current;
+    let timer;
+    setPhase('refreshing');
+    try{
+      const next=await Promise.race([createPrivatePhotoUrl(path),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Photo timeout')),15000);})]);
+      if(version!==generation.current)return;
+      if(!next)throw new Error('Photo URL unavailable');
+      setUrl(next);setReload(value=>value+1);
+    }catch(error){if(version===generation.current)setPhase('failed');}
+    finally{clearTimeout(timer);}
+  };
+  const controls=()=>h('div',{className:'invoice-image-rotation-controls'},
+    h('button',{type:'button',className:'bi','data-scf-action':'view','aria-label':'Xoay trái ảnh '+label,title:'Xoay trái 90°',onClick:()=>rotate(-90)},h('i',{className:'ti ti-rotate'})),
+    h('button',{type:'button',className:'bi','data-scf-action':'view','aria-label':'Xoay phải ảnh '+label,title:'Xoay phải 90°',onClick:()=>rotate(90)},h('i',{className:'ti ti-rotate-clockwise'})),
+    h('button',{type:'button',className:'bs','data-scf-action':'view','aria-label':'Trả về chiều gốc ảnh '+label,title:'Trả về chiều ảnh gốc',onClick:original},'Ảnh gốc'),
+    landscape&&manualRotation?.src===src&&manualRotation?.landscape===landscape&&h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>{setManualRotation(null);if(orientation?.status!=='ready')setRecognitionRetry(value=>value+1);}},'Theo chiều chữ')
+  );
+  const imageStage=full=>h('div',{className:'invoice-photo-stage',style:{'--invoice-ratio':layout.ratio,aspectRatio:String(layout.ratio)}},
+    // This component renews expired URLs once; skip the document-wide image retry.
+    h('img',{key:reload,src:url,alt:label,loading:full?'eager':'lazy',decoding:'async','data-scf-photo-refreshing':'1',
+      style:{width:layout.imageWidth,height:layout.imageHeight,transform:'translate(-50%, -50%) rotate('+layout.rotation+'deg)'},
+      onLoad:event=>{const img=event?.currentTarget;if(img?.naturalWidth&&img?.naturalHeight){setNatural({width:img.naturalWidth,height:img.naturalHeight});if(!full)setRecognitionImage(img);}setPhase('ready');},onError:refresh})
+  );
+  const failure=()=>h('div',{className:'trip-invoice-preview-error',role:'status'},'Chưa tải được ảnh.',
+    h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>{attempt.current=false;setPhase('ready');setReload(value=>value+1);}},'Thử lại'));
+  return h('figure',{className:'trip-invoice-preview invoice-size-'+safeSize+(layout.sideways?' invoice-rotated-sideways':'')},
+    h('figcaption',null,label),
+    h('button',{type:'button',className:'trip-invoice-image-button','data-scf-action':'view','aria-label':'Mở ảnh '+label,onClick:()=>setViewer(true),style:phase==='failed'?{display:'none'}:undefined},imageStage(false)),
+    phase!=='failed'&&controls(),
+    landscape&&orientation?.src===src&&h('small',{className:'invoice-orientation-status',role:'status'},
+      manualRotation?.src===src&&manualRotation?.landscape===landscape?'Đang dùng chiều bạn chọn':orientation.status==='working'?'Đang nhận diện chiều chữ…':orientation.status==='ready'?'Đã nhận diện chiều chữ':orientation.status==='uncertain'?'Chưa rõ chiều chữ. Bạn có thể xoay bằng nút bên trên.':'Chưa nhận diện được. Bạn có thể xoay bằng nút bên trên.',
+      ['uncertain','failed'].includes(orientation.status)&&h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>{setManualRotation(null);setRecognitionRetry(value=>value+1);}},'Thử nhận diện lại')
+    ),
+    phase==='refreshing'&&h('small',{role:'status'},'Đang tải lại ảnh…'),
+    phase==='failed'&&failure(),
+    viewer&&h(Modal,{title:label,lg:'xl',className:'invoice-photo-viewer',onClose:()=>setViewer(false)},
+      controls(),phase==='failed'?failure():imageStage(true),
+      phase==='refreshing'&&h('small',{role:'status'},'Đang tải lại ảnh…'),
+      h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>window.open(url,'_blank','noopener')},'Mở tệp ảnh gốc')
+    )
+  );
+}
