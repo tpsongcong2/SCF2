@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V446';
+const SCF_BUILD_VERSION='V449';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -128,13 +128,57 @@ function scfCreateAutomaticTripLookup(trips){
   const byShiftId=new Map(),byShiftName=new Map();
   const key=(date,shift)=>JSON.stringify([String(date||'').trim(),shift]);
   const add=trip=>{
-    if(['active','completion_pending','completed','cancelled'].includes(String(trip?.status||'')))return;
+    if(trip?.driverDispatchedAt||['active','completion_pending','completed','cancelled'].includes(String(trip?.status||'')))return;
     const idKey=key(trip.deliveryDate,String(trip.shiftId||'')),nameKey=key(trip.deliveryDate,normalizeLookupText(trip.shiftName||''));
     if(!byShiftId.has(idKey))byShiftId.set(idKey,trip);
     if(!byShiftName.has(nameKey))byShiftName.set(nameKey,trip);
   };
   (trips||[]).forEach(add);
   return {add,find:(date,shiftId,shiftName)=>shiftId?byShiftId.get(key(date,shiftId)):(shiftName?byShiftName.get(key(date,normalizeLookupText(shiftName))):undefined)};
+}
+function scfPlanAutomaticOrders(orders,trips,prodShifts,customers,actorName,limit=25){
+  const workingTrips=[...(trips||[])],tripById=new Map(workingTrips.map(trip=>[String(trip.id||''),trip]));
+  const lookup=scfCreateAutomaticTripLookup(workingTrips);
+  const occupiedKey=(date,shift)=>JSON.stringify([String(date||'').trim(),String(shift||'').trim()]);
+  const occupiedIds=new Set(workingTrips.map(trip=>occupiedKey(trip.deliveryDate,trip.shiftId)));
+  const occupiedNames=new Set(workingTrips.map(trip=>occupiedKey(trip.deliveryDate,normalizeLookupText(trip.shiftName))));
+  let changed=0,tripsChanged=false;
+  const nextOrders=(orders||[]).map(order=>{
+    if(changed>=limit||!order||!['','pending','assigned'].includes(String(order.status||'')))return order;
+    const linked=tripById.get(String(order.tripId||''));
+    if(linked&&(linked.driverDispatchedAt||['active','completion_pending','completed','cancelled'].includes(String(linked.status||''))))return order;
+    const plannedShift=order.prodShiftAssignMode==='manual'
+      ?(prodShifts||[]).find(shift=>String(shift.id||'')===String(order.prodShiftId||''))
+      :getProdShiftForOrder(order,prodShifts||[],customers||[]);
+    let next=scfApplyAutomaticProduction(order,plannedShift);
+    if(order.tripAssignMode!=='manual'){
+      let trip=null;
+      const tripDate=plannedShift?addDaysVN(order.deliveryDate,Number(plannedShift.tripDateOffset??0)):'';
+      const deliveryShift=plannedShift&&(plannedShift.tripShiftId||plannedShift.tripShiftName)?resolveCurrentDeliveryShift(order,plannedShift):null;
+      if(tripDate&&deliveryShift&&deliveryShift.active!==false){
+        const shiftId=String(deliveryShift.id||'').trim(),shiftName=String(deliveryShift.name||'').trim();
+        trip=lookup.find(tripDate,shiftId,shiftName);
+        // Không tạo chuyến trùng một ca đã giao lái xe/đóng, hoặc tự gắn
+        // thêm đơn vào chuyến đó. Để Chờ xếp cho người có quyền xử lý.
+        const existing=shiftId?occupiedIds.has(occupiedKey(tripDate,shiftId)):occupiedNames.has(occupiedKey(tripDate,normalizeLookupText(shiftName)));
+        if(!trip&&!existing){
+          const driverId=String(deliveryShift.defaultDriverId||'').trim(),driverName=String(deliveryShift.defaultDriverName||'').trim();
+          const key=scfAdvanceTripKey(tripDate,deliveryShift),stamp=fmtDT();
+          trip={id:key.id,deliveryDate:tripDate,deliveryTime:deliveryShift.timeStart||deliveryShift.startTime||order.deliveryTime||'',shiftId,shiftName,area:deliveryShift.area||order.area||'',
+            driverId,driverName,driverAssignMode:driverId||driverName?'auto':'',orderIds:[],totalWeight:0,status:driverId||driverName?'assigned':'planning',
+            note:'Tự động tạo khi có đơn phù hợp: '+shiftName,createdAt:stamp,updatedAt:stamp,updatedBy:actorName||'Hệ thống',autoCreated:true};
+          workingTrips.push(trip);tripById.set(String(trip.id),trip);lookup.add(trip);tripsChanged=true;
+          occupiedIds.add(occupiedKey(tripDate,shiftId));occupiedNames.add(occupiedKey(tripDate,normalizeLookupText(shiftName)));
+        }
+      }
+      const tripId=trip?.id||null,status=trip?'assigned':'pending';
+      if(String(next.tripId||'')!==String(tripId||'')||next.status!==status||next.tripAssignMode!=='auto')next={...next,tripId,tripAssignMode:'auto',status};
+    }
+    if(next===order)return order;
+    changed++;
+    return {...next,updatedAt:fmtDT(),updatedBy:actorName||'Hệ thống'};
+  });
+  return {orders:nextOrders,trips:workingTrips,changed,tripsChanged};
 }
 function createScfDataLoader(read,apply){
   const loaded=new Set(),pending=new Map();let disposed=false;
@@ -224,6 +268,18 @@ function App(){
   const employeeStorageKey=isFaceMask?'scf_privileged_employees':'scf_employees';
   const homePage=isFaceMask?'workreport_total':'welcome';
   const[session,setSession]=useLS('scf_session',null);
+  const[automaticPlanRevision,setAutomaticPlanRevision]=useState(0);
+  useEffect(()=>{
+    let timer=null;
+    const resume=()=>{
+      if(window.scfOrderAutomationPending?.())return;
+      if(timer)clearTimeout(timer);
+      timer=setTimeout(()=>setAutomaticPlanRevision(value=>value+1),250);
+    };
+    window.addEventListener('scf-sync-state',resume);
+    window.addEventListener('online',resume);
+    return()=>{if(timer)clearTimeout(timer);window.removeEventListener('scf-sync-state',resume);window.removeEventListener('online',resume);};
+  },[]);
   useEffect(()=>{const replaced=async()=>{if(window.__SCF_SESSION_REPLACEMENT_HANDLED)return;window.__SCF_SESSION_REPLACEMENT_HANDLED=true;try{await sb?.auth?.signOut({scope:'local'});}catch{}window.scfClearSensitiveLocalData?.();setSession(null);window.showToast?.('Phiên đăng nhập trên máy này không còn hiệu lực. Hãy đăng nhập lại; chỉ chọn đăng xuất máy cũ nếu đúng là tài khoản đang dùng ở máy khác.','warn',8000);};window.addEventListener('scf-session-replaced',replaced);return()=>window.removeEventListener('scf-session-replaced',replaced);},[]);
   useEffect(()=>{
     if(!SCF_SERVER_AUTH_ENABLED||!session)return;
@@ -545,61 +601,23 @@ function App(){
     const automationUser=cu;
     const tripInputsReady=['orders','trips','shifts','prod_shifts','customers'].every(key=>dataLoaderRef.current?.loaded.has(key));
     if(loading||!pageReady||!autoSyncReady||!tripInputsReady||!['delivery','trips','orderdetail'].includes(page)||isFaceMask||!automationUser||!canAccess(automationUser.role,'delivery',automationUser.permissions,automationUser.dept)||!canWrite(automationUser.role,'delivery',automationUser.permLevels)||!shifts?.length||!prodShifts?.length)return;
-    const usableTrip=t=>!['active','completion_pending','completed','cancelled'].includes(String(t?.status||''));
+    // Chờ lần lưu đơn/chuyến trước được xác nhận rồi mới sửa tối đa 25 đơn.
+    // Như vậy các đợt không bị gộp thành một lần ghi toàn bộ danh sách lớn.
+    if(!navigator.onLine||window.scfOrderAutomationPending?.())return;
+    const usableTrip=t=>!t?.driverDispatchedAt&&!['active','completion_pending','completed','cancelled'].includes(String(t?.status||''));
     const linkedTripIds=new Set((orders||[]).filter(o=>!['cancelled','done','failed'].includes(String(o?.status||''))).map(o=>String(o?.tripId||'')).filter(Boolean));
     // Chuyến được lập trước theo lịch phải được giữ lại dù chưa có đơn.
     const keptTrips=(trips||[]).filter(t=>!(t?.autoCreated&&!t?.autoPlanned&&usableTrip(t)&&!(t.orderIds||[]).length&&!linkedTripIds.has(String(t.id||''))));
     const advance=scfCreateAdvanceTripWindow(keptTrips,shifts||[],fmtDate(),3,automationUser.name||'Hệ thống');
-    const workingTrips=advance.trips;
-    const tripById=new Map(workingTrips.map(t=>[String(t.id||''),t]));
-    const automaticTripLookup=scfCreateAutomaticTripLookup(workingTrips);
-    let tripsChanged=keptTrips.length!==(trips||[]).length||advance.changed,ordersChanged=false;
-    const nextOrders=(orders||[]).map(order=>{
-      if(order?.tripAssignMode==='manual'||!['','pending','assigned'].includes(String(order?.status||'')))return order;
-      const linked=tripById.get(String(order?.tripId||''));
-      // Không tự chuyển một chuyến đã bắt đầu/chờ duyệt/hoàn thành.
-      if(linked&&!usableTrip(linked))return order;
-      const plannedShift=order?.prodShiftAssignMode==='manual'&&order?.prodShiftId
-        ?(prodShifts||[]).find(s=>String(s?.id||'')===String(order.prodShiftId))
-        :getProdShiftForOrder(order,prodShifts||[],customers||[]);
-      if(!plannedShift)return order;
-      const tripDate=addDaysVN(order.deliveryDate,Number(plannedShift.tripDateOffset??0));
-      // Chỉ dùng ca giao đã được khai báo trực tiếp trong cấu hình ca SX.
-      // Không suy đoán ca giao theo khu vực, tên điểm hoặc các chuyến cùng ngày.
-      const wantedShiftId=String(plannedShift.tripShiftId||'').trim();
-      const wantedShiftName=String(plannedShift.tripShiftName||'').trim();
-      if(!tripDate||(!wantedShiftId&&!wantedShiftName))return order;
-      // Dùng chung bộ phân giải với trang Đơn giao hàng. Bộ này ưu tiên tên ca
-      // hiện hành trước ID cũ, tránh cấu hình đã đổi ca nhưng còn lưu tripShiftId
-      // cũ làm đơn YP/QV bị tác vụ nền kéo sang ĐT-20H.
-      const deliveryShift=resolveCurrentDeliveryShift(order,plannedShift);
-      if(!deliveryShift)return order;
-      const shiftId=String(deliveryShift.id||'').trim();
-      const shiftName=String(deliveryShift.name||'').trim();
-      let trip=automaticTripLookup.find(tripDate,shiftId,shiftName);
-      if(!trip){
-        const driverId=String(deliveryShift?.defaultDriverId||'').trim();
-        const driverName=String(deliveryShift?.defaultDriverName||'').trim();
-        trip={
-          id:'CH'+uid(),deliveryDate:tripDate,deliveryTime:deliveryShift?.timeStart||deliveryShift?.startTime||order.deliveryTime||'',
-          shiftId,shiftName:shiftName||deliveryShift?.area||'Chuyến tự động',area:deliveryShift?.area||order.area||'',
-          driverName,driverId,driverAssignMode:driverId||driverName?'auto':'',orderIds:[],totalWeight:0,
-          status:driverId||driverName?'assigned':'planning',
-          note:'Tự động tạo khi có đơn phù hợp'+(shiftName?': '+shiftName:''),
-          createdAt:fmtDT(),updatedAt:fmtDT(),updatedBy:automationUser.name||'Hệ thống',autoCreated:true
-        };
-        workingTrips.push(trip);tripById.set(String(trip.id),trip);automaticTripLookup.add(trip);tripsChanged=true;
-      }
-      if(String(order.tripId||'')===String(trip.id)&&order.status==='assigned'&&order.tripAssignMode==='auto')return order;
-      ordersChanged=true;
-      return {...order,tripId:trip.id,tripAssignMode:'auto',status:'assigned',updatedAt:fmtDT(),updatedBy:automationUser.name||'Hệ thống'};
-    });
+    const planned=scfPlanAutomaticOrders(orders,advance.trips,prodShifts,customers,automationUser.name,25);
+    const workingTrips=planned.trips,nextOrders=planned.orders;
+    let tripsChanged=keptTrips.length!==(trips||[]).length||advance.changed||planned.tripsChanged;
     // tripId của đơn là nguồn chính xác; làm sạch orderIds cũ và tổng khối lượng sau khi chuyển.
     const reconciled=scfReconcileTripOrderLinks(workingTrips,nextOrders,products||[]);
     if(reconciled.changed)tripsChanged=true;
     if(tripsChanged)setAutoTrips(reconciled.trips);
-    if(ordersChanged)setOrders(nextOrders);
-  },[loading,pageReady,autoSyncReady,page,isFaceMask,session,employees,orders,trips,shifts,prodShifts,customers,products]);
+    if(planned.changed)setOrders(nextOrders);
+  },[loading,pageReady,autoSyncReady,page,isFaceMask,session,employees,orders,trips,shifts,prodShifts,customers,products,automaticPlanRevision]);
 
   const addNotification=React.useCallback(data=>{
     const recipientIds=[...new Set((data?.recipientIds||[data?.recipientId]).filter(Boolean).map(String))];

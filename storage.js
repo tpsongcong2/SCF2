@@ -165,7 +165,12 @@ function reportSyncError(key,error,value){
   }
 }
 function syncPayloadBytes(value){try{return new Blob([JSON.stringify(value??null)]).size;}catch{return 0;}}
-function remoteTimeoutFor(value){return Math.min(DB_REMOTE_MAX_TIMEOUT_MS,DB_REMOTE_TIMEOUT_MS+Math.ceil(syncPayloadBytes(value)/65536)*750);}
+function remoteTimeoutFor(value){
+  // A small order patch still verifies a session and writes a database row.
+  // Its deadline must not shrink to ~11s just because its JSON is small.
+  const minimum=value?.key==='scf_orders'&&Array.isArray(value?.patches)?DB_REMOTE_MAX_TIMEOUT_MS:DB_REMOTE_TIMEOUT_MS;
+  return Math.min(DB_REMOTE_MAX_TIMEOUT_MS,minimum+Math.ceil(syncPayloadBytes(value)/65536)*750);
+}
 function readSyncMetrics(){try{const value=JSON.parse(localStorage.getItem(SCF_SYNC_METRICS_KEY)||'[]');return Array.isArray(value)?value:[];}catch{return[];}}
 function recordSyncMetric(key,mode,payload,startedAt,ok){
   const rows=readSyncMetrics();rows.unshift({key,mode,bytes:syncPayloadBytes(payload),durationMs:Math.max(0,Math.round(performance.now()-startedAt)),ok:!!ok,at:new Date().toISOString()});
@@ -228,6 +233,9 @@ window.scfClearSensitiveLocalData=function(){
   setSyncState(navigator.onLine?'idle':'offline');
 };
 window.scfGetSyncState=function(){return window.__SCF_SYNC_STATE||{status:navigator.onLine?'idle':'offline',pending:0};};
+window.scfOrderAutomationPending=function(){
+  const queue=readSyncQueue();return !!(queue.scf_orders||queue.scf_trips);
+};
 window.scfGetSyncReport=function(){
   const queue=readSyncQueue();
   const metrics=readSyncMetrics();
