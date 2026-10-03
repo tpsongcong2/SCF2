@@ -545,7 +545,9 @@ async function runPendingWrites(){
       if(scfWriteChains[key])await scfWriteChains[key].catch(()=>false);
       item=readSyncQueue()[key];if(!item){waitingResolvers.forEach(done=>done(true));continue;}
       if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees')){const timeoutMs=remoteTimeoutFor(item.value);await withRemoteTimeout(serverSaveEmployees(item.value,timeoutMs),timeoutMs);}
-      else if(serverAuthEnabled()&&key==='scf_trips'&&(item.mode==='auto-trips'||(Array.isArray(item.value)&&item.value.some(trip=>trip?.autoCreated)))){const timeoutMs=remoteTimeoutFor(item.value);await withRemoteTimeout(serverSaveAutoTrips(item.value,timeoutMs),timeoutMs);}
+      // Manual trip writes must keep their permission/duplicate validation on
+      // retry, even when the collection also contains automatically made trips.
+      else if(serverAuthEnabled()&&key==='scf_trips'&&item.mode==='auto-trips'){const timeoutMs=remoteTimeoutFor(item.value);await withRemoteTimeout(serverSaveAutoTrips(item.value,timeoutMs),timeoutMs);}
       else if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
         const expectedUpdatedAt=item.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
         const baseValue=Object.prototype.hasOwnProperty.call(item,'baseValue')?item.baseValue:scfRemoteSnapshots.get(key);
