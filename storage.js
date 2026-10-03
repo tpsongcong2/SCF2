@@ -153,13 +153,14 @@ function syncErrorMessage(key,error,value){
 }
 function reportSyncError(key,error,value){
   const message=syncErrorMessage(key,error,value);setSyncState('error',message);
+  const noticeKey=message.replace(/(?:Mã kiểm tra:|— mã)\s*[a-zA-Z0-9_-]+/gi,'Mã kiểm tra');
   const now=Date.now();
-  if(window.showToast&&(scfLastSyncErrorNotice.message!==message||now-scfLastSyncErrorNotice.at>60000)){
-    scfLastSyncErrorNotice={message,at:now};window.showToast(message,'error',12000);
+  if(window.showToast&&(scfLastSyncErrorNotice.message!==noticeKey||now-scfLastSyncErrorNotice.at>60000)){
+    scfLastSyncErrorNotice={message:noticeKey,at:now};window.showToast(message,'error',12000);
   }
   if(key!=='scf_notifications'){
-    let hash=0;for(let i=0;i<message.length;i++)hash=((hash<<5)-hash+message.charCodeAt(i))|0;
-    const detail={key,message,fingerprint:'sync-'+key+'-'+Math.abs(hash)};
+    let hash=0;for(let i=0;i<noticeKey.length;i++)hash=((hash<<5)-hash+noticeKey.charCodeAt(i))|0;
+    const detail={key,message,actorId:String(window.__SCF_ACCESS_CONTEXT?.employeeId||''),fingerprint:'sync-'+key+'-'+Math.abs(hash)};
     window.__SCF_LAST_SYNC_ERROR=detail;
     window.dispatchEvent(new CustomEvent('scf-sync-error-notification',{detail}));
   }
@@ -230,6 +231,13 @@ window.scfClearSensitiveLocalData=function(){
   scfMemorySyncQueue={};
   scfMemorySyncQueueReady=true;
   try{sessionStorage.removeItem(SCF_SYNC_QUEUE_KEY);}catch{}
+  delete window.__SCF_LAST_SYNC_ERROR;
+  delete window.__SCF_COLLECTION_SYNC_RESULTS;
+  delete window.__SCF_AUTH_DIAGNOSTICS;
+  delete window.__SCF_ACCESS_CONTEXT;
+  try{sessionStorage.removeItem('scf_auth_diagnostics');}catch{}
+  try{localStorage.removeItem(SCF_SYNC_METRICS_KEY);}catch{}
+  scfLastSyncErrorNotice={message:'',at:0};
   setSyncState(navigator.onLine?'idle':'offline');
 };
 window.scfGetSyncState=function(){return window.__SCF_SYNC_STATE||{status:navigator.onLine?'idle':'offline',pending:0};};
@@ -253,6 +261,22 @@ window.scfGetSyncReport=function(){
     metrics,
     items:Object.entries(queue).map(([key,item])=>({key,label:labels[key]||key.replace(/^scf_/,'').replaceAll('_',' '),updatedAt:item?.updatedAt||'',bytes:Number(item?.bytes)||syncPayloadBytes(item?.patches||item?.value),recordCount:Array.isArray(item?.patches)?item.patches.length:(Array.isArray(item?.value)?item.value.length:(item?.value&&typeof item.value==='object'?Object.keys(item.value).length:1)),attempts:Number(item?.attempts)||0,mode:item?.patches?'patch':(item?.mode||'full')}))
   };
+};
+function scfBuildSyncDiagnostics(){
+  const report=window.scfGetSyncReport?.()||{},actorId=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
+  const entries=(window.__SCF_AUTH_DIAGNOSTICS||[]).filter(entry=>!entry.actorId||String(entry.actorId)===actorId).map(entry=>({
+    id:entry.id,stage:entry.stage,ms:entry.ms,status:entry.status,outcome:entry.outcome,at:entry.at,
+    server:entry.server?{ms:entry.server.ms,steps:(entry.server.steps||[]).map(step=>({stage:step.stage,ms:step.ms,ok:step.ok,code:step.code}))}:undefined
+  }));
+  return {version:typeof SCF_BUILD_VERSION==='undefined'?'':SCF_BUILD_VERSION,createdAt:new Date().toISOString(),accountId:actorId,
+    connection:{online:!!navigator.onLine,status:report.status,pending:report.pending},
+    queue:(report.items||[]).map(item=>({key:item.key,mode:item.mode,updatedAt:item.updatedAt,bytes:item.bytes,recordCount:item.recordCount,attempts:item.attempts})),
+    metrics:(report.metrics||[]).map(item=>({key:item.key,mode:item.mode,bytes:item.bytes,durationMs:item.durationMs,ok:item.ok,at:item.at})),requests:entries};
+}
+window.scfDownloadSyncDiagnostics=function(){
+  const url=URL.createObjectURL(new Blob([JSON.stringify(scfBuildSyncDiagnostics(),null,2)],{type:'application/json'}));
+  const link=document.createElement('a');link.href=url;link.download='SCFOOD-kiem-tra-dong-bo.json';
+  document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
 function withRemoteTimeout(promise,ms=DB_REMOTE_TIMEOUT_MS){
   let timer;
@@ -421,7 +445,7 @@ async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,base
   return measuredCollectionSave(key,patches?'patch':'full',payload,async()=>{
     try{return await withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt,timeoutMs):serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue,timeoutMs),timeoutMs);}
     catch(error){
-      if(error?.code!=='SCF_REMOTE_TIMEOUT'||key!=='scf_orders'||!patches?.length)throw error;
+      if(!['SCF_REMOTE_TIMEOUT','SCF_DATABASE_TIMEOUT'].includes(error?.code)||key!=='scf_orders'||!patches?.length)throw error;
       // A timed-out HTTP response is ambiguous: the server may already have
       // committed the patch. Read only the changed orders before retrying it.
       try{
@@ -460,6 +484,7 @@ async function performDbSet(key,val,queuedAt='',mode=''){
       const patches=Array.isArray(queued.patches)&&queued.patches.length?queued.patches:null;
       const timeoutMs=remoteTimeoutFor(patches?{key,patches,expectedUpdatedAt}:{key,value:val,baseValue,expectedUpdatedAt});
       const saved=await scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,baseValue,timeoutMs);
+      if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
       scfVerifyInvoiceSave(key,saved,val,patches);
       scfVerifyOrderTripSave(key,saved,val,patches);
       const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(val);
@@ -468,6 +493,10 @@ async function performDbSet(key,val,queuedAt='',mode=''){
       if(merged)setTimeout(()=>window.scfSyncNow?.(),100);return true;
     }catch(e){
       console.warn('serverSavePermittedCollection:',e.message);
+      if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
+      if(['SCF_DATABASE_BUSY','SCF_DATABASE_TIMEOUT'].includes(e?.code)){
+        setSyncState('syncing','Máy chủ đang bận. Thay đổi vẫn được giữ để tự đồng bộ lại.');scheduleSyncRetry();return false;
+      }
       if(e?.code==='SCF_WRITE_CONFLICT'){
         // Xung đột do máy khác vừa lưu được giữ lại trong hàng đợi. Với các
         // đơn khác nhau, Edge Function sẽ ghép theo mã đơn ở lần thử lại;
@@ -562,6 +591,7 @@ async function runPendingWrites(){
         const patches=Array.isArray(item.patches)&&item.patches.length?item.patches:null;
         const timeoutMs=remoteTimeoutFor(patches?{key,patches,expectedUpdatedAt}:{key,value:item.value,baseValue,expectedUpdatedAt});
         const saved=await scfSavePermittedCollection(key,item.value,patches,expectedUpdatedAt,baseValue,timeoutMs);
+        if(readSyncQueue()[key]?.updatedAt!==item.updatedAt)return false;
         scfVerifyInvoiceSave(key,saved,item.value,patches);
         scfVerifyOrderTripSave(key,saved,item.value,patches);
         const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(item.value);
@@ -578,6 +608,10 @@ async function runPendingWrites(){
     }catch(e){
       console.warn('flushPendingWrites '+key+':',e?.message||e);
       waitingResolvers.forEach(done=>done(false));
+      if(readSyncQueue()[key]?.updatedAt!==item?.updatedAt)return false;
+      if(['SCF_DATABASE_BUSY','SCF_DATABASE_TIMEOUT'].includes(e?.code)){
+        setSyncState('syncing','Máy chủ đang bận. Thay đổi vẫn được giữ để tự đồng bộ lại.');scheduleSyncRetry();return false;
+      }
       if(e?.code==='SCF_WRITE_CONFLICT'){
         setSyncState('syncing','Đang ghép thay đổi với máy khác rồi thử lại');
         window.showToast&&window.showToast('Máy khác vừa lưu dữ liệu. App đang tự ghép thay đổi và đồng bộ lại…','info',6000);

@@ -4,10 +4,12 @@ const SCF_SERVER_AUTH_ENABLED=true;
 const SCF_AUTH_REQUEST_TIMEOUT_MS=30000;
 function scfRecordAuthDiagnostic(entry){
   if(typeof window==='undefined')return;
+  const actorId=String(entry?.actorId??window.__SCF_ACCESS_CONTEXT?.employeeId??'');
+  if(actorId&&actorId!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||''))return;
   let rows=window.__SCF_AUTH_DIAGNOSTICS;
   if(!rows)try{rows=JSON.parse(sessionStorage.getItem('scf_auth_diagnostics')||'[]');}catch{}
   if(!Array.isArray(rows))rows=[];
-  window.__SCF_AUTH_DIAGNOSTICS=[entry,...rows].slice(0,40);
+  window.__SCF_AUTH_DIAGNOSTICS=[{...entry,actorId},...rows].slice(0,40);
   try{sessionStorage.setItem('scf_auth_diagnostics',JSON.stringify(window.__SCF_AUTH_DIAGNOSTICS));}catch{}
 }
 async function scfMeasureAuthStage(stage,task){
@@ -44,6 +46,7 @@ async function invokeScfAuthOnce(options,timeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');
   const controller=new AbortController();
   const started=Date.now(),action=String(options?.body?.action||'request');
+  const actorId=String(typeof window==='undefined'?'':window.__SCF_ACCESS_CONTEXT?.employeeId||'');
   const diagnosticId='scf-'+started.toString(36)+'-'+Math.random().toString(36).slice(2,10);
   let timer,status=0,outcome='error',server;
   const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();const error=new Error('Supabase timeout — '+action+' — mã '+diagnosticId);error.code='SCF_REMOTE_TIMEOUT';reject(error);},Math.max(1000,Number(timeoutMs)||SCF_AUTH_REQUEST_TIMEOUT_MS));});
@@ -63,7 +66,7 @@ async function invokeScfAuthOnce(options,timeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
     throw error;
   }finally{
     clearTimeout(timer);
-    scfRecordAuthDiagnostic({id:diagnosticId,stage:action,ms:Date.now()-started,status,outcome,at:new Date().toISOString(),server:server?{ms:server.ms,steps:(server.steps||[]).map(step=>({stage:step.stage,ms:step.ms,ok:step.ok,code:step.code}))}:undefined});
+    scfRecordAuthDiagnostic({id:diagnosticId,actorId,stage:action,ms:Date.now()-started,status,outcome,at:new Date().toISOString(),server:server?{ms:server.ms,steps:(server.steps||[]).map(step=>({stage:step.stage,ms:step.ms,ok:step.ok,code:step.code}))}:undefined});
   }
 }
 
@@ -103,6 +106,14 @@ async function serverFunctionErrorMessage(error,data,fallback){
     }
   }catch(e){console.warn('Không đọc được nội dung lỗi Edge Function:',e?.message||e);}
   return finish(error?.message||fallback);
+}
+async function scfServerSaveError(error,data,fallback){
+  let body=data;
+  if(error?.context?.clone)try{body=await error.context.clone().json();}catch{}
+  const result=new Error(await serverFunctionErrorMessage(error,body,fallback));
+  if(/^SCF_[A-Z_]+$/.test(String(body?.code||'')))result.code=body.code;
+  result.diagnosticId=String(body?.diagnostic?.id||'');
+  return result;
 }
 
 async function serverUsernameLogin(username,password,forceTakeover=false){
@@ -239,7 +250,7 @@ async function serverSavePermittedCollection(key,value,expectedUpdatedAt='',base
     const duplicate=new Error(data.error||'Đơn hàng này đã tồn tại trên máy chủ.');
     duplicate.code='SCF_DUPLICATE_DELIVERY_ORDER';throw duplicate;
   }
-  if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không đồng bộ được dữ liệu.'));
+  if(error||!data?.ok)throw await scfServerSaveError(error,data,'Không đồng bộ được dữ liệu.');
   return{value:data.value||value,updatedAt:data.updatedAt||''};
 }
 
@@ -256,7 +267,7 @@ async function serverPatchPermittedCollection(key,patches,expectedUpdatedAt='',r
     const duplicate=new Error(data.error||'Đơn hàng này đã tồn tại trên máy chủ.');
     duplicate.code='SCF_DUPLICATE_DELIVERY_ORDER';throw duplicate;
   }
-  if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Không đồng bộ được thay đổi của đơn hàng.'));
+  if(error||!data?.ok)throw await scfServerSaveError(error,data,'Không đồng bộ được thay đổi của đơn hàng.');
   return{items:Array.isArray(data.items)?data.items:[],updatedAt:data.updatedAt||'',patched:true};
 }
 

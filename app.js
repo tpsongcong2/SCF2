@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V449';
+const SCF_BUILD_VERSION='V450';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -257,9 +257,10 @@ function SyncStatus(){
   const canOpen=!!state?.pending||state?.status==='error'||state?.status==='offline';
   const retry=()=>{if(state?.pending&&state?.status!=='syncing')window.scfFlushPendingWrites?.();};
   const title=state?.detail?(state.detail+(state?.pending?' — Bấm để đồng bộ lại':'')):(state?.pending?'Bấm để đồng bộ lại':label);
+  const downloadButton=h('button',{type:'button',onClick:()=>window.scfDownloadSyncDiagnostics?.()},h('i',{className:'ti ti-download'}),'Tải thông tin kiểm tra đồng bộ');
   return h(React.Fragment,null,
     h('span',{className:'sync-status sync-'+(state?.status||'idle'),title,'aria-live':'polite',role:canOpen?'button':undefined,tabIndex:canOpen?0:undefined,onClick:()=>canOpen&&setReportOpen(true),onKeyDown:event=>{if(canOpen&&(event.key==='Enter'||event.key===' ')){event.preventDefault();setReportOpen(true);}},style:canOpen?{cursor:'pointer'}:null},h('i',{className:'ti '+item[1]+(state?.status==='syncing'?' spin':'')}),label),
-    reportOpen&&h(Modal,{title:'Chi tiết dữ liệu chờ đồng bộ',lg:'xl',onClose:()=>setReportOpen(false)},h('div',{style:{display:'grid',gap:9,overflowWrap:'anywhere',wordBreak:'break-word',minWidth:0}},state?.detail&&h('div',{style:{padding:'9px 11px',border:'1px solid #f0cf7a',borderRadius:'var(--r)',background:'#fff8e1',color:'#6d4b00'}},h('b',null,'Trạng thái: '),state.detail),reportRows.length?reportRows:h('div',{style:{color:'var(--tx2)'}},'Không có bản ghi trong hàng đợi. Đây là trạng thái lỗi của lần đồng bộ trước; hãy kiểm tra nội dung trạng thái ở trên.'),h('div',{style:{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}},h('button',{onClick:()=>setReportOpen(false)},'Đóng'),h('button',{className:'bp',disabled:state?.status==='syncing'||!(report?.items||[]).length,onClick:()=>{retry();setReportOpen(false);}},h('i',{className:'ti ti-refresh'}),'Đồng bộ ngay'))))
+    reportOpen&&h(Modal,{title:'Chi tiết dữ liệu chờ đồng bộ',lg:'xl',onClose:()=>setReportOpen(false)},h('div',{style:{display:'grid',gap:9,overflowWrap:'anywhere',wordBreak:'break-word',minWidth:0}},state?.detail&&h('div',{style:{padding:'9px 11px',border:'1px solid #f0cf7a',borderRadius:'var(--r)',background:'#fff8e1',color:'#6d4b00'}},h('b',null,'Trạng thái: '),state.detail),reportRows.length?reportRows:h('div',{style:{color:'var(--tx2)'}},'Không có bản ghi trong hàng đợi. Đây là trạng thái lỗi của lần đồng bộ trước; hãy kiểm tra nội dung trạng thái ở trên.'),h('div',{style:{display:'flex',justifyContent:'flex-end',flexWrap:'wrap',gap:8,marginTop:6}},downloadButton,h('button',{onClick:()=>setReportOpen(false)},'Đóng'),h('button',{className:'bp',disabled:state?.status==='syncing'||!(report?.items||[]).length,onClick:()=>{retry();setReportOpen(false);}},h('i',{className:'ti ti-refresh'}),'Đồng bộ ngay'))))
   );
 }
 
@@ -636,7 +637,7 @@ function App(){
     if(loading||!pageReady||!cu||isFaceMask)return;
     const saveSyncError=event=>{
       const detail=event?.detail||window.__SCF_LAST_SYNC_ERROR;
-      if(!detail?.message||!detail?.fingerprint||detail.key==='scf_notifications')return;
+      if(!detail?.message||!detail?.fingerprint||detail.key==='scf_notifications'||String(detail.actorId||'')!==String(cu.id))return;
       addNotification({recipientId:cu.id,title:'Lỗi đồng bộ cần kiểm tra',message:detail.message,type:'error',icon:'ti-alert-triangle',sourceType:'sync-error',sourceId:detail.fingerprint,dedupeKey:detail.fingerprint,targetPage:detail.key==='scf_orders'?'delivery':'notifications'});
     };
     window.addEventListener('scf-sync-error-notification',saveSyncError);
@@ -711,7 +712,7 @@ function App(){
   const isAccounting=employeeDepartmentIncludes(cu,'Kế toán');
   const activeLevel=getLvl(cu.role,page,cu.permLevels);
   const readOnly=activeLevel==='r';
-  window.__SCF_ACCESS_CONTEXT={role:cu.role,page,level:activeLevel,readOnly};
+  window.__SCF_ACCESS_CONTEXT={employeeId:String(cu.id||''),role:cu.role,page,level:activeLevel,readOnly};
   const wips=['purchase','workreport_vp','workreport_sx'];
   const logout=async()=>{await serverLogout();window.scfClearSensitiveLocalData&&window.scfClearSensitiveLocalData();setSession(null);if(SCF_SERVER_AUTH_ENABLED)location.reload();};
   return h('div',{className:'layout'},
