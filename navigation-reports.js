@@ -2195,7 +2195,7 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
   const canShowInlineInvoices=['admin','administrator','driver'].includes(String(currentUser?.role||'').trim().toLowerCase())||employeeDepartmentIncludes(currentUser,'Kế toán')||employeeHasDepartment(currentUser,'Lái xe');
   const[inlineInvoicePreference,setInlineInvoicePreference]=useLS('scf_debt_inline_invoices_'+String(currentUser?.id||''),false);
   const[inlineInvoiceSize,setInlineInvoiceSize]=useLS('scf_inline_invoice_size_'+String(currentUser?.id||''),'medium');
-  const[inlineInvoiceLandscape,setInlineInvoiceLandscape]=useLS('scf_inline_invoice_landscape_'+String(currentUser?.id||''),false);
+  const[inlineInvoiceLandscape,setInlineInvoiceLandscape]=useLS('scf_inline_invoice_auto_orientation_v2_'+String(currentUser?.id||''),true);
   const showInlineInvoices=canShowInlineInvoices&&inlineInvoicePreference===true;
   const invoiceSize=['small','medium','large'].includes(inlineInvoiceSize)?inlineInvoiceSize:'medium';
   const customerOptions=scfSalesDebtCustomerOptions(customers,orders);

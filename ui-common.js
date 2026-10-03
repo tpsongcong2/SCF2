@@ -88,7 +88,10 @@ function TripInvoicePreview({src,label,size='medium',landscape=false}){
   const attempt=React.useRef(false),generation=React.useRef(0);
   useEffect(()=>()=>{generation.current++;},[]);
   useEffect(()=>{
-    if(!landscape||!recognitionImage||typeof window.scfDetectInvoiceOrientation!=='function')return;
+    if(!landscape||!recognitionImage)return;
+    if(typeof window.scfDetectInvoiceOrientation!=='function'){
+      setOrientation({src,status:'unavailable',angle:0});return;
+    }
     let active=true,started=false,observer;
     const run=()=>{
       if(started||!active)return;started=true;observer?.disconnect();
@@ -132,18 +135,25 @@ function TripInvoicePreview({src,label,size='medium',landscape=false}){
   );
   const failure=()=>h('div',{className:'trip-invoice-preview-error',role:'status'},'Chưa tải được ảnh.',
     h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>{attempt.current=false;setPhase('ready');setReload(value=>value+1);}},'Thử lại'));
+  const orientationStatus=()=>h('small',{className:'invoice-orientation-status',role:'status'},
+    !landscape?'Tự xoay đang tắt. Bật “Tự xoay đúng chiều” ở thanh phía trên.':
+    manualRotation?.src===src&&manualRotation?.landscape===landscape?'Đang dùng chiều bạn chọn':
+    orientation?.src!==src?'Tự xoay đang bật. Chờ ảnh hiển thị để nhận diện.':
+    orientation.status==='working'?'Đang nhận diện chiều chữ…':
+    orientation.status==='ready'?'Đã nhận diện chiều chữ':
+    orientation.status==='unavailable'?'Chưa tải được bộ tự xoay. Tải lại trang để thử lại.':
+    orientation.status==='uncertain'?'Chưa rõ chiều chữ. Bạn có thể xoay bằng nút bên trên.':'Chưa nhận diện được. Bạn có thể xoay bằng nút bên trên.',
+    landscape&&orientation?.src===src&&['uncertain','failed','unavailable'].includes(orientation.status)&&h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>{setManualRotation(null);setRecognitionRetry(value=>value+1);}},'Thử nhận diện lại')
+  );
   return h('figure',{className:'trip-invoice-preview invoice-size-'+safeSize+(layout.sideways?' invoice-rotated-sideways':'')},
     h('figcaption',null,label),
     h('button',{type:'button',className:'trip-invoice-image-button','data-scf-action':'view','aria-label':'Mở ảnh '+label,onClick:()=>setViewer(true),style:phase==='failed'?{display:'none'}:undefined},imageStage(false)),
     phase!=='failed'&&controls(),
-    landscape&&orientation?.src===src&&h('small',{className:'invoice-orientation-status',role:'status'},
-      manualRotation?.src===src&&manualRotation?.landscape===landscape?'Đang dùng chiều bạn chọn':orientation.status==='working'?'Đang nhận diện chiều chữ…':orientation.status==='ready'?'Đã nhận diện chiều chữ':orientation.status==='uncertain'?'Chưa rõ chiều chữ. Bạn có thể xoay bằng nút bên trên.':'Chưa nhận diện được. Bạn có thể xoay bằng nút bên trên.',
-      ['uncertain','failed'].includes(orientation.status)&&h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>{setManualRotation(null);setRecognitionRetry(value=>value+1);}},'Thử nhận diện lại')
-    ),
+    phase!=='failed'&&orientationStatus(),
     phase==='refreshing'&&h('small',{role:'status'},'Đang tải lại ảnh…'),
     phase==='failed'&&failure(),
     viewer&&h(Modal,{title:label,lg:'xl',className:'invoice-photo-viewer',onClose:()=>setViewer(false)},
-      controls(),phase==='failed'?failure():imageStage(true),
+      controls(),phase==='failed'?failure():imageStage(true),phase!=='failed'&&orientationStatus(),
       phase==='refreshing'&&h('small',{role:'status'},'Đang tải lại ảnh…'),
       h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>window.open(url,'_blank','noopener')},'Mở tệp ảnh gốc')
     )

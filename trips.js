@@ -1116,7 +1116,8 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
   const[hideTripOptionalColumns,setHideTripOptionalColumns]=useLS('scf_trip_hide_optional_columns_v2',true);
   const[inlineInvoicePreference,setInlineInvoicePreference]=useLS('scf_trip_inline_invoices_'+String(currentUser?.id||''),false);
   const[inlineInvoiceSize,setInlineInvoiceSize]=useLS('scf_inline_invoice_size_'+String(currentUser?.id||''),'medium');
-  const[inlineInvoiceLandscape,setInlineInvoiceLandscape]=useLS('scf_inline_invoice_landscape_'+String(currentUser?.id||''),false);
+  // Enable text orientation once for existing accounts; subsequent choices persist.
+  const[inlineInvoiceLandscape,setInlineInvoiceLandscape]=useLS('scf_inline_invoice_auto_orientation_v2_'+String(currentUser?.id||''),true);
   const[driverInvoiceColumnPreference,setDriverInvoiceColumnPreference]=useLS('scf_trip_driver_invoice_column_'+String(currentUser?.id||''),false);
   const invoiceSize=['small','medium','large'].includes(inlineInvoiceSize)?inlineInvoiceSize:'medium';
   const _td1=fmtDate();const _ti1=_td1.split('/').reverse().join('-');const[fPeriod,sfPeriod]=useState('day');const[fDate,sfDate]=useState(_ti1);const[fMonth,sfMonth]=useState(_ti1.slice(0,7));const[fTrip,sfTrip]=useState('');const[fTripGroup,sfTripGroup]=useState('');const[fShift,sfShift]=useState('');const[fDriver,sfDriver]=useState('');const[fOrderState,sfOrderState]=useState('with');
