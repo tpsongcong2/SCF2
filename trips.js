@@ -1265,6 +1265,8 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
       const tripId=edit.id;
       const oldOrderIds=new Set((old?.orderIds||[]).map(String));
       const nextOrderIds=new Set((d.orderIds||[]).map(String));
+      const driverChanged=String(d.driverId||'')!==String(old?.driverId||'')||String(d.driverName||'').trim()!==String(old?.driverName||'').trim();
+      const manualDriver=d.driverAssignMode==='manual'||(driverChanged&&d.driverAssignMode!=='auto');
       const stamp=fmtDT();
       const actor=currentUser?.name||'Người dùng';
       if(old){setOrders(p=>p.map(o=>{
@@ -1275,16 +1277,17 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
         };
         if(nextOrderIds.has(orderId)){
           const manuallyChanged=!oldOrderIds.has(orderId)||String(o.tripId||'')!==String(tripId);
+          const pinToManualDriver=manualDriver&&o.tripAssignMode!=='manual'&&o.tripAssignMode!=='driver_additional';
           const next={...o,tripId,status:orderStatusForTrip(d.status)};
-          if(!manuallyChanged)return next;
+          if(!manuallyChanged&&!pinToManualDriver)return next;
           return {...next,tripAssignMode:'manual',updatedAt:stamp,updatedBy:actor,
-            orderHistory:[...(o.orderHistory||[]),{id:'LS'+uid(),action:'Xếp chuyến thủ công',changes:['Chuyến: '+(o.tripId||'Chưa xếp')+' → '+tripId,'Cách xếp: Thủ công'],at:stamp,atIso:new Date().toISOString(),by:actor,byId:currentUser?.id||''}]
+            orderHistory:[...(o.orderHistory||[]),{id:'LS'+uid(),action:pinToManualDriver?'Chốt chuyến theo lái xe chọn tay':'Xếp chuyến thủ công',changes:[manuallyChanged?'Chuyến: '+(o.tripId||'Chưa xếp')+' → '+tripId:'Chuyến: '+tripId,'Cách xếp: Thủ công',...(pinToManualDriver?['Lái xe: '+(old?.driverName||'Chưa có lái')+' → '+(d.driverName||'Chưa có lái')]:[])],at:stamp,atIso:new Date().toISOString(),by:actor,byId:currentUser?.id||''}]
           };
         }
         return o;
       }));}
-      setTrips(p=>p.map(t=>t.id===edit.id?{...edit,...d,id:tripId}:t));
-      const updated={...edit,...d,id:tripId};
+      const updated={...edit,...d,id:tripId,...(manualDriver?{driverAssignMode:'manual'}:{})};
+      setTrips(p=>p.map(t=>t.id===edit.id?updated:t));
       const added=(updated.orderIds||[]).filter(id=>!(old?.orderIds||[]).includes(id)).length;
       const removed=(old?.orderIds||[]).filter(id=>!(updated.orderIds||[]).includes(id)).length;
       const oldDriverId=driverRecipientId(old),newDriverId=driverRecipientId(updated);
