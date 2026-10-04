@@ -1116,8 +1116,6 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
   const[hideTripOptionalColumns,setHideTripOptionalColumns]=useLS('scf_trip_hide_optional_columns_v2',true);
   const[inlineInvoicePreference,setInlineInvoicePreference]=useLS('scf_trip_inline_invoices_'+String(currentUser?.id||''),false);
   const[inlineInvoiceSize,setInlineInvoiceSize]=useLS('scf_inline_invoice_size_'+String(currentUser?.id||''),'medium');
-  // Enable text orientation once for existing accounts; subsequent choices persist.
-  const[inlineInvoiceLandscape,setInlineInvoiceLandscape]=useLS('scf_inline_invoice_auto_orientation_v2_'+String(currentUser?.id||''),true);
   const[driverInvoiceColumnPreference,setDriverInvoiceColumnPreference]=useLS('scf_trip_driver_invoice_column_'+String(currentUser?.id||''),false);
   const invoiceSize=['small','medium','large'].includes(inlineInvoiceSize)?inlineInvoiceSize:'medium';
   const _td1=fmtDate();const _ti1=_td1.split('/').reverse().join('-');const[fPeriod,sfPeriod]=useState('day');const[fDate,sfDate]=useState(_ti1);const[fMonth,sfMonth]=useState(_ti1.slice(0,7));const[fTrip,sfTrip]=useState('');const[fTripGroup,sfTripGroup]=useState('');const[fShift,sfShift]=useState('');const[fDriver,sfDriver]=useState('');const[fOrderState,sfOrderState]=useState('with');
@@ -1946,7 +1944,6 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
       canManageTrips&&h('button',{type:'button',className:'bp trip-create-button','data-scf-action':'write',onClick:()=>{se(null);sm('f');}},h('i',{className:'ti ti-plus'}),' Tạo chuyến'),
       canShowInlineInvoices&&h('button',{type:'button',className:'bs trip-invoice-mode-toggle'+(showInlineInvoices?' active':''),'data-scf-action':'view','aria-pressed':showInlineInvoices,onClick:()=>setInlineInvoicePreference(!showInlineInvoices)},h('i',{className:showInlineInvoices?'ti ti-photo-off':'ti ti-photo'}),showInlineInvoices?' Ẩn ảnh hóa đơn':' Hiện ảnh hóa đơn'),
       showInlineInvoices&&h(InvoiceImageSizeSelect,{value:invoiceSize,onChange:setInlineInvoiceSize}),
-      showInlineInvoices&&h(InvoiceLandscapeToggle,{value:inlineInvoiceLandscape===true,onChange:setInlineInvoiceLandscape}),
       showInlineInvoices&&h('button',{type:'button',className:'bs desktop-only trip-driver-invoice-toggle','data-scf-action':'view','aria-pressed':showDriverInvoiceColumn,onClick:()=>setDriverInvoiceColumnPreference(!showDriverInvoiceColumn)},showDriverInvoiceColumn?'Ẩn HĐ LX':'Hiện HĐ LX'),
       canCreateTripImages&&h('button',{className:'mobile-only trip-filter-image trip-filter-day-image','data-scf-action':'view',disabled:!fDate||!filteredTrips.length,onClick:()=>sm('day-image')},h('i',{className:'ti ti-photo-search'}),' Xem ảnh đơn tổng'),
       canCreateTripImages&&h('button',{className:'mobile-only trip-filter-image trip-mobile-quick-action trip-mobile-update','data-scf-action':'write',disabled:!fTrip||!filteredTrips.length,title:fTrip?'Cập nhật chuyến đã lọc':'Chọn ca giao và lái xe trước',onClick:()=>sm('quick-update')},h('i',{className:'ti ti-checkup-list'}),' Cập nhật SL giao và HĐ'),
@@ -2089,7 +2086,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                     !hideTripOptionalColumns&&h('td',null,orderBasketControl(trip,o,'workOut','Rổ đi',canEditTripQty)),
                     !hideTripOptionalColumns&&h('td',null,orderBasketControl(trip,o,'workReturn','Rổ về',canEditTripQty)),
                     h('td',null,
-                      showInlineInvoices&&o.invoiceImage&&h(TripInvoicePreview,{key:o.invoiceImage,src:o.invoiceImage,orderId:o.id,size:invoiceSize,landscape:inlineInvoiceLandscape===true,label:'Hóa đơn '+(o.pointName||o.customer||'')}),
+                      showInlineInvoices&&o.invoiceImage&&h(TripInvoicePreview,{key:o.invoiceImage,src:o.invoiceImage,orderId:o.id,size:invoiceSize,landscape:true,label:'Hóa đơn '+(o.pointName||o.customer||'')}),
                       o.invoiceImage
                         ?h('div',{style:{display:'flex',gap:4}},
                           h('button',{className:'bi',title:'Xem ảnh hóa đơn',onClick:()=>window.open(o.invoiceImage,'_blank')},h('i',{className:'ti ti-photo-check',style:{fontSize:15,color:'var(--pri)'}})),
@@ -2164,8 +2161,8 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                     )
                   )),
                   showInlineInvoices&&(o.invoiceImage||o.driverInvoiceImage)&&h('div',{className:'trip-inline-invoice-list'},
-                    o.invoiceImage&&h(TripInvoicePreview,{key:'invoice-'+o.invoiceImage,src:o.invoiceImage,orderId:o.id,size:invoiceSize,landscape:inlineInvoiceLandscape===true,label:'Hóa đơn '+pointLabel}),
-                    o.driverInvoiceImage&&h(TripInvoicePreview,{key:'driver-'+o.driverInvoiceImage,src:o.driverInvoiceImage,orderId:o.id,kind:'driver',size:invoiceSize,landscape:inlineInvoiceLandscape===true,label:'HĐ lái xe '+pointLabel})
+                    o.invoiceImage&&h(TripInvoicePreview,{key:'invoice-'+o.invoiceImage,src:o.invoiceImage,orderId:o.id,size:invoiceSize,landscape:true,label:'Hóa đơn '+pointLabel}),
+                    o.driverInvoiceImage&&h(TripInvoicePreview,{key:'driver-'+o.driverInvoiceImage,src:o.driverInvoiceImage,orderId:o.id,kind:'driver',size:invoiceSize,landscape:true,label:'HĐ lái xe '+pointLabel})
                   ),
                   isWelstoryOrder(o)&&!hideTripOptionalColumns&&h('div',{className:'trip-order-baskets',style:{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap',marginTop:8}},
                     h('label',{style:{display:'flex',gap:6,alignItems:'center'}},'Rổ đi',orderBasketControl(trip,o,'workOut','Rổ đi',canEditTripQty)),
