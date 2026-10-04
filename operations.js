@@ -1259,10 +1259,21 @@ function isPrivilegedEmployeeRecord(employee){
     )
   );
 }
-function CpwModal({emp,cu,onSave,onClose,forced=false}){
+function CpwModal({emp,cu,onSave,onClose,onExit,forced=false}){
   const isAdminReset=cu.role==='admin'&&emp.id!==cu.id;
   const initialPassword=isAdminReset?generateTemporaryPassword():'';
   const[op,sop]=useState('');const[np,snp]=useState(initialPassword);const[cp,scp]=useState(initialPassword);const[busy,setBusy]=useState(false);
+  const[error,setError]=useState('');const[exiting,setExiting]=useState(false);
+  const life=React.useRef({mounted:true,saving:false,exiting:false});
+  useEffect(()=>()=>{life.current.mounted=false;},[]);
+  const active=()=>life.current.mounted&&!life.current.exiting;
+  const fail=message=>{if(active()){setError(message);window.showToast(message,'error');}};
+  const close=async()=>{
+    if(life.current.exiting)return;
+    life.current.exiting=true;setExiting(true);sop('');snp('');scp('');setError('');
+    try{await (forced?onExit:onClose)?.();}
+    catch{if(life.current.mounted){life.current.exiting=false;setExiting(false);fail('Chưa thoát được. Hãy thử lại.');}}
+  };
   const regenerate=()=>{const value=generateTemporaryPassword();snp(value);scp(value);};
   const copyTemporaryPassword=async()=>{
     try{
@@ -1272,25 +1283,33 @@ function CpwModal({emp,cu,onSave,onClose,forced=false}){
     }catch{prompt('Sao chép mật khẩu tạm này:',np);}
   };
   const submit=async()=>{
-    if(busy)return;
-    if(!SCF_SERVER_AUTH_ENABLED&&cu.role!=='admin'&&!(await verifyPassword(op,emp.password))){window.showToast('Mật khẩu cũ không đúng!','error');return;}
-    if(np.length<PASSWORD_MIN_LENGTH){window.showToast('Mật khẩu phải có ít nhất '+PASSWORD_MIN_LENGTH+' ký tự!','warn');return;}
-    if(np!==cp){window.showToast('Mật khẩu xác nhận không khớp!','error');return;}
-    setBusy(true);
+    if(life.current.saving||!active())return;
+    setError('');
+    if(!isAdminReset&&!op){fail('Vui lòng nhập mật khẩu hiện tại.');return;}
+    if(np.length<PASSWORD_MIN_LENGTH){fail('Mật khẩu phải có ít nhất '+PASSWORD_MIN_LENGTH+' ký tự!');return;}
+    if(np.length>128){fail('Mật khẩu mới không được quá 128 ký tự.');return;}
+    if(np!==cp){fail('Mật khẩu xác nhận không khớp!');return;}
+    life.current.saving=true;setBusy(true);
     try{
+      if(!SCF_SERVER_AUTH_ENABLED&&!isAdminReset&&!(await verifyPassword(op,emp.password))){fail('Mật khẩu cũ không đúng!');return;}
+      if(!active())return;
       if(SCF_SERVER_AUTH_ENABLED){
         await serverChangePassword(emp.id,op,np,isAdminReset);
+        if(!active())return;
         await onSave('',{mustChangePw:isAdminReset});
       }else{
-        await onSave(await hashPassword(np),{mustChangePw:isAdminReset});
+        const passwordHash=await hashPassword(np);
+        if(!active())return;
+        await onSave(passwordHash,{mustChangePw:isAdminReset});
       }
-      window.showToast(isAdminReset?'Đã đặt mật khẩu tạm. Nhân viên phải đổi mật khẩu khi đăng nhập.':'Đã đổi mật khẩu.','success');
+      if(active())window.showToast(isAdminReset?'Đã đặt mật khẩu tạm. Nhân viên phải đổi mật khẩu khi đăng nhập.':'Đã đổi mật khẩu.','success');
     }
-    catch(e){window.showToast(e.message||'Không thể mã hóa mật khẩu.','error');}
-    finally{setBusy(false);}
+    catch(e){fail(e.message||'Không đổi được mật khẩu. Hãy thử lại hoặc thoát để đăng nhập lại.');}
+    finally{life.current.saving=false;if(active())setBusy(false);}
   };
-  return h(Modal,{title:(isAdminReset?'Đặt lại mật khẩu — ':'Đổi mật khẩu — ')+emp.name,onClose:forced?()=>{}:onClose},
+  return h(Modal,{title:(isAdminReset?'Đặt lại mật khẩu — ':'Đổi mật khẩu — ')+emp.name,onClose:close},
     forced&&h('div',{style:{padding:'9px 12px',borderRadius:6,background:'#FFF7D6',color:'#755900',fontSize:13,marginBottom:12}},'Bạn đang dùng mật khẩu tạm. Hãy đổi mật khẩu mới để tiếp tục sử dụng hệ thống.'),
+    error&&h('div',{role:'alert',style:{padding:'9px 12px',borderRadius:6,background:'#FCEBEB',color:'#A32D2D',fontSize:13,marginBottom:12}},error),
     isAdminReset
       ?h('div',null,
         h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:7}},'Mật khẩu tạm chỉ hiển thị trong cửa sổ này. Hãy sao chép và gửi riêng cho nhân viên.'),
@@ -1301,11 +1320,11 @@ function CpwModal({emp,cu,onSave,onClose,forced=false}){
         )
       )
       :h('div',null,
-        cu.role!=='admin'&&h(F,{label:'Mật khẩu cũ'},h(PasswordField,{value:op,onChange:e=>sop(e.target.value)})),
-        h(F,{label:'Mật khẩu mới'},h(PasswordField,{value:np,onChange:e=>snp(e.target.value)})),
-        h(F,{label:'Xác nhận'},h(PasswordField,{value:cp,onChange:e=>scp(e.target.value)}))
+        h(F,{label:'Mật khẩu cũ'},h(PasswordField,{value:op,onChange:e=>{sop(e.target.value);setError('');}})),
+        h(F,{label:'Mật khẩu mới'},h(PasswordField,{value:np,onChange:e=>{snp(e.target.value);setError('');}})),
+        h(F,{label:'Xác nhận'},h(PasswordField,{value:cp,onChange:e=>{scp(e.target.value);setError('');}}))
       ),
-    h(Row,null,!forced&&h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,disabled:busy,style:{padding:'8px 20px'}},busy?'Đang mã hóa...':isAdminReset?'Đặt mật khẩu tạm':'Đổi mật khẩu'))
+    h(Row,null,h('button',{type:'button',onClick:close,disabled:exiting},exiting?'Đang thoát...':forced?'Thoát ra':'Hủy'),h('button',{className:'bp',onClick:submit,disabled:busy||exiting,style:{padding:'8px 20px'}},busy?(SCF_SERVER_AUTH_ENABLED?'Đang đổi mật khẩu...':'Đang mã hóa...'):isAdminReset?'Đặt mật khẩu tạm':'Đổi mật khẩu'))
   );
 }
 function EmployeeTab({employees,setEmployees,cu,depts,permissionProfiles}){

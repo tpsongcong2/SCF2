@@ -143,7 +143,10 @@ async function getServerAuthSession(){
 }
 
 async function serverLogout(){
-  if(SCF_SERVER_AUTH_ENABLED&&sb)try{await invokeScfAuth({body:{action:'release_session'}},10000);await sb.auth.signOut();}catch(e){console.warn('Server logout:',e.message);}
+  if(!SCF_SERVER_AUTH_ENABLED||!sb)return;
+  try{await invokeScfAuth({body:{action:'release_session'}},10000);}catch{console.warn('Không xác nhận được việc thoát phiên trên máy chủ.');}
+  // A failed release must not prevent signing out the local auth session.
+  try{await withRemoteTimeout(sb.auth.signOut({scope:'local'}),12000);}catch{console.warn('Chưa hoàn tất việc thoát phiên xác thực.');}
 }
 async function serverTouchSession(){
   if(!SCF_SERVER_AUTH_ENABLED||!sb)return false;

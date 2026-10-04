@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V463';
+const SCF_BUILD_VERSION='V464';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -823,7 +823,7 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
       (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,onLogout:logout})
     ),
     cu.mustChangePw&&h(CpwModal,{
-      emp:cu,cu,forced:true,onClose:()=>{},
+      emp:cu,cu,forced:true,onClose:logout,onExit:logout,
       onSave:(password)=>{
         const update=list=>list.map(employee=>employee.id===cu.id
           ?{...employee,password,mustChangePw:false,updatedBy:cu.name,updatedAt:fmtDT()}
