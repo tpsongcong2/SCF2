@@ -12,6 +12,14 @@ function findExistingDeliveryOrderId(orders,id,excludeId=''){
   const target=String(id||'').trim();if(!target)return null;
   return (orders||[]).find(order=>String(order?.id||'').trim()===target&&String(order?.id||'')!==String(excludeId||''))||null;
 }
+function DeliveryOrderGroupHeader({group,count,weight}){
+  const isTrip=group?.mode==='trip';
+  return h('div',{className:'delivery-group-header'},
+    h('span',{className:'delivery-group-title'},(isTrip?'🚚 Chuyến: ':'📍 Khu vực: ')+(group?.label||'')),
+    isTrip&&h('span',{className:'delivery-group-driver'},group?.driverName?'Lái xe: '+group.driverName:'Chưa có lái'),
+    h('span',{className:'delivery-group-summary'},count+' đơn — '+weight.toFixed(1)+' kg')
+  );
+}
 function deliveryOrderCreator(order){
   const history=Array.isArray(order?.orderHistory)?order.orderHistory:[];
   return order?.createdBy||history[0]?.by||order?.updatedBy||'không rõ người tạo';
@@ -2776,6 +2784,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           label,
           summaryLabel:label,
           mode:'trip',
+          driverName:String(o._effectiveTrip.driverName||'').trim()||(o._effectiveTrip.driverId?String((employees||[]).find(e=>String(e.id)===String(o._effectiveTrip.driverId))?.name||'').trim():''),
           sortDate:tripDateObj?tripDateObj.getTime():Number.MAX_SAFE_INTEGER,
           sortShiftOrder:selectedArea==='SSTN'?(samsungRank??Number.MAX_SAFE_INTEGER):(selectedArea==='DT'?0:(shiftMeta?shiftMeta._order:Number.MAX_SAFE_INTEGER)),
           sortShiftTime:shiftMeta?shiftMeta._startMin:(String(o._effectiveTrip.deliveryTime||'').trim()?timeToMin(o._effectiveTrip.deliveryTime):Number.MAX_SAFE_INTEGER),
@@ -3625,10 +3634,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         )),
         h('tbody',null,list.length?orderTableRows.map((o,_i)=>{
           if(o._hdr) return h('tr',{key:'oh'+_i},h('td',{colSpan:detailColumnsHidden?8:12,className:'delivery-group-header-cell'},
-            h('div',{className:'delivery-group-header'},
-              h('span',null,(o.group?.mode==='trip'?'🚚 Chuyến: ':'📍 Khu vực: ')+(o.group?.label||'')),
-              h('span',{className:'delivery-group-summary'},o.cnt+' đơn — '+o.kl.toFixed(1)+' kg')
-            )
+            h(DeliveryOrderGroupHeader,{group:o.group,count:o.cnt,weight:o.kl})
           ));
           const ctx=o._ctx||orderContext(o);
           const totalW=o._totalW||calcOrderWeight(ctx);
