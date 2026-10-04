@@ -2086,7 +2086,7 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                     !hideTripOptionalColumns&&h('td',null,orderBasketControl(trip,o,'workOut','Rổ đi',canEditTripQty)),
                     !hideTripOptionalColumns&&h('td',null,orderBasketControl(trip,o,'workReturn','Rổ về',canEditTripQty)),
                     h('td',null,
-                      showInlineInvoices&&o.invoiceImage&&h(TripInvoicePreview,{key:o.invoiceImage,src:o.invoiceImage,size:invoiceSize,landscape:inlineInvoiceLandscape===true,label:'Hóa đơn '+(o.pointName||o.customer||'')}),
+                      showInlineInvoices&&o.invoiceImage&&h(TripInvoicePreview,{key:o.invoiceImage,src:o.invoiceImage,orderId:o.id,size:invoiceSize,landscape:inlineInvoiceLandscape===true,label:'Hóa đơn '+(o.pointName||o.customer||'')}),
                       o.invoiceImage
                         ?h('div',{style:{display:'flex',gap:4}},
                           h('button',{className:'bi',title:'Xem ảnh hóa đơn',onClick:()=>window.open(o.invoiceImage,'_blank')},h('i',{className:'ti ti-photo-check',style:{fontSize:15,color:'var(--pri)'}})),
@@ -2161,8 +2161,8 @@ function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,c
                     )
                   )),
                   showInlineInvoices&&(o.invoiceImage||o.driverInvoiceImage)&&h('div',{className:'trip-inline-invoice-list'},
-                    o.invoiceImage&&h(TripInvoicePreview,{key:'invoice-'+o.invoiceImage,src:o.invoiceImage,size:invoiceSize,landscape:inlineInvoiceLandscape===true,label:'Hóa đơn '+pointLabel}),
-                    o.driverInvoiceImage&&h(TripInvoicePreview,{key:'driver-'+o.driverInvoiceImage,src:o.driverInvoiceImage,size:invoiceSize,landscape:inlineInvoiceLandscape===true,label:'HĐ lái xe '+pointLabel})
+                    o.invoiceImage&&h(TripInvoicePreview,{key:'invoice-'+o.invoiceImage,src:o.invoiceImage,orderId:o.id,size:invoiceSize,landscape:inlineInvoiceLandscape===true,label:'Hóa đơn '+pointLabel}),
+                    o.driverInvoiceImage&&h(TripInvoicePreview,{key:'driver-'+o.driverInvoiceImage,src:o.driverInvoiceImage,orderId:o.id,kind:'driver',size:invoiceSize,landscape:inlineInvoiceLandscape===true,label:'HĐ lái xe '+pointLabel})
                   ),
                   isWelstoryOrder(o)&&!hideTripOptionalColumns&&h('div',{className:'trip-order-baskets',style:{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap',marginTop:8}},
                     h('label',{style:{display:'flex',gap:6,alignItems:'center'}},'Rổ đi',orderBasketControl(trip,o,'workOut','Rổ đi',canEditTripQty)),

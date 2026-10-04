@@ -2379,7 +2379,7 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
             h('td',null,h('b',null,order.deliveryTime||'—')),
             // One image cell spans this order's visible product lines.
             lineIndex===0&&h('td',{rowSpan:visibleLines(order).length,style:{textAlign:'center'}},order.invoiceImage
-              ?showInlineInvoices?h(TripInvoicePreview,{key:order.invoiceImage,src:order.invoiceImage,size:invoiceSize,landscape:inlineInvoiceLandscape===true,label:'Hóa đơn '+(order.pointName||order.address||'')+' · '+(fmtAnyDate(order.deliveryDate||order.date)||'')})
+              ?showInlineInvoices?h(TripInvoicePreview,{key:order.invoiceImage,src:order.invoiceImage,orderId:order.id,size:invoiceSize,landscape:inlineInvoiceLandscape===true,label:'Hóa đơn '+(order.pointName||order.address||'')+' · '+(fmtAnyDate(order.deliveryDate||order.date)||'')})
                 :h('button',{type:'button',className:'bi',title:'Xem ảnh hóa đơn',onClick:()=>window.open(order.invoiceImage,'_blank')},h('i',{className:'ti ti-photo-check',style:{fontSize:16,color:'var(--pri)'}}))
               :'—')
           );

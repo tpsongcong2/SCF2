@@ -215,6 +215,16 @@ function sanitizeEmployeesForServer(employees){
   }
   return clean;
 }
+async function serverLoadInvoiceOrientations(items){
+  const{data,error}=await invokeScfAuth({body:{action:'load_invoice_orientations',items}},12000);
+  if(error||!data?.ok)throw await scfServerSaveError(error,data,'Chưa đọc được chiều ảnh trên máy chủ.');
+  return data.items||[];
+}
+async function serverSaveInvoiceOrientation(item){
+  const{data,error}=await invokeScfAuth({body:{action:'save_invoice_orientation',...item}},12000);
+  if(error||(!data?.ok&&!data?.conflict))throw await scfServerSaveError(error,data,'Chưa lưu được chiều ảnh lên máy chủ.');
+  return data;
+}
 async function serverSaveEmployees(employees,requestTimeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
   const payload=sanitizeEmployeesForServer(employees);
