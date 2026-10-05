@@ -379,6 +379,11 @@ th{font-family:var(--ui-header-family)!important}
 }
 .trip-attendance-list,.trip-mobile-orders{display:grid;gap:8px}
 .trip-invoice-mode-toggle.active{background:var(--pri);color:#fff;border-color:var(--pri)}
+.trip-report-return{margin-bottom:12px;scroll-margin-top:120px}
+.trip-report-return button{min-height:44px;white-space:normal;text-align:left}
+.trip-detail-table th:first-child,.trip-detail-table .trip-detail-sequence-cell{width:76px;min-width:76px;text-align:center;padding-left:8px;padding-right:8px}
+.trip-detail-sequence-cell .trip-number-confirm{width:48px;min-width:0}
+.trip-detail-sequence-cell input{width:100%!important;max-width:100%;min-width:0}
 .trip-invoice-preview{--invoice-width:200px;--invoice-height:260px;--invoice-mobile-height:340px;margin:0 0 8px;width:var(--invoice-width);max-width:100%;display:grid;gap:6px}
 .trip-invoice-preview.invoice-size-small{--invoice-width:140px;--invoice-height:185px;--invoice-mobile-height:240px}
 .trip-invoice-preview.invoice-size-large{--invoice-width:420px;--invoice-height:560px;--invoice-mobile-height:460px}
@@ -1116,6 +1121,11 @@ tbody tr:hover td{background:var(--bg)}
 .asset-document-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0}
 .asset-document-group{padding:12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg2);min-width:0}
 .asset-document-group>strong{display:block;margin-bottom:8px}
+.asset-type-help,.asset-profile-edit p{font-size:13px;line-height:1.5;color:var(--tx2);margin-bottom:12px}
+.asset-profile-edit button{min-height:44px}
+.asset-document-entry{border:1px solid var(--bd);border-radius:10px;padding:12px;background:var(--bg2);min-width:0}
+.asset-document-entry .asset-document-group{padding:0;border:0;margin-bottom:12px}
+.asset-document-entry .fl{margin-bottom:0}
 .asset-file-row{display:flex;align-items:center;gap:4px;margin:6px 0}
 .asset-file-link{display:flex;align-items:center;gap:7px;max-width:100%;min-width:0;overflow-wrap:anywhere;text-align:left;font-size:13px}
 .asset-upload-button{position:relative;display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;cursor:pointer;background:var(--bg);font-size:13px}

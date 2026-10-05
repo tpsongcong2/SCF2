@@ -88,7 +88,8 @@ function AssetForm({asset,onSave,onClose}){
   const picker=(kind,label)=>h(AssetFilePicker,{key:kind,label,assetId:f.id,kind,files:f.attachments?.[kind]||[],onChange:files=>sf(p=>({...p,attachments:{...(p.attachments||{}),[kind]:files}})),onBusy:(key,value)=>setUploads(p=>({...p,[key]:value}))});
   return h(Modal,{title:asset?'Sửa tài sản':'Thêm tài sản',onClose:close,lg:true},
     h(F,{label:'Tên tài sản *'},h('input',{value:f.name,onChange:e=>s('name',e.target.value),placeholder:'Tên tài sản...'})),
-    h(F,{label:'Loại tài sản'},h('select',{value:f.assetType||'other',disabled:busy,onChange:e=>s('assetType',e.target.value)},h('option',{value:'other'},'Máy móc / tài sản khác'),h('option',{value:'vehicle'},'Xe'))),
+    h(F,{label:'Loại tài sản'},h('select',{'aria-label':'Loại tài sản',value:f.assetType||'other',disabled:busy,onChange:e=>s('assetType',e.target.value)},h('option',{value:'other'},'Máy móc / tài sản khác'),h('option',{value:'vehicle'},'Xe'))),
+    f.assetType!=='vehicle'&&h('p',{className:'asset-type-help'},'Nếu là xe, chọn loại “Xe” để nhập riêng đăng ký, đăng kiểm, bảo hiểm và ngày hết hạn.'),
     h('div',{className:'g2'},
       h(F,{label:'Giá trị mua'},h(NumInput,{value:f.purchaseValue,onChange:v=>s('purchaseValue',v)})),
       h(F,{label:'Giá trị hiện tại'},h(NumInput,{value:f.currentValue,onChange:v=>s('currentValue',v)}))
@@ -97,7 +98,7 @@ function AssetForm({asset,onSave,onClose}){
     h('div',{className:'asset-document-grid'},picker('photos','Ảnh tài sản'),picker('other','Tài liệu liên quan')),
     (f.assetType==='vehicle'||SCF_ASSET_DOCUMENT_TYPES.some(t=>f[t.expiry]||(f.attachments?.[t.key]||[]).length))&&h('section',{className:'asset-vehicle-documents'},
       h('h3',null,'Hồ sơ xe'),h('p',{className:'muted'},'Chuông thông báo nhắc từ 10 ngày trước hạn. Mỗi tệp tối đa 15 MB.'),
-      h('div',{className:'asset-document-grid'},SCF_ASSET_DOCUMENT_TYPES.map(type=>h('div',{key:type.key},picker(type.key,type.label),type.expiry&&h(F,{label:'Ngày hết hạn '+type.label.toLowerCase()},h('input',{type:'date',value:f[type.expiry]||'',onChange:e=>s(type.expiry,e.target.value)})))))
+      h('div',{className:'asset-document-grid'},SCF_ASSET_DOCUMENT_TYPES.map(type=>h('div',{key:type.key,className:'asset-document-entry'},picker(type.key,type.label),type.expiry&&h(F,{label:'Ngày hết hạn '+type.label.toLowerCase()},h('input',{'aria-label':'Ngày hết hạn '+type.label.toLowerCase(),type:'date',value:f[type.expiry]||'',onChange:e=>s(type.expiry,e.target.value)})))))
     ),
     busy&&h('p',{role:'status'},'Đang tải tệp lên kho tài liệu. Vui lòng chờ trước khi lưu.'),
     h(Row,null,
@@ -106,9 +107,15 @@ function AssetForm({asset,onSave,onClose}){
     )
   );
 }
-function AssetDetails({asset,onClose}){
+function AssetDetails({asset,onClose,onEdit}){
   const groups=[{key:'photos',label:'Ảnh tài sản'},...SCF_ASSET_DOCUMENT_TYPES,{key:'other',label:'Tài liệu liên quan'}];
-  return h(Modal,{title:'Hồ sơ tài sản · '+asset.name,onClose,lg:true},h('div',{className:'asset-document-grid'},groups.map(group=>h('section',{key:group.key,className:'asset-document-group'},h('strong',null,group.label),group.expiry&&h('p',null,'Hết hạn: '+(asset[group.expiry]?asset[group.expiry].split('-').reverse().join('/'):'Chưa nhập')),(asset.attachments?.[group.key]||[]).map(file=>h(AssetFileLink,{key:file.id||file.path,file})),!(asset.attachments?.[group.key]||[]).length&&h('p',{className:'muted'},'Chưa có tệp')))));
+  return h(Modal,{title:'Hồ sơ tài sản · '+asset.name,onClose,lg:true},
+    typeof onEdit==='function'&&h('div',{className:'asset-profile-edit'},
+      asset.assetType!=='vehicle'&&h('p',null,'Nếu tài sản này là xe, bấm “Nhập hồ sơ xe” để nhập giấy tờ và ngày hết hạn riêng từng loại.'),
+      asset.assetType!=='vehicle'&&h('button',{type:'button',className:'bs','data-scf-action':'write',onClick:()=>onEdit(asset),style:{marginRight:8}},'Cập nhật ảnh / tài liệu'),
+      h('button',{type:'button',className:'bp','data-scf-action':'write',onClick:()=>onEdit(asset.assetType==='vehicle'?asset:{...asset,assetType:'vehicle'})},h('i',{className:'ti ti-edit'}),asset.assetType==='vehicle'?' Cập nhật hồ sơ xe':' Nhập hồ sơ xe')
+    ),
+    h('div',{className:'asset-document-grid'},groups.map(group=>h('section',{key:group.key,className:'asset-document-group'},h('strong',null,group.label),group.expiry&&h('p',null,'Hết hạn: '+(asset[group.expiry]?asset[group.expiry].split('-').reverse().join('/'):'Chưa nhập')),(asset.attachments?.[group.key]||[]).map(file=>h(AssetFileLink,{key:file.id||file.path,file})),!(asset.attachments?.[group.key]||[]).length&&h('p',{className:'muted'},'Chưa có tệp')))));
 }
 function AssetsTab({assets,setAssets,currentUser}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[q,sq]=useState('');
@@ -148,7 +155,7 @@ function AssetsTab({assets,setAssets,currentUser}){
       ))
     }),
     writable&&modal==='f'&&h(AssetForm,{asset:edit,onSave:save,onClose:()=>{sm(null);se(null);}}),
-    modal==='view'&&edit&&h(AssetDetails,{asset:edit,onClose:()=>{sm(null);se(null);}})
+    modal==='view'&&edit&&h(AssetDetails,{asset:edit,onClose:()=>{sm(null);se(null);},onEdit:writable?asset=>{se(asset);sm('f');}:undefined})
   );
 }
 
