@@ -148,7 +148,24 @@ function resolveOrderPointAliases(order,customers){
     .filter(Boolean);
   return {resolved,pt,aliases:[...new Set(aliases)]};
 }
+const PROD_ORDER_SHIFT_CACHE=new WeakMap();
+const PROD_ORDER_EMPTY_CUSTOMERS=[];
 function getProdShiftForOrder(order,prodShifts,customers){
+  if(!order||!Array.isArray(prodShifts))return null;
+  const points=Array.isArray(customers)?customers:PROD_ORDER_EMPTY_CUSTOMERS;
+  let byCustomers=PROD_ORDER_SHIFT_CACHE.get(prodShifts);
+  if(!byCustomers){byCustomers=new WeakMap();PROD_ORDER_SHIFT_CACHE.set(prodShifts,byCustomers);}
+  let matches=byCustomers.get(points);
+  if(!matches){matches=new Map();byCustomers.set(points,matches);}
+  // Ngày và số lượng không ảnh hưởng đến việc chọn ca. Các đơn cùng điểm/giờ
+  // dùng lại kết quả; lịch SX hoặc danh mục điểm mới có bộ nhớ riêng.
+  const key=JSON.stringify([normalizeTimeInput(order.deliveryTime),order.pointId,order.ptId,order.pointName,order.address,order.customerId,order.custId,order.customer,order.area]);
+  if(matches.has(key))return matches.get(key);
+  const shift=scfMatchProdShiftForOrder(order,prodShifts,points);
+  if(matches.size>=4096)matches.clear();
+  matches.set(key,shift);return shift;
+}
+function scfMatchProdShiftForOrder(order,prodShifts,customers){
   if(!order||!prodShifts)return null;
   if(!/^\d{1,2}:\d{2}$/.test(normalizeTimeInput(order.deliveryTime)))return null;
   const tMin=timeToMin(order.deliveryTime);

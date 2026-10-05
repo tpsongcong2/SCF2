@@ -749,11 +749,12 @@ function scfCreateTripOrderReader(orders,customers,products){
     },
     weight(trip){
       const result=entry(trip);if(result.weight!==undefined)return result.weight;
-      result.weight=result.orders.reduce((total,order)=>total+(order.lines||[]).reduce((sum,line)=>{
+      const calculated=result.orders.reduce((total,order)=>total+(order.lines||[]).reduce((sum,line)=>{
         const product=productById.get(line.productId),qty=numFmt(line.qtyInvoice)||numFmt(line.qtyProd)||numFmt(line.qty)||numFmt(line.quantity)||0;
         const unit=String(line.unit||product?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');
         return sum+(['kg','kgs','kilogram','kilograms'].includes(unit)?qty:(product?.weightPerUnit||numFmt(line.weightPerUnit)||0)*qty);
-      },0),0)||numFmt(trip.totalWeight);
+      },0),0);
+      result.weight=result.orders.length?calculated:numFmt(trip.totalWeight);
       return result.weight;
     }
   };
@@ -1108,7 +1109,8 @@ function TripOrdersManageModal({trip,orders,canAdd,canEdit,onAdd,onEdit,onClose}
   );
 }
 
-function TripsTab({trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,prodCats,quotes,financeDebts,setFinanceDebts,company,currentUser,notify}){
+function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,prodCats,quotes,financeDebts,setFinanceDebts,company,currentUser,notify}){
+  const trips=React.useMemo(()=>scfTripMembershipView(storedTrips,orders),[storedTrips,orders]);
   const tripOrderReader=React.useMemo(()=>scfCreateTripOrderReader(orders,customers,products),[orders,customers,products]);
   const[listSelection,setListSelection]=useState(null);
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);const[additionalTrip,setAdditionalTrip]=useState(null);const[printOrder,setPrintOrder]=useState(null);

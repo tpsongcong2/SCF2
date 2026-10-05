@@ -80,6 +80,9 @@ button:hover{background:var(--bg2)}
 .delivery-line-note-row+.delivery-line-note-row{border-top:1px dashed var(--bd)}
 .delivery-group-header-cell{background:#2d6a4f!important;color:#fff!important;font-weight:700!important;font-size:13px!important;padding:5px 12px!important}
 .delivery-group-header{display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:4px 16px;width:100%;text-align:left}
+.delivery-group-driver{display:inline-flex;align-items:center;gap:8px;max-width:100%}
+.delivery-group-driver-edit{flex:0 0 auto;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45);padding:4px 8px;min-width:32px;min-height:30px;border-radius:6px;cursor:pointer}
+.delivery-group-driver-edit:hover{background:rgba(255,255,255,.18)}
 .delivery-group-title,.delivery-group-driver{overflow-wrap:anywhere}
 .delivery-group-summary{white-space:nowrap;font-size:12px;font-weight:700}
 .delivery-group-header-mobile{background:#2d6a4f;color:#fff;font-weight:700;font-size:13px;padding:8px 12px;border-radius:10px;flex-wrap:wrap}

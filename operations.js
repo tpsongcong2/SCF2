@@ -1662,20 +1662,26 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
   const garageOptions=(garages||[]).filter(g=>g&&g.name&&(g.active!==false||String(g.id||'')===String(form.garageId||''))).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'vi'));
   const matchedFormGarage=garageOptions.find(g=>String(g.id||'')===String(form.garageId||'')||normalizeText(g.name)===normalizeText(form.garage));
   const garageSelectValue=matchedFormGarage?String(matchedFormGarage.id||''):(form.garage?'__legacy__':'');
+  const electricalDepartment=emp=>employeeDepartments(emp).find(value=>{
+    const name=normalizeDepartmentName(value);
+    return name.includes('co dien')||name.includes('dien co')||/^(bp12|bp012)$/.test(name);
+  });
   const repairerOptions=(employees||[])
     .filter(emp=>{
       if(isVehicle) return true;
       const role=String(emp?.role||'').trim().toLowerCase();
-      return role==='staff' && employeeDepartmentIncludes(emp,'Sản xuất') && !isFemaleGender(emp?.gender,emp?.female);
+      return !!electricalDepartment(emp)||(role==='staff' && employeeDepartmentIncludes(emp,'Sản xuất') && !isFemaleGender(emp?.gender,emp?.female));
     })
     .map(emp=>{
       const id=String(emp?.id||emp?.code||emp?.username||emp?.name||'').trim();
       const name=String(emp?.name||emp?.fullName||emp?.id||'').trim();
       if(!id&&!name) return null;
-      return {id:id||name,name:name||id,label:[emp?.id||emp?.code||'',emp?.name||emp?.fullName||''].filter(Boolean).join(' - ')||id||name};
+      const electricalDept=electricalDepartment(emp),isElectrical=!!electricalDept;
+      const label=[emp?.id||emp?.code||'',emp?.name||emp?.fullName||''].filter(Boolean).join(' - ')||id||name;
+      return {id:id||name,name:name||id,isElectrical,label:label+(isElectrical?' · '+electricalDept:'')};
     })
     .filter(Boolean)
-    .sort((a,b)=>a.label.localeCompare(b.label,'vi'));
+    .sort((a,b)=>Number(b.isElectrical)-Number(a.isElectrical)||a.label.localeCompare(b.label,'vi'));
   useEffect(()=>{
     let off=false;
     dbGet(storageKey,items).then(data=>{if(!off&&data)_setItems(data);});
@@ -2026,6 +2032,7 @@ function MaintenanceTab({title,icon,assets,employees,garages=[],setPage}){
         :h('div',{className:'g2'},
             h(F,{label:'Người sửa'},
               h('div',{style:{display:'grid',gap:8}},
+                h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Có thể chọn nhiều nhân viên cùng sửa.'),
                 repairerOptions.length
                   ?h('div',{style:{maxHeight:180,overflow:'auto',border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,display:'grid',gap:8,background:'#fff'}},
                       repairerOptions.map(opt=>{

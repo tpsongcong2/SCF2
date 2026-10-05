@@ -19,6 +19,37 @@ function scfEscapePrintData(value){
 }
 
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+// The order's explicit trip link wins over the trip's older cached orderIds.
+// Only legacy orders without a link may fall back to that cached membership.
+function scfCreateOrderTripIndex(orders,trips){
+  const tripById=new Map(),legacyByOrderId=new Map(),ordersByTripId=new Map();
+  (trips||[]).forEach(trip=>{
+    const id=String(trip?.id||'');if(!id)return;
+    tripById.set(id,trip);
+    (trip.orderIds||[]).forEach(orderId=>{const key=String(orderId);if(!legacyByOrderId.has(key))legacyByOrderId.set(key,id);});
+  });
+  const tripForOrder=order=>{
+    const explicit=String(order?.tripId||'');
+    if(explicit)return tripById.get(explicit)||null;
+    if(order?.tripAssignMode==='manual')return null;
+    return tripById.get(legacyByOrderId.get(String(order?.id||'')))||null;
+  };
+  (orders||[]).forEach(order=>{
+    const trip=tripForOrder(order);if(!trip)return;
+    const id=String(trip.id),members=ordersByTripId.get(id)||[];
+    members.push(order);ordersByTripId.set(id,members);
+  });
+  return {tripById,tripForOrder,ordersByTripId};
+}
+function scfTripMembershipView(trips,orders){
+  const index=scfCreateOrderTripIndex(orders,trips);
+  return (trips||[]).map(trip=>{
+    const wanted=[...new Set((index.ordersByTripId.get(String(trip.id))||[]).map(order=>order.id))];
+    const current=trip.orderIds||[];
+    const sameMembers=wanted.length===current.length&&wanted.every((id,i)=>String(id)===String(current[i]));
+    return sameMembers&&(wanted.length||!trip.totalWeight)?trip:{...trip,orderIds:wanted,...(!wanted.length?{totalWeight:0}:{})};
+  });
+}
 const fmtDate=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
 const fmtDT=()=>{const d=new Date();return fmtDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
 const numFmt=n=>{if(n===null||n===undefined||n==='')return 0;if(typeof n==='number')return Number.isFinite(n)?n:0;const s=String(n).trim().replace(/\s+/g,'').replace(',','.');const m=s.match(/-?\d+(\.\d+)?/);return m?Number(m[0])||0:0;};
