@@ -44,7 +44,7 @@ function filterTripAdditionalProducts(products,prodCats,orderLines,category,quer
 function scfTripProductTone(value){
   const name=normalizePlainText(value).replace(/[^a-z0-9]+/g,' ').trim();
   if(/(?:^|\s)(?:banh|b)\s+cuon(?:\s|$)/.test(name))return 'yellow';
-  if(name.includes('banh chung')||/(?:^|\s)quay(?:\s|$)/.test(name))return 'brick';
+  if(name.includes('banh chung')||/(?:^|\s)(?:quay|pho\s+cuon)(?:\s|$)/.test(name))return 'brick';
   return '';
 }
 function scfTripProductHighlightStyle(value){
@@ -976,7 +976,7 @@ function renderTripImage(trips,orders,products,customers,title,prodCats=[]){
     rows.forEach(row=>{
       const tone=scfTripProductTone(row[2]);
       const brick=row.isGoods||scfTripImageEarlyOrder(trip,row)||tone==='brick';
-      blocks.push({cells:visibleColumns.map(index=>row[index]),fill:brick?'#f4af86':tone==='yellow'?'#ffff00':tripFill});
+      blocks.push({cells:visibleColumns.map(index=>row[index]),fill:tone==='yellow'?'#ffff00':brick?'#f4af86':tripFill});
     });
   });
   blocks.forEach(block=>{
@@ -1053,7 +1053,7 @@ function TripDayImageModal({trips,orders,products,customers,prodCats=[],date,onC
     return()=>{active=false;if(imageUrl.current)URL.revokeObjectURL(imageUrl.current);};
   },[]);
   return h(Modal,{title:'Xem ảnh đơn tổng theo ngày',lg:true,onClose},
-    h('p',null,'Ngày '+(date||fmtDate())+' · '+trips.length+' chuyến. Nền xanh/trắng xen kẽ; tên lái xe và bánh cuốn tô vàng, đơn theo giờ đặc biệt và hàng hóa tô màu gạch.'),
+    h('p',null,'Ngày '+(date||fmtDate())+' · '+trips.length+' chuyến. Nền xanh/trắng xen kẽ; tên lái xe và mọi loại bánh cuốn tô vàng. Phở cuốn, đơn theo giờ đặc biệt và hàng hóa khác tô màu gạch.'),
     busy&&h('p',null,'Đang tạo ảnh đơn tổng…'),
     error&&h('p',{role:'alert',style:{color:'#b51e20'}},error),
     image&&h('div',null,
