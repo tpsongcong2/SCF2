@@ -732,7 +732,7 @@ function TopNav({page,setPage,role,perms,dept}){
   );
 }
 
-function MobileNav({page,setPage,role,perms,dept,onLogout}){
+function MobileNav({page,setPage,role,perms,dept,onLogout,onQuickTripSummary}){
   const[open,setOpen]=useState(false);
   const groups=[]; let cur=null;
   NAV.forEach(item=>{
@@ -747,7 +747,7 @@ function MobileNav({page,setPage,role,perms,dept,onLogout}){
     .filter(item=>item&&canAccess(role,item.key,perms,dept));
   const currentIsQuick=quick.some(item=>item.key===page);
   const go=key=>{setPage(key);setOpen(false);};
-  const items=[...quick,{key:'more',icon:'ti-grid-dots',label:'Thêm'}];
+  const items=[...quick,...(onQuickTripSummary?[{key:'quick-summary',icon:'ti-photo-search',label:'Đơn tổng'}]:[]),{key:'more',icon:'ti-grid-dots',label:'Thêm'}];
 
   return h(React.Fragment,null,
     open&&h('div',{className:'mobile-nav-backdrop',onClick:()=>setOpen(false),role:'presentation'}),
@@ -780,7 +780,9 @@ function MobileNav({page,setPage,role,perms,dept,onLogout}){
       )
     ),
     h('nav',{className:'mobile-nav','aria-label':'Điều hướng nhanh',style:{gridTemplateColumns:'repeat('+items.length+',1fr)'}},
-      items.map(item=>item.key==='more'
+      items.map(item=>item.key==='quick-summary'
+        ?h('button',{type:'button',key:item.key,className:'mobile-nav-btn mobile-nav-summary',onClick:()=>{setOpen(false);onQuickTripSummary();},'aria-label':'Xem nhanh đơn tổng',title:item.label},h('i',{className:'ti '+item.icon}),h('span',null,item.label))
+        :item.key==='more'
         ?h('button',{key:item.key,className:'mobile-nav-btn'+(open||!currentIsQuick?' on':''),onClick:()=>setOpen(v=>!v),'aria-label':'Mở tất cả chức năng',title:'Thêm'},
           h('i',{className:'ti '+(open?'ti-x':item.icon)})
         )

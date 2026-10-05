@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V479';
+const SCF_BUILD_VERSION='V485';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -306,6 +306,8 @@ function App(){
     return()=>{stopped=true;clearInterval(timer);document.removeEventListener('visibilitychange',visible);};
   },[session?.id]);
   const[menuHidden,setMenuHidden]=useLS('scf_topnav_hidden',false);
+  const[quickTripSummaryOpen,setQuickTripSummaryOpen]=useState(false);
+  const quickSummaryUserRef=React.useRef(null);
   const[employees,_se]=useState(SCF_SERVER_AUTH_ENABLED?[]:DEF_EMPS);
   const[company,_sc]=useState(DEF_COMPANY);
   const[materials,_sm]=useState(DEF_MATERIALS);
@@ -447,6 +449,16 @@ function App(){
     ?(authEmployee&&(employees.find(e=>String(e.id)===String(authEmployee.id))||authEmployee))
     :(session?employees.find(e=>String(e.id)===String(session.id)):null);
   const cuAccessDepartments=employeeDepartments(cu);
+  quickSummaryUserRef.current=cu;
+  useEffect(()=>setQuickTripSummaryOpen(false),[cu?.id]);
+  const loadQuickSummaryData=async()=>{
+    const owner=quickSummaryUserRef.current;
+    const data=await scfLoadQuickTripSummaryData(owner);
+    const current=quickSummaryUserRef.current;
+    if(!current||String(current.id)!==String(owner?.id)||!canViewTripQuickSummary(current))throw Error('Phiên đăng nhập đã thay đổi. Hãy mở lại đơn tổng.');
+    _st(data.trips);_so(data.orders);_sp(data.products);_scu(data.customers);_spc(data.prodCats);
+    return data;
+  };
   const resources={
     company:[DEF_COMPANY,_sc,v=>({...DEF_COMPANY,...v})],ui_settings:[DEF_UI_SETTINGS,_sui,normalizeUiSettings],
     materials:[[],_sm],assets:[[],_sas],garages:[[],_sg],prodcats:[[],_spc],
@@ -858,7 +870,8 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         wips.includes(page)&&h(PlaceholderTab,{title:PTITLES[page],icon:PICONS[page]||'ti-clock'})
         )
       ),
-      (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,onLogout:logout})
+      quickTripSummaryOpen&&!isFaceMask&&canViewTripQuickSummary(cu)&&h(TripQuickSummaryModal,{key:cu.id,currentUser:cu,employees,loadData:loadQuickSummaryData,onClose:()=>setQuickTripSummaryOpen(false)}),
+      (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,onLogout:logout,onQuickTripSummary:!isFaceMask&&canViewTripQuickSummary(cu)?()=>setQuickTripSummaryOpen(true):undefined})
     ),
     cu.mustChangePw&&h(CpwModal,{
       emp:cu,cu,forced:true,onClose:logout,onExit:logout,
