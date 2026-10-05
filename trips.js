@@ -175,6 +175,13 @@ function TripNumberConfirm({value,onCommit,label,min=0,integer=false,placeholder
 }
 function TripBasketInput({value,onCommit,label}){return h(TripNumberConfirm,{value,onCommit,label,min:0,width:62});}
 function TripDeliveryOrderConfirm({value,onCommit}){return h(TripNumberConfirm,{value,onCommit,label:'Số thứ tự',min:1,integer:true,placeholder:'...',width:64});}
+function scfTripDriverEditAllowed(trip,user){
+  if(!canTripAction(user,'manage'))return false;
+  if(['active','completion_pending','completed','cancelled'].includes(trip?.status))return false;
+  // Dấu giao LX còn sót trên chuyến lập kế hoạch không được khóa việc chọn lái.
+  if(!trip?.driverDispatchedAt||trip.status==='planning')return true;
+  return ['admin','administrator'].includes(String(user?.role||'').trim().toLowerCase())||employeeDepartmentIncludes(user,'Kế toán');
+}
 function TripForm({trip,orders,employees,shifts,customers,products,currentUser,initialDate,canCreatePastTrip,onSave,onClose}){
   const drivers=employees.filter(e=>e.role==='driver'||employeeHasDepartment(e,'Lái xe'));
   const[f,sf]=useState(trip?{driverWork:0,weightRate:0,tripAllowance:0,attendanceStatus:'pending',...trip}:{driverName:'',driverId:'',shiftId:'',shiftName:'',deliveryDate:initialDate||fmtDate(),deliveryTime:'07:00',orderIds:[],note:'',status:'planning',driverWork:0,weightRate:0,tripAllowance:0,attendanceStatus:'pending'});
@@ -229,14 +236,16 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,i
   const allFilteredChecked=filteredOrders.length>0&&filteredOrders.every(o=>(f.orderIds||[]).includes(o.id));
   const someFilteredChecked=filteredOrders.some(o=>(f.orderIds||[]).includes(o.id))&&!allFilteredChecked;
   const isStarted=!!trip?.driverDispatchedAt||['active','completion_pending','completed'].includes(f.status);
+  const driverLocked=!scfTripDriverEditAllowed(trip,currentUser);
 
   return h(Modal,{title:trip?'Sửa chuyến '+trip.id:'Tạo chuyến giao hàng',onClose,lg:true},
     h('div',{className:'g2'},
-      h(F,{label:'Lái xe'},h('select',{value:f.driverId,disabled:isStarted,onChange:e=>{const emp=employees.find(x=>x.id===e.target.value);sf(p=>({...p,driverId:e.target.value,driverName:emp?emp.name:'',driverAssignMode:'manual'}));},style:{marginBottom:0}},
+      h(F,{label:'Lái xe'},h('select',{value:f.driverId,disabled:driverLocked,onChange:e=>{if(driverLocked)return;const emp=employees.find(x=>x.id===e.target.value);sf(p=>({...p,driverId:e.target.value,driverName:emp?emp.name:'',driverAssignMode:'manual'}));},style:{marginBottom:0}},
         h('option',{value:''},'— Chọn từ danh sách —'),drivers.map(e=>h('option',{key:e.id,value:e.id},e.name))
       )),
-      h(F,{label:'Hoặc nhập tên lái xe'},h('input',{value:f.driverName,disabled:isStarted,onChange:e=>sf(p=>({...p,driverId:'',driverName:e.target.value,driverAssignMode:'manual'})),placeholder:'Có thể để trống khi lập kế hoạch'})),
+      h(F,{label:'Hoặc nhập tên lái xe'},h('input',{value:f.driverName,disabled:driverLocked,onChange:e=>{if(!driverLocked)sf(p=>({...p,driverId:'',driverName:e.target.value,driverAssignMode:'manual'}));},placeholder:'Có thể để trống khi lập kế hoạch'})),
     ),
+    driverLocked&&h('p',{role:'status',style:{fontSize:13,color:'var(--tx2)'}},['active','completion_pending','completed','cancelled'].includes(trip?.status)?'Chuyến đang giao hoặc đã kết thúc nên không thể đổi lái xe.':'Chuyến đã giao lái xe. Admin hoặc Kế toán có quyền sửa chuyến mới được đổi lái khi chưa bắt đầu giao.'),
     h('div',{className:'g3'},
       h(F,{label:'Ngày giao'},h('input',{value:f.deliveryDate,onChange:e=>s('deliveryDate',e.target.value),placeholder:'DD/MM/YYYY'})),
       h(F,{label:'Ca giao'},h('select',{value:f.shiftId,onChange:e=>{const sh=(shifts||[]).find(x=>x.id===e.target.value);sf(p=>{const driver=scfShiftDriverAt(sh,{deliveryDate:p.deliveryDate});return{...p,shiftId:e.target.value,shiftName:sh?sh.name:'',deliveryTime:sh&&(sh.timeStart||sh.startTime)?(sh.timeStart||sh.startTime):p.deliveryTime,...(p.driverAssignMode==='auto'||(!p.driverId&&!p.driverName&&p.driverAssignMode!=='manual')?{...driver,driverAssignMode:'auto'}:{})};});}},
@@ -1255,7 +1264,8 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
   },[trips.length,orders.length]);
   let tSeq=trips.length+1;
   const orderStatusForTrip=s=>s==='planning'?'pending':s==='assigned'?'assigned':s==='active'?'delivering':['completion_pending','completed'].includes(s)?'done':'pending';
-  const save=d=>{
+  const save=input=>{
+    const d={...input};
     if(!canManageTrips)return;
     if(!edit&&(!scfTripDateKey(d.deliveryDate)||(scfTripIsPastDate(d.deliveryDate)&&!canCreatePastTrip))){window.showToast('Ngày giao không hợp lệ hoặc bạn không được tạo chuyến cho ngày cũ.','warn');return;}
     const duplicate=scfFindDuplicateTrip(trips,{...d,id:edit?.id||''});
@@ -1266,6 +1276,13 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
       const oldOrderIds=new Set((old?.orderIds||[]).map(String));
       const nextOrderIds=new Set((d.orderIds||[]).map(String));
       const driverChanged=String(d.driverId||'')!==String(old?.driverId||'')||String(d.driverName||'').trim()!==String(old?.driverName||'').trim();
+      if(driverChanged&&!scfTripDriverEditAllowed(old,currentUser)){window.showToast('Chuyến đã bắt đầu giao, đã kết thúc hoặc bạn không có quyền đổi lái xe.','warn');return;}
+      if(driverChanged&&old?.status==='planning'){
+        d.status=d.driverId||String(d.driverName||'').trim()?'assigned':'planning';
+        // Chuyến lập kế hoạch chưa giao cho lái mới. Xóa dấu giao LX cũ để
+        // người lập chuyến có thể giao lại sau khi đã chọn đúng lái xe.
+        if(old.driverDispatchedAt)Object.assign(d,{driverDispatchedAt:'',driverDispatchedBy:'',driverAcknowledgedAt:'',startTime:'',driverNotificationSentAt:'',driverNotificationRecipientId:''});
+      }
       const manualDriver=d.driverAssignMode==='manual'||(driverChanged&&d.driverAssignMode!=='auto');
       const stamp=fmtDT();
       const actor=currentUser?.name||'Người dùng';
