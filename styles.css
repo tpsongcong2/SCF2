@@ -91,8 +91,18 @@ button:hover{background:var(--bg2)}
 .delivery-production-shift-name{display:flex!important;justify-content:center;max-width:100%;white-space:normal;text-align:center;line-height:1.2}
 .delivery-production-shift-date{font-size:var(--ui-table-size)!important;font-weight:var(--ui-table-weight)!important;font-style:var(--ui-table-style)!important;color:var(--tx2);white-space:nowrap}
 .delivery-trip-cell{white-space:nowrap}
-.delivery-trip-content{display:grid;gap:6px;min-width:0;width:100%;white-space:nowrap}
-.delivery-trip-content select{min-width:0;max-width:100%}
+.delivery-trip-content{display:flex;align-items:center;gap:4px;min-width:0;width:100%;white-space:nowrap}
+.manual-trip-picker,.delivery-trip-auto-fields{display:flex;align-items:center;gap:4px;flex:1 1 auto;min-width:0;position:relative}
+.delivery-trip-date,.delivery-trip-choice{height:30px;min-height:30px;margin:0;padding:4px 5px;border:1px solid var(--bd);border-radius:6px;font-size:12px;background:#fff;min-width:0}
+.delivery-trip-date{flex:0 0 120px;width:120px;max-width:120px}
+.delivery-trip-choice{flex:1 1 0;width:0;overflow:hidden;text-overflow:ellipsis;color:var(--pri3)}
+.delivery-trip-choice:disabled,.delivery-trip-date[readonly]{color:var(--tx2);background:var(--bg2);opacity:1}
+.delivery-trip-mode-switch{flex:0 0 36px;width:36px;min-height:30px;height:30px;padding:0;border:1px solid #b9dccc;border-radius:6px;background:#e8f5ee;color:#1b5e20;font-size:11px;font-weight:700;cursor:pointer}
+.delivery-trip-mode-switch[data-mode="manual"]{background:#fff3cd;color:#8a5a00;border-color:#ebd590}
+.delivery-trip-mode-switch:disabled{cursor:not-allowed;opacity:.55}
+.delivery-trip-confirm{flex:0 0 30px;width:30px;min-width:30px;height:30px;margin:0;padding:0!important;display:flex;align-items:center;justify-content:center}
+.delivery-trip-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.delivery-trip-content.compact .delivery-trip-mode-switch,.manual-trip-picker.compact input,.manual-trip-picker.compact select,.delivery-trip-auto-fields.compact input,.delivery-trip-auto-fields.compact select,.manual-trip-picker.compact .delivery-trip-confirm{height:44px;min-height:44px}
 .delivery-orders-table{width:100%;table-layout:fixed}
 .order-detail-line-grid{position:relative;min-width:0}
 .order-line-remove{position:absolute;right:8px;bottom:10px;width:30px;height:30px;padding:0!important;display:flex;align-items:center;justify-content:center;color:#A32D2D!important;background:#fff!important;border:1px solid #F2B8B5!important;border-radius:8px!important}
@@ -344,6 +354,10 @@ th{font-family:var(--ui-header-family)!important}
 .delivery-card-trip-controls{display:grid;gap:10px;margin-top:12px}
 .delivery-card-trip-controls button{min-height:44px;font-size:13px}
 .delivery-card-trip-controls input,.delivery-card-trip-controls select{min-height:44px;min-width:0;max-width:100%;font-size:16px!important}
+.delivery-card-trip-controls.delivery-trip-content{display:flex;gap:4px}
+.delivery-card-trip-controls.delivery-trip-content button{height:44px;min-height:44px;font-size:13px}
+.delivery-card-trip-controls.delivery-trip-content .delivery-trip-date{flex-basis:140px;width:140px;max-width:140px}
+.delivery-card-trip-controls.delivery-trip-content input,.delivery-card-trip-controls.delivery-trip-content select{height:44px;min-height:44px}
 .delivery-card-empty{font-size:13px;color:var(--tx2);padding:8px 0}
 .delivery-editor-date-time{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .delivery-editor-point{position:relative}

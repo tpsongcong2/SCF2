@@ -118,7 +118,7 @@ function manualTripDateToISO(value){
 }
 function manualTripText(trip){
   if(!trip)return 'Chưa có chuyến phù hợp';
-  return [trip.deliveryDate,trip.shiftName,trip.driverName||'Chưa có lái xe',trip.area].filter(Boolean).join(' · ');
+  return [trip.shiftName||'Chưa có ca',trip.driverName||'Chưa có lái xe'].join(' · ');
 }
 const DELIVERY_TRIP_INDEX_CACHE=new WeakMap();
 function deliveryTripIndex(trips){
@@ -159,11 +159,24 @@ function manualTripForOrder(trips,order){
   if(order?.tripAssignMode==='manual')return null;
   return index.legacyOrder.get(String(order?.id||''))||null;
 }
+function DeliveryTripModeSwitch({mode,disabled,title,onChange}){
+  return h('button',{type:'button',className:'delivery-trip-mode-switch','data-scf-action':'write','data-mode':mode,
+    role:'switch','aria-label':'Xếp chuyến tự động','aria-checked':mode!=='manual',disabled,
+    title:title||(mode==='manual'?'Bằng tay · Bấm để chuyển về tự động':'Tự động · Bấm để chọn chuyến bằng tay'),onClick:onChange
+  },mode==='manual'?'BT':'TĐ');
+}
+function DeliveryAutomaticTripFields({trip,defaultDate,compact=false}){
+  return h('div',{className:'delivery-trip-auto-fields'+(compact?' compact':'')},
+    h('input',{className:'delivery-trip-date',type:'date',value:manualTripDateToISO(trip?.deliveryDate||defaultDate),readOnly:true,
+      title:'Ngày chuyến tự động','aria-label':'Ngày chuyến giao hàng'}),
+    h('select',{className:'delivery-trip-choice',value:trip?.id||'',disabled:true,title:manualTripText(trip),'aria-label':'Ca giao và lái xe'},
+      h('option',{value:trip?.id||''},manualTripText(trip)))
+  );
+}
 function ManualTripPicker({trips,selectedTripId,defaultDate,disabled,title,onConfirm,compact=false}){
   const selectedTrip=deliveryTripIndex(trips).byId.get(String(selectedTripId||''))||null;
   const initialDate=manualTripDateToISO(selectedTrip?.deliveryDate||defaultDate||(trips||[])[0]?.deliveryDate||'');
   const [date,setDate]=useState(initialDate);
-  const [query,setQuery]=useState('');
   const [draftTripId,setDraftTripId]=useState(selectedTripId||'');
   const [saving,setSaving]=useState(false);
   const [saveState,setSaveState]=useState('');
@@ -172,7 +185,7 @@ function ManualTripPicker({trips,selectedTripId,defaultDate,disabled,title,onCon
     if(next&&next!==date)setDate(next);
     setDraftTripId(selectedTripId||'');
   },[selectedTripId,defaultDate]);
-  const filtered=React.useMemo(()=>filterManualTripOptions(trips,date,query),[trips,date,query]);
+  const filtered=React.useMemo(()=>filterManualTripOptions(trips,date,''),[trips,date]);
   const selectedVisible=filtered.some(trip=>String(trip?.id||'')===String(draftTripId||''));
   const hasChange=String(draftTripId||'')!==String(selectedTripId||'');
   const confirm=async()=>{
@@ -182,24 +195,25 @@ function ManualTripPicker({trips,selectedTripId,defaultDate,disabled,title,onCon
     catch(error){setSaveState('error');window.showToast(error?.message||'Chưa lưu được chuyến đã chọn.','error');}
     finally{setSaving(false);}
   };
-  const inputStyle={fontSize:12,padding:compact?'5px 6px':'4px 6px',borderRadius:'var(--r)',border:'1px solid var(--bd)',width:'100%',minWidth:0,background:disabled?'var(--bg2)':'#fff'};
-  return h('div',{className:'manual-trip-picker',style:{display:'grid',gap:4}},
-    h('div',{style:{display:'grid',gridTemplateColumns:compact?'minmax(124px,.9fr) minmax(130px,1.1fr)':'minmax(118px,.9fr) minmax(110px,1.1fr)',gap:4}},
-      h('input',{type:'date',value:date,disabled,title:'Gõ hoặc chọn ngày chuyến',onChange:e=>{setDate(e.target.value);setQuery('')},style:inputStyle,'aria-label':'Ngày chuyến giao hàng'}),
-      h('input',{type:'search',value:query,disabled,placeholder:'Tìm ca, lái xe, khu vực…',title:'Tìm theo ca, lái xe hoặc khu vực',onChange:e=>setQuery(e.target.value),style:inputStyle,'aria-label':'Tìm chuyến giao hàng'})
-    ),
+  const needsConfirmation=hasChange||saving||saveState==='error';
+  return h('div',{className:'manual-trip-picker'+(compact?' compact':'')},
+    h('input',{className:'delivery-trip-date',type:'date',value:date,disabled:disabled||saving,title:'Gõ hoặc chọn ngày chuyến',onChange:e=>setDate(e.target.value),'aria-label':'Ngày chuyến giao hàng'}),
     h('select',{
+      className:'delivery-trip-choice','aria-label':'Ca giao và lái xe',
       value:selectedVisible?draftTripId:'',
       disabled:disabled||saving,
-      title,
+      title:title||manualTripText(deliveryTripIndex(trips).byId.get(String(draftTripId||''))),
       onChange:e=>{setDraftTripId(e.target.value);setSaveState('')},
-      style:{...inputStyle,color:draftTripId?'var(--pri)':'var(--tx2)',cursor:disabled?'not-allowed':'pointer'}
+      style:{color:draftTripId?'var(--pri)':'var(--tx2)'}
     },
       h('option',{value:''},filtered.length?'— Chọn chuyến trong ngày —':'— Không có chuyến phù hợp —'),
       filtered.map(trip=>h('option',{key:trip.id,value:trip.id},manualTripText(trip)))
     ),
-    (hasChange||saving||saveState==='error')&&h('button',{type:'button',className:'bp',disabled:disabled||saving,onClick:confirm,style:{width:'100%',padding:'7px 8px',fontSize:12}},saving?'Đang xác nhận trên máy chủ…':saveState==='error'?'Thử xác nhận lại':'Xác nhận chuyển xong'),
-    saveState==='error'&&h('span',{role:'alert',style:{fontSize:11,color:'#A32D2D'}},'Máy chủ chưa xác nhận. Chuyến đang chờ đồng bộ; vui lòng thử lại.')
+    needsConfirmation&&h('button',{type:'button',className:'bp delivery-trip-confirm',disabled:disabled||saving,onClick:confirm,
+      title:saving?'Đang xác nhận trên máy chủ…':saveState==='error'?'Máy chủ chưa xác nhận. Bấm để thử xác nhận lại.':'Xác nhận chuyển xong',
+      'aria-label':saving?'Đang xác nhận trên máy chủ':saveState==='error'?'Thử xác nhận lại':'Xác nhận chuyển xong'
+    },h('i',{className:saving?'ti ti-loader-2 spin':saveState==='error'?'ti ti-refresh':'ti ti-check','aria-hidden':true})),
+    saveState==='error'&&h('span',{role:'alert',className:'delivery-trip-status'},'Máy chủ chưa xác nhận. Chuyến đang chờ đồng bộ; vui lòng thử lại.')
   );
 }
 function OrderDetailLine({line,products,prodCats,prodShifts,deliveryDate,deliveryTime,pointName,area,inheritedShift,inheritedTiming,inheritedMode,onChange,onRemove}){
@@ -3809,8 +3823,6 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           const prodShiftCtx=ctx;
           const tripMode=o.tripAssignMode==='manual'?'manual':'auto';
           const productionData=detailColumnsHidden?null:productionDisplayForOrder(prodShiftCtx);
-          const tripDateOffset=productionData?.offset;
-          const tripDateOffsetLabel=(tripDateOffset===null||tripDateOffset===undefined||Number.isNaN(tripDateOffset))?'?':tripDateOffset;
           const preferredTripDate=o._preferredTripDate||getOrderTripDate(prodShiftCtx,prodShifts||[])||'';
           const preferredTripShiftName=o._preferredTripShiftName||getOrderTripShiftName(prodShiftCtx,prodShifts||[]);
           const autoTrip=o._effectiveTrip===undefined?deliveryTripForOrder(prodShiftCtx):o._effectiveTrip;
@@ -3822,27 +3834,17 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           const assignmentClosed=closedTrip(currentTrip)||ctx.status==='done';
           const assignmentLocked=assignmentClosed||(assignmentStarted&&!canWithdrawStartedOrder);
           const assignmentTitle=assignmentClosed?'Chuyến đã chờ duyệt/hoàn thành':assignmentLocked?'Đơn đang giao, chỉ Kế toán hoặc Admin được rút/chuyển':assignmentStarted?'Kế toán/Admin: chuyển sang chọn tay để rút hoặc chuyển đơn':'';
-          const tripLabel=autoTrip?.area||autoTrip?.shiftName||preferredTripShiftName;
           const plansForDisplay=productionData?.plans||[];
           const firstPlanForDisplay=productionData?.firstPlan;
           const planRows=plansForDisplay.length
             ?plansForDisplay.map((plan,pi)=>({key:plan.line?.id||('plan_'+pi),plan,line:plan.line||ctx.lines?.[pi]||{},productName:plan.productName||plan.line?.productName||'Sản phẩm'}))
             :(ctx.lines||[]).map((line,pi)=>({key:line.id||('line_'+pi),plan:null,line,productName:line.productName||'Sản phẩm'}));
           const tripSelect=!detailColumnsHidden&&h('div',{className:'delivery-trip-content'},
-            h('div',{style:{display:'flex',alignItems:'center',gap:6,flexWrap:'nowrap'}},
-              h('span',{className:'badge',style:{background:tripMode==='manual'?'#FFF3CD':'#E8F5E9',color:tripMode==='manual'?'#8A5A00':'#1B5E20'}},tripMode==='manual'?'Chọn tay':'T.Đ ('+tripDateOffsetLabel+')'),
-              tripLabel&&h('span',{className:'delivery-table-text',style:{color:'var(--tx2)'}},'Ca giao: '+tripLabel),
-              h('button',{
-                type:'button',
-                disabled:assignmentLocked||(assignmentStarted&&tripMode==='manual'),
-                title:assignmentTitle,
-                onClick:()=>setOrderTripMode(o,tripMode==='manual'?'auto':'manual'),
-                style:{padding:'3px 8px',fontSize:11,borderRadius:999,border:'1px solid var(--bd)',background:'#fff',cursor:assignmentLocked?'not-allowed':'pointer',opacity:assignmentLocked?.55:1}
-              },tripMode==='manual'?'Về T.Đ':'Đ.Tay')
-            ),
+            h(DeliveryTripModeSwitch,{mode:tripMode,disabled:assignmentLocked||(assignmentStarted&&tripMode==='manual'),title:assignmentTitle,
+              onChange:()=>setOrderTripMode(o,tripMode==='manual'?'auto':'manual')}),
             tripMode==='manual'
               ?h(ManualTripPicker,{trips:tripOptions,selectedTripId,defaultDate:preferredTripDate||ctx.deliveryDate,disabled:assignmentLocked,title:assignmentTitle,onConfirm:tripId=>assignTripManually(o,tripId)})
-              :h('div',{className:'delivery-table-text',style:{color:selectedTripId?'var(--pri3)':'var(--tx2)',lineHeight:1.4,padding:'2px 0',whiteSpace:'nowrap'}},manualTripText(autoTrip))
+              :h(DeliveryAutomaticTripFields,{trip:autoTrip,defaultDate:preferredTripDate||ctx.deliveryDate})
           );
           const productionShiftName=firstPlanForDisplay
             ?h('span',{className:'badge delivery-production-shift-name',title:prodShiftMode==='manual'?'Ca SX chọn tay':'Ca SX tự động',style:{background:firstPlanForDisplay.shift.color,color:firstPlanForDisplay.shift.textColor,border:prodShiftMode==='manual'?'1px solid '+firstPlanForDisplay.shift.textColor:'1px dashed '+firstPlanForDisplay.shift.textColor}},firstPlanForDisplay.shift.name)
@@ -3938,10 +3940,12 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           renderTripControls:()=>{
             if(!canEditMobileOrder)return null;
             const tripOptions=pickerTripsForOrder(ctx);
-            return h('div',{className:'delivery-card-trip-controls'},
-            h('button',{type:'button','data-scf-action':'write',disabled:assignmentLocked||(assignmentStarted&&tripMode==='manual'),title:assignmentTitle,
-              onClick:()=>setOrderTripMode(o,tripMode==='manual'?'auto':'manual')},tripMode==='manual'?'Chuyển về TĐ':'Chọn chuyến bằng tay'),
-            tripMode==='manual'&&h(ManualTripPicker,{trips:tripOptions,selectedTripId:ctx.tripId||'',defaultDate:displayTrip?.deliveryDate||preferredTripDate||ctx.deliveryDate,disabled:assignmentLocked,title:assignmentTitle,onConfirm:tripId=>assignTripManually(o,tripId),compact:true})
+            return h('div',{className:'delivery-card-trip-controls delivery-trip-content compact'},
+            h(DeliveryTripModeSwitch,{mode:tripMode,disabled:assignmentLocked||(assignmentStarted&&tripMode==='manual'),title:assignmentTitle,
+              onChange:()=>setOrderTripMode(o,tripMode==='manual'?'auto':'manual')}),
+            tripMode==='manual'
+              ?h(ManualTripPicker,{trips:tripOptions,selectedTripId:ctx.tripId||'',defaultDate:displayTrip?.deliveryDate||preferredTripDate||ctx.deliveryDate,disabled:assignmentLocked,title:assignmentTitle,onConfirm:tripId=>assignTripManually(o,tripId),compact:true})
+              :h(DeliveryAutomaticTripFields,{trip:displayTrip,defaultDate:preferredTripDate||ctx.deliveryDate,compact:true})
             );
           }
         });
