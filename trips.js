@@ -1006,7 +1006,8 @@ function scfInvoiceStatus(order){
   const queuedPatch=queue&&Array.isArray(queue.patches)?queue.patches.find(patch=>String(patch.id)===id):null;
   const queuedOrder=queue&&!Array.isArray(queue.patches)&&Array.isArray(queue.value)?queue.value.find(item=>String(item.id)===id):null;
   const baseOrder=queuedOrder&&Array.isArray(queue.baseValue)?queue.baseValue.find(item=>String(item.id)===id):null;
-  const pending=scfInvoiceUploads.has(id)||!!(queuedPatch&&queuedPatch.base?.invoiceImage!==queuedPatch.value?.invoiceImage)||!!(queuedOrder&&baseOrder&&queuedOrder.invoiceImage!==baseOrder.invoiceImage);
+  const confirmed=!!order.invoiceImage&&window.__SCF_CONFIRMED_INVOICES?.[id]===order.invoiceImage;
+  const pending=scfInvoiceUploads.has(id)||(!confirmed&&(!!(queuedPatch&&queuedPatch.base?.invoiceImage!==queuedPatch.value?.invoiceImage)||!!(queuedOrder&&baseOrder&&queuedOrder.invoiceImage!==baseOrder.invoiceImage)));
   return pending?'◷ HĐ đang chờ lưu':scfInvoiceRetryFiles.has(String(order.id))?'! Ảnh chưa tải lên':order.invoiceImage?'✓ Đã có HĐ':'○ Chưa có HĐ';
 }
 function TripMobileQuickUpdateModal({trip,orders,customers,products,prodCats,canEditTrip,canAddProduct,onAddProduct,onDeliveredQty,onInvoice,onRetryLocalInvoice,renderLineNote,renderBasket,onClose}){
@@ -1683,7 +1684,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
       saveImage(url);
       await new Promise(resolve=>setTimeout(resolve,0));
       persistSyncQueueNow();
-      const synced=await window.scfWaitForCollectionSync('scf_orders',50000)&&window.__SCF_CONFIRMED_INVOICES?.[uploadId]===url;
+      const synced=await window.scfWaitForOrderInvoiceSync(uploadId,url,50000);
       window.showToast(synced?'Đã lưu ảnh hóa đơn lên máy chủ.':'Ảnh đã tải lên nhưng đơn hàng chưa được máy chủ xác nhận. Hãy kiểm tra trạng thái đồng bộ.',synced?'success':'warn',7000);
     }catch(e){window.showToast('Chưa lưu được ảnh hóa đơn: '+(e.message||e)+(scfInvoiceRetryFiles.has(uploadId)?'. Có thể bấm Thử lưu ảnh lại.':'. Hãy kiểm tra trạng thái đồng bộ.'),'error',10000);}
     finally{scfInvoiceUploads.delete(uploadId);window.dispatchEvent(new CustomEvent('scf-sync-state'));}

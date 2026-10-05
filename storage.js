@@ -233,6 +233,7 @@ window.scfClearSensitiveLocalData=function(){
   try{sessionStorage.removeItem(SCF_SYNC_QUEUE_KEY);}catch{}
   delete window.__SCF_LAST_SYNC_ERROR;
   delete window.__SCF_COLLECTION_SYNC_RESULTS;
+  delete window.__SCF_CONFIRMED_INVOICES;
   delete window.__SCF_AUTH_DIAGNOSTICS;
   delete window.__SCF_ACCESS_CONTEXT;
   try{sessionStorage.removeItem('scf_auth_diagnostics');}catch{}
@@ -477,6 +478,7 @@ async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,base
   });
 }
 async function performDbSet(key,val,queuedAt='',mode=''){
+  const invoiceActorId=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
   if(serverAuthEnabled()){
     if(!sb){if(!readSyncQueue()[key])queueRemoteWrite(key,val,{updatedAt:queuedAt});return false;}
     try{
@@ -516,8 +518,11 @@ async function performDbSet(key,val,queuedAt='',mode=''){
       const patches=Array.isArray(queued.patches)&&queued.patches.length?queued.patches:null;
       const timeoutMs=remoteTimeoutFor(patches?{key,patches,expectedUpdatedAt}:{key,value:val,baseValue,expectedUpdatedAt});
       const saved=await scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,baseValue,timeoutMs);
-      if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
+      if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==invoiceActorId)return false;
+      // Keep this photo's server receipt even if a later edit owns the queue.
+      // The later edit still keeps its queue and reconciliation safeguards.
       scfVerifyInvoiceSave(key,saved,val,patches);
+      if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
       scfVerifyOrderTripSave(key,saved,val,patches);
       scfVerifyTripDriverSave(key,saved,val);
       const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(val);
@@ -618,6 +623,7 @@ function scheduleSyncRetry(){
   scfRetryTimer=setTimeout(async()=>{scfRetryTimer=null;await flushPendingWrites();},delay);
 }
 async function runPendingWrites(){
+  const invoiceActorId=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
   if(!navigator.onLine||!sb)return false;
   if(serverAuthEnabled()){
     try{const{data}=await sb.auth.getSession();if(!data?.session)return false;}catch{return false;}
@@ -648,8 +654,9 @@ async function runPendingWrites(){
         const patches=Array.isArray(item.patches)&&item.patches.length?item.patches:null;
         const timeoutMs=remoteTimeoutFor(patches?{key,patches,expectedUpdatedAt}:{key,value:item.value,baseValue,expectedUpdatedAt});
         const saved=await scfSavePermittedCollection(key,item.value,patches,expectedUpdatedAt,baseValue,timeoutMs);
-        if(readSyncQueue()[key]?.updatedAt!==item.updatedAt)return false;
+        if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==invoiceActorId)return false;
         scfVerifyInvoiceSave(key,saved,item.value,patches);
+        if(readSyncQueue()[key]?.updatedAt!==item.updatedAt)return false;
         scfVerifyOrderTripSave(key,saved,item.value,patches);
         scfVerifyTripDriverSave(key,saved,item.value);
         const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(item.value);
@@ -717,6 +724,40 @@ window.scfWaitForCollectionSync=function(key,timeoutMs=35000){
     };
     check();
   });
+};
+window.scfWaitForOrderInvoiceSync=async function(orderId,url,timeoutMs=50000){
+  const id=String(orderId),deadline=Date.now()+timeoutMs;
+  const actorId=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
+  const verifyAfter=deadline-Math.min(10000,timeoutMs/2);
+  let checked=false;
+  if(!id||!url)return false;
+  if(window.__SCF_CONFIRMED_INVOICES?.[id]===url)return true;
+  if(!navigator.onLine)return false;
+  // The invoice has its own receipt. Later quantity edits or another order's
+  // pending save must not turn an already confirmed photo into a warning.
+  window.scfSendCollectionsNow(['scf_orders']).catch(error=>console.warn('Invoice sync:',error?.message||error));
+  while(true){
+    if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==actorId)return false;
+    if(window.__SCF_CONFIRMED_INVOICES?.[id]===url)return true;
+    if(!navigator.onLine||Date.now()>=deadline)return false;
+    const pending=readSyncQueue().scf_orders||scfDebouncedWrites.scf_orders;
+    if(!checked&&typeof serverLoadOrderSyncRecords==='function'&&(!pending||Date.now()>=verifyAfter)){
+      checked=true;
+      try{
+        const saved=await serverLoadOrderSyncRecords([id],Math.max(1,Math.min(10000,deadline-Date.now())));
+        if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==actorId)return false;
+        const row=saved?.items?.find(item=>String(item.id)===id);
+        if(row?.invoiceImage===url){
+          window.__SCF_CONFIRMED_INVOICES=window.__SCF_CONFIRMED_INVOICES||{};
+          window.__SCF_CONFIRMED_INVOICES[id]=url;
+          return true;
+        }
+      }catch(error){console.warn('Invoice verification:',error?.message||error);}
+      if(window.__SCF_CONFIRMED_INVOICES?.[id]===url)return true;
+      if(!pending)return false;
+    }
+    await new Promise(resolve=>setTimeout(resolve,150));
+  }
 };
 window.scfWaitForTripDriverSync=async function(tripId,driverId,orderIds,timeoutMs=6000){
   if(!navigator.onLine)return false;

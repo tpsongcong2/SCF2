@@ -1,4 +1,4 @@
-const CACHE = 'scf-v474';
+const CACHE = 'scf-v476';
 const ASSETS = [
   './',
   './index.html',
@@ -7,9 +7,9 @@ const ASSETS = [
   './vendor/supabase.min.js?v=358',
   './vendor/react.production.min.js?v=358',
   './vendor/react-dom.production.min.js?v=358',
-  './styles.css?v=473',
+  './styles.css?v=475',
   './runtime.js?v=457',
-  './storage.js?v=473',
+  './storage.js?v=476',
   './print-agent.js',
   './helpers.js?v=473',
   './defaults.js?v=218',
@@ -19,10 +19,11 @@ const ASSETS = [
   './ui-common.js?v=460',
   './invoice-orientation.js?v=457',
   './invoice-orientation-store.js?v=460',
-  './catalogs.js?v=341',
+  './asset-documents.js?v=475',
+  './catalogs.js?v=475',
   './production-shifts.js?v=469',
   './organization.js?v=424',
-  './notifications.js?v=191',
+  './notifications.js?v=475',
   './user-guide.js?v=424',
   './operations.js?v=465',
   './navigation-reports.js?v=463',
@@ -34,11 +35,11 @@ const ASSETS = [
   './delivery-orders.js?v=473',
   './qrcode.min.js?v=357',
   './import-tools.js?v=448',
-  './trips.js?v=474',
+  './trips.js?v=476',
   './production.js?v=448',
   './permissions.js?v=452',
   './permission-settings.js?v=452',
-  './app.js?v=474',
+  './app.js?v=476',
   './bootstrap.js?v=448',
   './manifest.json',
   './icon-192.png',
@@ -51,7 +52,7 @@ const ASSETS = [
 // thật sự cần tới; tránh tải lặp toàn bộ ứng dụng và ba bản font ngay lần mở đầu.
 const PRECACHE_ASSETS = [
   './index.html',
-  './styles.css?v=473',
+  './styles.css?v=475',
   './vendor/tabler-icons.min.css?v=394'
 ];
 

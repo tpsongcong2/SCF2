@@ -11,7 +11,7 @@ function NotificationsTab({notifications,setNotifications,currentUser,setPage}){
   const markAll=()=>setNotifications(prev=>(prev||[]).map(n=>String(n.recipientId||'')===userId&&!n.readAt?{...n,readAt:fmtDT()}:n));
   const openItem=n=>{
     markRead(n.id);
-    if(n.targetPage==='trips'&&n.sourceId)try{sessionStorage.setItem('scf_notification_target',JSON.stringify({sourceType:n.sourceType||'',sourceId:n.sourceId,targetPage:n.targetPage||'',notificationId:n.id}));}catch{}
+    if(['trips','assets'].includes(n.targetPage)&&n.sourceId)try{sessionStorage.setItem('scf_notification_target',JSON.stringify({sourceType:n.sourceType||'',sourceId:n.sourceId,targetPage:n.targetPage||'',notificationId:n.id}));}catch{}
     if(n.targetPage)setPage(n.targetPage);
   };
   const enableDevice=async()=>{

@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V474';
+const SCF_BUILD_VERSION='V476';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -593,13 +593,15 @@ function App(){
 
   useEffect(()=>{
     if(loading||bootError||!cu||!pageReady||!sb)return;
-    const keys=requiredKeys.filter(key=>['orders','trips','notifications'].includes(key));
+    const keys=requiredKeys.filter(key=>['orders','trips','notifications','assets'].includes(key));
     let stopped=false,busy=false;
     const refresh=async()=>{
       if(stopped||busy||document.hidden||!navigator.onLine)return;
       busy=true;
       try{
-        const changed=await dbGetChangedKeys(keys.map(key=>'scf_'+key));
+        const watchedKeys=[...keys];
+        if(!isFaceMask&&canAccess(cu.role,'assets',cu.permissions,cuAccessDepartments)&&dataLoaderRef.current?.loaded.has('assets')&&!watchedKeys.includes('assets'))watchedKeys.push('assets');
+        const changed=await dbGetChangedKeys(watchedKeys.map(key=>'scf_'+key));
         const changedKeys=changed.map(key=>key.replace(/^scf_/,''));
         if(!changedKeys.length)return;
         const tripRefresh=changedKeys.some(key=>key==='orders'||key==='trips');
@@ -654,6 +656,21 @@ function App(){
     setTimeout(()=>window.scfFlushPendingWrites&&window.scfFlushPendingWrites(),900);
     return rows.length;
   },[cu?.id,cu?.name]);
+  const [assetReminderDay,setAssetReminderDay]=useState(scfAssetToday);
+  useEffect(()=>{
+    if(loading||!pageReady||!cu||isFaceMask||!canAccess(cu.role,'assets',cu.permissions,cuAccessDepartments))return;
+    // Tải danh mục ở nền sau khi màn hình đã sẵn sàng, không chặn đăng nhập.
+    dataLoaderRef.current?.load('assets').catch(error=>console.warn('Asset reminders:',error?.message||error));
+    const updateDay=()=>setAssetReminderDay(scfAssetToday());
+    updateDay();const timer=setInterval(updateDay,60000);
+    document.addEventListener('visibilitychange',updateDay);
+    return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',updateDay);};
+  },[loading,pageReady,cu?.id,cu?.role,cu?.permissions,isFaceMask]);
+  useEffect(()=>{
+    if(loading||!cu||isFaceMask||!dataLoaderRef.current?.loaded.has('assets')||!canAccess(cu.role,'assets',cu.permissions,cuAccessDepartments))return;
+    const desired=scfAssetExpiryNotifications(assets,cu,assetReminderDay);
+    setNotifications(prev=>scfMergeAssetExpiryNotifications(prev,desired,cu.id));
+  },[assets,assetReminderDay,cu?.id,cu?.role,cu?.permissions,loading,isFaceMask,notifications]);
   useEffect(()=>{
     if(loading||!pageReady||!cu||isFaceMask)return;
     const saveSyncError=event=>{
@@ -794,7 +811,7 @@ function App(){
         canAccess(cu.role,'leaves',cu.permissions)&&page==='leaves'&&h(LeaveTab,{leaves,setLeaves,employees,currentUser:cu}),
         canAccess(cu.role,'backup',cu.permissions)&&page==='backup'&&h(BackupTab,{employees,materials,assets,garages,prodCats,products,customers,workcats,tasks,advances,rewards,employeeErrors,employeeUniforms,leaves,nccs,nccGoods,purchases,goodsPurchases,depts,prodShiftRules,uiSettings,printTemplateSettings,financeEntries,financeDebts,financeOpenings}),
         canAccess(cu.role,'materials',cu.permissions)&&page==='materials'&&h(MaterialsTab,{materials,setMaterials,purchases}),
-        canAccess(cu.role,'assets',cu.permissions)&&page==='assets'&&h(AssetsTab,{assets,setAssets}),
+        canAccess(cu.role,'assets',cu.permissions)&&page==='assets'&&h(AssetsTab,{assets,setAssets,currentUser:cu}),
         canAccess(cu.role,'garages',cu.permissions)&&page==='garages'&&h(GaragesTab,{garages,setGarages}),
         canAccess(cu.role,'depts',cu.permissions)&&page==='depts'&&h(DeptsTab,{depts,setDepts,employees,workcats}),
         canAccess(cu.role,'products',cu.permissions)&&page==='products'&&h(ProductsTab,{products,setProducts,prodCats,setProdCats}),
