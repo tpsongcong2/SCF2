@@ -915,7 +915,11 @@ function isDtTrip(trip){
   const value=[trip?.shiftName,trip?.shiftCode,trip?.id].filter(Boolean).join(' ').toUpperCase();
   return /(^|[^A-ZÀ-Ỹ])ĐT(?=$|[^A-ZÀ-Ỹ])/.test(value);
 }
-function scfTripImageGroup(trip){return isDtTrip(trip)?'dt':'samsung';}
+function scfTripImageGroup(trip){
+  // Image groups follow trip names, independently of driver names and delivery areas.
+  const chiHai=[trip?.shiftName,trip?.shiftCode].some(value=>/^CHI HAI(?: |$)/.test(String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim()));
+  return isDtTrip(trip)||chiHai?'dt':'samsung';
+}
 function scfTripImageShiftName(trip){
   return String(trip.shiftName||trip.shiftCode||trip.shiftId||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'D').toUpperCase().replace(/[\s\-–—]+/g,'').replace(/^VINHPHUC/,'VP');
 }
@@ -1036,7 +1040,7 @@ function TripImagesModal({trips,orders,products,customers,prodCats=[],onClose}){
     finally{if(active.current)setBusy(false);}
   };
   return h(Modal,{title:'Tạo ảnh chuyến giao hàng',lg:true,onClose},
-    h('p',null,'Mặc định Ảnh 1 gồm các chuyến ĐT, Ảnh 2 gồm các chuyến còn lại. Chú ý lấy từ ghi chú đơn và dòng sản phẩm.'),
+    h('p',null,'Mặc định Ảnh 1 gồm các chuyến ĐT và Chị Hải, Ảnh 2 gồm các chuyến còn lại. Chú ý lấy từ ghi chú đơn và dòng sản phẩm.'),
     h('div',{style:{display:'flex',gap:8,marginBottom:12}},['1','2'].map(group=>h('button',{key:group,disabled:busy,onClick:()=>{clear();setSelection(Object.fromEntries(trips.map(trip=>[trip.id,group])));}},'Tất cả vào ảnh '+group)),h('button',{disabled:busy,onClick:()=>{clear();setSelection({});}},'Bỏ chọn')),
     h('div',{className:'tw',style:{maxHeight:330,overflow:'auto'}},h('table',null,
       h('thead',null,h('tr',null,['Chọn ảnh','Ngày giao','Chuyến / ca','Lái xe','Dòng SP'].map(label=>h('th',{key:label},label)))),
@@ -1068,7 +1072,7 @@ function TripDayImageModal({trips,orders,products,customers,prodCats=[],date,onC
     create();
     return()=>{active=false;if(imageUrl.current)URL.revokeObjectURL(imageUrl.current);};
   },[]);
-  return h(Modal,{title:'Xem ảnh đơn tổng theo ngày',lg:true,onClose},
+  return h(Modal,{title:'Xem ảnh đơn tổng theo ngày',lg:true,className:'trip-summary-day-modal',overlayClassName:'trip-summary-day-overlay',onClose},
     h('p',null,'Ngày '+(date||fmtDate())+' · '+trips.length+' chuyến. Nền xanh/trắng xen kẽ; tên lái xe và mọi loại bánh cuốn tô vàng. Phở cuốn, đơn theo giờ đặc biệt và hàng hóa khác tô màu gạch.'),
     busy&&h('p',null,'Đang tạo ảnh đơn tổng…'),
     error&&h('p',{role:'alert',style:{color:'#b51e20'}},error),

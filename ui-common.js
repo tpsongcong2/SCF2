@@ -1,8 +1,8 @@
 /* ─── UI base ─── */
 function F({label,children}){return h('div',{className:'fl'},h('label',null,label),children)}
 function Row({children}){return h('div',{className:'form-actions'},children)}
-function Modal({title,lg,className='',onClose,children}){
-  return h('div',{className:'overlay',onClick:e=>{if(e.target===e.currentTarget)onClose()}},
+function Modal({title,lg,className='',overlayClassName='',onClose,children}){
+  return h('div',{className:'overlay'+(overlayClassName?' '+overlayClassName:''),onClick:e=>{if(e.target===e.currentTarget)onClose()}},
     h('div',{className:'modal'+(lg==='xl'?' xl':lg?' wide':'')+(className?' '+className:''),style:{},onClick:e=>e.stopPropagation()},
       h('div',{className:'mh'},h('h2',null,title),h('button',{className:'mclose',type:'button',onClick:onClose},h('i',{className:'ti ti-x'}))),
       children

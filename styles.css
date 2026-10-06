@@ -729,11 +729,12 @@ th{font-family:var(--ui-header-family)!important}
   .trip-summary-quick-view i{font-size:26px}
   .modal.trip-summary-quick-modal.image-screen{padding:0;display:flex;flex-direction:column;overflow:hidden}
   .trip-summary-quick-modal.image-screen .mh{flex-shrink:0;position:static;margin:0;padding:14px 12px}
-  .trip-summary-quick-modal.image-screen .trip-summary-quick-result{width:100%;min-height:0;flex:1;overflow:auto;gap:0;align-items:stretch;padding-bottom:env(safe-area-inset-bottom)}
+  .trip-summary-quick-modal.image-screen .trip-summary-quick-result{width:100%;min-height:0;flex:1;overflow:auto;gap:0;align-items:stretch;padding-bottom:env(safe-area-inset-bottom);scrollbar-width:none}
+  .trip-summary-quick-modal.image-screen .trip-summary-quick-result::-webkit-scrollbar{display:none}
   .trip-summary-quick-modal.image-screen .trip-summary-quick-result>b,.trip-summary-quick-modal.image-screen small{padding:10px 12px}
   .trip-summary-quick-modal.image-screen .trip-summary-quick-tools{padding:8px 10px;gap:6px}
   .trip-summary-quick-modal.image-screen .trip-summary-quick-tools button,.trip-summary-quick-modal.image-screen .trip-summary-quick-tools a{min-height:44px}
-  .trip-summary-quick-modal.image-screen .trip-summary-quick-image{border:0;border-radius:0;overflow:visible;padding-left:2px;box-sizing:border-box}
+  .trip-summary-quick-modal.image-screen .trip-summary-quick-image{border:0;border-radius:0;overflow:visible;width:calc(100% - 24px);margin-inline:12px;box-sizing:border-box}
   .trip-summary-quick-modal.image-screen .trip-summary-quick-image.zoomed{max-height:none;overflow:auto}
   .mobile-nav-btn.on{color:var(--pri);background:#e5f2eb}
   .mobile-nav-btn.on::after{content:'';position:absolute;bottom:3px;width:5px;height:5px;border-radius:50%;background:var(--acc)}
@@ -858,6 +859,9 @@ th{font-family:var(--ui-header-family)!important}
   .empty-st{padding:2rem 1rem}
   .overlay{align-items:flex-start;padding:10px;overflow:auto}
   .modal,.modal.wide,.modal.xl{width:100%;max-width:100%;max-height:none;min-height:auto;padding:14px;border-radius:10px}
+  .overlay.trip-summary-day-overlay{padding-inline:5px;scrollbar-width:none}
+  .overlay.trip-summary-day-overlay::-webkit-scrollbar{display:none}
+  .modal.wide.trip-summary-day-modal{padding-inline:7px;border-width:0}
   .trip-quick-filter-grid{grid-template-columns:1fr}
   .modal.trip-quick-fullscreen{width:100vw!important;max-width:none!important;height:100dvh;min-height:100dvh;max-height:100dvh;margin:0;padding:14px;border:0;border-radius:0;overflow-y:auto;background:#fff;color:#000}
   .modal.trip-quick-fullscreen .mh{position:sticky;top:-14px;z-index:5;margin:-14px -14px 12px;padding:14px;background:#fff;border-bottom:1px solid #ddd}
