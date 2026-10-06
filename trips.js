@@ -874,7 +874,7 @@ function DeliverySequenceSettingsTab({customers,setCustomers,currentUser}){
 
 function tripImageRows(trip,orders,products,customers,prodCats=[]){
   const ids=new Set((trip.orderIds||[]).map(String));
-  return sortTripOrdersByDeliveryOrder(trip,orders.filter(order=>order.status!=='cancelled'&&(order.tripId?String(order.tripId)===String(trip.id):ids.has(String(order.id)))),customers)
+  const rows=sortTripOrdersByDeliveryOrder(trip,orders.filter(order=>order.status!=='cancelled'&&(order.tripId?String(order.tripId)===String(trip.id):ids.has(String(order.id)))),customers)
     .flatMap(order=>(order.lines||[]).map(line=>{
       const product=products.find(p=>String(p.id)===String(line.productId));
       const note=order.isAdditionalTripOrder?'Đơn PS':[order.note,line.note].filter(Boolean).join(' · ');
@@ -882,6 +882,22 @@ function tripImageRows(trip,orders,products,customers,prodCats=[]){
       row.isGoods=isGoodsProduct(product||line,prodCats);
       return row;
     }));
+  return scfSortTripImageRows(trip,rows);
+}
+function scfTripImageProductRank(value){
+  const name=normalizePlainText(value).replace(/[^a-z0-9]+/g,' ').trim();
+  if(/(?:^|\s)(?:banh\s+)?pho\s+cuon(?:\s|$)/.test(name))return 0;
+  if(/(?:^|\s)(?:banh\s+)?pho\s+tuoi(?:\s|$)/.test(name))return 1;
+  if(/(?:^|\s)bun\s+tuoi\s+soi\s+to(?:\s|$)/.test(name))return 2;
+  if(/(?:^|\s)bun\s+tuoi(?:\s|$)/.test(name))return 3;
+  if(scfTripProductTone(value)==='yellow')return 4;
+  return 5;
+}
+function scfSortTripImageRows(trip,rows){
+  if(scfTripImageGroup(trip)!=='samsung'||!['KV','KHOVAN'].includes(scfTripImageShiftName(trip)))return rows;
+  // Group KV product lines while retaining delivery order within each group.
+  return rows.map((row,index)=>({row,index,rank:scfTripImageProductRank(row[2])}))
+    .sort((a,b)=>a.rank-b.rank||a.index-b.index).map(item=>item.row);
 }
 function tripImageDriverName(value){
   return String(value||'').trim()||'Chưa có lái xe';
