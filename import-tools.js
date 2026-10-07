@@ -227,7 +227,14 @@ function scfAttachOrderQr(html,order){
   const markup=scfOrderQrMarkup(order);
   if(!html||!markup)return html;
   const style='<style>.print-sheet{position:relative}.print-sheet>.hdr,.print-sheet>h2,.print-sheet>.header-grid,.print-sheet>.legal,.print-sheet>.coinfo,.print-sheet>.title-wrap{padding-right:30mm}.scf-order-qr{position:absolute;right:8mm;top:7mm;width:24mm;text-align:center;background:#fff;padding:1.5mm;z-index:2}.scf-order-qr svg{display:block;width:21mm;height:21mm;margin:0 auto}.scf-order-qr-label{font:700 8px Arial,sans-serif;color:#000;line-height:1.15;margin-top:1mm;overflow-wrap:anywhere}@media print{.scf-order-qr{right:8mm;top:7mm}}</style>';
-  return html.replace('</head>',style+'</head>').replace('<div class="print-sheet">','<div class="print-sheet">'+markup);
+  // Keep QR rules in the first style block: batch printing extracts that block.
+  const title='<div class="title">PHIẾU GIAO HÀNG</div>';
+  const titleStyle='.scf-order-title-row{position:relative;display:flex;align-items:center;justify-content:center;min-height:26mm;margin-bottom:10px;padding:0 27mm}.scf-order-title-row>.title{margin:0}.scf-order-title-row>.scf-order-qr{position:absolute;width:24mm;padding:1mm;right:0;top:50%;transform:translateY(-50%)}.scf-order-title-row .scf-order-qr svg{width:21mm;height:21mm}.scf-order-title-row .scf-order-qr-label{font-size:7px}';
+  const css=style.slice(7,-8)+(html.includes(title)?titleStyle:'');
+  const styled=html.replace('</style>',css+'</style>');
+  return html.includes(title)
+    ?styled.replace(title,'<div class="scf-order-title-row">'+title+markup+'</div>')
+    :styled.replace('<div class="print-sheet">','<div class="print-sheet">'+markup);
 }
 
 function buildPrintHTMLBody(template, order, company) {
