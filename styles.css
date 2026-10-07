@@ -1168,3 +1168,16 @@ tbody tr:hover td{background:var(--bg)}
 .asset-expiry{font-size:12px;margin-top:5px;white-space:nowrap}
 .asset-vehicle-documents h3{margin:18px 0 6px}
 @media(max-width:640px){.asset-document-grid{grid-template-columns:1fr}.asset-upload-button,.asset-file-link{min-height:44px}}
+
+/* Quick quantity editing stays inside the product row. */
+.delivery-quantity-cell{display:flex;align-items:center;justify-content:center;gap:3px;min-width:0;font-weight:600}
+.delivery-quantity-pencil,.delivery-quantity-save{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:2px!important;width:20px;height:22px;min-width:20px;border:0!important;border-radius:5px;background:transparent!important;color:#83958d;box-shadow:none!important}
+.delivery-quantity-pencil:hover,.delivery-quantity-save:hover{color:#184a37;background:#e6f1eb!important}
+.delivery-quantity-save{color:#217558;background:#e9f3ed!important}
+.delivery-quantity-cell svg{display:block;flex-shrink:0;pointer-events:none}
+.delivery-quantity-pencil:focus-visible,.delivery-quantity-save:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+.delivery-quantity-editor{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:3px;width:100%;min-width:0;white-space:normal}
+.delivery-quantity-editor input{width:100%;min-width:0;padding:4px 2px;text-align:center;font-size:13px;border-color:var(--pri)}
+.delivery-quantity-error{grid-column:1/-1;font-size:11px;line-height:1.35;color:#A32D2D;margin-top:3px;overflow-wrap:anywhere}
+.order-detail-line-grid>div{min-width:0}
+@media(max-width:768px){.delivery-quantity-pencil,.delivery-quantity-save{width:28px;height:30px;min-width:28px}.delivery-quantity-editor input{font-size:16px}}

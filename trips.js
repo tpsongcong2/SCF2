@@ -621,9 +621,10 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
   const[shiftFilter,setShiftFilter]=useLS('scf_driver_report_shift_'+currentUser.id,'');
   const[listSelection,setListSelection]=useState(null);
   const isDriver=currentUser?.role==='driver'||employeeHasDepartment(currentUser,'Lái xe');
+  // Attendance counts every own assigned trip, just as the Admin report does.
+  // Dispatch still controls opening the operational trip screen below.
   const scopedTrips=React.useMemo(()=>(trips||[]).filter(trip=>!isDriver||
-    ((trip.driverId?String(trip.driverId)===String(currentUser?.id||''):!!scfDriverReportName(currentUser?.name)&&scfDriverReportName(trip.driverName)===scfDriverReportName(currentUser.name))&&
-    (!!trip.driverDispatchedAt||['active','completion_pending','completed'].includes(trip.status)))),[trips,isDriver,currentUser?.id,currentUser?.name]);
+    (trip.driverId?String(trip.driverId)===String(currentUser?.id||''):!!scfDriverReportName(currentUser?.name)&&scfDriverReportName(trip.driverName)===scfDriverReportName(currentUser.name))),[trips,isDriver,currentUser?.id,currentUser?.name]);
   const drivers=React.useMemo(()=>scfDriverReportDrivers(scopedTrips,employees),[scopedTrips,employees]);
   const driverKey=isDriver?'id:'+currentUser.id:driverFilter;
   const ownDrivers=isDriver?{...drivers,tripKey:()=>driverKey}:drivers;
@@ -631,6 +632,7 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
   const report=React.useMemo(()=>scfBuildDriverTripReport({trips:scopedTrips,orders,products,customers,month,driverKey,drivers:ownDrivers,today}),[scopedTrips,orders,products,customers,month,driverKey,drivers,isDriver,today]);
   const selectedName=isDriver?currentUser.name:drivers.options.find(item=>item.key===driverKey)?.name;
   const canOpen=typeof onOpenTrips==='function'&&canAccess(currentUser?.role,'trips',currentUser?.permissions,employeeDepartments(currentUser));
+  const canOpenTrip=row=>canOpen&&(!isDriver||!!row.driverDispatchedAt||['active','completion_pending','completed'].includes(row.status));
   const canViewMonthWeight=canViewDriverReportMonthlyWeight(currentUser);
   const activeShift=report.shifts.some(item=>item.name===shiftFilter)?shiftFilter:'';
   const rows=report.rows.filter(row=>!activeShift||row.deliveryShift===activeShift);
@@ -638,7 +640,7 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
   const visible=scfTripListWindow(rows,listSelection,listKey);
   const fmt=value=>Number(value||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
   const status=row=>row.driverCompleted?'Đã hoàn thành':'Chưa hoàn thành';
-  const open=row=>{if(canOpen)scfOpenDriverReportTrip(row,onOpenTrips,currentUser);};
+  const open=row=>{if(canOpenTrip(row))scfOpenDriverReportTrip(row,onOpenTrips,currentUser);};
   const metric=(label,value,extra)=>h('div',{className:'driver-report-metric'},h('span',null,label),h('b',null,value),extra&&h('small',null,extra));
   return h('div',{className:'driver-work-report'},
     h('div',{className:'ptitle'},h('i',{className:'ti ti-steering-wheel',style:{fontSize:20}}),'Báo công lái xe'),
@@ -658,15 +660,15 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
       ),
       h('section',{className:'card driver-report-details'},
         h('div',{className:'driver-report-list-head'},h('h3',null,'Danh sách chuyến ('+rows.length+')'),h('label',null,h('select',{value:activeShift,'aria-label':'Lọc ca giao hàng',onChange:event=>setShiftFilter(event.target.value)},h('option',{value:''},'Tất cả ca giao'),report.shifts.map(item=>h('option',{key:item.name,value:item.name},item.name))))),
-        h('p',{className:'driver-report-note'},canOpen?'Bấm vào chuyến để xem chi tiết. Chuyến 0 kg và chuyến hủy được ẩn.':'Chuyến 0 kg và chuyến hủy được ẩn. Tài khoản chưa có quyền xem chi tiết chuyến.'),
+        h('p',{className:'driver-report-note'},canOpen?(isDriver?'Báo công gồm cả chuyến đã xếp. Bấm vào chuyến đã giao cho bạn để xem chi tiết. Chuyến 0 kg và chuyến hủy được ẩn.':'Bấm vào chuyến để xem chi tiết. Chuyến 0 kg và chuyến hủy được ẩn.'):'Chuyến 0 kg và chuyến hủy được ẩn. Tài khoản chưa có quyền xem chi tiết chuyến.'),
         !rows.length?h('div',{className:'driver-report-empty'},'Chưa có chuyến có hàng theo lựa chọn này.'):
         h(React.Fragment,null,
           h('div',{className:'desktop-only tw'},h('table',null,h('thead',null,h('tr',null,...['Ngày','Ca giao hàng','Số đơn','Khối lượng','Trạng thái','Công','Tiền công'].map(label=>h('th',{key:label},label)))),
-            h('tbody',null,visible.trips.map(row=>h('tr',{key:row.id,className:canOpen?'driver-report-trip-row':'',onClick:()=>open(row)},h('td',null,canOpen?h('button',{type:'button',className:'driver-report-trip-link','aria-label':'Xem chuyến '+row.deliveryDate+' '+row.deliveryShift,onClick:event=>{event.stopPropagation();open(row);}},row.deliveryDate,h('i',{className:'ti ti-chevron-right'})):row.deliveryDate),h('td',null,h('b',null,row.deliveryShift)),h('td',null,row.orderCount),h('td',null,fmt(row.weight)+' kg'),h('td',null,status(row)),h('td',null,fmt(row.work)),h('td',null,fmt(row.totalPay)+' đ')))))),
+            h('tbody',null,visible.trips.map(row=>h('tr',{key:row.id,className:canOpenTrip(row)?'driver-report-trip-row':'',onClick:()=>open(row)},h('td',null,canOpenTrip(row)?h('button',{type:'button',className:'driver-report-trip-link','aria-label':'Xem chuyến '+row.deliveryDate+' '+row.deliveryShift,onClick:event=>{event.stopPropagation();open(row);}},row.deliveryDate,h('i',{className:'ti ti-chevron-right'})):row.deliveryDate),h('td',null,h('b',null,row.deliveryShift)),h('td',null,row.orderCount),h('td',null,fmt(row.weight)+' kg'),h('td',null,status(row)),h('td',null,fmt(row.work)),h('td',null,fmt(row.totalPay)+' đ')))))),
           h('div',{className:'mobile-only trip-attendance-list'},visible.trips.map(row=>h('div',{key:'mobile-'+row.id,className:'mobile-data-card trip-attendance-card driver-report-trip-card',onClick:()=>open(row)},
             h('div',{className:'mobile-data-head'},h('div',null,h('div',{className:'mobile-data-title'},row.deliveryShift),h('div',{className:'mobile-data-sub'},row.deliveryDate+' · '+row.orderCount+' đơn')),h('span',{className:'badge',style:{background:row.driverCompleted?'#E1F5EE':'#FFF4D9',color:row.driverCompleted?'#0F6E56':'#805500'}},status(row))),
             h('div',{className:'driver-report-trip-amounts'},h('b',null,fmt(row.weight)+' kg'),h('span',null,'Công: '+fmt(row.work)),h('span',null,fmt(row.totalPay)+' đ')),
-            canOpen&&h('button',{type:'button',className:'driver-report-mobile-open','aria-label':'Xem chuyến '+row.deliveryDate+' '+row.deliveryShift,onClick:event=>{event.stopPropagation();open(row);}},'Xem chi tiết chuyến',h('i',{className:'ti ti-chevron-right'}))
+            canOpenTrip(row)&&h('button',{type:'button',className:'driver-report-mobile-open','aria-label':'Xem chuyến '+row.deliveryDate+' '+row.deliveryShift,onClick:event=>{event.stopPropagation();open(row);}},'Xem chi tiết chuyến',h('i',{className:'ti ti-chevron-right'}))
           )))
         ),
         visible.count<rows.length&&h('button',{type:'button',className:'driver-report-more',onClick:()=>setListSelection({key:listKey,count:visible.count+40})},'Xem thêm chuyến ('+(rows.length-visible.count)+')')
@@ -994,9 +996,7 @@ function renderTripImage(trips,orders,products,customers,title,prodCats=[]){
     blocks.push({cells:[shiftName,driverName,'TỔNG KHỐI LƯỢNG CHUYẾN: '+totalWeight.toLocaleString('vi-VN',{maximumFractionDigits:2})+' kg'],widths:[shiftWidth,driverWidth,canvas.width-shiftWidth-driverWidth],cellFills:[tripFill,'#ffff00',tripFill],fill:tripFill,bold:true});
     blocks.push({cells:visibleColumns.map(index=>headers[index]),fill:tripFill,bold:true});
     rows.forEach(row=>{
-      const tone=scfTripProductTone(row[2]);
-      const brick=row.isGoods||scfTripImageEarlyOrder(trip,row)||tone==='brick';
-      blocks.push({cells:visibleColumns.map(index=>row[index]),fill:tone==='yellow'?'#ffff00':brick?'#f4af86':tripFill});
+      blocks.push({cells:visibleColumns.map(index=>row[index]),fill:scfTripSummaryRowFill(trip,row,tripFill)});
     });
   });
   blocks.forEach(block=>{
@@ -1020,6 +1020,11 @@ function renderTripImage(trips,orders,products,customers,title,prodCats=[]){
     });y+=block.height;
   });
   return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('Không tạo được ảnh. Hãy chọn ít chuyến hơn.')),'image/png'));
+}
+function scfTripSummaryRowFill(trip,row,tripFill){
+  const tone=scfTripProductTone(row[2]);
+  const brick=row.isGoods||scfTripImageEarlyOrder(trip,row)||tone==='brick';
+  return tone==='yellow'?'#ffff00':brick?'#f4af86':tripFill;
 }
 function TripImagesModal({trips,orders,products,customers,prodCats=[],onClose}){
   const [selection,setSelection]=useState(()=>Object.fromEntries(trips.map(trip=>[trip.id,scfTripImageGroup(trip)==='dt'?'1':'2'])));const [images,setImages]=useState([]);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
