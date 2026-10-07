@@ -588,10 +588,11 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
   const canOpen=canAccess(currentUser?.role,'fuelpurchases',currentUser?.permissions,employeeDepartments(currentUser));
   const canManage=canOpen&&canWrite(currentUser?.role,'fuelpurchases',currentUser?.permLevels);
   const canRemove=canOpen&&canDel(currentUser?.role,'fuelpurchases',currentUser?.permLevels);
+  const canChooseBuyer=currentUser?.role==='admin';
   const isDriver=currentUser?.role==='driver'||employeeHasDepartment(currentUser,'Lái xe');
   const selfOption=currentUser?{id:currentUser.id,name:currentUser.name||currentUser.id,label:(currentUser.name||currentUser.id)+(currentUser.id?' - '+currentUser.id:'')}:null;
   const driverOptions=(employees||[])
-    .filter(e=>e.role==='driver'||employeeHasDepartment(e,'Lái xe'))
+    .filter(e=>canChooseBuyer||e.role==='driver'||employeeHasDepartment(e,'Lái xe'))
     .map(e=>({id:e.id,name:e.name||e.id,label:(e.name||e.id)+(e.id?' - '+e.id:'')}))
     .sort((a,b)=>a.label.localeCompare(b.label,'vi'));
   const buyerOptions=(selfOption?[selfOption,...driverOptions.filter(d=>d.id!==selfOption.id)]:driverOptions);
@@ -701,8 +702,11 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
       window.showToast('Nhập ngày mua, xe, số lít và giá tiền.','warn');
       return;
     }
-    const buyerId=edit?.buyerId||currentUser.id||form.buyerId||'';
-    const buyerName=edit?.buyerName||currentUser.name||form.buyerName||'';
+    const selectedBuyer=canChooseBuyer?buyerOptions.find(x=>x.id===form.buyerId):null;
+    const preservedBuyer=canChooseBuyer&&edit?.buyerId&&edit.buyerId===form.buyerId;
+    if(canChooseBuyer&&!selectedBuyer&&!preservedBuyer){window.showToast('Hãy chọn nhân viên đổ xăng.','warn');return;}
+    const buyerId=canChooseBuyer?form.buyerId:(edit?.buyerId||currentUser.id||'');
+    const buyerName=canChooseBuyer?(selectedBuyer?.name||edit?.buyerName||form.buyerName||''):(edit?.buyerName||currentUser.name||'');
     const data={
       ...form,
       buyerId,
@@ -883,7 +887,11 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
     )),
     canManage&&modal&&h(Modal,{className:'fuel-entry-modal',title:edit?'Sửa đơn xăng dầu':'Thêm đơn xăng dầu',onClose:()=>{if(!uploading){setModal(false);setEdit(null);}}},
       h('div',{className:'fuel-form-heading'},'Thông tin lần đổ nhiên liệu'),
-      h('div',{style:{fontSize:14,color:'var(--tx2)',marginBottom:12}},'Người đổ: '+(form.buyerName||currentUser.name||'')),
+      canChooseBuyer?h(F,{label:'Nhân viên đổ xăng *'},h('select',{value:form.buyerId,onChange:e=>{const buyer=buyerOptions.find(x=>x.id===e.target.value);setForm(p=>({...p,buyerId:buyer?.id||'',buyerName:buyer?.name||''}));},style:{fontSize:16,minHeight:48}},
+        h('option',{value:''},'— Chọn nhân viên đổ xăng —'),
+        form.buyerId&&!buyerOptions.some(x=>x.id===form.buyerId)&&h('option',{value:form.buyerId},form.buyerName||form.buyerId),
+        buyerOptions.map(b=>h('option',{key:b.id,value:b.id},b.label))
+      )):h('div',{style:{fontSize:14,color:'var(--tx2)',marginBottom:12}},'Người đổ: '+(form.buyerName||currentUser.name||'')),
       h(F,{label:'Xe / biển số *'},h('input',{value:form.vehicle,onChange:e=>setF('vehicle',e.target.value.toUpperCase()),list:'fuel-vehicle-options',placeholder:'Chọn hoặc nhập biển số',style:{fontSize:20,minHeight:48}})),
       h('datalist',{id:'fuel-vehicle-options'},vehicleOptions.map(v=>h('option',{key:v,value:v},v))),
       h(F,{label:'Số lít *'},h('input',{type:'text',inputMode:'decimal',value:form.liters||'',onChange:e=>{if(/^\d*[.,]?\d{0,3}$/.test(e.target.value))setF('liters',e.target.value);},placeholder:'18,025',style:{fontSize:28,fontWeight:700,minHeight:60,padding:12}})),

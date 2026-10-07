@@ -166,9 +166,10 @@ function DeliveryTripModeSwitch({mode,disabled,title,onChange}){
   },mode==='manual'?'BT':'TĐ');
 }
 function DeliveryAutomaticTripFields({trip,defaultDate,compact=false}){
+  const date=manualTripDateToISO(trip?.deliveryDate||defaultDate);
+  const dateText=date?date.split('-').reverse().join('/'):'—';
   return h('div',{className:'delivery-trip-auto-fields'+(compact?' compact':'')},
-    h('input',{className:'delivery-trip-date',type:'date',value:manualTripDateToISO(trip?.deliveryDate||defaultDate),readOnly:true,
-      title:'Ngày chuyến tự động','aria-label':'Ngày chuyến giao hàng'}),
+    h('span',{className:'delivery-trip-date-display',title:'Ngày chuyến tự động','aria-label':'Ngày chuyến giao hàng: '+dateText},dateText),
     h('select',{className:'delivery-trip-choice',value:trip?.id||'',disabled:true,title:manualTripText(trip),'aria-label':'Ca giao và lái xe'},
       h('option',{value:trip?.id||''},manualTripText(trip)))
   );
@@ -1217,6 +1218,19 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
   );
 }
 
+function scfOrderImageProductKey(value){
+ return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toUpperCase().trim().replace(/[,;]\s*(KG|KGS)\s*$/,'').replace(/\s+/g,' ');
+}
+async function scfOrderImageDeadline(work){
+ const controller=new AbortController();let timer;
+ try{return await Promise.race([Promise.resolve().then(()=>work(controller.signal)),new Promise((_,reject)=>{timer=setTimeout(()=>{reject(Error('AI chưa trả kết quả sau 60 giây. Hãy thử lại hoặc nhập đơn bằng tay.'));controller.abort();},60000);})]);}
+ finally{clearTimeout(timer);}
+}
+async function scfPrepareOrderImage(file){
+ // Preserve screenshot text: keep supported original files within the server limit.
+ if(file.size<=8*1024*1024)return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve({dataUrl:r.result});r.onerror=()=>reject(Error('Không đọc được ảnh.'));r.readAsDataURL(file);});
+ return resizeImageFile(file,2600,.98);
+}
 function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,currentUser,onClose}) {
   const[file,setFile]=useState(null);
   const[img,setImg]=useState('');
@@ -1406,27 +1420,62 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,c
     flush();
     return result.filter(o=>o.lines.length);
   };
+  const imageLoadRef=useRef(0);
+  const activeRef=useRef(true);
+  const readingRef=useRef(false);
+  const readImageRef=useRef(null);
   const setImageFile=f=>{
-    if(!f)return;
-    setFile(f);setRows([]);setText('');
+    if(!f||readingRef.current)return;
+    if(!/^image\/(png|jpeg|webp)$/i.test(f.type||'')){window.showToast('Hãy chọn ảnh PNG, JPG hoặc WebP.','warn');return;}
+    if(f.size>20*1024*1024){window.showToast('Ảnh quá lớn. Hãy chọn ảnh dưới 20 MB.','warn');return;}
+    const version=++imageLoadRef.current;
+    setFile(null);setImg('');setRows([]);setText('');setProgress('');
     const r=new FileReader();
-    r.onload=e=>setImg(e.target.result);
+    r.onload=e=>{if(activeRef.current&&version===imageLoadRef.current){setImg(e.target.result);setFile(f);readImageRef.current(f);}};
+    r.onerror=()=>{if(activeRef.current)window.showToast('Không mở được ảnh.','error');};
     r.readAsDataURL(f);
   };
-  const runOcr=async()=>{
-    if(!file){window.showToast('Hãy chọn hoặc kéo ảnh vào trước.','warn');return;}
-    setBusy(true);setProgress('Đang đọc ảnh...');
+  useEffect(()=>{
+    activeRef.current=true;
+    const paste=e=>{
+      const f=Array.from(e.clipboardData?.items||[]).find(item=>item.kind==='file'&&item.type.startsWith('image/'))?.getAsFile();
+      if(f){e.preventDefault();setImageFile(f);}
+    };
+    window.addEventListener('paste',paste);
+    return()=>{activeRef.current=false;++imageLoadRef.current;window.removeEventListener('paste',paste);};
+  },[]);
+  const runOcr=async imageFile=>{
+    if(!imageFile||readingRef.current){if(!imageFile)window.showToast('Hãy dán, kéo thả hoặc chọn ảnh trước.','warn');return;}
+    readingRef.current=true;setBusy(true);setRows([]);setText('');setProgress('AI đang đọc đơn hàng, tối đa 60 giây...');
     try{
-      if(!window.Tesseract)await window.scfLoadExternalScript('tesseract');
-      const res=await Tesseract.recognize(file,'vie+eng',{logger:m=>{if(m.status)setProgress(m.status+(m.progress?(' '+Math.round(m.progress*100)+'%'):''));}});
-      const txt=res?.data?.text||'';
-      setText(txt);
-      setRows(parseText(txt));
-      setProgress('Đã đọc xong');
-    }catch(e){window.showToast('Không đọc được ảnh: '+(e.message||e),'error');}
-    finally{setBusy(false);}
+      if(!sb)throw Error('Chưa kết nối máy chủ.');
+      const data=await scfOrderImageDeadline(async signal=>{
+        const prepared=await scfPrepareOrderImage(imageFile);
+        if(signal.aborted)throw Error('Đã hết thời gian đọc ảnh.');
+        const {data,error}=await sb.functions.invoke('scf-order-vision',{body:{imageDataUrl:prepared.dataUrl},signal});
+        if(error){let details;try{details=await error.context?.json();}catch{}throw Error(details?.error||'Chưa gọi được AI. Kiểm tra chức năng scf-order-vision trên máy chủ.');}
+        return data;
+      });
+      if(!data?.ok||!Array.isArray(data.orders))throw Error(data?.error||'AI trả dữ liệu không hợp lệ.');
+      if(!activeRef.current)return;
+      const parsed=data.orders.map(raw=>{
+        const matches=customers.flatMap(c=>(c.points||[]).filter(pt=>noAccent(norm(pt.name))===noAccent(norm(raw.pointName))).map(pt=>({c,pt})));
+        const match=matches.length===1?matches[0]:null;
+        return {id:uid(),deliveryDate:String(raw.deliveryDate||''),deliveryTime:String(raw.deliveryTime||''),pointId:match?.pt.id||'',pointName:String(raw.pointName||''),customerId:match?.c.id||'',customer:match?.c.name||'',address:match?.pt.address||'',area:match?.pt.area||'',status:'pending',note:String(raw.note||''),lines:(Array.isArray(raw.lines)?raw.lines:[]).map(line=>{
+          const candidates=products.filter(p=>scfOrderImageProductKey(p.name)===scfOrderImageProductKey(line.productName));
+          const product=candidates.length===1?candidates[0]:null;
+          const qty=typeof line.quantity==='number'&&Number.isFinite(line.quantity)&&line.quantity>=0?line.quantity:'';
+          return{id:uid(),productId:product?.id||'',productName:String(line.productName||''),customerCode:String(line.customerCode||''),unit:product?.unit||String(line.unit||''),weightPerUnit:product?.weightPerUnit||0,qtyProd:qty,qtyInvoice:qty,note:String(line.note||'')};
+        })};
+      }).filter(o=>o.lines.length);
+      setRows(parsed);
+      setText(parsed.map(o=>[o.pointName+' '+o.deliveryDate+' '+o.deliveryTime,...o.lines.map(l=>l.productName+' '+l.qtyProd)].join('\n')).join('\n\n'));
+      const missingPoints=parsed.filter(o=>!o.pointId).length;
+      setProgress(parsed.length?(missingPoints?'Đã đọc dòng hàng. Có '+missingPoints+' bản nháp cần chọn địa điểm bên dưới. ':'AI đã đọc '+parsed.length+' đơn. ')+'Kiểm tra sản phẩm, ngày, giờ và số lượng trước khi nhập.':'AI chưa đọc được đơn. Hãy thử ảnh rõ hơn.');
+    }catch(e){if(activeRef.current){setProgress(e.message||'Chưa đọc được ảnh.');window.showToast(e.message||String(e),'error');}}
+    finally{readingRef.current=false;if(activeRef.current)setBusy(false);}
   };
-  const reparse=()=>setRows(parseText(text));
+  readImageRef.current=runOcr;
   const updateOrder=(id,data)=>setRows(p=>p.map(o=>o.id===id?{...o,...data}:o));
   const updateLine=(oid,lid,data)=>setRows(p=>p.map(o=>o.id===oid?{...o,lines:o.lines.map(l=>l.id===lid?{...l,...data}:l)}:o));
   const allPoints=(customers||[]).flatMap(c=>(c.points||[]).map(pt=>({...pt,customerId:c.id,customerName:c.name})));
@@ -1445,7 +1494,9 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,c
     updateLine(oid,lid,{productId:p.id||'',productName:p.name||'',unit:p.unit||'',weightPerUnit:p.weightPerUnit||0});
   };
   const importRows=()=>{
+    if(busy)return;
     if(!rows.length){window.showToast('Chưa có đơn hàng nào để nhập.','warn');return;}
+    if(rows.some(o=>!o.pointId||!/^\d{2}\/\d{2}\/\d{4}$/.test(o.deliveryDate)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(o.deliveryTime)||(o.lines||[]).some(l=>l.qtyProd===''||!Number.isFinite(Number(l.qtyProd))||Number(l.qtyProd)<0))){window.showToast('Hãy kiểm tra đủ địa điểm, ngày, giờ và số lượng của từng đơn trước khi nhập.','warn');return;}
     const unmatchedLines=rows.flatMap(order=>(order.lines||[]).filter(line=>!line.productId||!(products||[]).some(product=>String(product.id)===String(line.productId))));
     if(unmatchedLines.length){
       window.showToast('Còn '+unmatchedLines.length+' dòng sản phẩm chưa khớp danh mục. Hãy chọn sản phẩm tương ứng trước khi nhập.','warn');
@@ -1459,32 +1510,25 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,c
     window.showToast('Đã nhập '+finalRows.length+' đơn hàng từ ảnh.','success');
     onClose();
   };
-  return h(Modal,{title:'Tự động lấy đơn từ ảnh',lg:true,onClose},
-    h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,alignItems:'start'}},
+  return ReactDOM.createPortal(h(Modal,{title:'Lấy đơn từ ảnh — bản nháp',lg:true,className:'order-image-import-modal',overlayClassName:'order-image-import-overlay',onClose},
+    h('div',{className:'order-image-import-top'},
       h('div',null,
         h('div',{
           onDragOver:e=>{e.preventDefault();},
-          onDrop:e=>{e.preventDefault();setImageFile(e.dataTransfer.files&&e.dataTransfer.files[0]);},
+          onDrop:e=>{e.preventDefault();setImageFile(Array.from(e.dataTransfer.files||[]).find(f=>f.type.startsWith('image/')));},
           onClick:()=>inputRef.current&&inputRef.current.click(),
           style:{border:'1.5px dashed var(--pri)',borderRadius:'var(--rl)',padding:'1.25rem',minHeight:220,display:'flex',alignItems:'center',justifyContent:'center',textAlign:'center',cursor:'pointer',background:'#f7fbf8',overflow:'hidden'}
         },
           img?h('img',{src:img,style:{maxWidth:'100%',maxHeight:260,objectFit:'contain'}})
-          :h('div',null,h('i',{className:'ti ti-photo-scan',style:{fontSize:44,color:'var(--pri)',display:'block',marginBottom:8}}),'Kéo ảnh vào đây hoặc bấm để chọn ảnh')
+          :h('div',null,h('i',{className:'ti ti-photo-scan',style:{fontSize:44,color:'var(--pri)',display:'block',marginBottom:8}}),'Dán ảnh bằng Ctrl+V, kéo thả ảnh vào đây hoặc bấm để chọn ảnh')
         ),
         h('input',{ref:inputRef,type:'file',accept:'image/*',style:{display:'none'},onChange:e=>setImageFile(e.target.files&&e.target.files[0])}),
-        h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}},
-          h('button',{className:'bp',onClick:runOcr,disabled:busy},h('i',{className:'ti ti-scan-text',style:{fontSize:14}}),busy?'Đang đọc...':'AI/OCR đọc ảnh'),
-          h('button',{onClick:reparse,disabled:busy||!text},h('i',{className:'ti ti-table-import',style:{fontSize:14}}),'Vào bảng xem trước')
-        ),
         progress&&h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:8}},progress)
       ),
-      h('div',null,
-        h(F,{label:'Nội dung OCR'},h('textarea',{value:text,onChange:e=>setText(e.target.value),rows:12,placeholder:'Sau khi OCR, chữ đọc được sẽ hiện ở đây. Có thể sửa rồi bấm Tách lại dữ liệu.'})),
-        h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Mẹo: ảnh rõ, thẳng, đủ sáng và mỗi dòng có tên hàng + số lượng sẽ đọc tốt hơn.')
-      )
+      h('div',{className:'order-image-import-help'},'Dán, kéo thả hoặc chọn ảnh để AI tự đọc và tạo đơn nháp. Kiểm tra, sửa dữ liệu trong bảng bên dưới, rồi bấm Nhập đơn hàng để lưu chính thức.')
     ),
     h('div',{style:{marginTop:'1rem'}},
-      h('div',{style:{fontWeight:600,marginBottom:8,color:'var(--pri3)'}},'Bảng xem trước ('+rows.length+' đơn, '+rows.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng hàng)'),
+      h('div',{style:{fontWeight:600,marginBottom:8,color:'var(--pri3)'}},'Đơn nháp ('+rows.length+' đơn, '+rows.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng hàng)'),
       h('div',{className:'tw',style:{maxHeight:260}},
         h('table',null,
           h('thead',null,h('tr',null,...['Thông tin đơn','Dòng hàng trong đơn'].map(c=>h('th',{key:c},c)))),
@@ -1500,7 +1544,7 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,c
                 allPoints.map(pt=>h('option',{key:pt.id,value:pt.id},pt.customerName+' - '+pt.name))
               ),
               h('input',{value:o.customer||'',readOnly:true,style:{width:'100%',fontSize:12,padding:'5px 6px',background:'#f7faf8'}}),
-              !o.pointId&&h('div',{style:{fontSize:11,color:'#A32D2D',marginTop:2}},'Chưa khớp danh mục')
+              !o.pointId&&h('div',{style:{fontSize:11,color:'#A32D2D',marginTop:2}},'Cần chọn địa điểm trước khi nhập đơn')
             ),
             h('td',null,
               h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:5}},(o.lines||[]).length+' dòng hàng'),
@@ -1520,8 +1564,7 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,c
       )
     ),
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:importRows,disabled:busy||!rows.length},h('i',{className:'ti ti-file-import',style:{fontSize:14}}),'Nhập đơn hàng'))
-  );
-}
+  ),document.body);}
 
 function PrintByCustomerModal({orders,customers,products,company,initialDate,onClose}) {
   const [custId,sCust]=useState('');
@@ -2530,34 +2573,6 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const source=cleanDeliveryOrderRecord(orderContext(order));
     const draft={...source,id:'',copySourceId:order.id||'',status:'pending',tripId:'',tripAssignMode:'auto',invoiceImage:'',invoiceImageName:'',invoiceUploadedAt:'',invoiceUploadedBy:'',createdAt:'',updatedAt:'',lines:(source.lines||[]).map(line=>({...line,id:uid(),qtyDelivered:''}))};
     se(null);setCopyDraft(draft);sm('f');
-  };
-  const saveInvoiceImage=async(order,file)=>{
-    if(!file)return;
-    try{
-      const url=await uploadPhoto(file,'order-invoices/'+(order.id||'order'),{requireRemote:true});
-      const imageData={invoiceImage:url,invoiceImageName:file.name||'hoa-don.jpg',invoiceUploadedAt:fmtDT(),invoiceUploadedBy:currentUser?.name||''};
-      setOrders(prev=>prev.map(x=>x.id===order.id?{...x,...imageData,orderHistory:[...(x.orderHistory||[]),historyEntry(x.invoiceImage?'Thay ảnh hóa đơn':'Thêm ảnh hóa đơn',[file.name||'hoa-don.jpg'])],updatedAt:fmtDT(),updatedBy:currentUser?.name||''}:x));
-      setInvoiceView(prev=>prev?.id===order.id?{...prev,...imageData}:prev);
-    }catch(e){window.showToast('Chưa tải được ảnh hóa đơn lên máy chủ: '+(e.message||e),'error');}
-  };
-  const pickInvoiceImage=order=>{
-    scfPickPhoto(file=>saveInvoiceImage(order,file));
-  };
-  const removeInvoiceImage=async order=>{
-    if(!order?.invoiceImage)return;
-    if(!await window.scfConfirm('Xóa ảnh hóa đơn của đơn '+(order.id||'')+'?\nĐơn hàng và các thông tin khác vẫn được giữ nguyên.','Xóa ảnh hóa đơn',true))return;
-    setOrders(prev=>prev.map(x=>x.id===order.id?{
-      ...x,
-      invoiceImage:'',
-      invoiceImageName:'',
-      invoiceUploadedAt:'',
-      invoiceUploadedBy:'',
-      invoiceImageRemovedAt:fmtDT(),
-      invoiceImageRemovedBy:currentUser?.name||'',
-      orderHistory:[...(x.orderHistory||[]),historyEntry('Xóa ảnh hóa đơn',[x.invoiceImageName||'Ảnh hóa đơn'])],updatedAt:fmtDT(),updatedBy:currentUser?.name||''
-    }:x));
-    setInvoiceView(prev=>prev?.id===order.id?null:prev);
-    window.showToast('Đã xóa ảnh hóa đơn của đơn '+(order.id||'')+'.','success');
   };
   const del=async id=>{
     const old=orders.find(x=>x.id===id);
@@ -3863,8 +3878,9 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
             ?h('span',{className:'badge delivery-production-shift-name',title:prodShiftMode==='manual'?'Ca SX chọn tay':'Ca SX tự động',style:{background:firstPlanForDisplay.shift.color,color:firstPlanForDisplay.shift.textColor,border:prodShiftMode==='manual'?'1px solid '+firstPlanForDisplay.shift.textColor:'1px dashed '+firstPlanForDisplay.shift.textColor}},firstPlanForDisplay.shift.name)
             :h('span',{className:'delivery-table-text',style:{color:'var(--tx2)'}},'Chưa có ca phù hợp');
           const productionShiftDisplay=h('div',{className:'delivery-prod-shift-display'},
-            productionShiftName,
-            h('div',{className:'delivery-production-shift-date'},'Ngày SX: '+(firstPlanForDisplay?.prodDate||'—'))
+            h('div',{className:'delivery-production-shift-heading'},productionShiftName,
+              h('span',{className:'delivery-production-shift-date'},': '+(firstPlanForDisplay?.prodDate||'—'))),
+            h('div',{className:'delivery-production-shift-date'},'Tem: '+(firstPlanForDisplay?.labelDate||'—')+', '+(firstPlanForDisplay?.labelTime||'—'))
           );
           return h('tr',{key:o._rowKey,className:'delivery-order-row'},
             h('td',null,
@@ -3907,13 +3923,9 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
             !detailColumnsHidden&&[
               h('td',{key:'production',className:'delivery-center-cell'},productionShiftDisplay),
               h('td',{key:'invoice',className:'delivery-center-cell'},
-                o.invoiceImage
-                  ?h('div',{style:{display:'flex',gap:4,alignItems:'center',justifyContent:'center'}},
-                    h('button',{className:'bi',onClick:()=>setInvoiceView(o),title:'Xem hóa đơn đã upload'},h('i',{className:'ti ti-photo-check',style:{fontSize:15,color:'var(--pri)'}})),
-                    h('button',{className:'bi',onClick:()=>pickInvoiceImage(o),title:'Đổi ảnh hóa đơn'},h('i',{className:'ti ti-camera-up',style:{fontSize:15}})),
-                    h('button',{className:'bi',onClick:()=>removeInvoiceImage(o),title:'Xóa ảnh hóa đơn',style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
-                  )
-                  :h('button',{className:'bi',onClick:()=>pickInvoiceImage(o),title:'Upload/chụp ảnh hóa đơn'},h('i',{className:'ti ti-camera-plus',style:{fontSize:15}}))
+                String(o.invoiceImage||'').trim()
+                  ?h('button',{className:'bi',onClick:()=>setInvoiceView(o),title:'Xem ảnh hóa đơn','aria-label':'Xem ảnh hóa đơn'},h('i',{className:'ti ti-photo-check',style:{fontSize:15,color:'var(--pri)'}}))
+                  :null
               ),
               h('td',{key:'status',className:'delivery-center-cell'},h(StatusBadge,{s:ctx.status})),
               h('td',{key:'trip',className:'delivery-trip-cell'},tripSelect),
@@ -3981,8 +3993,6 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           h('img',{src:invoiceView.invoiceImage,style:{maxWidth:'100%',height:'auto',borderRadius:'var(--r)'}})
         ),
         h(Row,null,
-          h('button',{onClick:()=>pickInvoiceImage(invoiceView)},h('i',{className:'ti ti-camera-up',style:{fontSize:14}}),' Đổi ảnh'),
-          h('button',{onClick:()=>removeInvoiceImage(invoiceView),style:{color:'#A32D2D',borderColor:'#F7C1C1',background:'#FFF5F5'}},h('i',{className:'ti ti-trash',style:{fontSize:14}}),' Xóa ảnh'),
           h('button',{className:'bp',onClick:()=>setInvoiceView(null)},'Đóng')
         )
       )
