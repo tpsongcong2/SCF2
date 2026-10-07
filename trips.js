@@ -927,7 +927,7 @@ function scfTripImageShiftName(trip){
 }
 function scfTripImageSortKey(trip){
   const name=scfTripImageShiftName(trip);
-  const ss=['SST1','VPDEM','SST2','YPQV','MANI7HSHIP','SSS1','SSS2','VPNGAY','SSC1'].indexOf(name);
+  const ss=['SST1','VPDEM','SST2','YPQV','MANI7HSHIP','SSS1','SSS2','VPNGAY','SSC1'].indexOf(name==='MANISHIP7H'?'MANI7HSHIP':name);
   const warehouse=name==='KV'||name==='KHOVAN';
   const dt=name.match(/^DT-?(\d{1,2})H(.*)$/);
   const rawDate=String(trip.deliveryDate||'');
@@ -993,7 +993,10 @@ function renderTripImage(trips,orders,products,customers,title,prodCats=[],showD
     const ids=new Set((trip.orderIds||[]).map(String));
     const totalWeight=orders.filter(order=>order.status!=='cancelled'&&(order.tripId?String(order.tripId)===String(trip.id):ids.has(String(order.id)))).reduce((sum,order)=>sum+tripImageOrderWeight(order,products),0)||numFmt(trip.totalWeight);
     const shiftWidth=Math.round(canvas.width*.18),driverWidth=Math.round(canvas.width*.34);
-    if(showDriverName)blocks.push({cells:[shiftName,driverName,'TỔNG KHỐI LƯỢNG CHUYẾN: '+totalWeight.toLocaleString('vi-VN',{maximumFractionDigits:2})+' kg'],widths:[shiftWidth,driverWidth,canvas.width-shiftWidth-driverWidth],cellFills:[tripFill,'#ffff00',tripFill],fill:tripFill,bold:true});
+    const totalLabel='TỔNG KHỐI LƯỢNG CHUYẾN: '+totalWeight.toLocaleString('vi-VN',{maximumFractionDigits:2})+' kg';
+    blocks.push(showDriverName
+      ?{cells:[shiftName,driverName,totalLabel],widths:[shiftWidth,driverWidth,canvas.width-shiftWidth-driverWidth],cellFills:[tripFill,'#ffff00',tripFill],fill:tripFill,bold:true}
+      :{cells:[shiftName,totalLabel],widths:[shiftWidth,canvas.width-shiftWidth],fill:tripFill,bold:true});
     blocks.push({cells:visibleColumns.map(index=>headers[index]),fill:tripFill,bold:true});
     rows.forEach(row=>{
       blocks.push({cells:visibleColumns.map(index=>row[index]),fill:scfTripSummaryRowFill(trip,row,tripFill)});
