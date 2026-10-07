@@ -240,12 +240,16 @@ function scfAttachOrderQr(html,order){
   return body.replace('</style>',css+'</style>');
 }
 
+function scfOrderPrintInvoiceQty(line){
+  return Number(line?.qtyInvoice??line?.qtyProd??line?.qty??line?.quantity??0)||0;
+}
+
 function buildPrintHTMLBody(template, order, company) {
   order = scfEscapePrintData(order || {});
   company = scfEscapePrintData(company || {});
   const co = company || {};
   const lines = (order.lines || []).filter(l => l.productName).map(l=>({...l,productName:scfOrderPrintProductName(order,l)}));
-  const totalQty = lines.reduce((s,l) => s + Number(l.qtyInvoice||l.qtyProd||0), 0);
+  const totalQty = lines.reduce((s,l) => s + scfOrderPrintInvoiceQty(l), 0);
 
   if (template === 'welstory' || template === 'songcong') {
     const isSongCong = template === 'songcong';
@@ -255,7 +259,7 @@ function buildPrintHTMLBody(template, order, company) {
     const rows = lines.map((l,i) => `<tr style="height:42px">
       <td style="${BC};font-size:16px">${i+1}</td>
       <td style="${B};padding:2px 6px;font-size:16px">${l.productName||''}</td>
-      <td style="${BC};font-weight:700;font-size:18px">${Number(l.qtyInvoice||l.qtyProd||0)||''}</td>
+      <td style="${BC};font-weight:700;font-size:18px">${scfOrderPrintInvoiceQty(l)}</td>
       <td style="${BC}"></td>
       <td style="${BC};font-size:16px">${l.unit||''}</td>
       ${emCells}
@@ -367,7 +371,7 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
         <td style="text-align:center">${l.productId||''}</td>
         <td>${l.productName||''}</td>
         <td style="text-align:center">${l.unit||'KG'}</td>
-        <td style="text-align:center">${Number(l.qtyInvoice||l.qtyProd||0).toLocaleString('vi-VN',{minimumFractionDigits:2})}</td>
+        <td style="text-align:center">${scfOrderPrintInvoiceQty(l).toLocaleString('vi-VN',{minimumFractionDigits:2})}</td>
         <td></td>
         <td style="text-align:center">${order.deliveryTime||''}</td>
       </tr>`).join('');
@@ -463,18 +467,18 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
       const yscode = ys ? ys.code : '';
       const ysname = ys ? ys.name : (l.productName||'');
       const ysunit = l.unit||'KG';
-      const qty    = Number(l.qtyInvoice||l.qtyProd||0);
+      const qty    = scfOrderPrintInvoiceQty(l);
       return `<tr style="height:36px">
         <td style="${BC};font-size:14px">${i+1}</td>
         <td style="${BC};font-size:13px;font-weight:600">${yscode}</td>
         <td style="${BL};font-size:13px;font-weight:600">${ysname}</td>
         <td style="${BC};font-size:13px">${ysunit}</td>
-        <td style="${BC};font-size:15px;font-weight:700">${qty||''}</td>
+        <td style="${BC};font-size:15px;font-weight:700">${qty}</td>
         <td style="${BC}"></td>
         <td style="${BC};font-size:12px">${l.note||''}</td>
       </tr>`;
     }).join('');
-    const totalQ = lines.reduce((s,l)=>s+Number(l.qtyInvoice||l.qtyProd||0),0);
+    const totalQ = lines.reduce((s,l)=>s+scfOrderPrintInvoiceQty(l),0);
 
     return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>送货确认单 - YOUGSUN</title>
