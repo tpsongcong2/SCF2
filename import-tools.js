@@ -226,15 +226,18 @@ function scfOrderQrMarkup(order){
 function scfAttachOrderQr(html,order){
   const markup=scfOrderQrMarkup(order);
   if(!html||!markup)return html;
-  const style='<style>.print-sheet{position:relative}.print-sheet>.hdr,.print-sheet>h2,.print-sheet>.header-grid,.print-sheet>.legal,.print-sheet>.coinfo,.print-sheet>.title-wrap{padding-right:30mm}.scf-order-qr{position:absolute;right:8mm;top:7mm;width:24mm;text-align:center;background:#fff;padding:1.5mm;z-index:2}.scf-order-qr svg{display:block;width:21mm;height:21mm;margin:0 auto}.scf-order-qr-label{font:700 8px Arial,sans-serif;color:#000;line-height:1.15;margin-top:1mm;overflow-wrap:anywhere}@media print{.scf-order-qr{right:8mm;top:7mm}}</style>';
-  // Keep QR rules in the first style block: batch printing extracts that block.
-  const title='<div class="title">PHIẾU GIAO HÀNG</div>';
-  const titleStyle='.scf-order-title-row{position:relative;display:flex;align-items:center;justify-content:center;min-height:26mm;margin-bottom:10px;padding:0 27mm}.scf-order-title-row>.title{margin:0}.scf-order-title-row>.scf-order-qr{position:absolute;width:24mm;padding:1mm;right:0;top:50%;transform:translateY(-50%)}.scf-order-title-row .scf-order-qr svg{width:21mm;height:21mm}.scf-order-title-row .scf-order-qr-label{font-size:7px}';
-  const css=style.slice(7,-8)+(html.includes(title)?titleStyle:'');
-  const styled=html.replace('</style>',css+'</style>');
-  return html.includes(title)
-    ?styled.replace(title,'<div class="scf-order-title-row">'+title+markup+'</div>')
-    :styled.replace('<div class="print-sheet">','<div class="print-sheet">'+markup);
+  // Batch printing copies the first style block, so keep all QR rules there.
+  const css='.scf-order-title-row{position:relative;display:flex;align-items:center;justify-content:center;min-height:27mm;margin-bottom:10px;padding:0 27mm;break-inside:avoid}.scf-order-title-row>.title,.scf-order-title-row>h2,.scf-order-title-row>.title-wrap{margin:0}.scf-order-qr{position:absolute;box-sizing:border-box;width:24mm;padding:1mm;right:0;top:50%;transform:translateY(-50%);text-align:center;background:#fff}.scf-order-qr svg{display:block;width:21mm;height:21mm;margin:0 auto}.scf-order-qr-label{font:700 7px Arial,sans-serif;color:#000;line-height:1.15;margin-top:1mm;overflow-wrap:anywhere}';
+  const row=title=>'<div class="scf-order-title-row">'+title+markup+'</div>';
+  let body=html;
+  const fosecaTitle='<h2>PHIẾU GIAO NHẬN HÀNG</h2>';
+  if(body.includes(fosecaTitle)){
+    // Company information must precede the title and its QR on this template too.
+    body=body.replace(fosecaTitle,'').replace('<div class="meta-row">',row(fosecaTitle)+'<div class="meta-row">');
+  }else{
+    body=body.replace(/<div class="title">PHIẾU GIAO HÀNG<\/div>|<div class="title-wrap">[\s\S]*?<div class="title-vn">[\s\S]*?<\/div>\s*<\/div>/,row);
+  }
+  return body.replace('</style>',css+'</style>');
 }
 
 function buildPrintHTMLBody(template, order, company) {
