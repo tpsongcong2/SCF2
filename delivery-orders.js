@@ -3015,7 +3015,9 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const configuredDeliverySequence=o=>{
     const ctx=o?._ctx||orderContext(o);
     const resolved=pointMatchById.get(String(ctx?.pointId||ctx?.ptId||''))||pointMatchByName.get(normalizeLookupText(ctx?.pointName||''))||findOrderPointMatch(ctx,customers||[]);
-    return numFmt(resolved?.point?.deliveryOrder??resolved?.point?.deliverySeq??resolved?.point?.deliveryIndex);
+    const trip=o._effectiveTrip||o._autoTrip;
+    const shift=matchShiftSchedule({shiftId:trip?.shiftId,shiftName:trip?.shiftName||o._preferredTripShiftName,area:trip?.area||o._area,deliveryTime:trip?.deliveryTime||ctx.deliveryTime});
+    return scfPointDeliverySequence(resolved?.point,{shiftId:trip?.shiftId||shift?.id,shiftName:trip?.shiftName||o._preferredTripShiftName||''});
   };
   const groupInfoCache=React.useMemo(()=>new WeakMap(),[trips,shifts,employees,fArea,sortMode]);
   const groupInfoForOrder=o=>{
@@ -3036,6 +3038,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           summaryLabel:label,
           mode:'trip',
           tripId:o._effectiveTrip.id,
+          imageSortTrip:o._effectiveTrip,
           driverName:String(o._effectiveTrip.driverName||'').trim()||(o._effectiveTrip.driverId?String((employees||[]).find(e=>String(e.id)===String(o._effectiveTrip.driverId))?.name||'').trim():''),
           sortDate:tripDateObj?tripDateObj.getTime():Number.MAX_SAFE_INTEGER,
           sortShiftOrder:selectedArea==='SSTN'?(samsungRank??Number.MAX_SAFE_INTEGER):(selectedArea==='DT'?0:(shiftMeta?shiftMeta._order:Number.MAX_SAFE_INTEGER)),
@@ -3052,6 +3055,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       const samsungRank=samsungTripShiftRank.get(normalizeLookupText(o._preferredTripShiftName||''));
       return {
         key:'trip:pending:'+pendingKey,
+        imageSortTrip:{id:'pending:'+pendingKey,deliveryDate:o._preferredTripDate,shiftName:o._preferredTripShiftName,area:o._area},
         label,
         summaryLabel:label,
         mode:'trip',
@@ -3075,11 +3079,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     if(sortMode==='trip'){
       const dateCmp=(ga.sortDate||0)-(gb.sortDate||0);
       if(dateCmp!==0)return dateCmp;
-      const shiftOrderCmp=(ga.sortShiftOrder??Number.MAX_SAFE_INTEGER)-(gb.sortShiftOrder??Number.MAX_SAFE_INTEGER);
-      if(shiftOrderCmp!==0)return shiftOrderCmp;
-      const shiftTimeCmp=(ga.sortShiftTime??Number.MAX_SAFE_INTEGER)-(gb.sortShiftTime??Number.MAX_SAFE_INTEGER);
-      if(shiftTimeCmp!==0)return shiftTimeCmp;
-      const groupCmp=(ga.sortText||'').localeCompare(gb.sortText||'','vi');
+      const groupCmp=scfCompareTripImageTrips(ga.imageSortTrip,gb.imageSortTrip);
       if(groupCmp!==0)return groupCmp;
     }else{
       const areaCmp=(ga.sortText||'zzz').localeCompare(gb.sortText||'zzz','vi');

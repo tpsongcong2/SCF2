@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V512';
+const SCF_BUILD_VERSION='V516';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -27,7 +27,7 @@ const SCF_PAGE_DATA={
   materials:['materials','purchases'],assets:['assets'],garages:['garages'],
   products:['products','prodcats'],depts:['depts','workcats'],workcats:['workcats','depts'],
   customers:['customers','shifts','orders','areas'],areas:['areas','customers','orders'],
-  prodshifts:['prod_shifts','prod_shift_rules','orders','customers','shifts'],deliveryrules:['delivery_rules'],deliverysequence:['customers','areas'],
+  prodshifts:['prod_shifts','prod_shift_rules','orders','customers','shifts'],deliveryrules:['delivery_rules'],deliverysequence:['customers','areas','shifts'],
   tasks:['tasks','workcats'],notifications:[],userguide:[],
   nccs:['nccs','purchases'],nccgoods:['ncc_goods','goods_purchases'],
   purchaseorders:['purchases','nccs','materials','products','prodcats'],
@@ -831,7 +831,7 @@ function App(){
         canAccess(cu.role,'areas',cu.permissions)&&page==='areas'&&h(AreasTab,{areas,setAreas,customers,setCustomers,orders}),
         canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts,currentUser:cu}),
         canAccess(cu.role,'deliveryrules',cu.permissions)&&page==='deliveryrules'&&h(DeliveryRulesTab,{items:deliveryRules,setItems:setDeliveryRules,currentUser:cu}),
-        canAccess(cu.role,'deliverysequence',cu.permissions,cuAccessDepartments)&&page==='deliverysequence'&&h(DeliverySequenceSettingsTab,{customers,setCustomers,currentUser:cu}),
+        canAccess(cu.role,'deliverysequence',cu.permissions,cuAccessDepartments)&&page==='deliverysequence'&&h(DeliverySequenceSettingsTab,{customers,setCustomers,currentUser:cu,shifts}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats,depts}),
         canAccess(cu.role,'tasks',cu.permissions)&&page==='tasks'&&h(TasksTab,{tasks,setTasks,workcats,employees,currentUser:cu,notify:addNotification}),
         canAccess(cu.role,'notifications',cu.permissions)&&page==='notifications'&&h(NotificationsTab,{notifications,setNotifications,currentUser:cu,setPage}),

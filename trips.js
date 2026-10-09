@@ -710,10 +710,17 @@ function AdditionalTripOrderForm({trip,customers,products,onSave,onClose}){
   );
 }
 
-function tripDefaultPointOrder(order,customers){
-  return scfTripOrderLocation(order,customers).sequence;
+function tripDefaultPointOrder(order,customers,trip){
+  return scfTripOrderLocation(order,customers,trip).sequence;
 }
-function scfTripOrderLocation(order,customers){
+function scfPointDeliverySequence(point,trip){
+  const shiftId=String(trip?.shiftId||'');
+  if(shiftId)return numFmt(point?.deliveryOrderByShift?.[shiftId]);
+  // A named but unresolved shift must not inherit the old order for every shift.
+  if(trip?.shiftName)return 0;
+  return numFmt(point?.deliveryOrder??point?.deliverySeq??point?.deliveryIndex);
+}
+function scfTripOrderLocation(order,customers,trip){
   const resolved=findOrderPointMatch(order,customers||[]),point=resolved?.point;
   const clean=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const name=clean(point?.name||order.pointName||order.customer);
@@ -721,7 +728,7 @@ function scfTripOrderLocation(order,customers){
   const pointId=String(point?.id||order.pointId||order.ptId||'');
   const customerId=String(resolved?.customer?.id||order.customerId||order.custId||'');
   return {
-    sequence:numFmt(point?.deliveryOrder??point?.deliverySeq??point?.deliveryIndex),
+    sequence:scfPointDeliverySequence(point,trip),
     area:area||'\uffff',address:address||name||'\uffff',name,
     key:JSON.stringify(pointId?[customerId,pointId]:[customerId,area,address,name])
   };
@@ -732,12 +739,12 @@ function tripManualOrderEnabled(trip){
 function tripOrderSortValue(trip,order,customers){
   return tripManualOrderEnabled(trip)
     ?numFmt(order?.deliveryOrder??order?.deliverySeq??order?.deliveryIndex)
-    :tripDefaultPointOrder(order,customers);
+    :tripDefaultPointOrder(order,customers,trip);
 }
 function sortTripOrdersByDeliveryOrder(trip,tripOrders,customers,valueForOrder,locationForOrder){
   const manual=tripManualOrderEnabled(trip);
   // Resolve locations once and reuse them when the trip reader caches its result.
-  const locations=manual?null:new Map((tripOrders||[]).map(order=>[order,locationForOrder?locationForOrder(order):scfTripOrderLocation(order,customers)]));
+  const locations=manual?null:new Map((tripOrders||[]).map(order=>[order,locationForOrder?locationForOrder(order):scfTripOrderLocation(order,customers,trip)]));
   const values=new Map((tripOrders||[]).map(order=>[order,valueForOrder?valueForOrder(order):manual?tripOrderSortValue(trip,order,customers):locations.get(order).sequence]));
   const locationCollator=manual?null:new Intl.Collator('vi',{numeric:true});
   const compareText=(a,b)=>locationCollator.compare(String(a||''),String(b||''));
@@ -781,16 +788,18 @@ function scfCreateTripOrderReader(orders,customers,products){
     rows.sort((a,b)=>a.index-b.index);
     result={orders:rows.map(row=>row.order)};cache.set(trip,result);return result;
   };
-  const pointLocation=order=>{
-    if(!defaultLocation.has(order))defaultLocation.set(order,scfTripOrderLocation(order,customers));
-    return defaultLocation.get(order);
+  const pointLocation=(order,trip)=>{
+    if(!defaultLocation.has(order))defaultLocation.set(order,new Map());
+    const cache=defaultLocation.get(order),key=String(trip.shiftId||trip.shiftName||'');
+    if(!cache.has(key))cache.set(key,scfTripOrderLocation(order,customers,trip));
+    return cache.get(key);
   };
   return {
     orders:trip=>entry(trip).orders,
     hasOrders:trip=>(trip.orderIds||[]).some(id=>byId.has(id)),
     sorted(trip){
       const result=entry(trip);if(result.sorted)return result.sorted;
-      result.sorted=sortTripOrdersByDeliveryOrder(trip,result.orders,customers,undefined,tripManualOrderEnabled(trip)?undefined:pointLocation);
+      result.sorted=sortTripOrdersByDeliveryOrder(trip,result.orders,customers,undefined,tripManualOrderEnabled(trip)?undefined:order=>pointLocation(order,trip));
       return result.sorted;
     },
     weight(trip){
@@ -811,63 +820,69 @@ function scfTripListWindow(filteredTrips,selection,key,pageSize=40){
   return {trips:filteredTrips.slice(0,count),count,total:filteredTrips.length};
 }
 
-function DeliverySequenceSettingsTab({customers,setCustomers,currentUser}){
+function DeliverySequenceSettingsTab({customers,setCustomers,currentUser,shifts=[]}){
+  const[shiftId,setShiftId]=useState('');
   const rows=(customers||[]).flatMap(customer=>(customer.points||[]).map(point=>({
-    customerId:customer.id,customerName:customer.name||customer.id||'—',pointId:point.id,pointName:point.name||point.address||point.id||'—',area:String(point.area||'Chưa phân khu vực').trim()||'Chưa phân khu vực',value:point.deliveryOrder??point.deliverySeq??''
+    customerId:customer.id,customerName:customer.name||customer.id||'—',pointId:point.id,pointName:point.name||point.address||point.id||'—',area:String(point.area||'Chưa phân khu vực').trim()||'Chưa phân khu vực',value:point.deliveryOrderByShift?.[shiftId]??''
   }))).sort((a,b)=>a.area.localeCompare(b.area,'vi',{numeric:true,sensitivity:'base'})||(numFmt(a.value)||999999)-(numFmt(b.value)||999999)||a.pointName.localeCompare(b.pointName,'vi',{numeric:true,sensitivity:'base'}));
   const areaOptions=[...new Set(rows.map(row=>row.area))];
   const[area,setArea]=useState('');
-  const[draft,setDraft]=useState(()=>Object.fromEntries(rows.map(row=>[row.customerId+'\u001f'+row.pointId,String(row.value||'')])));
+  const selectedArea=areaOptions.includes(area)?area:(areaOptions[0]||'');
+  const[draft,setDraft]=useState({});
+  const rowKey=row=>JSON.stringify([shiftId,row.customerId,row.pointId]);
   useEffect(()=>{
     setDraft(current=>{
       const next={...current};
-      rows.forEach(row=>{const key=row.customerId+'\u001f'+row.pointId;if(!Object.prototype.hasOwnProperty.call(next,key))next[key]=String(row.value||'');});
+      rows.forEach(row=>{const key=rowKey(row);if(!Object.prototype.hasOwnProperty.call(next,key))next[key]=String(row.value||'');});
       return next;
     });
-  },[rows.map(row=>row.customerId+'\u001f'+row.pointId).join('\u0001')]);
-  const visibleRows=rows.filter(row=>!area||row.area===area).sort((a,b)=>{
-    const aKey=a.customerId+'\u001f'+a.pointId,bKey=b.customerId+'\u001f'+b.pointId;
+  },[shiftId,customers]);
+  const visibleRows=rows.filter(row=>row.area===selectedArea).sort((a,b)=>{
+    const aKey=rowKey(a),bKey=rowKey(b);
     const av=numFmt(draft[aKey]),bv=numFmt(draft[bKey]);
     const ao=av>0?av:Number.MAX_SAFE_INTEGER,bo=bv>0?bv:Number.MAX_SAFE_INTEGER;
     return a.area.localeCompare(b.area,'vi',{numeric:true,sensitivity:'base'})||ao-bo||a.pointName.localeCompare(b.pointName,'vi',{numeric:true,sensitivity:'base'});
   });
-  const setValue=(row,value)=>setDraft(previous=>({...previous,[row.customerId+'\u001f'+row.pointId]:String(value||'').replace(/[^\d]/g,'')}));
+  const setValue=(row,value)=>setDraft(previous=>({...previous,[rowKey(row)]:String(value||'').replace(/[^\d]/g,'')}));
   const renumberArea=areaName=>{
     const group=rows.filter(row=>row.area===areaName).sort((a,b)=>{
-      const av=numFmt(draft[a.customerId+'\u001f'+a.pointId]),bv=numFmt(draft[b.customerId+'\u001f'+b.pointId]);
+      const av=numFmt(draft[rowKey(a)]),bv=numFmt(draft[rowKey(b)]);
       return (av>0?av:Number.MAX_SAFE_INTEGER)-(bv>0?bv:Number.MAX_SAFE_INTEGER)||a.pointName.localeCompare(b.pointName,'vi',{numeric:true,sensitivity:'base'});
     });
     setDraft(previous=>{
-      const next={...previous};group.forEach((row,index)=>{next[row.customerId+'\u001f'+row.pointId]=String(index+1);});return next;
+      const next={...previous};group.forEach((row,index)=>{next[rowKey(row)]=String(index+1);});return next;
     });
   };
   const save=()=>{
-    const invalid=rows.find(row=>{const raw=draft[row.customerId+'\u001f'+row.pointId];return raw!==''&&(!Number.isInteger(Number(raw))||Number(raw)<1);});
+    if(!shiftId)return;
+    const invalid=rows.find(row=>{const raw=draft[rowKey(row)]??String(row.value||'');return raw!==''&&(!Number.isInteger(Number(raw))||Number(raw)<1);});
     if(invalid){window.showToast('Thứ tự của '+invalid.pointName+' phải là số nguyên từ 1 trở lên hoặc để trống.','warn');return;}
     const stamp=fmtDT(),actor=currentUser?.name||'';
     setCustomers(previous=>(previous||[]).map(customer=>({...customer,points:(customer.points||[]).map(point=>{
-      const key=customer.id+'\u001f'+point.id;
+      const key=rowKey({customerId:customer.id,pointId:point.id});
+      if(!Object.prototype.hasOwnProperty.call(draft,key))return point;
       const value=String(draft[key]||'').trim();
-      return{...point,deliveryOrder:value?Number(value):'',updatedAt:stamp,updatedBy:actor};
+      return{...point,deliveryOrderByShift:{...point.deliveryOrderByShift,[shiftId]:value?Number(value):''},updatedAt:stamp,updatedBy:actor};
     })})));
-    window.showToast('Đã lưu thứ tự giao mặc định của các bếp.','success');
+    window.showToast('Đã lưu thứ tự bếp cho ca đã chọn.','success');
   };
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-list-numbers',style:{fontSize:20}}),'Cài đặt thứ tự giao'),
     h('div',{className:'card',style:{marginBottom:12}},
-      h('div',{style:{fontSize:13,color:'var(--tx2)',lineHeight:1.55,marginBottom:12}},'Thứ tự này được dùng cho các chuyến ở chế độ TĐ. Admin hoặc kế toán có thể chuyển riêng từng chuyến sang B.tay để nhập STT khác.'),
+      h('div',{style:{fontSize:13,color:'var(--tx2)',lineHeight:1.55,marginBottom:12}},'Chọn ca giao hàng để đặt thứ tự bếp riêng cho ca đó. Áp dụng cho chuyến TĐ; chuyến B.tay giữ STT riêng. Ca chưa đặt thứ tự sẽ xếp theo khu vực và địa điểm.'),
       h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
-        h('select',{value:area,onChange:event=>setArea(event.target.value),style:{minWidth:220}},h('option',{value:''},'Tất cả khu vực'),areaOptions.map(name=>h('option',{key:name,value:name},name))),
-        area&&h('button',{type:'button',onClick:()=>renumberArea(area)},h('i',{className:'ti ti-sort-ascending-numbers'}),' Đánh số lại khu vực'),
-        h('button',{type:'button',className:'bp',onClick:save,style:{marginLeft:'auto'}},h('i',{className:'ti ti-device-floppy'}),' Lưu thứ tự')
+        h('select',{'aria-label':'Khu vực',value:selectedArea,onChange:event=>setArea(event.target.value),style:{minWidth:220}},!areaOptions.length&&h('option',{value:''},'Chưa có khu vực'),areaOptions.map(name=>h('option',{key:name,value:name},name))),
+        h('select',{'aria-label':'Ca giao hàng',value:shiftId,onChange:event=>setShiftId(event.target.value),style:{minWidth:220}},h('option',{value:''},'— Chọn ca giao hàng —'),shifts.map(shift=>h('option',{key:shift.id,value:shift.id},(shift.name||shift.id)+(shift.area?' · '+shift.area:'')))),
+        selectedArea&&h('button',{type:'button',disabled:!shiftId,onClick:()=>renumberArea(selectedArea)},h('i',{className:'ti ti-sort-ascending-numbers'}),' Đánh số lại khu vực'),
+        h('button',{type:'button',className:'bp',disabled:!shiftId,onClick:save,style:{marginLeft:'auto'}},h('i',{className:'ti ti-device-floppy'}),' Lưu thứ tự')
       )
     ),
     h('div',{className:'card',style:{padding:0,overflow:'hidden'}},
       h('div',{className:'tw'},h('table',null,
         h('thead',null,h('tr',null,['Khu vực','Khách hàng','Bếp / địa điểm giao','Thứ tự giao'].map(label=>h('th',{key:label},label)))),
         h('tbody',null,visibleRows.length?visibleRows.map(row=>{
-          const key=row.customerId+'\u001f'+row.pointId;
-          return h('tr',{key},h('td',null,h('b',null,row.area)),h('td',null,row.customerName),h('td',null,h('b',null,row.pointName)),h('td',null,h('input',{type:'number',min:1,step:1,inputMode:'numeric',value:draft[key]??'',onChange:event=>setValue(row,event.target.value),placeholder:'Chưa đặt',style:{width:110,textAlign:'center',fontWeight:700}})));
+          const key=rowKey(row);
+          return h('tr',{key},h('td',null,h('b',null,row.area)),h('td',null,row.customerName),h('td',null,h('b',null,row.pointName)),h('td',null,h('input',{disabled:!shiftId,type:'number',min:1,step:1,inputMode:'numeric',value:draft[key]??'',onChange:event=>setValue(row,event.target.value),placeholder:'Chưa đặt',style:{width:110,textAlign:'center',fontWeight:700}})));
         }):h('tr',null,h('td',{colSpan:4,className:'empty-st'},'Chưa có bếp hoặc địa điểm giao trong danh mục khách hàng.')))
       ))
     )
@@ -934,12 +949,13 @@ function scfTripImageSortKey(trip){
   const date=/^\d{2}\/\d{2}\/\d{4}$/.test(rawDate)?rawDate.split('/').reverse().join('-'):rawDate;
   return {date,group:scfTripImageGroup(trip)==='dt'?1:0,rank:warehouse?2000:dt?Number(dt[1]):ss>=0?ss:1000,suffix:dt?dt[2]:name};
 }
-function scfSortTripImageTrips(trips){
-  return [...(trips||[])].sort((a,b)=>{
+function scfCompareTripImageTrips(a,b){
     const ka=scfTripImageSortKey(a),kb=scfTripImageSortKey(b);
     return ka.date.localeCompare(kb.date)||ka.group-kb.group||ka.rank-kb.rank||
       ka.suffix.localeCompare(kb.suffix,'vi',{numeric:true})||String(a.id||'').localeCompare(String(b.id||''),'vi',{numeric:true});
-  });
+}
+function scfSortTripImageTrips(trips){
+  return [...(trips||[])].sort(scfCompareTripImageTrips);
 }
 function scfTripImageEarlyOrder(trip,row){
   const time=normalizeTimeInput(row[5]);
