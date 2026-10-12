@@ -78,6 +78,9 @@ button:hover{background:var(--bg2)}
 .delivery-line-note-list{width:100%;max-width:100%}
 .delivery-line-note-row{display:flex;align-items:center;min-height:32px;padding:5px 10px;line-height:1.35;white-space:normal;overflow-wrap:anywhere;color:var(--tx)}
 .delivery-line-note-row+.delivery-line-note-row{border-top:1px dashed var(--bd)}
+.delivery-line-note-editor{width:100%;min-width:0}
+.delivery-line-note-editor input{width:100%;min-width:0;padding:3px 5px;font:inherit;line-height:1.35}
+.delivery-line-note-editor input[readonly]{border-color:transparent;background:transparent;cursor:text}
 .delivery-group-header-cell{background:#2d6a4f!important;color:#fff!important;font-weight:700!important;font-size:13px!important;padding:5px 12px!important}
 .delivery-group-header{display:flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:4px 16px;width:100%;text-align:left}
 .delivery-group-driver{display:inline-flex;align-items:center;gap:8px;max-width:100%}
@@ -414,6 +417,11 @@ th{font-family:var(--ui-header-family)!important}
 .tw .trip-invoice-review-table{table-layout:fixed;min-width:1020px}
 .trip-invoice-review-table td{overflow-wrap:anywhere;padding:10px 8px}
 .trip-invoice-review-table th{padding:10px 8px}
+.trip-detail-table .trip-detail-note-cell{min-width:180px}
+.trip-detail-note-cell .trip-order-note-confirm,.trip-detail-note-cell .trip-order-note-confirm input{min-width:0!important;max-width:100%;width:100%}
+.trip-detail-table .trip-detail-basket-cell{min-width:80px;text-align:center}
+.trip-detail-basket-cell .trip-number-confirm{width:62px;max-width:100%}
+.trip-detail-basket-cell .trip-number-confirm input{min-width:0;max-width:100%}
 .trip-invoice-review-table .trip-driver-invoice-cell{font-size:12px}
 .trip-invoice-review-table .trip-driver-invoice-cell button{white-space:normal;font-size:12px;padding:4px}
 .trip-invoice-review-table input[type=number]{max-width:76px!important}
@@ -1190,3 +1198,28 @@ tbody tr:hover td{background:var(--bg)}
 .order-image-import-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
 .order-image-import-help{line-height:1.6;color:var(--tx2)}
 @media(max-width:700px){.order-image-import-top{grid-template-columns:minmax(0,1fr)}.modal.order-image-import-modal{max-height:calc(100dvh - 32px)}}
+
+.delivery-production-cell .delivery-prod-shift-display{width:100%;max-width:100%}
+.delivery-production-cell .delivery-production-shift-heading{max-width:100%;flex-wrap:wrap}
+.delivery-invoice-cell{vertical-align:middle!important;text-align:center!important}
+.delivery-invoice-cell .delivery-invoice-view{display:flex;align-items:center;justify-content:center;width:32px;height:32px;margin:0 auto;padding:0;flex-shrink:0}
+
+.delivery-inline-copy-row>td{background:#fff!important;border-bottom:1px dashed var(--pri);vertical-align:middle}
+.delivery-inline-copy-row input{padding:5px 4px;min-width:0;width:100%;font:inherit}
+.delivery-inline-copy-row .delivery-product-qty-value{padding:0 4px}
+.delivery-inline-point{position:relative;min-width:0}
+.delivery-inline-point-results{position:absolute;top:100%;left:0;min-width:260px;max-width:360px;max-height:240px;overflow:auto;background:#fff;border:1px solid var(--bd2);border-radius:6px;box-shadow:0 4px 12px #0002;z-index:50}
+.delivery-inline-point-results button{display:flex;flex-direction:column;align-items:flex-start;width:100%;border:0;border-radius:0;text-align:left;padding:8px}
+.delivery-inline-point-results small{color:var(--tx2)}
+.delivery-inline-copy-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px}
+.delivery-inline-copy-actions b{color:var(--pri)}
+
+.delivery-mobile-trip-editor{display:grid;gap:12px}
+.delivery-mobile-mode{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.delivery-mobile-mode .delivery-trip-mode-switch{min-width:48px;min-height:44px;width:auto;flex:0 0 48px}
+.delivery-mobile-edit-value{display:flex;align-items:center;gap:5px;min-width:0}
+.delivery-mobile-edit-value>b{flex:1;min-width:0;font-size:14px;overflow-wrap:anywhere}
+.delivery-mobile-edit-value input,.delivery-mobile-edit-value select{flex:1;min-width:0;width:0;min-height:44px;font-size:16px;padding:5px}
+.delivery-mobile-edit-value button{flex:0 0 36px;width:36px;min-height:44px;justify-content:center;padding:4px}
+.delivery-mobile-confirm{background:#257052;color:#fff;border:0;border-radius:7px}
+.delivery-mobile-confirm:hover{background:#1b533d}

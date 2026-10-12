@@ -826,8 +826,9 @@ function DeliverySequenceSettingsTab({customers,setCustomers,currentUser,shifts=
     customerId:customer.id,customerName:customer.name||customer.id||'—',pointId:point.id,pointName:point.name||point.address||point.id||'—',area:String(point.area||'Chưa phân khu vực').trim()||'Chưa phân khu vực',value:point.deliveryOrderByShift?.[shiftId]??''
   }))).sort((a,b)=>a.area.localeCompare(b.area,'vi',{numeric:true,sensitivity:'base'})||(numFmt(a.value)||999999)-(numFmt(b.value)||999999)||a.pointName.localeCompare(b.pointName,'vi',{numeric:true,sensitivity:'base'}));
   const areaOptions=[...new Set(rows.map(row=>row.area))];
-  const[area,setArea]=useState('');
-  const selectedArea=areaOptions.includes(area)?area:(areaOptions[0]||'');
+  const[areasByShift,setAreasByShift]=useState({});
+  const selectedAreas=shiftId?(areasByShift[shiftId]??areaOptions.filter(area=>rows.some(row=>row.area===area&&numFmt(row.value)>0))):[];
+  const toggleArea=area=>setAreasByShift(previous=>({...previous,[shiftId]:selectedAreas.includes(area)?selectedAreas.filter(name=>name!==area):[...selectedAreas,area]}));
   const[draft,setDraft]=useState({});
   const rowKey=row=>JSON.stringify([shiftId,row.customerId,row.pointId]);
   useEffect(()=>{
@@ -837,18 +838,15 @@ function DeliverySequenceSettingsTab({customers,setCustomers,currentUser,shifts=
       return next;
     });
   },[shiftId,customers]);
-  const visibleRows=rows.filter(row=>row.area===selectedArea).sort((a,b)=>{
+  const visibleRows=rows.filter(row=>selectedAreas.includes(row.area)).sort((a,b)=>{
     const aKey=rowKey(a),bKey=rowKey(b);
     const av=numFmt(draft[aKey]),bv=numFmt(draft[bKey]);
     const ao=av>0?av:Number.MAX_SAFE_INTEGER,bo=bv>0?bv:Number.MAX_SAFE_INTEGER;
-    return a.area.localeCompare(b.area,'vi',{numeric:true,sensitivity:'base'})||ao-bo||a.pointName.localeCompare(b.pointName,'vi',{numeric:true,sensitivity:'base'});
+    return ao-bo||a.area.localeCompare(b.area,'vi',{numeric:true,sensitivity:'base'})||a.pointName.localeCompare(b.pointName,'vi',{numeric:true,sensitivity:'base'});
   });
   const setValue=(row,value)=>setDraft(previous=>({...previous,[rowKey(row)]:String(value||'').replace(/[^\d]/g,'')}));
-  const renumberArea=areaName=>{
-    const group=rows.filter(row=>row.area===areaName).sort((a,b)=>{
-      const av=numFmt(draft[rowKey(a)]),bv=numFmt(draft[rowKey(b)]);
-      return (av>0?av:Number.MAX_SAFE_INTEGER)-(bv>0?bv:Number.MAX_SAFE_INTEGER)||a.pointName.localeCompare(b.pointName,'vi',{numeric:true,sensitivity:'base'});
-    });
+  const renumberSelected=()=>{
+    const group=visibleRows;
     setDraft(previous=>{
       const next={...previous};group.forEach((row,index)=>{next[rowKey(row)]=String(index+1);});return next;
     });
@@ -869,12 +867,16 @@ function DeliverySequenceSettingsTab({customers,setCustomers,currentUser,shifts=
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-list-numbers',style:{fontSize:20}}),'Cài đặt thứ tự giao'),
     h('div',{className:'card',style:{marginBottom:12}},
-      h('div',{style:{fontSize:13,color:'var(--tx2)',lineHeight:1.55,marginBottom:12}},'Chọn ca giao hàng để đặt thứ tự bếp riêng cho ca đó. Áp dụng cho chuyến TĐ; chuyến B.tay giữ STT riêng. Ca chưa đặt thứ tự sẽ xếp theo khu vực và địa điểm.'),
+      h('div',{style:{fontSize:13,color:'var(--tx2)',lineHeight:1.55,marginBottom:12}},'Chọn ca giao hàng trước, sau đó tích một hoặc nhiều khu vực để đặt thứ tự các bếp trong cùng ca. Áp dụng cho chuyến TĐ; chuyến B.tay giữ STT riêng.'),
       h('div',{style:{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}},
-        h('select',{'aria-label':'Khu vực',value:selectedArea,onChange:event=>setArea(event.target.value),style:{minWidth:220}},!areaOptions.length&&h('option',{value:''},'Chưa có khu vực'),areaOptions.map(name=>h('option',{key:name,value:name},name))),
         h('select',{'aria-label':'Ca giao hàng',value:shiftId,onChange:event=>setShiftId(event.target.value),style:{minWidth:220}},h('option',{value:''},'— Chọn ca giao hàng —'),shifts.map(shift=>h('option',{key:shift.id,value:shift.id},(shift.name||shift.id)+(shift.area?' · '+shift.area:'')))),
-        selectedArea&&h('button',{type:'button',disabled:!shiftId,onClick:()=>renumberArea(selectedArea)},h('i',{className:'ti ti-sort-ascending-numbers'}),' Đánh số lại khu vực'),
+        h('button',{type:'button',disabled:!shiftId||!visibleRows.length,onClick:renumberSelected},h('i',{className:'ti ti-sort-ascending-numbers'}),' Đánh số lại các bếp đang hiện'),
         h('button',{type:'button',className:'bp',disabled:!shiftId,onClick:save,style:{marginLeft:'auto'}},h('i',{className:'ti ti-device-floppy'}),' Lưu thứ tự')
+      ),
+      h('fieldset',{disabled:!shiftId,style:{marginTop:12,padding:12,border:'1px solid var(--bd)',borderRadius:8}},
+        h('legend',{style:{padding:'0 6px',fontSize:13,fontWeight:600}},'Khu vực hiển thị · có thể chọn nhiều'),
+        h('div',{style:{display:'flex',gap:10,flexWrap:'wrap'}},areaOptions.map(name=>h('label',{key:name,style:{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 10px',border:'1px solid var(--bd)',borderRadius:6,cursor:shiftId?'pointer':'default'}},h('input',{type:'checkbox','aria-label':'Khu vực '+name,checked:selectedAreas.includes(name),onChange:()=>toggleArea(name),style:{width:16,height:16,margin:0}}),name))),
+        h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:8}},shiftId?'Các bếp của những khu vực đã chọn dùng chung thứ tự trong ca. Bỏ tích chỉ ẩn khu vực khỏi bảng, không xóa thứ tự đã lưu.':'Chọn ca giao hàng để chọn khu vực.')
       )
     ),
     h('div',{className:'card',style:{padding:0,overflow:'hidden'}},
@@ -883,7 +885,7 @@ function DeliverySequenceSettingsTab({customers,setCustomers,currentUser,shifts=
         h('tbody',null,visibleRows.length?visibleRows.map(row=>{
           const key=rowKey(row);
           return h('tr',{key},h('td',null,h('b',null,row.area)),h('td',null,row.customerName),h('td',null,h('b',null,row.pointName)),h('td',null,h('input',{disabled:!shiftId,type:'number',min:1,step:1,inputMode:'numeric',value:draft[key]??'',onChange:event=>setValue(row,event.target.value),placeholder:'Chưa đặt',style:{width:110,textAlign:'center',fontWeight:700}})));
-        }):h('tr',null,h('td',{colSpan:4,className:'empty-st'},'Chưa có bếp hoặc địa điểm giao trong danh mục khách hàng.')))
+        }):h('tr',null,h('td',{colSpan:4,className:'empty-st'},!shiftId?'Chọn ca giao hàng trước.':!selectedAreas.length?'Tích chọn khu vực để hiện các bếp cần sắp xếp.':'Chưa có bếp hoặc địa điểm giao trong các khu vực đã chọn.')))
       ))
     )
   );
@@ -2333,7 +2335,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
             // Bảng đơn hàng
             tripOrders.length?h('div',{className:'desktop-only tw'},
               h('table',{className:'trip-detail-table'+(showInlineInvoices?' trip-invoice-review-table':'')},
-                showInlineInvoices&&h('colgroup',null,...[76,110,150,78,106,64,...(hideTripOptionalColumns?[]:[140,65,65]),null,...(showDriverInvoiceColumn?[120]:[]),48].map((width,index)=>h('col',{key:index,style:width?{width}:undefined}))),
+                showInlineInvoices&&h('colgroup',null,...[76,110,150,78,122,64,...(hideTripOptionalColumns?[]:[200,80,80]),null,...(showDriverInvoiceColumn?[120]:[]),48].map((width,index)=>h('col',{key:index,style:width?{width}:undefined}))),
                 h('thead',null,h('tr',null,...['STT','Địa điểm','Hàng hóa','SL HĐ','SL đã giao','Giờ',...(hideTripOptionalColumns?[]:['Chú ý','Rổ đi','Rổ về']),'Ảnh HĐ',...(showDriverInvoiceColumn?['HĐ LX']:[]),'In đơn'].map(c=>h('th',{key:c},c)))),
                 h('tbody',null,tripOrders.map((o,orderIndex)=>{
                   return h('tr',{key:o.id},
@@ -2349,9 +2351,9 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
                       :h('span',{style:{fontWeight:600}},tripDeliveredQty(l))
                     )))),
                     h('td',null,o.deliveryTime||'—'),
-                    !hideTripOptionalColumns&&h('td',null,h('div',{className:'trip-line-notes-desktop'},(o.lines||[]).map((line,index)=>h('div',{key:line.id||index,className:'trip-line-note-desktop'},lineNoteControl(trip,o,line,index,{fontSize:12,padding:'4px 6px'}))))),
-                    !hideTripOptionalColumns&&h('td',null,orderBasketControl(trip,o,'workOut','Rổ đi',canEditTripQty)),
-                    !hideTripOptionalColumns&&h('td',null,orderBasketControl(trip,o,'workReturn','Rổ về',canEditTripQty)),
+                    !hideTripOptionalColumns&&h('td',{className:'trip-detail-note-cell'},h('div',{className:'trip-line-notes-desktop'},(o.lines||[]).map((line,index)=>h('div',{key:line.id||index,className:'trip-line-note-desktop'},lineNoteControl(trip,o,line,index,{fontSize:12,padding:'4px 6px'}))))),
+                    !hideTripOptionalColumns&&h('td',{className:'trip-detail-basket-cell'},orderBasketControl(trip,o,'workOut','Rổ đi',canEditTripQty)),
+                    !hideTripOptionalColumns&&h('td',{className:'trip-detail-basket-cell'},orderBasketControl(trip,o,'workReturn','Rổ về',canEditTripQty)),
                     h('td',null,
                       showInlineInvoices&&o.invoiceImage&&h(TripInvoicePreview,{key:o.invoiceImage,src:o.invoiceImage,orderId:o.id,size:invoiceSize,landscape:true,label:'Hóa đơn '+(o.pointName||o.customer||'')}),
                       o.invoiceImage
