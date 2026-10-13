@@ -2361,6 +2361,15 @@ function scfDeliveryLineFill(trip,order,line,product,prodCats){
   return fill==='#ffff00'?'#ffeca6':fill==='#f4af86'?'#f8cfaf':'#ffffff';
 }
 
+function scfMarkDeliveryOrder(event,active){
+  const row=event.currentTarget,key=row.dataset.deliveryOrderKey;
+  if(!active&&event.relatedTarget?.closest?.('[data-delivery-order-key]')?.dataset.deliveryOrderKey===key)return;
+  const body=row.closest('tbody');
+  if(!body)return;
+  body.querySelectorAll('[data-delivery-order-key]').forEach(item=>{
+    item.classList.toggle('delivery-order-hover',active&&item.dataset.deliveryOrderKey===key);
+  });
+}
 function DeliveryMobileEditableField({label,value,type='time',disabled,onConfirm}){
   const [editing,setEditing]=useState(false),[draft,setDraft]=useState(''),[saving,setSaving]=useState(false),[error,setError]=useState(''),[commit,setCommit]=useState(null);
   const begin=()=>{setCommit(()=>onConfirm);setDraft(type==='date'?toIsoDate(value):mobileDeliveryTime(value));setError('');setEditing(true);};
@@ -4139,7 +4148,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           const orderRows=displayRows.map((row,pi)=>{
             const lineFill=scfDeliveryLineFill(autoTrip||{shiftName:preferredTripShiftName},ctx,{...row.line,productName:row.productName},products.find(product=>String(product.id)===String(row.line?.productId)),prodCats);
             const coloredCell={background:lineFill};
-            return h('tr',{key:o._rowKey+'_'+row.key,className:'delivery-order-row'},
+            return h('tr',{key:o._rowKey+'_'+row.key,className:'delivery-order-row'+(pi===0?' delivery-order-start':'')+(pi===displayRows.length-1?' delivery-order-end':''),'data-delivery-order-key':String(o._rowKey||o.id),onMouseEnter:e=>scfMarkDeliveryOrder(e,true),onMouseLeave:e=>scfMarkDeliveryOrder(e,false),onFocus:e=>scfMarkDeliveryOrder(e,true),onBlur:e=>scfMarkDeliveryOrder(e,false)},
             h('td',{style:coloredCell},
               h('div',{className:'delivery-order-date'},
                 isAdmin&&(pi===0?h('input',{
@@ -4185,7 +4194,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
               h('td',{key:'status',rowSpan:displayRows.length,className:'delivery-center-cell'},h(StatusBadge,{s:ctx.status})),
               h('td',{key:'trip',rowSpan:displayRows.length,className:'delivery-trip-cell'},tripSelect)
             ],
-            pi===0&&h('td',{key:'actions',rowSpan:displayRows.length},h('div',{style:{display:'flex',gap:2,justifyContent:'center',alignItems:'center'}},
+            pi===0&&h('td',{key:'actions',className:'delivery-order-actions',rowSpan:displayRows.length},h('div',{style:{display:'flex',gap:2,justifyContent:'center',alignItems:'center'}},
                 h('button',{className:'bi',onClick:()=>spr(o),title:'In hóa đơn'},h('i',{className:'ti ti-printer',style:{fontSize:14}})),
                 h('button',{className:'bi',onClick:()=>printLabels(o),title:'In tem'},h('i',{className:'ti ti-tag',style:{fontSize:14}})),
                 h('button',{className:'bi',onClick:()=>setHistoryView(o),title:'Lịch sử đơn hàng'},h('i',{className:'ti ti-history',style:{fontSize:15}})),

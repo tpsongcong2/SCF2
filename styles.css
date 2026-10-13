@@ -976,7 +976,16 @@ button:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
 /* Topbar user info */
 .topbar{backdrop-filter:blur(4px);background:rgba(255,255,255,.96)}
 /* Better table hover */
-tbody tr:hover td{background:var(--bg)}
+tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
+.delivery-order-row.delivery-order-hover>td{
+  --order-top:0px;--order-bottom:0px;--order-left:0px;--order-right:0px;
+  background-image:linear-gradient(rgba(35,112,80,.10),rgba(35,112,80,.10))!important;
+  box-shadow:inset 0 var(--order-top) #368564,inset 0 var(--order-bottom) #368564,inset var(--order-left) 0 #368564,inset var(--order-right) 0 #368564;
+}
+.delivery-order-hover.delivery-order-start>td{--order-top:2px}
+.delivery-order-hover.delivery-order-end>td,.delivery-order-hover>td[rowspan]{--order-bottom:-2px}
+.delivery-order-hover>td:first-child{--order-left:3px}
+.delivery-order-hover>td.delivery-order-actions{--order-right:-2px}
 /* Badge improvements */
 .badge{font-weight:500;letter-spacing:.01em}
 /* Scrollbar styling */
