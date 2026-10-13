@@ -1,6 +1,10 @@
 /* Giao kế hoạch theo xưởng và ca làm việc. Dữ liệu lưu chung với đơn SX cũ để giữ tương thích. */
 const SCF_WORKSHOPS=[['bun','Xưởng bún'],['banh','Xưởng bánh'],['botgao','Xưởng bột gạo']];
 const scfWorkshopName=id=>SCF_WORKSHOPS.find(([key])=>key===id)?.[1]||'Chưa phân xưởng';
+function scfWorkshopProductionEmployees(employees){
+  return (employees||[]).filter(employee=>employee.id!=null&&employee.active!==false&&employeeDepartmentIncludes(employee,'Sản xuất'))
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi'));
+}
 function scfWorkshopForProduct(product){
   if(product?.workshop)return product.workshop;
   const name=String(product?.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
@@ -44,6 +48,9 @@ function WorkshopAssignmentsTab({prodOrders,setProdOrders,orders,products,employ
   const[lines,setLines]=useState([]);
   const[note,setNote]=useState('');
   const[resultDrafts,setResultDrafts]=useState({});
+  const productionEmployees=scfWorkshopProductionEmployees(employees);
+  const participants=productionEmployees.filter(employee=>String(employee.id)!==String(leaderId));
+  const selectedMemberIds=participants.filter(employee=>memberIds.some(id=>String(id)===String(employee.id))).map(employee=>String(employee.id));
   const assignments=(prodOrders||[]).filter(item=>item.kind==='workshop_assignment');
   const visible=assignments.filter(item=>item.date===date&&(canManage||canConfirm||String(item.leaderId)===String(currentUser?.id)||(item.memberIds||[]).some(id=>String(id)===String(currentUser?.id)))).sort((a,b)=>SCF_WORKSHOPS.findIndex(([key])=>key===a.workshop)-SCF_WORKSHOPS.findIndex(([key])=>key===b.workshop)||shiftGroups.indexOf(a.shiftGroup)-shiftGroups.indexOf(b.shiftGroup));
   const availableProducts=(products||[]).filter(product=>scfWorkshopForProduct(product)===workshop);
@@ -63,10 +70,10 @@ function WorkshopAssignmentsTab({prodOrders,setProdOrders,orders,products,employ
     if(!lines.length||lines.some(line=>!line.productId||!Number.isFinite(Number(line.qtyRequired))||Number(line.qtyRequired)<=0||scfWorkshopForProduct((products||[]).find(p=>p.id===line.productId))!==workshop)){
       window.showToast('Chọn sản phẩm đúng xưởng và nhập chỉ tiêu lớn hơn 0.','warn');return;
     }
-    const leader=(employees||[]).find(employee=>String(employee.id)===String(leaderId));
-    if(!leader){window.showToast('Trưởng ca không còn trong danh sách nhân viên.','warn');return;}
+    const leader=productionEmployees.find(employee=>String(employee.id)===String(leaderId));
+    if(!leader){window.showToast('Chọn trưởng ca đang làm việc thuộc bộ phận sản xuất.','warn');return;}
     const now=fmtDT();
-    const next={id:'SXW'+uid(),kind:'workshop_assignment',date,shiftGroup,workshop,leaderId,leaderName:leader.name,memberIds,lines:lines.map(line=>({...line,id:line.id||uid(),qtyRequired:numFmt(line.qtyRequired),qtyProduced:'',qtyBad:'',qtyReceived:''})),note:note.trim(),status:'assigned',assignedBy:currentUser.name,assignedAt:now,updatedBy:currentUser.name,updatedAt:now};
+    const next={id:'SXW'+uid(),kind:'workshop_assignment',date,shiftGroup,workshop,leaderId,leaderName:leader.name,memberIds:selectedMemberIds,lines:lines.map(line=>({...line,id:line.id||uid(),qtyRequired:numFmt(line.qtyRequired),qtyProduced:'',qtyBad:'',qtyReceived:''})),note:note.trim(),status:'assigned',assignedBy:currentUser.name,assignedAt:now,updatedBy:currentUser.name,updatedAt:now};
     setProdOrders(previous=>[...(previous||[]),next]);
     setLines([]);setNote('');setMemberIds([]);
     window.showToast('Đã giao kế hoạch cho trưởng ca.','success');
@@ -111,8 +118,24 @@ function WorkshopAssignmentsTab({prodOrders,setProdOrders,orders,products,employ
     canManage&&h('div',{className:'card',style:{marginBottom:16}},
       h('div',{style:{fontWeight:700,marginBottom:10}},'Giao kế hoạch mới'),
       h('div',{className:'g2'},
-        h(F,{label:'Trưởng ca *'},h('select',{value:leaderId,onChange:e=>setLeaderId(e.target.value)},h('option',{value:''},'— Chọn trưởng ca —'),(employees||[]).filter(employee=>employee.active!==false).map(employee=>h('option',{key:employee.id,value:employee.id},employee.name+' · '+(employee.dept||'Chưa có bộ phận'))))),
-        h(F,{label:'Nhân viên tham gia (không bắt buộc)'},h('select',{multiple:true,size:4,value:memberIds,onChange:e=>setMemberIds([...e.target.selectedOptions].map(option=>option.value))},(employees||[]).filter(employee=>employee.active!==false&&String(employee.id)!==String(leaderId)).map(employee=>h('option',{key:employee.id,value:employee.id},employee.name))))
+        h(F,{label:'Trưởng ca *'},h('select',{value:leaderId,onChange:e=>{setLeaderId(e.target.value);setMemberIds(previous=>previous.filter(id=>String(id)!==String(e.target.value)));}},h('option',{value:''},'— Chọn trưởng ca —'),productionEmployees.map(employee=>h('option',{key:employee.id,value:employee.id},employee.name+' · '+employeeDepartmentLabel(employee))))),
+        h(F,{label:'Nhân viên tham gia (không bắt buộc)'},
+          h('div',{className:'workshop-roster'},
+            h('div',{className:'workshop-roster-toolbar'},
+              h('span',{'aria-live':'polite'},'Đã chọn '+selectedMemberIds.length+' / '+participants.length+' người'),
+              h('button',{type:'button',disabled:!participants.length,onClick:()=>setMemberIds(participants.map(employee=>String(employee.id)))},'Chọn tất cả'),
+              h('button',{type:'button',disabled:!selectedMemberIds.length,onClick:()=>setMemberIds([])},'Bỏ chọn')
+            ),
+            h('div',{className:'workshop-roster-help'},'Tích nhân viên sản xuất đi làm trong ca này. Trưởng ca được tính riêng.'),
+            h('div',{className:'workshop-roster-list'},participants.length?participants.map(employee=>{
+              const id=String(employee.id),checked=selectedMemberIds.includes(id);
+              return h('label',{key:id,className:'workshop-roster-person'+(checked?' selected':'')},
+                h('input',{type:'checkbox',checked,onChange:e=>{const selected=e.target.checked;setMemberIds(previous=>selected?[...new Set([...previous.map(String),id])]:previous.filter(value=>String(value)!==id));}}),
+                h('span',null,h('strong',null,employee.name),h('small',null,employeeDepartmentLabel(employee)))
+              );
+            }):h('div',{className:'workshop-roster-empty'},'Chưa có nhân viên sản xuất để chọn.'))
+          )
+        )
       ),
       h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',margin:'10px 0'}},
         workshop!=='botgao'&&h('button',{type:'button',onClick:loadPlan},'Lấy kế hoạch từ đơn hàng'),
