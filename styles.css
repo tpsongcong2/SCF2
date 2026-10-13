@@ -432,13 +432,15 @@ th{font-family:var(--ui-header-family)!important}
 .trip-inline-invoice-list{display:grid;gap:12px;margin-top:12px}
 .trip-inline-invoice-list .trip-invoice-preview{width:100%;margin:0}
 .trip-inline-invoice-list .invoice-photo-stage{--invoice-view-height:var(--invoice-mobile-height)}
-.tw .debt-invoice-table{table-layout:fixed;min-width:calc(792px + var(--debt-invoice-image-width,120px))}
+.tw .debt-invoice-table{table-layout:fixed;min-width:calc(1012px + var(--debt-invoice-image-width,120px))}
 .debt-invoice-col-driver{width:132px}
 .debt-invoice-col-date{width:106px}
 .debt-invoice-col-point{width:138px}
 .debt-invoice-col-product{width:190px}
 .debt-invoice-col-qty{width:78px}
 .debt-invoice-col-time{width:70px}
+.debt-invoice-col-note{width:220px}
+.debt-invoice-note{white-space:pre-wrap;line-height:1.5}
 .debt-invoice-table td,.debt-invoice-table th{padding:8px 10px;overflow-wrap:anywhere}
 .debt-invoice-table .debt-invoice-qty{white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
 .debt-invoice-table th:nth-child(5),.debt-invoice-table th:nth-child(6){text-align:right}

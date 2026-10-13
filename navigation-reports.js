@@ -2316,10 +2316,10 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
       ['Tổng SL hóa đơn',totals.invoice],['Tổng SL đã giao',totals.delivered],['Chênh lệch',totals.delivered-totals.invoice]
     ];
     const productsData=[['STT','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch'],...productRows.map((row,index)=>[index+1,row.name,row.unit||'',row.invoice,row.delivered,row.delivered-row.invoice])];
-    const ordersData=[['Lái xe','Ngày giao','Địa điểm','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch','Giờ giao','Ảnh hóa đơn']];
+    const ordersData=[['Lái xe','Ngày giao','Địa điểm','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch','Giờ giao','Ảnh hóa đơn','Chú ý']];
     filtered.forEach(order=>visibleLines(order).forEach(line=>ordersData.push([
       driverFor(order),fmtAnyDate(order.deliveryDate||order.date)||'',order.pointName||order.address||'',line.productName||'',line.unit||'',
-      numFmt(line.qtyInvoice)||0,deliveredQty(line,order),deliveredQty(line,order)-(numFmt(line.qtyInvoice)||0),order.deliveryTime||'',order.invoiceImage||''
+      numFmt(line.qtyInvoice)||0,deliveredQty(line,order),deliveredQty(line,order)-(numFmt(line.qtyInvoice)||0),order.deliveryTime||'',order.invoiceImage||'',String(line.note||'')
     ])));
     const wb=XLSX.utils.book_new();
     [['Tong quan',overview],['Tong hop san pham',productsData],['Hoa don da nhap',ordersData]].forEach(([name,data])=>{
@@ -2375,8 +2375,8 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
     h('div',{className:'card'},
       h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:10}},'Các hóa đơn đã nhập'),
       h('div',{className:'tw'},h('table',{className:'debt-invoice-table',style:{'--debt-invoice-image-width':showInlineInvoices?({small:'205px',medium:'280px',large:'420px'}[invoiceSize]):'90px'}},
-        h('colgroup',null,...['driver','date','point','product','qty','qty','time','image'].map((kind,index)=>h('col',{key:index,className:'debt-invoice-col-'+kind}))),
-        h('thead',null,h('tr',null,...['Lái xe','Ngày giao','Địa điểm','Sản phẩm','SL hóa đơn','SL đã giao','Giờ giao','Ảnh HĐ'].map(label=>h('th',{key:label},label)))),
+        h('colgroup',null,...['driver','date','point','product','qty','qty','time','image','note'].map((kind,index)=>h('col',{key:index,className:'debt-invoice-col-'+kind}))),
+        h('thead',null,h('tr',null,...['Lái xe','Ngày giao','Địa điểm','Sản phẩm','SL hóa đơn','SL đã giao','Giờ giao','Ảnh HĐ','Chú ý'].map(label=>h('th',{key:label},label)))),
         h('tbody',null,invoiceRows.length?invoiceRows.map(({order,line,lineIndex})=>{
           const invoice=line?(numFmt(line.qtyInvoice)||0):0;
           const delivered=line?deliveredQty(line,order):0;
@@ -2392,9 +2392,10 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
             lineIndex===0&&h('td',{rowSpan:visibleLines(order).length,style:{textAlign:'center'}},order.invoiceImage
               ?showInlineInvoices?h(TripInvoicePreview,{key:order.invoiceImage,src:order.invoiceImage,orderId:order.id,size:invoiceSize,landscape:true,label:'Hóa đơn '+(order.pointName||order.address||'')+' · '+(fmtAnyDate(order.deliveryDate||order.date)||'')})
                 :h('button',{type:'button',className:'bi',title:'Xem ảnh hóa đơn',onClick:()=>window.open(order.invoiceImage,'_blank')},h('i',{className:'ti ti-photo-check',style:{fontSize:16,color:'var(--pri)'}}))
-              :'—')
+              :'—'),
+            h('td',{className:'debt-invoice-note'},String(line?.note||'').trim()||'—')
           );
-        }):h('tr',null,h('td',{colSpan:8,className:'empty-st'},'Không có hóa đơn đã nhập theo bộ lọc.')))
+        }):h('tr',null,h('td',{colSpan:9,className:'empty-st'},'Không có hóa đơn đã nhập theo bộ lọc.')))
       ))
     )
   );
