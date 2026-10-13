@@ -1,4 +1,4 @@
-const CACHE = 'scf-v532';
+const CACHE = 'scf-v535';
 const ASSETS = [
   './',
   './index.html',
@@ -7,26 +7,26 @@ const ASSETS = [
   './vendor/supabase.min.js?v=358',
   './vendor/react.production.min.js?v=358',
   './vendor/react-dom.production.min.js?v=358',
-  './styles.css?v=532',
+  './styles.css?v=533',
   './runtime.js?v=457',
-  './storage.js?v=476',
+  './storage.js?v=535',
   './print-agent.js',
   './helpers.js?v=473',
   './defaults.js?v=218',
   './auth.js',
-  './server-auth.js?v=464',
+  './server-auth.js?v=535',
   './templates.js',
   './ui-common.js?v=488',
   './invoice-orientation.js?v=457',
   './invoice-orientation-store.js?v=460',
   './asset-documents.js?v=475',
-  './catalogs.js?v=478',
+  './catalogs.js?v=534',
   './production-shifts.js?v=469',
   './organization.js?v=424',
   './notifications.js?v=475',
   './user-guide.js?v=424',
   './operations.js?v=465',
-  './navigation-reports.js?v=532',
+  './navigation-reports.js?v=535',
   './order-detail.js?v=424',
   './delivery-shifts.js?v=455',
   './auth-workforce.js?v=448',
@@ -38,10 +38,11 @@ const ASSETS = [
   './trips.js?v=532',
   './delivery-excel.js?v=491',
   './vendor/exceljs-4.4.0.min.js',
-  './production.js?v=448',
+  './production.js?v=534',
+  './production-assignments.js?v=534',
   './permissions.js?v=452',
   './permission-settings.js?v=452',
-  './app.js?v=532',
+  './app.js?v=535',
   './bootstrap.js?v=448',
   './manifest.json',
   './icon-192.png',
@@ -54,7 +55,7 @@ const ASSETS = [
 // thật sự cần tới; tránh tải lặp toàn bộ ứng dụng và ba bản font ngay lần mở đầu.
 const PRECACHE_ASSETS = [
   './index.html',
-  './styles.css?v=532',
+  './styles.css?v=533',
   './vendor/tabler-icons.min.css?v=394'
 ];
 

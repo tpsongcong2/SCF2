@@ -58,7 +58,7 @@ async function invokeScfAuthOnce(options,timeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
     if(result?.error&&controller.signal.aborted){
       const error=new Error('Supabase timeout');error.code='SCF_REMOTE_TIMEOUT';throw error;
     }
-    outcome=result?.error?'error':'ok';return result;
+    outcome=result?.error?'error':result?.data?.conflict?'conflict':result?.data?.ok===false?'rejected':'ok';return result;
   }catch(error){
     if(controller.signal.aborted||error?.name==='AbortError'){
       outcome='timeout';const timeoutError=new Error('Supabase timeout — '+action+' — mã '+diagnosticId);timeoutError.code='SCF_REMOTE_TIMEOUT';throw timeoutError;
@@ -253,7 +253,7 @@ async function serverSavePermittedCollection(key,value,expectedUpdatedAt='',base
   if(data?.conflict){
     const ids=Array.isArray(data.conflictIds)&&data.conflictIds.length?' Các mã đang bị sửa đồng thời: '+data.conflictIds.join(', ')+'.':'';
     const conflict=new Error('Dữ liệu trên máy chủ vừa thay đổi'+(data.actorName?' bởi '+data.actorName:'')+'. Thay đổi trên máy này vẫn được giữ để kiểm tra.'+ids);
-    conflict.code='SCF_WRITE_CONFLICT';throw conflict;
+    conflict.code='SCF_WRITE_CONFLICT';conflict.conflictIds=Array.isArray(data.conflictIds)?data.conflictIds:[];throw conflict;
   }
   if(data?.duplicateCode){
     const duplicate=new Error(data.error||'Mã đơn hàng bị trùng. Vui lòng nhập lại mã khác.');

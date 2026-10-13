@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V532';
+const SCF_BUILD_VERSION='V535';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -44,7 +44,7 @@ const SCF_PAGE_DATA={
   salesreport:['orders','customers','products','prod_shifts','quotes'],
   cashflowreport:['finance_entries','finance_debts','finance_openings','customers','nccs','orders','products','quotes','purchases','goods_purchases'],
   powdersales:['customers','trips'],prodsummary:['orders','products','prod_shifts','prod_shift_rules','prod_actuals'],
-  prodorders:['prodorders','products'],stock:['stock','products','prodcats'],
+  prodorders:['prodorders','products','orders','prod_shifts','prod_shift_rules'],stock:['stock','products','prodcats'],
   syncreport:[],purchase:[],workreport_vp:[],workreport_sx:[]
 };
 function scfPageDataKeys(page,allKeys){
@@ -259,7 +259,7 @@ function SyncStatus(){
   const item=map[state?.status]||map.idle;
   const label=state?.pending?item[0]+' ('+state.pending+')':item[0];
   const report=reportOpen&&window.scfGetSyncReport?window.scfGetSyncReport():null;
-  const reportRows=(report?.items||[]).map(row=>h('div',{key:row.key,style:{padding:'10px 12px',border:'1px solid var(--bd)',borderRadius:'var(--r)',background:'var(--bg2)'}},h('div',{style:{fontWeight:700}},row.label),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:4}},row.recordCount+' bản ghi · Sửa lúc '+(row.updatedAt?new Date(row.updatedAt).toLocaleString('vi-VN'):'—')+' · Đã thử '+row.attempts+' lần')));
+  const reportRows=(report?.items||[]).map(row=>h('div',{key:row.key,style:{padding:'10px 12px',border:'1px solid var(--bd)',borderRadius:'var(--r)',background:'var(--bg2)'}},h('div',{style:{fontWeight:700}},row.label),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:4}},row.recordCount+' bản ghi · Sửa lúc '+(row.updatedAt?new Date(row.updatedAt).toLocaleString('vi-VN'):'—')+' · Đã thử '+row.attempts+' lần'),row.errorMessage&&h('div',{role:'alert',style:{fontSize:12,color:'#A32D2D',marginTop:6}},row.errorMessage)));
   const canOpen=!!state?.pending||state?.status==='error'||state?.status==='offline';
   const retry=()=>{if(state?.pending&&state?.status!=='syncing')window.scfFlushPendingWrites?.();};
   const title=state?.detail?(state.detail+(state?.pending?' — Bấm để đồng bộ lại':'')):(state?.pending?'Bấm để đồng bộ lại':label);
@@ -862,7 +862,7 @@ function App(){
 canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(FinanceReportTab,{entries:financeEntries,setEntries:setFinanceEntries,debts:financeDebts,setDebts:setFinanceDebts,openings:financeOpenings,setOpenings:setFinanceOpenings,customers,nccs,currentUser:cu,orders,products,quotes,purchases,goodsPurchases}),
         canAccess(cu.role,'powdersales',cu.permissions)&&page==='powdersales'&&h(PowderSalesTab,{customers,trips,employees,setPage}),
         canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products,prodShifts,prodShiftRules,prodActuals,setProdActuals,stock,currentUser:cu}),
-        canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,products,currentUser:cu}),
+        canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,orders,products,employees,prodShifts,prodShiftRules,currentUser:cu}),
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,prodCats,currentUser:cu}),
         canAccess(cu.role,'syncreport',cu.permissions)&&page==='syncreport'&&h(SyncDataReportTab),
         canAccess(cu.role,'dbusage',cu.permissions)&&page==='dbusage'&&h(SupabaseUsageReportTab,{employees,materials,assets,prodCats,products,customers,areas,workcats,tasks,nccs,purchases,goodsPurchases,quotes,orders,trips,attendance,advances,rewards,employeeErrors,employeeUniforms,leaves,depts,shifts,prodShifts,prodShiftRules,prodOrders,stock,company}),

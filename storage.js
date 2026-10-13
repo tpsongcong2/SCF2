@@ -64,7 +64,7 @@ const SCF_SYNC_LABELS={
   scf_employees:'Nhân viên SCFOOD',scf_privileged_employees:'Admin & Ban Giám Đốc',scf_orders:'Đơn giao hàng',scf_trips:'Chuyến giao hàng',scf_attendance:'Chấm công',
   scf_advances:'Ứng lương',scf_rewards:'Thưởng phạt',scf_employee_errors:'Lỗi nhân viên',scf_employee_uniforms:'Cấp đồng phục',scf_leaves:'Nghỉ phép',scf_finance_entries:'Dòng tiền',
   scf_finance_debts:'Công nợ',scf_finance_openings:'Số dư đầu kỳ',scf_internal_messages:'Tin nhắn nội bộ',scf_tasks:'Giao việc',scf_notifications:'Thông báo',
-  scf_customers:'Khách hàng',scf_products:'Sản phẩm',scf_materials:'Nguyên vật liệu',scf_quotes:'Báo giá',scf_ncc_goods:'Nhà cung cấp hàng hóa',scf_goods_purchases:'Đơn mua hàng hóa'
+  scf_customers:'Khách hàng',scf_products:'Sản phẩm',scf_materials:'Nguyên vật liệu',scf_quotes:'Báo giá',scf_ncc_goods:'Nhà cung cấp hàng hóa',scf_goods_purchases:'Đơn mua hàng hóa',scf_fuelpurchases:'Đơn mua xăng dầu'
 };
 let scfMemorySyncQueue={};
 let scfMemorySyncQueueReady=false;
@@ -173,14 +173,14 @@ function remoteTimeoutFor(value){
   return Math.min(DB_REMOTE_MAX_TIMEOUT_MS,minimum+Math.ceil(syncPayloadBytes(value)/65536)*750);
 }
 function readSyncMetrics(){try{const value=JSON.parse(localStorage.getItem(SCF_SYNC_METRICS_KEY)||'[]');return Array.isArray(value)?value:[];}catch{return[];}}
-function recordSyncMetric(key,mode,payload,startedAt,ok){
-  const rows=readSyncMetrics();rows.unshift({key,mode,bytes:syncPayloadBytes(payload),durationMs:Math.max(0,Math.round(performance.now()-startedAt)),ok:!!ok,at:new Date().toISOString()});
+function recordSyncMetric(key,mode,payload,startedAt,ok,error){
+  const rows=readSyncMetrics();rows.unshift({key,mode,bytes:syncPayloadBytes(payload),durationMs:Math.max(0,Math.round(performance.now()-startedAt)),ok:!!ok,at:new Date().toISOString(),...(error?{code:String(error.code||'SCF_SYNC_ERROR'),conflictIds:Array.isArray(error.conflictIds)?error.conflictIds.slice(0,10):[]}:{} )});
   try{localStorage.setItem(SCF_SYNC_METRICS_KEY,JSON.stringify(rows.slice(0,30)));}catch{}
 }
 async function measuredCollectionSave(key,mode,payload,task){
   const startedAt=performance.now();
   try{const result=await task();recordSyncMetric(key,mode,payload,startedAt,true);return result;}
-  catch(error){recordSyncMetric(key,mode,payload,startedAt,false);throw error;}
+  catch(error){recordSyncMetric(key,mode,payload,startedAt,false,error);throw error;}
 }
 function mergeRecordPatches(previous,next){
   const merged=new Map();
@@ -226,6 +226,11 @@ function removeQueuedWrite(key,updatedAt=''){
   if(updatedAt&&queue[key]?.updatedAt!==updatedAt)return false;
   delete queue[key];writeSyncQueue(queue);return true;
 }
+function scfRememberSyncFailure(key,writeToken,error){
+  const queue=readSyncQueue();if(queue[key]?.updatedAt!==writeToken)return;
+  queue[key]={...queue[key],attempts:(Number(queue[key].attempts)||0)+1,lastError:{code:String(error?.code||'SCF_SYNC_ERROR'),message:String(error?.message||'Không đồng bộ được dữ liệu'),conflictIds:Array.isArray(error?.conflictIds)?error.conflictIds.slice(0,10):[]}};
+  writeSyncQueue(queue);
+}
 window.scfClearSensitiveLocalData=function(){
   SCF_SENSITIVE_KEYS.forEach(key=>{try{localStorage.removeItem(localCacheKey(key));}catch{}});
   scfMemorySyncQueue={};
@@ -235,6 +240,7 @@ window.scfClearSensitiveLocalData=function(){
   delete window.__SCF_COLLECTION_SYNC_RESULTS;
   delete window.__SCF_CONFIRMED_INVOICES;
   delete window.__SCF_AUTH_DIAGNOSTICS;
+  delete window.__SCF_FUEL_SYNC_CONFLICT;
   delete window.__SCF_ACCESS_CONTEXT;
   try{sessionStorage.removeItem('scf_auth_diagnostics');}catch{}
   try{localStorage.removeItem(SCF_SYNC_METRICS_KEY);}catch{}
@@ -253,14 +259,14 @@ window.scfGetSyncReport=function(){
     scf_advances:'Ứng lương',scf_rewards:'Thưởng phạt',scf_employee_errors:'Lỗi nhân viên',scf_employee_uniforms:'Cấp đồng phục',scf_leaves:'Nghỉ phép',scf_finance_entries:'Dòng tiền',
     scf_finance_debts:'Công nợ',scf_finance_openings:'Số dư đầu kỳ',scf_internal_messages:'Tin nhắn nội bộ',scf_tasks:'Giao việc',scf_notifications:'Thông báo',
     scf_customers:'Khách hàng',scf_products:'Sản phẩm',scf_materials:'Nguyên vật liệu',scf_quotes:'Báo giá',
-    scf_ncc_goods:'Nhà cung cấp hàng hóa',scf_goods_purchases:'Đơn mua hàng hóa'
+    scf_ncc_goods:'Nhà cung cấp hàng hóa',scf_goods_purchases:'Đơn mua hàng hóa',scf_fuelpurchases:'Đơn mua xăng dầu'
   };
   return {
     ...window.scfGetSyncState(),
     online:navigator.onLine,
     serverReady:!!sb,
     metrics,
-    items:Object.entries(queue).map(([key,item])=>({key,label:labels[key]||key.replace(/^scf_/,'').replaceAll('_',' '),updatedAt:item?.updatedAt||'',bytes:Number(item?.bytes)||syncPayloadBytes(item?.patches||item?.value),recordCount:Array.isArray(item?.patches)?item.patches.length:(Array.isArray(item?.value)?item.value.length:(item?.value&&typeof item.value==='object'?Object.keys(item.value).length:1)),attempts:Number(item?.attempts)||0,mode:item?.patches?'patch':(item?.mode||'full')}))
+    items:Object.entries(queue).map(([key,item])=>({key,label:labels[key]||key.replace(/^scf_/,'').replaceAll('_',' '),updatedAt:item?.updatedAt||'',bytes:Number(item?.bytes)||syncPayloadBytes(item?.patches||item?.value),recordCount:Array.isArray(item?.patches)?item.patches.length:(Array.isArray(item?.value)?item.value.length:(item?.value&&typeof item.value==='object'?Object.keys(item.value).length:1)),attempts:Number(item?.attempts)||0,mode:item?.patches?'patch':(item?.mode||'full'),errorMessage:item?.lastError?.message||'',errorCode:item?.lastError?.code||''}))
   };
 };
 function scfBuildSyncDiagnostics(){
@@ -272,7 +278,7 @@ function scfBuildSyncDiagnostics(){
   return {version:typeof SCF_BUILD_VERSION==='undefined'?'':SCF_BUILD_VERSION,createdAt:new Date().toISOString(),accountId:actorId,
     connection:{online:!!navigator.onLine,status:report.status,pending:report.pending},
     queue:(report.items||[]).map(item=>({key:item.key,mode:item.mode,updatedAt:item.updatedAt,bytes:item.bytes,recordCount:item.recordCount,attempts:item.attempts})),
-    metrics:(report.metrics||[]).map(item=>({key:item.key,mode:item.mode,bytes:item.bytes,durationMs:item.durationMs,ok:item.ok,at:item.at})),requests:entries};
+    metrics:(report.metrics||[]).map(item=>({key:item.key,mode:item.mode,bytes:item.bytes,durationMs:item.durationMs,ok:item.ok,at:item.at,code:item.code,conflictIds:item.conflictIds})),requests:entries};
 }
 window.scfDownloadSyncDiagnostics=function(){
   const url=URL.createObjectURL(new Blob([JSON.stringify(scfBuildSyncDiagnostics(),null,2)],{type:'application/json'}));
@@ -461,11 +467,94 @@ function scfVerifyTripDriverSave(key,saved,value){
     }
   }
 }
+function scfRebaseFuelCollection(current,incoming,base){
+  const stable=list=>Array.isArray(list)&&list.every(row=>row&&String(row.id||'').trim())&&new Set(list.map(row=>String(row.id))).size===list.length;
+  if(!stable(current)||!stable(incoming))throw new Error('Danh sách xăng dầu có mã trống hoặc trùng. Thay đổi vẫn được giữ trên máy.');
+  const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+  const currentMap=new Map(current.map(row=>[String(row.id),row]));
+  const incomingMap=new Map(incoming.map(row=>[String(row.id),row]));
+  const baseMap=stable(base)?new Map(base.map(row=>[String(row.id),row])):null;
+  const merged=new Map(currentMap),conflicts=[];
+  const conflict=(id,fields,local=incomingMap.get(id)||null,remote=currentMap.get(id)||null)=>conflicts.push({id,fields,local,remote});
+  for(const local of incoming){
+    const id=String(local.id),remote=currentMap.get(id),before=baseMap?.get(id);
+    if(!remote){
+      if(!before)merged.set(id,local);
+      else if(!same(local,before))conflict(id,['Đơn đã bị xóa trên máy chủ']);
+      continue;
+    }
+    if(same(local,remote))continue;
+    if(!before){conflict(id,['Thiếu dữ liệu nền để xác định thay đổi']);continue;}
+    const row={...remote},fields=[];
+    // Số lít/đơn giá/thành tiền và mã/tên nhân viên phải được chọn cùng nhau.
+    // Ghép từng trường độc lập có thể tạo một đơn sai tổng tiền hoặc sai người.
+    for(const group of [['liters','price','amount'],['buyerId','buyerName']]){
+      const changed=(record)=>group.some(field=>!same(record[field],before[field]));
+      if(changed(local)&&changed(remote)&&group.some(field=>!same(local[field],remote[field])))fields.push(...group);
+    }
+    for(const field of new Set([...Object.keys(before),...Object.keys(local),...Object.keys(remote)])){
+      if(field==='id'||field==='updatedAt'||field==='updatedBy')continue;
+      if(fields.includes(field))continue;
+      const has=(obj)=>Object.prototype.hasOwnProperty.call(obj,field);
+      const localChanged=has(local)!==has(before)||!same(local[field],before[field]);
+      if(!localChanged)continue;
+      const serverChanged=has(remote)!==has(before)||!same(remote[field],before[field]);
+      if(serverChanged&&(has(local)!==has(remote)||!same(local[field],remote[field]))){fields.push(field);continue;}
+      if(has(local))row[field]=local[field];else delete row[field];
+    }
+    if(fields.length){
+      const localChoice={...row,updatedAt:local.updatedAt,updatedBy:local.updatedBy},remoteChoice={...row};
+      for(const field of fields){if(Object.prototype.hasOwnProperty.call(local,field))localChoice[field]=local[field];else delete localChoice[field];}
+      conflict(id,[...new Set(fields)],localChoice,remoteChoice);continue;
+    }
+    if(!same(row,remote)){
+      if(local.updatedAt!==undefined)row.updatedAt=local.updatedAt;
+      if(local.updatedBy!==undefined)row.updatedBy=local.updatedBy;
+    }
+    merged.set(id,row);
+  }
+  if(baseMap)for(const[id,before]of baseMap){
+    if(incomingMap.has(id)||!currentMap.has(id))continue;
+    if(same(currentMap.get(id),before))merged.delete(id);
+    else conflict(id,['Đơn bị xóa ở máy này và được sửa trên máy chủ']);
+  }
+  return{value:[...merged.values()],conflicts};
+}
+async function scfSaveFuelAfterConflict(val,baseValue,timeoutMs){
+  const key='scf_fuelpurchases',pending=readSyncQueue()[key],owner=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
+  if(!pending||pending.value!==val){const stale=new Error('Thay đổi mới đang được chuẩn bị đồng bộ.');stale.code='SCF_STALE_WRITE';throw stale;}
+  const loaded=await withRemoteTimeout(serverLoadPermittedCollection(key),timeoutMs);
+  const stillCurrent=()=>String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')===owner&&readSyncQueue()[key]?.updatedAt===pending?.updatedAt;
+  if(!pending||!stillCurrent()){const stale=new Error('Thay đổi mới đang được chuẩn bị đồng bộ.');stale.code='SCF_STALE_WRITE';throw stale;}
+  const remote=loaded?.value??[],rebased=scfRebaseFuelCollection(remote,val,baseValue);
+  if(rebased.conflicts.length){
+    window.__SCF_FUEL_SYNC_CONFLICT={owner,writeToken:pending.updatedAt,remote,updatedAt:loaded.updatedAt||'',value:rebased.value,conflicts:rebased.conflicts};
+    window.dispatchEvent(new CustomEvent('scf-fuel-sync-conflict'));
+    const error=new Error('Có '+rebased.conflicts.length+' đơn xăng dầu cần đối chiếu. Mở Đơn mua xăng dầu và bấm “Kiểm tra đơn xung đột”. Các đơn chờ vẫn được giữ trên máy.');
+    error.code='SCF_FUEL_WRITE_CONFLICT';error.conflictIds=rebased.conflicts.map(row=>row.id);throw error;
+  }
+  if(JSON.stringify(rebased.value)===JSON.stringify(remote))return{value:remote,updatedAt:loaded.updatedAt||''};
+  if(!stillCurrent()){const stale=new Error('Thay đổi mới đang được chuẩn bị đồng bộ.');stale.code='SCF_STALE_WRITE';throw stale;}
+  return withRemoteTimeout(serverSavePermittedCollection(key,rebased.value,loaded.updatedAt||'',remote,timeoutMs),timeoutMs);
+}
+window.scfResolveFuelSyncConflict=async function(choices){
+  const conflict=window.__SCF_FUEL_SYNC_CONFLICT,key='scf_fuelpurchases',pending=readSyncQueue()[key];
+  if(!conflict||conflict.owner!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')||pending?.updatedAt!==conflict.writeToken)throw new Error('Dữ liệu chờ đã thay đổi. Bấm Đồng bộ lại để kiểm tra phiên bản mới nhất.');
+  if(conflict.conflicts.some(row=>!['local','remote'].includes(choices?.[row.id])))throw new Error('Chọn dữ liệu cần giữ cho từng đơn xung đột.');
+  const rows=new Map(conflict.value.map(row=>[String(row.id),row]));
+  for(const row of conflict.conflicts){const chosen=choices[row.id]==='local'?row.local:row.remote;if(chosen)rows.set(row.id,chosen);else rows.delete(row.id);}
+  const value=[...rows.values()],stamp=queueRemoteWrite(key,value,{syncing:true});
+  const queue=readSyncQueue();queue[key]={...queue[key],baseValue:syncSnapshot(conflict.remote),expectedUpdatedAt:conflict.updatedAt};writeSyncQueue(queue);
+  scfLocalWrites.set(key,{value});window.dispatchEvent(new CustomEvent('scf-collection-reconciled',{detail:{key,value,writeToken:stamp}}));
+  delete window.__SCF_FUEL_SYNC_CONFLICT;window.dispatchEvent(new CustomEvent('scf-fuel-sync-conflict'));
+  return window.scfSendCollectionsNow([key]);
+};
 async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,baseValue,timeoutMs){
   const payload=patches?{key,patches,expectedUpdatedAt}:{key,value:val,baseValue,expectedUpdatedAt};
   return measuredCollectionSave(key,patches?'patch':'full',payload,async()=>{
     try{return await withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt,timeoutMs):serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue,timeoutMs),timeoutMs);}
     catch(error){
+      if(key==='scf_fuelpurchases'&&error?.code==='SCF_WRITE_CONFLICT')return scfSaveFuelAfterConflict(val,baseValue,timeoutMs);
       if(!['SCF_REMOTE_TIMEOUT','SCF_DATABASE_TIMEOUT'].includes(error?.code)||key!=='scf_orders'||!patches?.length)throw error;
       // A timed-out HTTP response is ambiguous: the server may already have
       // committed the patch. Read only the changed orders before retrying it.
@@ -534,6 +623,8 @@ async function performDbSet(key,val,queuedAt='',mode=''){
     }catch(e){
       console.warn('serverSavePermittedCollection:',e.message);
       if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
+      scfRememberSyncFailure(key,queuedAt,e);
+      if(e?.code==='SCF_FUEL_WRITE_CONFLICT'){reportSyncError(key,e,val);return false;}
       if(['SCF_DATABASE_BUSY','SCF_DATABASE_TIMEOUT'].includes(e?.code)){
         setSyncState('syncing','Máy chủ đang bận. Thay đổi vẫn được giữ để tự đồng bộ lại.');scheduleSyncRetry();return false;
       }
@@ -675,6 +766,8 @@ async function runPendingWrites(){
       console.warn('flushPendingWrites '+key+':',e?.message||e);
       waitingResolvers.forEach(done=>done(false));
       if(readSyncQueue()[key]?.updatedAt!==item?.updatedAt)return false;
+      scfRememberSyncFailure(key,item?.updatedAt,e);
+      if(e?.code==='SCF_FUEL_WRITE_CONFLICT'){reportSyncError(key,e,item?.value);return false;}
       if(['SCF_DATABASE_BUSY','SCF_DATABASE_TIMEOUT'].includes(e?.code)){
         setSyncState('syncing','Máy chủ đang bận. Thay đổi vẫn được giữ để tự đồng bộ lại.');scheduleSyncRetry();return false;
       }
@@ -696,7 +789,6 @@ async function runPendingWrites(){
         removeQueuedWrite(key,item?.updatedAt||'');
         return false;
       }
-      const latest=readSyncQueue();if(latest[key]){latest[key].attempts=(Number(latest[key].attempts)||0)+1;writeSyncQueue(latest);}
       reportSyncError(key,e,item?.value);scheduleSyncRetry();return false;
     }
   }

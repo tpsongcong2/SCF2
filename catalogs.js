@@ -296,7 +296,7 @@ function normalizeProductWeight(prod){
 function ProductForm({prod,prodCats,onSave,onClose}){
   const normalizedProd=normalizeProductWeight(prod);
   const baseRule=resolveProductLabelPackRule(normalizedProd,normalizedProd?.name);
-  const[f,sf]=useState({...{code:'',name:'',catId:prodCats[0]?.id||'',goodsGroup:'',unit:'Cái',weightPerUnit:'',note:'',custCode:'',custName:'',needsLabel:baseRule.enabled,labelPackSize:baseRule.pack,labelMergeSmallRemainder:baseRule.mergeSmallRemainder},...(normalizedProd||{})});
+  const[f,sf]=useState({...{code:'',name:'',catId:prodCats[0]?.id||'',goodsGroup:'',workshop:'',unit:'Cái',weightPerUnit:'',note:'',custCode:'',custName:'',needsLabel:baseRule.enabled,labelPackSize:baseRule.pack,labelMergeSmallRemainder:baseRule.mergeSmallRemainder},...(normalizedProd||{}),workshop:scfWorkshopForProduct(normalizedProd)});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
   const needWeight=!['Kg','Tấn','Lít'].includes(f.unit);
   const submit=()=>{
@@ -319,6 +319,10 @@ function ProductForm({prod,prodCats,onSave,onClose}){
       )),
     ),
     h(F,{label:'Tên sản phẩm *'},h('input',{value:f.name,onChange:e=>s('name',e.target.value),placeholder:'Tên sản phẩm...'})),
+    h(F,{label:'Xưởng sản xuất'},h('select',{value:f.workshop||'',onChange:e=>s('workshop',e.target.value)},
+      h('option',{value:''},'— Chưa phân xưởng —'),
+      SCF_WORKSHOPS.map(([key,name])=>h('option',{key,value:key},name))
+    )),
     h(F,{label:'Nhóm HH'},h('input',{value:f.goodsGroup||'',onChange:e=>s('goodsGroup',e.target.value),placeholder:'Ví dụ: Bánh, đồ uống, thuốc, vật tư...'})),
     h('div',{className:needWeight?'g2':''},
       h(F,{label:'Đơn vị tính (ĐVT)'},h('select',{value:f.unit,onChange:e=>s('unit',e.target.value)},UNITS.map(u=>h('option',{key:u,value:u},u)))),

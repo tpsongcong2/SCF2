@@ -79,11 +79,10 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
   const shiftGroups=[...rules,unknownRule].map(rule=>({rule,rows:rows.filter(r=>r.shift===rule.id).sort(sortByProdOrder)})).filter(g=>g.rows.length);
   const sumActualRows=list=>list.reduce((sum,r)=>sum+numFmt(readActualQty(r.prodDate,r.shift,r.productId)),0);
   const sumBadRows=list=>list.reduce((sum,r)=>sum+numFmt(readBadQty(r.prodDate,r.shift,r.productId)),0);
-  const readGoodQty=(prodDate,shiftId,productId)=>numFmt(readActualQty(prodDate,shiftId,productId))-numFmt(readBadQty(prodDate,shiftId,productId));
   const isInvalidActualRow=(prodDate,shiftId,productId)=>numFmt(readBadQty(prodDate,shiftId,productId))>numFmt(readActualQty(prodDate,shiftId,productId));
   const calcBadRate=(actualQty,badQty)=>numFmt(actualQty)>0?(numFmt(badQty)/numFmt(actualQty))*100:0;
   const fmtRate=rate=>((Math.round(numFmt(rate)*10)/10).toLocaleString('vi-VN'))+'%';
-  const sumGoodRows=list=>list.reduce((sum,r)=>sum+readGoodQty(r.prodDate,r.shift,r.productId),0);
+  const isBanhCuon=name=>String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().startsWith('BANH CUON');
   const hasInvalidRows=list=>list.some(r=>isInvalidActualRow(r.prodDate,r.shift,r.productId));
   const majorGroupMap={};
   const majorGroupOrder=[];
@@ -92,7 +91,6 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
     const qtyProd=g.rows.reduce((sum,r)=>sum+numFmt(r.qtyProd),0);
     const qtyActual=sumActualRows(g.rows);
     const qtyBad=sumBadRows(g.rows);
-    const qtyGood=sumGoodRows(g.rows);
     const badRate=calcBadRate(qtyActual,qtyBad);
     const hasInvalid=hasInvalidRows(g.rows);
     if(!majorGroupMap[gName]){
@@ -102,7 +100,6 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
         qtyProd:0,
         qtyActual:0,
         qtyBad:0,
-        qtyGood:0,
         badRate:0,
         hasInvalid:false,
         rowCount:0,
@@ -111,11 +108,10 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
       };
       majorGroupOrder.push(gName);
     }
-    majorGroupMap[gName].shifts.push({...g,qtyProd,qtyActual,qtyBad,qtyGood,badRate,hasInvalid});
+    majorGroupMap[gName].shifts.push({...g,qtyProd,qtyActual,qtyBad,badRate,hasInvalid});
     majorGroupMap[gName].qtyProd+=qtyProd;
     majorGroupMap[gName].qtyActual+=qtyActual;
     majorGroupMap[gName].qtyBad+=qtyBad;
-    majorGroupMap[gName].qtyGood+=qtyGood;
     majorGroupMap[gName].badRate=calcBadRate(majorGroupMap[gName].qtyActual,majorGroupMap[gName].qtyBad);
     majorGroupMap[gName].hasInvalid=majorGroupMap[gName].hasInvalid||hasInvalid;
     majorGroupMap[gName].rowCount+=g.rows.length;
@@ -156,16 +152,12 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
               h('div',{style:{fontSize:24,fontWeight:700,color:'var(--pri3)'}},g.qtyProd.toLocaleString())
             ),
             h('div',{style:{padding:'10px 12px',borderRadius:'var(--r)',background:'#F8FBF9'}},
-              h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4}},'Tổng SL SX'),
+              h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4}},'Tổng SL SX ĐẠT'),
               h('div',{style:{fontSize:24,fontWeight:700,color:'var(--pri)'}},g.qtyActual.toLocaleString())
             ),
             h('div',{style:{padding:'10px 12px',borderRadius:'var(--r)',background:'#FFF7ED'}},
               h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4}},'Tổng hàng lỗi'),
               h('div',{style:{fontSize:24,fontWeight:700,color:'#C2410C'}},g.qtyBad.toLocaleString())
-            ),
-            h('div',{style:{padding:'10px 12px',borderRadius:'var(--r)',background:g.hasInvalid?'#FEF2F2':'#F0FDF4'}},
-              h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4}},'Tổng SL đạt'),
-              h('div',{style:{fontSize:24,fontWeight:700,color:g.hasInvalid?'#B91C1C':'#15803D'}},g.qtyGood.toLocaleString())
             ),
             h('div',{style:{padding:'10px 12px',borderRadius:'var(--r)',background:'#EFF6FF'}},
               h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4}},'Tỷ lệ lỗi'),
@@ -190,16 +182,12 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
                 h('div',{style:{fontSize:18,fontWeight:700,color:'var(--pri3)'}},g.qtyProd.toLocaleString())
               ),
               h('div',{style:{padding:'8px 12px',borderRadius:'var(--r)',background:'#F8FBF9',minWidth:120}},
-                h('div',{style:{fontSize:11,color:'var(--tx2)'}},'SL SX ca lớn'),
+                h('div',{style:{fontSize:11,color:'var(--tx2)'}},'SL SX ĐẠT ca lớn'),
                 h('div',{style:{fontSize:18,fontWeight:700,color:'var(--pri)'}},g.qtyActual.toLocaleString())
               ),
               h('div',{style:{padding:'8px 12px',borderRadius:'var(--r)',background:'#FFF7ED',minWidth:120}},
                 h('div',{style:{fontSize:11,color:'var(--tx2)'}},'Hàng lỗi ca lớn'),
                 h('div',{style:{fontSize:18,fontWeight:700,color:'#C2410C'}},g.qtyBad.toLocaleString())
-              ),
-              h('div',{style:{padding:'8px 12px',borderRadius:'var(--r)',background:g.hasInvalid?'#FEF2F2':'#F0FDF4',minWidth:120}},
-                h('div',{style:{fontSize:11,color:'var(--tx2)'}},'SL đạt ca lớn'),
-                h('div',{style:{fontSize:18,fontWeight:700,color:g.hasInvalid?'#B91C1C':'#15803D'}},g.qtyGood.toLocaleString())
               ),
               h('div',{style:{padding:'8px 12px',borderRadius:'var(--r)',background:'#EFF6FF',minWidth:120}},
                 h('div',{style:{fontSize:11,color:'var(--tx2)'}},'Tỷ lệ lỗi ca lớn'),
@@ -208,7 +196,7 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
             )
           ),
           h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:'1rem'}},
-            g.shifts.map(({rule,rows:groupRows,qtyProd,qtyActual,qtyBad,qtyGood,badRate,hasInvalid})=>h('div',{key:rule.id,style:{border:`1px solid ${hasInvalid?'#FCA5A5':(rule.color||'var(--bd)')}`,borderRadius:'var(--rl)',overflow:'hidden',background:'#fff'}},
+            g.shifts.map(({rule,rows:groupRows,qtyProd,qtyActual,qtyBad,badRate,hasInvalid})=>h('div',{key:rule.id,style:{border:`1px solid ${hasInvalid?'#FCA5A5':(rule.color||'var(--bd)')}`,borderRadius:'var(--rl)',overflow:'hidden',background:'#fff'}},
               h('div',{style:{padding:'12px 14px',background:rule.color||'#F8FBF9',borderBottom:'.5px solid var(--bd)'}},
                 h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,flexWrap:'wrap'}},
                   h('div',null,
@@ -221,16 +209,12 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
                       h('div',{style:{fontSize:18,fontWeight:700,color:'var(--pri3)'}},qtyProd.toLocaleString())
                     ),
                     h('div',{style:{minWidth:80,padding:'6px 8px',borderRadius:'var(--r)',background:'rgba(255,255,255,.75)',textAlign:'center'}},
-                      h('div',{style:{fontSize:11,color:'var(--tx2)'}},'SL SX'),
+                      h('div',{style:{fontSize:11,color:'var(--tx2)'}},'SL SX ĐẠT'),
                       h('div',{style:{fontSize:18,fontWeight:700,color:'var(--pri)'}},qtyActual.toLocaleString())
                     ),
                     h('div',{style:{minWidth:80,padding:'6px 8px',borderRadius:'var(--r)',background:'#FFF7ED',textAlign:'center'}},
                       h('div',{style:{fontSize:11,color:'var(--tx2)'}},'Hàng lỗi'),
                       h('div',{style:{fontSize:18,fontWeight:700,color:'#C2410C'}},qtyBad.toLocaleString())
-                    ),
-                    h('div',{style:{minWidth:80,padding:'6px 8px',borderRadius:'var(--r)',background:hasInvalid?'#FEF2F2':'#F0FDF4',textAlign:'center'}},
-                      h('div',{style:{fontSize:11,color:'var(--tx2)'}},'SL đạt'),
-                      h('div',{style:{fontSize:18,fontWeight:700,color:hasInvalid?'#B91C1C':'#15803D'}},qtyGood.toLocaleString())
                     ),
                     h('div',{style:{minWidth:80,padding:'6px 8px',borderRadius:'var(--r)',background:'#EFF6FF',textAlign:'center'}},
                       h('div',{style:{fontSize:11,color:'var(--tx2)'}},'Tỷ lệ lỗi'),
@@ -241,17 +225,16 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
               ),
               h('div',{className:'tw production-summary-table'},
                 h('table',null,
-                  h('thead',null,h('tr',null,...['Sản phẩm','ĐVT','SL Đặt',...(stockFieldForShift(rule)?[stockFieldForShift(rule)==='stockEvening'?'Tồn 1h':'Tồn 9h']:[]),'SL SX','SL hàng lỗi','SL đạt','Tỷ lệ lỗi','Đơn hàng'].map(c=>h('th',{key:c,title:c.startsWith('Tồn ')?'Số tồn mới nhất trong mục Tồn kho':undefined},c)))),
+                  h('thead',null,h('tr',null,...['Sản phẩm','ĐVT','SL Đặt',...(stockFieldForShift(rule)?[stockFieldForShift(rule)==='stockEvening'?'Tồn 1h':'Tồn 9h']:[]),'SL SX ĐẠT','SL hàng lỗi','Tỷ lệ lỗi','Đơn hàng'].map(c=>h('th',{key:c,title:c.startsWith('Tồn ')?'Số tồn mới nhất trong mục Tồn kho':undefined},c)))),
                   h('tbody',null,groupRows.map((r,i)=>{
                     const rowInvalid=isInvalidActualRow(r.prodDate,r.shift,r.productId);
                     const rowActualQty=numFmt(readActualQty(r.prodDate,r.shift,r.productId));
                     const rowBadQty=numFmt(readBadQty(r.prodDate,r.shift,r.productId));
-                    const rowGoodQty=readGoodQty(r.prodDate,r.shift,r.productId);
                     const rowBadRate=calcBadRate(rowActualQty,rowBadQty);
                     const orderRowKey=[r.prodDate,r.shift,r.productId].join('|');
                     const orderIds=[...new Set(r.orders||[])];
                     const ordersOpen=openOrderRows.has(orderRowKey);
-                    return h('tr',{key:i,style:rowInvalid?{background:'#FEF2F2'}:null},
+                    return h('tr',{key:i,className:rowInvalid?'production-summary-invalid':isBanhCuon(r.productName)?'production-summary-banh-cuon':undefined},
                     h('td',null,h('div',{style:{fontWeight:500}},r.productName)),
                     h('td',null,h('span',{className:'badge',style:{background:rule.color||'#EAF3DE',color:rule.textColor||'#3B6D11'}},r.unit)),
                     h('td',null,h('span',{style:{fontSize:16,fontWeight:600,color:'var(--pri)'}},r.qtyProd.toLocaleString())),
@@ -262,7 +245,7 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
                       step:'0.01',
                       value:readActualQty(r.prodDate,r.shift,r.productId),
                       onChange:e=>saveActuals(r.prodDate,r.shift,r.productId,r.productName,{qty:e.target.value}),
-                      placeholder:'Nhập SL SX',
+                      placeholder:'Nhập SL SX ĐẠT',
                       style:{width:110,fontSize:13,padding:'5px 8px',borderRadius:'var(--r)',border:'1px solid var(--bd)',textAlign:'right'}
                     })),
                     h('td',null,h('input',{
@@ -274,10 +257,6 @@ function ProductionSummaryTab({orders,products,prodShifts,prodShiftRules,prodAct
                       placeholder:'Nhập SL lỗi',
                       style:{width:110,fontSize:13,padding:'5px 8px',borderRadius:'var(--r)',border:rowInvalid?'1px solid #DC2626':'1px solid #FDBA74',textAlign:'right',background:rowInvalid?'#FEF2F2':'#FFF7ED',color:rowInvalid?'#B91C1C':'inherit'}
                     })),
-                    h('td',null,h('div',null,
-                      h('div',{style:{fontSize:16,fontWeight:700,color:rowInvalid?'#B91C1C':'#15803D'}},rowGoodQty.toLocaleString()),
-                      rowInvalid&&h('div',{style:{fontSize:11,color:'#B91C1C',marginTop:4}},'Hàng lỗi vượt SL SX')
-                    )),
                     h('td',null,h('div',{style:{fontSize:16,fontWeight:700,color:rowInvalid?'#B91C1C':'#1D4ED8'}},fmtRate(rowBadRate))),
                     h('td',null,
                       h('button',{
@@ -343,18 +322,23 @@ function ProdOrderForm({po,products,currentUser,onSave,onClose}){
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),'Lưu đơn SX'))
   );
 }
-function ProdOrdersTab({prodOrders,setProdOrders,products,currentUser}){
+function ProdOrdersTab({prodOrders,setProdOrders,orders,products,employees,prodShifts,prodShiftRules,currentUser}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[filter,sf]=useState('all');const[q,sq]=useState('');
-  let pSeq=prodOrders.length+1;
+  const[showLegacy,setShowLegacy]=useState(false);
+  const legacyOrders=prodOrders.filter(item=>item.kind!=='workshop_assignment');
+  let pSeq=legacyOrders.length+1;
   const save=d=>{if(edit)setProdOrders(p=>p.map(x=>x.id===edit.id?d:x));else{const id='SX'+String(pSeq++).toString().padStart(4,'0');setProdOrders(p=>[...p,{...d,id,createdBy:currentUser.name,createdAt:fmtDT()}]);}sm(null);se(null);};
   const del=id=>window.scfConfirm('Bạn có chắc muốn xóa đơn sản xuất này?','Xóa đơn sản xuất',true).then(ok=>ok&&setProdOrders(p=>p.filter(x=>x.id!==id)));
   const sts=[['all','Tất cả'],['planning','Kế hoạch'],['in_progress','Đang SX'],['done','Hoàn thành']];
-  const list=prodOrders.filter(x=>(filter==='all'||x.status===filter)&&(!q||x.id.toLowerCase().includes(q.toLowerCase())||x.date.includes(q)));
+  const list=legacyOrders.filter(x=>(filter==='all'||x.status===filter)&&(!q||x.id.toLowerCase().includes(q.toLowerCase())||x.date.includes(q)));
   const statusMap={planning:['#E6F1FB','#185FA5','Kế hoạch'],in_progress:['#FAEEDA','#854F0B','Đang SX'],done:['#EAF3DE','#3B6D11','Hoàn thành'],cancelled:['#FCEBEB','#A32D2D','Hủy']};
   return h('div',null,
+    h(WorkshopAssignmentsTab,{prodOrders,setProdOrders,orders,products,employees,prodShifts,prodShiftRules,currentUser}),
+    h('button',{type:'button',onClick:()=>setShowLegacy(value=>!value),style:{margin:'16px 0'}},showLegacy?'Ẩn đơn sản xuất cũ':'Xem đơn sản xuất cũ ('+legacyOrders.length+')'),
+    showLegacy&&h(React.Fragment,null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-building-factory',style:{fontSize:20}}),'Đơn sản xuất'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
-      h('div',{style:{display:'flex',gap:5,flexWrap:'wrap'}},sts.map(([v,l])=>h('button',{key:v,className:'pill'+(filter===v?' on':''),onClick:()=>sf(v)},l+' ('+(v==='all'?prodOrders.length:prodOrders.filter(x=>x.status===v).length)+')'))),
+      h('div',{style:{display:'flex',gap:5,flexWrap:'wrap'}},sts.map(([v,l])=>h('button',{key:v,className:'pill'+(filter===v?' on':''),onClick:()=>sf(v)},l+' ('+(v==='all'?legacyOrders.length:legacyOrders.filter(x=>x.status===v).length)+')'))),
       h('div',{style:{display:'flex',gap:6}},
         h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn SX...'}),
         h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Tạo đơn SX'})
@@ -415,6 +399,7 @@ function ProdOrdersTab({prodOrders,setProdOrders,products,currentUser}){
       'Chưa có đơn sản xuất nào.'
     ),
     modal==='f'&&h(ProdOrderForm,{po:edit,products,currentUser,onSave:save,onClose:()=>{sm(null);se(null);}})
+    )
   );
 }
 
