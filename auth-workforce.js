@@ -388,7 +388,24 @@ function AttendanceKiosk({employees,attendance,setAttendance,currentUser,attenda
     h('p',{className:'attendance-kiosk-hint'},'Bản thử nghiệm có người giám sát. Chỉ lưu khi một khuôn mặt khớp rõ, có thao tác nhắm/mở mắt và GPS hợp lệ. Nhận diện ảnh/video giả chưa thể bảo đảm tuyệt đối; luôn giữ cách chấm công dự phòng.')
   );
 }
-function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,replaceEmployees,currentUser,company,reportTitle='Báo cáo chấm công',onKioskExit}) {
+function scfNormalizeAttendanceZones(zones){
+  const result={};
+  for(const [id,name]of [['office','Vùng 1: KẾ TOÁN'],['production','Vùng 2: SẢN XUẤT']]){
+    const zone=zones?.[id];
+    const lat=Number(zone?.lat),lon=Number(zone?.lon),radius=Number(zone?.radius);
+    if(!zone||zone.lat===''||zone.lon===''||zone.lat==null||zone.lon==null||!Number.isFinite(lat)||!Number.isFinite(lon)||!Number.isFinite(radius)||Math.abs(lat)>90||Math.abs(lon)>180||radius<=0)
+      throw new Error('Kiểm tra lại tọa độ và bán kính của '+name+'.');
+    result[id]={id,name,description:id==='production'?'Áp dụng cho các bộ phận Sản xuất':'Áp dụng cho Kế toán và Lái xe',lat,lon,radius};
+  }
+  return result;
+}
+function scfEmployeeAttendanceZone(employee,zones){
+  return employeeDepartmentIncludes(employee,'Sản xuất')?zones.production:zones.office;
+}
+function scfBuildFaceTemplate(capture,employeeName){
+  return capture?{hash:[...(capture.faceHash||[])],descriptor:[...(capture.faceDescriptor||[])],model:capture.faceModel||'',detectionScore:capture.faceDetectionScore||0,image:capture.image||'',box:capture.faceBox?{...capture.faceBox}:null,updatedAt:fmtDT(),updatedBy:employeeName}:null;
+}
+function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,replaceEmployees,currentUser,company,saveAttendanceZones,loadAttendanceZones,reportTitle='Báo cáo chấm công',onKioskExit}) {
   const settingsKey='scf_att_settings';
   const defaultWorkShifts=[
     {id:'night',name:'Ca đêm',start:'22:00',end:'03:00',color:'#EDE7F6',textColor:'#4527A0'},
@@ -400,6 +417,9 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     production:{id:'production',name:'Vùng 2: SẢN XUẤT',description:'Áp dụng cho các bộ phận Sản xuất',lat:W_LAT,lon:W_LON,radius:300}
   };
   const[settings,setSettings]=useLS(settingsKey,{lat:W_LAT,lon:W_LON,radius:300,start:'08:00',end:'17:00',workShifts:defaultWorkShifts,zones:defaultAttendanceZones});
+  const[zoneDraftDirty,setZoneDraftDirty]=useState(false);
+  const[zoneSaving,setZoneSaving]=useState(false);
+  const[zoneSaveError,setZoneSaveError]=useState('');
   const workShifts=Array.isArray(settings.workShifts)&&settings.workShifts.length===3?settings.workShifts:defaultWorkShifts;
   const[zaloWebhook,setZaloWebhook]=useLS('scf_zalo_webhook','');
   const[cap,setCap]=useState(null);const[preview,setPreview]=useState('');
@@ -418,11 +438,17 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   const isManager=currentUser.role==='manager';
   const canManage=isAdmin||isManager;
   const normalizeDept=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
-  const attendanceZones={
+  const localAttendanceZones={
     office:{...defaultAttendanceZones.office,lat:settings.lat??W_LAT,lon:settings.lon??W_LON,radius:settings.radius??300,...(settings.zones?.office||{})},
     production:{...defaultAttendanceZones.production,...(settings.zones?.production||{})}
   };
-  const attendanceZoneForEmployee=employee=>employeeDepartmentIncludes(employee,'Sản xuất')?attendanceZones.production:attendanceZones.office;
+  let sharedAttendanceZones=null;
+  try{if(company?.attendanceZones?.zones)sharedAttendanceZones=scfNormalizeAttendanceZones(company.attendanceZones.zones);}catch{}
+  const attendanceZones=section==='settings'&&isAdmin?localAttendanceZones:(sharedAttendanceZones||localAttendanceZones);
+  const attendanceZoneForEmployee=employee=>scfEmployeeAttendanceZone(employee,attendanceZones);
+  useEffect(()=>{
+    if(section==='settings'&&isAdmin&&sharedAttendanceZones&&!zoneDraftDirty)setSettings(previous=>({...previous,zones:sharedAttendanceZones}));
+  },[section,company?.attendanceZones?.updatedAt]);
   useEffect(()=>{
     if(settings.zones?.office&&settings.zones?.production)return;
     setSettings(prev=>({...prev,zones:{
@@ -548,7 +574,22 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     return notes.join(' • ');
   };
   const recentSame=myToday.find(r=>r.type===nextType&&Math.abs(timeToMin(timeNow())-timeToMin(r.time))<2);
-  const updateAttendanceZone=(zoneId,patch)=>setSettings(prev=>({...prev,zones:{...(prev.zones||attendanceZones),[zoneId]:{...attendanceZones[zoneId],...(prev.zones?.[zoneId]||{}),...patch}}}));
+  const updateAttendanceZone=(zoneId,patch)=>{
+    setZoneDraftDirty(true);setZoneSaveError('');
+    setSettings(prev=>({...prev,zones:{...(prev.zones||localAttendanceZones),[zoneId]:{...localAttendanceZones[zoneId],...(prev.zones?.[zoneId]||{}),...patch}}}));
+  };
+  const publishAttendanceZones=async()=>{
+    if(!isAdmin||zoneSaving)return;
+    setZoneSaving(true);setZoneSaveError('');setZoneDraftDirty(true);
+    try{
+      const zones=scfNormalizeAttendanceZones(localAttendanceZones);
+      if(typeof saveAttendanceZones!=='function')throw new Error('Chưa tải được chức năng lưu vị trí. Hãy tải lại ứng dụng.');
+      await saveAttendanceZones(zones);
+      setZoneDraftDirty(false);
+      window.showToast('Đã lưu vị trí chấm công trên máy chủ. Điện thoại nhân viên sẽ lấy vị trí này khi chấm công.','success',6500);
+    }catch(error){setZoneSaveError(error.message||'Chưa lưu được vị trí lên máy chủ.');}
+    finally{setZoneSaving(false);}
+  };
   const requestGps=async(target='attendance',opts={})=>{
     const settingsZoneId=target==='settings-production'?'production':target==='settings-office'?'office':'';
     if(!navigator.geolocation){
@@ -570,7 +611,7 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
           setGpsMsg('Đã lấy GPS lúc '+timeNow());
           if(settingsZoneId){
             updateAttendanceZone(settingsZoneId,{lat:+nextPos.lat.toFixed(6),lon:+nextPos.lon.toFixed(6)});
-            window.showToast('Đã cập nhật tọa độ '+attendanceZones[settingsZoneId].name+' từ GPS hiện tại.','success');
+            window.showToast('Đã lấy GPS mới cho '+attendanceZones[settingsZoneId].name+'. Bấm Lưu vị trí lên máy chủ để áp dụng cho nhân viên.','info',6500);
           }else if(!opts.silentSuccess){
             window.showToast('Đã lấy GPS thành công.','success');
           }
@@ -600,7 +641,7 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     setCap(null);
     return false;
   };
-  const buildFaceTemplate=()=>cap?{hash:[...(cap.faceHash||[])],descriptor:[...(cap.faceDescriptor||[])],model:cap.faceModel||'',detectionScore:cap.faceDetectionScore||0,image:cap.image||'',updatedAt:fmtDT(),updatedBy:currentUser.name}:null;
+  const buildFaceTemplate=()=>scfBuildFaceTemplate(cap,currentUser.name);
   const persistFaceTemplate=template=>{
     if(!template)return;
     setEmployees(list=>list.map(e=>e.id===emp.id?{...e,faceTemplate:template}:e));
@@ -648,6 +689,12 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     if(!cap){window.showToast('Hãy chụp khuôn mặt khi chấm công.','warn');return;}
     setPunchBusy(true);
     try{
+      let workingZone=activeAttendanceZone;
+      try{
+        const published=typeof loadAttendanceZones==='function'?await loadAttendanceZones():company?.attendanceZones;
+        if(!published?.zones)throw new Error('Admin chưa lưu vị trí chấm công dùng chung. Nhờ Admin mở Cài đặt chấm công và bấm Lưu vị trí lên máy chủ.');
+        workingZone=scfEmployeeAttendanceZone(emp,scfNormalizeAttendanceZones(published.zones));
+      }catch(error){window.showToast(error.message||'Chưa tải được vị trí chấm công từ máy chủ.','error',7500);return;}
       if(recentSame){
         if(!isAdmin){window.showToast('Nhân viên vừa chấm công gần đây, hệ thống không lưu trùng.','warn',5000);return;}
         const ok=await window.scfConfirm('Nhân viên vừa có bản ghi '+(nextType==='in'?'vào ca':'ra ca')+' gần đây. Vẫn lưu tiếp?','Bản ghi gần trùng');
@@ -666,9 +713,9 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
           window.showToast('Lần đăng ký đầu cần GPS hợp lệ. Hãy bật vị trí rồi thử lại.','warn',6000);
           return;
         }
-        const enrollmentGps=gpsStatus(workingPos,activeAttendanceZone);
+        const enrollmentGps=gpsStatus(workingPos,workingZone);
         if(!enrollmentGps.ok){
-          window.showToast('Chỉ được đăng ký khuôn mặt lần đầu tại '+activeAttendanceZone.name+'.','error',6500);
+          window.showToast('Chỉ được đăng ký khuôn mặt lần đầu tại '+workingZone.name+'. Cách vị trí quy định '+enrollmentGps.distance+'m; bán kính '+workingZone.radius+'m.','error',7500);
           return;
         }
         const confirmed=await window.scfConfirm('Dùng ảnh vừa chụp làm khuôn mặt mẫu của '+String(emp.name||'tài khoản này')+'? Sau khi đăng ký, chỉ Admin mới có thể thay đổi mẫu mặt.','Đăng ký khuôn mặt lần đầu');
@@ -697,9 +744,9 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
         }
       }
       const now=timeNow();
-      const g=gpsStatus(workingPos,activeAttendanceZone);
+      const g=gpsStatus(workingPos,workingZone);
       if(!g.ok){
-        showPunchInvalidMessage(true,g.ok,g.distance);
+        window.showToast('Chưa đúng vị trí: đang áp dụng '+workingZone.name+' cho bộ phận '+employeeDepartmentLabel(emp)+'. Cách vị trí quy định '+g.distance+'m; bán kính '+workingZone.radius+'m.','error',8500);
         return;
       }
       const tStatus=timeStatus(nextType,now,activeWorkShift);
@@ -723,8 +770,8 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
         accuracy:workingPos.acc,
         distance:g.distance,
         gpsOk:g.ok,
-        attendanceZoneId:activeAttendanceZone.id,
-        attendanceZoneName:activeAttendanceZone.name,
+        attendanceZoneId:workingZone.id,
+        attendanceZoneName:workingZone.name,
         photo:cap.image,
         status:'valid',
         note:[buildNote(tStatus,workingFaceOk,g),firstFaceEnrollment?'Đăng ký khuôn mặt lần đầu':''].filter(Boolean).join(' • '),
@@ -854,11 +901,6 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   );
   const sendWebhook=async()=>{if(!zaloWebhook){window.showToast('Chưa nhập webhook Zalo/server trung gian.','warn');return;}try{await fetch(zaloWebhook,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:zaloText(),date:day,records:filtered})});window.showToast('Đã gửi dữ liệu sang webhook.','success');}catch(e){window.showToast('Không gửi được webhook. Kiểm tra đường dẫn hoặc CORS.','error');}};
   const applyGpsToSettings=zoneId=>{
-    if(pos){
-      updateAttendanceZone(zoneId,{lat:+pos.lat.toFixed(6),lon:+pos.lon.toFixed(6)});
-      window.showToast('Đã cập nhật tọa độ '+attendanceZones[zoneId].name+' từ GPS hiện tại.','success');
-      return;
-    }
     getGps('settings-'+zoneId);
   };
   const resetGpsSettings=zoneId=>{
@@ -871,13 +913,13 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
       h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:3}},zone.name),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:10}},zone.description),
       h('div',{className:'g3 attendance-zone-fields'},
-        h(F,{label:'Vĩ độ'},h('input',{value:zone.lat,onChange:e=>updateAttendanceZone(zoneId,{lat:numFmt(e.target.value)})})),
-        h(F,{label:'Kinh độ'},h('input',{value:zone.lon,onChange:e=>updateAttendanceZone(zoneId,{lon:numFmt(e.target.value)})})),
-        h(F,{label:'Bán kính (m)'},h('input',{value:zone.radius,onChange:e=>updateAttendanceZone(zoneId,{radius:numFmt(e.target.value)})}))
+        h(F,{label:'Vĩ độ'},h('input',{disabled:zoneSaving,value:zone.lat,onChange:e=>updateAttendanceZone(zoneId,{lat:numFmt(e.target.value)})})),
+        h(F,{label:'Kinh độ'},h('input',{disabled:zoneSaving,value:zone.lon,onChange:e=>updateAttendanceZone(zoneId,{lon:numFmt(e.target.value)})})),
+        h(F,{label:'Bán kính (m)'},h('input',{disabled:zoneSaving,value:zone.radius,onChange:e=>updateAttendanceZone(zoneId,{radius:numFmt(e.target.value)})}))
       ),
       h('div',{className:'attendance-zone-actions'},
-        h('button',{type:'button',className:'attendance-zone-gps-button',onClick:()=>applyGpsToSettings(zoneId),disabled:gpsBusy},h('i',{className:'ti '+(gpsBusy?'ti-loader-2 spin':'ti-current-location')}),gpsBusy?' Đang lấy GPS...':' Dùng GPS hiện tại'),
-        h('button',{type:'button',className:'attendance-zone-default-button',onClick:()=>resetGpsSettings(zoneId)},'Mặc định Sông Công')
+        h('button',{type:'button',className:'attendance-zone-gps-button',onClick:()=>applyGpsToSettings(zoneId),disabled:gpsBusy||zoneSaving},h('i',{className:'ti '+(gpsBusy?'ti-loader-2 spin':'ti-current-location')}),gpsBusy?' Đang lấy GPS...':' Dùng GPS hiện tại'),
+        h('button',{type:'button',className:'attendance-zone-default-button',disabled:zoneSaving,onClick:()=>resetGpsSettings(zoneId)},'Mặc định Sông Công')
       )
     );
   };
@@ -961,14 +1003,14 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   }
   if(section==='settings'){
     if(!isAdmin)return null;
-    if(kioskOpen)return h(AttendanceKiosk,{employees,attendance,setAttendance,currentUser,attendanceZones,workShifts,onClose:()=>{try{sessionStorage.removeItem('scf_attendance_kiosk_active');}catch{}setKioskOpen(false);onKioskExit?.();}});
+    if(kioskOpen&&sharedAttendanceZones&&!zoneDraftDirty)return h(AttendanceKiosk,{employees,attendance,setAttendance,currentUser,attendanceZones:sharedAttendanceZones,workShifts,onClose:()=>{try{sessionStorage.removeItem('scf_attendance_kiosk_active');}catch{}setKioskOpen(false);onKioskExit?.();}});
     return h('div',{className:'attendance-settings-page'},
       h('div',{className:'ptitle'},h('i',{className:'ti ti-settings'}),'Cài đặt chấm công'),
       h('div',{className:'card',style:{marginBottom:'1rem'}},
         h('div',{className:'attendance-manager-title'},'Điện thoại chấm công tại cửa vào'),
         h('p',{style:{fontSize:13,color:'var(--tx2)'}},'Mở chế độ kiosk trên điện thoại đặt cố định. Cần đăng ký khuôn mặt mẫu cho nhân viên, cấp quyền camera và GPS một lần. Nhân viên chỉ cần đứng trước máy, nhắm mắt khoảng 1 giây rồi mở.'),
         h('p',{style:{fontSize:13,color:'#92400e',background:'#fffbeb',padding:'9px 12px',borderRadius:8}},'Bản thử nghiệm: cần có người giám sát. Chưa đặt điện thoại đăng nhập Admin ở cửa không người trông; phiên kiosk chuyên dụng và chống ảnh/video giả cần hoàn thiện trước khi vận hành chính thức.'),
-        h('button',{className:'bp',onClick:()=>{try{sessionStorage.setItem('scf_attendance_kiosk_active','1');}catch{}setKioskOpen(true);}},h('i',{className:'ti ti-face-id'}),' Mở kiosk tự nhận diện')
+        h('button',{className:'bp',disabled:!sharedAttendanceZones||zoneDraftDirty||zoneSaving,onClick:()=>{try{sessionStorage.setItem('scf_attendance_kiosk_active','1');}catch{}setKioskOpen(true);}},h('i',{className:'ti ti-face-id'}),' Mở kiosk tự nhận diện')
       ),
       h('div',{className:'att-grid'},
         h('div',{className:'card attendance-face-settings-card'},
@@ -990,6 +1032,9 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
             h('div',{className:'attendance-zone-grid'},
               renderAttendanceZoneEditor('office'),renderAttendanceZoneEditor('production')
             ),
+            h('div',{role:'status',style:{fontSize:13,margin:'10px 0',color:zoneDraftDirty||!sharedAttendanceZones?'#854F0B':'var(--pri)'}},zoneDraftDirty?'Vị trí đã thay đổi trên máy này, chưa lưu lên máy chủ.':sharedAttendanceZones?'Vị trí dùng chung đã được lưu'+(company.attendanceZones.updatedAt?' lúc '+company.attendanceZones.updatedAt:'')+'.':'Vị trí hiện tại chỉ lưu trên máy này. Cần lưu lên máy chủ để điện thoại nhân viên nhận được.'),
+            zoneSaveError&&h('div',{role:'alert',style:{color:'#A32D2D',marginBottom:10}},zoneSaveError),
+            h('button',{type:'button',className:'bp',disabled:zoneSaving||gpsBusy,onClick:publishAttendanceZones},zoneSaving?'Đang lưu vị trí…':'Lưu vị trí lên máy chủ'),
             gpsMsg&&h('div',{className:'attendance-gps-message','aria-live':'polite'},h('i',{className:'ti ti-map-pin'}),h('span',null,gpsMsg)),
             h('div',{className:'attendance-workshift-title'},'Ca làm việc theo 3 ca lớn'),
             h('div',{className:'attendance-workshift-grid'},workShifts.map(sh=>h('div',{className:'attendance-workshift-card',key:sh.id,style:{borderColor:sh.color,background:sh.color}},
@@ -1064,6 +1109,7 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
         !tpl&&h('div',{style:{marginBottom:10,padding:'9px 11px',border:'1px solid #F0CF7A',borderRadius:8,background:'#FFF8E1',color:'#6D4B00',fontSize:12,lineHeight:1.45}},h('b',null,'Đăng ký lần đầu: '),'Ảnh đầu tiên sẽ được lưu làm khuôn mặt mẫu sau khi GPS xác nhận bạn đang ở đúng vùng chấm công. Từ lần sau hệ thống chỉ chấp nhận khuôn mặt này.'),
         h(CameraBox,{preview,setPreview,template:tpl,onCapture:handleFaceCapture,autoOpenSignal:cameraAutoOpenSignal,simple:true})
       ),
+      h('div',{style:{fontSize:12,color:'var(--tx2)',padding:'8px 2px'}},'Vùng áp dụng: '+activeAttendanceZone.name+' · '+employeeDepartmentLabel(emp)),
       punchBusy&&h('div',{className:'attendance-employee-working'},h('i',{className:'ti ti-loader-2 spin'}),' Đang xác nhận khuôn mặt và GPS...'),
       punchShareCard(),
       h('div',{className:'attendance-employee-times'},
@@ -1090,6 +1136,7 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
         ?h(CameraBox,{preview,setPreview,template:tpl,onCapture:handleFaceCapture,autoOpenSignal:cameraAutoOpenSignal,simple:true})
         :h('div',{className:'attendance-manager-placeholder'},'Chọn nhân viên để chấm công.')
     ),
+    empId&&h('div',{style:{fontSize:12,color:'var(--tx2)',padding:'8px 2px'}},'Vùng áp dụng: '+activeAttendanceZone.name+' · '+employeeDepartmentLabel(emp)),
     punchBusy&&h('div',{className:'attendance-employee-working'},h('i',{className:'ti ti-loader-2 spin'}),' Đang xác nhận khuôn mặt và GPS...'),
     punchShareCard(),
     empId&&h('div',{className:'attendance-employee-times'},

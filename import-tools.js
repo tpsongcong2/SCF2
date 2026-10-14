@@ -602,7 +602,7 @@ function PrintTemplateModal({order, company, initialTemplate, onClose}) {
 
 
 const NAV=[
-  {key:'welcome',icon:'ti-cloud-sun',label:'Thời tiết'},
+  {key:'welcome',icon:'ti-sun',label:'Thời tiết'},
   {key:'notifications',icon:'ti-bell',label:'Thông báo'},
   {key:'userguide',icon:'ti-book-2',label:'HDSD SCFOOD'},
   {key:'company',icon:'ti-building-community',label:'Giới thiệu công ty'},
@@ -757,6 +757,8 @@ function MobileNav({page,setPage,role,perms,dept,onLogout,onQuickTripSummary}){
   });
   const visible=groups.filter(g=>g.pages.length);
   const preferred=['welcome','delivery','trips','attendance'];
+  const productionDept=(Array.isArray(dept)?dept:[dept]).some(value=>String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('san xuat'));
+  if(productionDept)preferred.push('prodsummary');
   const quick=preferred.map(key=>NAV.find(item=>item.key===key))
     .filter(item=>item&&canAccess(role,item.key,perms,dept));
   const currentIsQuick=quick.some(item=>item.key===page);
@@ -800,8 +802,9 @@ function MobileNav({page,setPage,role,perms,dept,onLogout,onQuickTripSummary}){
         ?h('button',{key:item.key,className:'mobile-nav-btn'+(open||!currentIsQuick?' on':''),onClick:()=>setOpen(v=>!v),'aria-label':'Mở tất cả chức năng',title:'Thêm'},
           h('i',{className:'ti '+(open?'ti-x':item.icon)})
         )
-        :h('button',{key:item.key,className:'mobile-nav-btn'+(page===item.key?' on':''),onClick:()=>go(item.key),'aria-label':item.label,title:item.label},
-          h('i',{className:'ti '+item.icon})
+        :h('button',{key:item.key,className:'mobile-nav-btn'+(item.key==='prodsummary'?' mobile-nav-summary':'')+(page===item.key?' on':''),onClick:()=>go(item.key),'aria-label':item.key==='prodsummary'?'Tổng hợp sản xuất':item.label,title:item.key==='prodsummary'?'Tổng hợp sản xuất':item.label},
+          h('i',{className:'ti '+item.icon}),
+          item.key==='prodsummary'&&h('span',null,'SX')
         )
       )
     )

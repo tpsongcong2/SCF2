@@ -82,6 +82,8 @@ function canAccess(role, page, perms, dept='') {
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
   if(isFaceMask&&!faceMaskPages.includes(page)&&!sharedVariantPages.includes(page))return false;
   if(!isFaceMask&&faceMaskPages.includes(page))return false;
+  // Trang đầu là điểm quay lại chung, kể cả khi nhân viên dùng bộ quyền riêng.
+  if(page==='welcome')return ['admin','manager','staff','driver'].includes(role);
   if(page==='permission_settings')return role==='admin';
   const deptText=(Array.isArray(dept)?dept:[dept]).map(value=>String(value||'')).join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
   const isAccounting=deptText.includes('ke toan');

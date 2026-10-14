@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V537';
+const SCF_BUILD_VERSION='V541';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -223,7 +223,31 @@ function scfLoadOptionalScript(name,url){
   }).catch(error=>{scfScriptLoads.delete(name);throw error;});
   scfScriptLoads.set(name,task);return task;
 }
-function scfEnsurePageTools(page){
+// Kiểm tra thành phần trước khi render: một tệp tải lỗi không được làm trắng trang.
+const SCF_PAGE_COMPONENTS={
+  welcome:'WelcomePage',company:'CompanySettings',appearance:'AppearanceSettingsTab',printtemplates:'PrintTemplateSettingsTab',
+  employees:'EmployeeTab EmpForm CpwModal',permission_settings:'PermissionSettingsTab',
+  attendance:'AttendanceTab',attendance_settings:'AttendanceTab',attendance_report:'AttendanceTab',workreport_total:'AttendanceTab',
+  advances:'MoneyTab',rewards:'MoneyTab',employee_errors:'EmployeeErrorsTab',employee_uniforms:'EmployeeUniformsTab',leaves:'LeaveTab',
+  backup:'BackupTab',materials:'MaterialsTab',assets:'AssetsTab',garages:'GaragesTab',depts:'DeptsTab',products:'ProductsTab',customers:'CustomersTab',areas:'AreasTab',
+  prodshifts:'ProdShiftsTab',deliveryrules:'DeliveryRulesTab',deliverysequence:'DeliverySequenceSettingsTab',workcats:'WorkCatsTab',tasks:'TasksTab',
+  notifications:'NotificationsTab',userguide:'UserGuideTab',nccs:'NCCTab',nccgoods:'NCCTab',purchaseorders:'PurchaseTab',purchasegoods:'PurchaseTab',
+  fuelpurchases:'FuelPurchaseTab',utilityexpenses:'UtilityExpenseTab',fuelreport:'FuelPurchaseReportTab',purchasereport:'PurchaseReportTab',
+  maintreport:'MaintenanceReportTab',materialusage:'MaterialUsageReportTab',powderdebtreport:'PowderDebtReportTab',maint_vehicle:'MaintenanceTab',maint_machine:'MaintenanceTab',
+  shifts:'ShiftsTab',quotes:'QuotesTab',delivery:'DeliveryOrdersTab',intem:'IntemTab',trips:'TripsTab',workreport_lx:'DriverTripWorkReportTab',
+  orderdetail:'OrderDetailListTab',salesreport:'SalesReportTab',marketsales:'SalesDebtReportTab',invoicereport:'InvoiceUploadReportTab',cashflowreport:'FinanceReportTab',
+  powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab'
+};
+function scfMissingPageComponents(page){
+  const names=SCF_PAGE_COMPONENTS[page]||(PROCESS_POST_KEYS[page]?'ProcessPostsTab':'PlaceholderTab');
+  return names.split(' ').filter(name=>typeof globalThis[name]!=='function');
+}
+async function scfEnsurePageTools(page){
+  const missing=scfMissingPageComponents(page);
+  if(missing.length){
+    console.warn('Chưa nạp được thành phần giao diện:',page,missing.join(', '));
+    throw new Error('Chưa tải được giao diện '+(PTITLES[page]||'màn hình này')+'. Bấm Thử tải lại để tải lại ứng dụng.');
+  }
   // Chuyến giao hàng không dùng thư viện Excel/ZIP. Không chặn giao diện bằng
   // hai gói CDN lớn chỉ để mở trang này.
   if(['welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','deliverysequence'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
@@ -765,6 +789,18 @@ function App(){
   window.__SCF_ACCESS_CONTEXT={employeeId:String(cu.id||''),role:cu.role,page,level:activeLevel,readOnly};
   const wips=['purchase','workreport_vp','workreport_sx'];
   const logout=async()=>{await serverLogout();window.scfClearSensitiveLocalData&&window.scfClearSensitiveLocalData();setSession(null);if(SCF_SERVER_AUTH_ENABLED)location.reload();};
+  const saveAttendanceZones=async zones=>{
+    if(cu?.role!=='admin'||window.__SCF_ACCESS_CONTEXT?.role!=='admin')throw new Error('Chỉ Admin được lưu vị trí chấm công.');
+    const next={...company,attendanceZones:{zones:scfNormalizeAttendanceZones(zones),updatedAt:fmtDT(),updatedBy:cu.name}};
+    _sc(next);
+    const saved=await dbSet('scf_company',next);
+    if(saved!==true)throw new Error('Chưa xác nhận được vị trí trên máy chủ. Thay đổi vẫn được giữ trên máy này; kiểm tra đồng bộ rồi bấm lưu lại.');
+  };
+  const loadAttendanceZones=async()=>{
+    const latest=await dbGetRequired('scf_company',DEF_COMPANY);
+    _sc({...DEF_COMPANY,...latest});
+    return latest?.attendanceZones;
+  };
   return h('div',{className:'layout'},
     h('div',{className:'main'},
       !menuHidden&&h('div',{className:'topbar'+(page!=='welcome'?' mobile-subpage-topbar':'')},
@@ -804,7 +840,7 @@ function App(){
       },
         !pageReady?h('div',{className:'card',role:pageError?'alert':'status',style:{padding:24}},
           h('p',null,pageError||'Đang tải dữ liệu '+(PTITLES[page]||'màn hình')+'…'),
-          pageError&&h('button',{className:'bp',onClick:()=>setPageAttempt(v=>v+1)},'Thử tải lại')
+          pageError&&h('button',{className:'bp',onClick:()=>{if(scfMissingPageComponents(page).length)location.reload();else setPageAttempt(v=>v+1);}},'Thử tải lại')
         ):h(React.Fragment,null,
         canAccess(cu.role,page)&&page==='welcome'&&h(WelcomePage,{emp:cu,employees,company,uiSettings,news:companyNews,setNews:setCompanyNews,messages:internalMessages,setMessages:setInternalMessages,onRefresh:refreshCommunityData}),
         canAccess(cu.role,'company',cu.permissions,cuAccessDepartments)&&page==='company'&&h(CompanySettings,{company,setCompany,canEdit:canWrite(cu.role,'company',cu.permLevels)}),
@@ -812,10 +848,10 @@ function App(){
         canAccess(cu.role,'printtemplates',cu.permissions)&&page==='printtemplates'&&h(PrintTemplateSettingsTab,{templateSettings:printTemplateSettings,setTemplateSettings:setPrintTemplateSettings,products,customers}),
         canAccess(cu.role,'employees',cu.permissions)&&page==='employees'&&h(EmployeeTab,{employees,setEmployees,cu,depts,permissionProfiles}),
         canAccess(cu.role,'permission_settings',cu.permissions)&&page==='permission_settings'&&h(PermissionSettingsTab,{profiles:permissionProfiles,setProfiles:setPermissionProfiles,employees,setEmployees,currentUser:cu}),
-        canAccess(cu.role,'attendance',cu.permissions)&&page==='attendance'&&h(AttendanceTab,{section:'punch',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company}),
-        canAccess(cu.role,'attendance_settings',cu.permissions)&&page==='attendance_settings'&&h(AttendanceTab,{section:'settings',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,onKioskExit:logout}),
-        canAccess(cu.role,'attendance_report',cu.permissions)&&page==='attendance_report'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company}),
-        canAccess(cu.role,'workreport_total',cu.permissions,cuAccessDepartments)&&page==='workreport_total'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,reportTitle:'Tổng công'}),
+        canAccess(cu.role,'attendance',cu.permissions)&&page==='attendance'&&h(AttendanceTab,{section:'punch',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones}),
+        canAccess(cu.role,'attendance_settings',cu.permissions)&&page==='attendance_settings'&&h(AttendanceTab,{section:'settings',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones,onKioskExit:logout}),
+        canAccess(cu.role,'attendance_report',cu.permissions)&&page==='attendance_report'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones}),
+        canAccess(cu.role,'workreport_total',cu.permissions,cuAccessDepartments)&&page==='workreport_total'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones,reportTitle:'Tổng công'}),
         canAccess(cu.role,'advances',cu.permissions)&&page==='advances'&&h(MoneyTab,{mode:'advance',records:advances,setRecords:setAdvances,employees,currentUser:cu}),
         canAccess(cu.role,'rewards',cu.permissions)&&page==='rewards'&&h(MoneyTab,{mode:'reward',records:rewards,setRecords:setRewards,employees,currentUser:cu}),
         canAccess(cu.role,'employee_errors',cu.permissions)&&page==='employee_errors'&&h(EmployeeErrorsTab,{records:employeeErrors,setRecords:setEmployeeErrors,employees,currentUser:cu}),
