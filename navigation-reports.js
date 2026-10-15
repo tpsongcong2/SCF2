@@ -573,28 +573,10 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,pro
 function fuelPurchaseAmount(liters,price){
   return Math.round(Math.round(numFmt(liters||0)*1000)*numFmt(price||0)/1000);
 }
-function scfFuelIsDriver(employee){
-  const role=String(employee?.role||'').trim().toLowerCase();
-  return !['admin','administrator'].includes(role)&&(role==='driver'||employeeDepartmentIncludes(employee,'Lái xe'));
-}
-function scfFuelBelongsToBuyer(row,employee,employees){
-  const id=String(employee?.id||'').trim(),buyerId=String(row?.buyerId||'').trim();
-  if(!id)return false;
-  if(buyerId)return buyerId===id;
-  const name=value=>String(value||'').trim().toLowerCase().replace(/\s+/g,' ');
-  const ownName=name(employee?.name);
-  return !!ownName&&name(row?.buyerName)===ownName&&!(employees||[]).some(other=>String(other?.id||'').trim()!==id&&name(other?.name)===ownName);
-}
-function FuelSyncConflictNotice({currentUser,employees}={}){
-  const read=()=>{
-    const value=window.__SCF_FUEL_SYNC_CONFLICT;
-    if(value?.owner!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||''))return null;
-    if(!scfFuelIsDriver(currentUser))return value;
-    const conflicts=(value.conflicts||[]).filter(row=>(!row.local||scfFuelBelongsToBuyer(row.local,currentUser,employees))&&(!row.remote||scfFuelBelongsToBuyer(row.remote,currentUser,employees)));
-    return conflicts.length?{...value,conflicts}:null;
-  };
+function FuelSyncConflictNotice(){
+  const read=()=>{const value=window.__SCF_FUEL_SYNC_CONFLICT;return value?.owner===String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')?value:null;};
   const[conflict,setConflict]=useState(read),[open,setOpen]=useState(false),[choices,setChoices]=useState({}),[busy,setBusy]=useState(false);
-  useEffect(()=>{const update=()=>{setConflict(read());setChoices({});};update();window.addEventListener('scf-fuel-sync-conflict',update);return()=>window.removeEventListener('scf-fuel-sync-conflict',update);},[currentUser,employees]);
+  useEffect(()=>{const update=()=>{setConflict(read());setChoices({});};window.addEventListener('scf-fuel-sync-conflict',update);return()=>window.removeEventListener('scf-fuel-sync-conflict',update);},[]);
   if(!conflict)return null;
   const fields=[['date','Ngày mua'],['vehicle','Xe'],['buyerName','Nhân viên đổ xăng'],['liters','Số lít'],['price','Giá/lít'],['amount','Thành tiền'],['note','Ghi chú'],['updatedAt','Sửa lúc'],['updatedBy','Người sửa']];
   const apply=async()=>{
@@ -637,15 +619,13 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
   const canManage=canOpen&&canWrite(currentUser?.role,'fuelpurchases',currentUser?.permLevels);
   const canRemove=canOpen&&canDel(currentUser?.role,'fuelpurchases',currentUser?.permLevels);
   const canChooseBuyer=currentUser?.role==='admin';
-  const isDriver=scfFuelIsDriver(currentUser);
-  const isOwn=row=>!isDriver||scfFuelBelongsToBuyer(row,currentUser,employees);
-  const scopedRows=(rows||[]).filter(isOwn);
+  const isDriver=currentUser?.role==='driver'||employeeHasDepartment(currentUser,'Lái xe');
   const selfOption=currentUser?{id:currentUser.id,name:currentUser.name||currentUser.id,label:(currentUser.name||currentUser.id)+(currentUser.id?' - '+currentUser.id:'')}:null;
   const driverOptions=(employees||[])
     .filter(e=>canChooseBuyer||e.role==='driver'||employeeHasDepartment(e,'Lái xe'))
     .map(e=>({id:e.id,name:e.name||e.id,label:(e.name||e.id)+(e.id?' - '+e.id:'')}))
     .sort((a,b)=>a.label.localeCompare(b.label,'vi'));
-  const buyerOptions=isDriver?(selfOption?[selfOption]:[]):(selfOption?[selfOption,...driverOptions.filter(d=>d.id!==selfOption.id)]:driverOptions);
+  const buyerOptions=(selfOption?[selfOption,...driverOptions.filter(d=>d.id!==selfOption.id)]:driverOptions);
   const vehicleOptions=[...new Set([
     ...(assets||[])
       .map(a=>String(a.name||a.code||a.id||'').trim())
@@ -656,9 +636,8 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
         const looksLikeMachine=t.startsWith('may ')||t.includes('máy')||t.includes('may')||t.includes('bom')||t.includes('bơm')||t.includes('inox');
         return looksLikeVehicle&&!looksLikeMachine;
       }),
-    ...(scopedRows.map(r=>String(r.vehicle||'').trim()).filter(Boolean))
+    ...((rows||[]).map(r=>String(r.vehicle||'').trim()).filter(Boolean))
   ])].sort((a,b)=>a.localeCompare(b,'vi'));
-  const filterVehicleOptions=isDriver?[...new Set(scopedRows.map(row=>String(row.vehicle||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')):vehicleOptions;
   const blankForm=buyerId=>{
     const d=buyerOptions.find(x=>x.id===buyerId);
     return {
@@ -692,7 +671,6 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
     setModal(true);
   };
   const openEdit=row=>{
-    if(!canEditRow(row))return;
     setEdit(row);
     setQuickCaptureStep(!row.meterImage?'meter':!row.plateImage?'plate':'meter');
     setForm({
@@ -713,6 +691,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
     });
     setModal(true);
   };
+  const isOwn=row=>!isDriver||row.buyerId===currentUser.id||String(row.buyerName||'').trim().toLowerCase()===String(currentUser.name||'').trim().toLowerCase();
   const canEditRow=row=>canManage&&(!isDriver||isOwn(row));
   const canDeleteRow=row=>canRemove&&(!isDriver||isOwn(row));
   const countImages=row=>((row.plateImage?1:0)+(row.meterImage?1:0)+((!row.plateImage&&!row.meterImage&&row.image)?1:0));
@@ -732,8 +711,9 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
     if(to&&d>to) return false;
     return true;
   };
-  const visible=scopedRows
-    .filter(r=>inRange(r.date||r.createdAt||r.updatedAt)
+  const visible=(rows||[])
+    .filter(r=>(canManage||isOwn(r))
+      && inRange(r.date||r.createdAt||r.updatedAt)
       && (!buyerFilter||String(r.buyerId||'')===String(buyerFilter))
       && (!vehicleFilter||String(r.vehicle||'')===String(vehicleFilter))
       && (!q||[r.date,r.vehicle,r.buyerName,r.note,r.imageName,r.plateImageName,r.meterImageName].join(' ').toLowerCase().includes(q.toLowerCase())))
@@ -747,8 +727,6 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
       return String(b.id||'').localeCompare(String(a.id||''),'vi',{numeric:true});
     });
   const save=()=>{
-    const liveEdit=edit?(rows||[]).find(row=>row.id===edit.id):null;
-    if(!canManage||(edit&&(!liveEdit||!canEditRow(liveEdit)))){window.showToast('Bạn chỉ được sửa đơn xăng dầu của mình.','warn');return;}
     if(uploading){window.showToast('Chờ lưu ảnh xong trước khi lưu đơn.','warn');return;}
     if(!form.date||!form.vehicle||numFmt(form.liters)<=0||numFmt(form.price)<=0){
       window.showToast('Nhập ngày mua, xe, số lít và giá tiền.','warn');
@@ -788,10 +766,9 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
     setEdit(null);
   };
   const del=id=>{
-    if(!canDeleteRow((rows||[]).find(row=>row.id===id)))return;
     window.scfConfirm('Bạn có chắc muốn xóa đơn mua xăng dầu này?','Xóa đơn',true).then(ok=>{
       if(ok){
-        setRows(prev=>prev.filter(x=>x.id!==id||!canDeleteRow(x)));
+        setRows(prev=>prev.filter(x=>x.id!==id));
         window.showToast('Đã xóa đơn mua xăng dầu','success');
       }
     });
@@ -855,13 +832,13 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
   };
   return h('div',{className:'fuel-purchase-page'},
     h('div',{className:'ptitle'},h('i',{className:'ti ti-gas-station',style:{fontSize:20}}),'Đơn mua xăng dầu'),
-    h(FuelSyncConflictNotice,{currentUser,employees}),
+    h(FuelSyncConflictNotice),
     h('div',{className:'mobile-only fuel-overview'},
       h('div',null,h('span',null,'Tổng tiền theo bộ lọc'),h('strong',null,visible.reduce((sum,row)=>sum+numFmt(row.amount||0),0).toLocaleString('vi-VN')+' đ')),
       h('div',null,h('b',null,visible.length+' đơn'),h('span',null,visible.reduce((sum,row)=>sum+numFmt(row.liters||0),0).toLocaleString('vi-VN')+' lít'))
     ),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
-      h('div',{style:{fontSize:12,color:'var(--tx2)'}},isDriver?'Chỉ hiển thị đơn xăng dầu do bạn đổ.':'Lọc theo ngày, người đổ và xe để xem nhanh trên điện thoại.'),
+      h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Lọc theo ngày, người đổ và xe để xem nhanh trên điện thoại.'),
       h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
         h(ExportBtn,{onClick:()=>xlsxExport(visible.map(r=>({...r,image:r.meterImage||r.plateImage||r.image||''})),[['date','Ngày mua'],['buyerName','Người đổ'],['vehicle','Xe'],['liters','Số lít'],['price','Giá tiền'],['amount','Thành tiền'],['note','Chú ý'],['plateImage','Ảnh biển số'],['meterImage','Ảnh cây xăng'],['image','Ảnh chính']],'Don_mua_xang_dau')}),
         canManage&&h(AddBtn,{onClick:openAdd,label:'Thêm đơn mua xăng dầu'})
@@ -888,7 +865,7 @@ function FuelPurchaseTab({rows,setRows,employees,assets,currentUser}) {
         h(F,{label:'Xe'},
           h('select',{value:vehicleFilter,onChange:e=>setVehicleFilter(e.target.value)},
             h('option',{value:''},'Tất cả'),
-            ...filterVehicleOptions.map(v=>h('option',{key:v,value:v},v))
+            ...vehicleOptions.map(v=>h('option',{key:v,value:v},v))
           )
         ),
         h('div',{style:{display:'flex',alignItems:'flex-end'}},
