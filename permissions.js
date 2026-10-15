@@ -133,6 +133,32 @@ function getLvl(role, page, lvls) {
 function canWrite(role, page, lvls) { const l=getLvl(role,page,lvls); return l==='rw'||l==='rwd'; }
 function canDel(role, page, lvls)   { return getLvl(role,page,lvls)==='rwd'; }
 
+// Quyền nút trên điện thoại bổ sung cho quyền trang/nghiệp vụ hiện có.
+// Tài khoản cũ chưa cấu hình giữ cách hiển thị hiện tại.
+const SCF_MOBILE_PERMISSION_GROUPS=[
+  {label:'Truy cập từ thanh dưới điện thoại',options:[['welcome','Thời tiết'],['delivery','Đơn giao hàng'],['trips','Chuyến giao hàng'],['attendance','Chấm công'],['prodsummary','SX · Tổng hợp sản xuất'],['quick-summary','Đơn tổng'],['more','Thêm · Danh sách chức năng']]},
+  {label:'Tính năng chuyến giao trên điện thoại',options:[['tripSummary','Xem ảnh đơn tổng'],['tripUpdate','Cập nhật SL giao và HĐ'],['tripPrint','In đơn'],['tripInvoices','Hiện ảnh hóa đơn'],['tripImage','Tạo ảnh chuyến']]}
+];
+function canMobileFeature(user,key){
+  if(['admin','administrator'].includes(String(user?.role||'').toLowerCase()))return true;
+  return user?.mobilePermissions?.[key]!==false;
+}
+function normalizedMobilePermissions(user={}){
+  return Object.fromEntries(SCF_MOBILE_PERMISSION_GROUPS.flatMap(group=>group.options.map(([key])=>[key,canMobileFeature(user,key)])));
+}
+function MobilePermissionFields({employee,onChange,disabled=false}){
+  return h('div',{className:'mobile-permission-settings',style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,margin:'10px 0',background:'var(--bg2)'}},
+    h('b',null,'Phân quyền giao diện điện thoại'),
+    h('div',{style:{fontSize:12,color:'var(--tx2)',margin:'6px 0'}},'Tích để hiện nút và cho phép mở tính năng. Vẫn cần quyền truy cập trang và quyền nghiệp vụ tương ứng ở phía trên.'),
+    SCF_MOBILE_PERMISSION_GROUPS.map(group=>h('div',{key:group.label,style:{marginTop:10}},
+      h('div',{style:{fontWeight:600,fontSize:12,marginBottom:6}},group.label),
+      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:6}},group.options.map(([key,label])=>h('label',{key,style:{display:'flex',gap:8,alignItems:'center',padding:'7px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6,fontSize:12}},
+        h('input',{type:'checkbox',disabled,checked:canMobileFeature(employee,key),style:{width:18,height:18,minHeight:18,flex:'0 0 18px',padding:0,margin:0,accentColor:'var(--pri)'},onChange:event=>onChange({...normalizedMobilePermissions(employee),[key]:event.target.checked})}),label
+      )))
+    ))
+  );
+}
+
 // Quyền nghiệp vụ bên trong trang Chuyến giao hàng. Không dùng chung
 // mức rw/rwd của trang vì người lập chuyến, lái xe và kế toán có
 // trách nhiệm khác nhau.
