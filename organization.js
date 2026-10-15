@@ -214,15 +214,38 @@ function DeptsTab({depts,setDepts,employees,workcats}){
     modal==='f'&&h(DeptForm,{dept:edit,depts:withCodes,onSave:save,onClose:()=>{sm(null);se(null);}})
   );
 }
-function WorkCatForm({cat,depts,onSave,onClose}){
-  const deptNames=(depts&&depts.length?depts.map(d=>d.name):DEPTS);
-  const[f,sf]=useState(cat||{code:'',name:'',dept:deptNames[0],unit:'Tấn',rate:'',desc:'',duration:'',qualityReq:'',note:''});
+function scfWorkCatDeptKey(value){return normalizeDepartmentName(value);}
+function scfFindWorkCat(workcats,value,department=''){
+  const key=String(value||'').trim();
+  if(!key)return null;
+  const inDepartment=row=>!department||scfWorkCatDeptKey(row.dept)===scfWorkCatDeptKey(department);
+  // IDs are authoritative. Legacy codes are accepted only when unambiguous
+  // within the department; a moved/deleted category must be selected again.
+  const exact=(workcats||[]).filter(row=>String(row.id||'')===key);
+  if(exact.length)return exact.length===1&&inDepartment(exact[0])?exact[0]:null;
+  const legacy=(workcats||[]).filter(row=>String(row.code||'')===key&&inDepartment(row));
+  return legacy.length===1?legacy[0]:null;
+}
+function scfWorkCatGroups(workcats,query='',department=''){
+  const search=normalizePlainText(query),groups=new Map();
+  (workcats||[]).forEach(row=>{
+    const key=scfWorkCatDeptKey(row.dept);
+    if(department&&(department==='__unassigned__'?!!key:key!==scfWorkCatDeptKey(department)))return;
+    if(search&&![row.code,row.name,row.dept,row.desc,row.duration,row.qualityReq,row.note].some(value=>normalizePlainText(value).includes(search)))return;
+    if(!groups.has(key))groups.set(key,{key,department:String(row.dept||'').trim(),rows:[]});
+    groups.get(key).rows.push(row);
+  });
+  return [...groups.values()].sort((a,b)=>a.department.localeCompare(b.department,'vi'));
+}
+function WorkCatForm({cat,depts,defaultDept='',onSave,onClose}){
+  const deptNames=[...new Set([...(depts&&depts.length?depts.map(d=>d.name):DEPTS),cat?.dept,defaultDept].filter(Boolean))];
+  const[f,sf]=useState(cat||{code:'',name:'',dept:defaultDept||deptNames[0]||'',unit:'Tấn',rate:'',desc:'',duration:'',qualityReq:'',note:''});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
-  const submit=()=>{if(!f.name){window.showToast('Nhập tên công việc!','warn');return;}onSave({...f,id:cat?.id||'CV'+uid(),rate:numFmt(f.rate)});};
+  const submit=()=>{if(!f.name){window.showToast('Nhập tên công việc!','warn');return;}if(!String(f.dept||'').trim()){window.showToast('Chọn bộ phận cho công việc.','warn');return;}onSave({...f,dept:String(f.dept).trim(),id:cat?.id||'CV'+uid(),rate:numFmt(f.rate)});};
   return h(Modal,{title:cat?'Sửa công việc':'Thêm danh mục công việc',onClose},
     h('div',{className:'g2'},
       h(F,{label:'Mã công việc'},h('input',{value:f.code,onChange:e=>s('code',e.target.value),placeholder:'CV001'})),
-      h(F,{label:'Bộ phận'},h('select',{value:f.dept,onChange:e=>s('dept',e.target.value)},deptNames.map(d=>h('option',{key:d,value:d},d)))),
+      h(F,{label:'Bộ phận *'},h('select',{value:f.dept||'',onChange:e=>s('dept',e.target.value)},h('option',{value:''},'— Chọn bộ phận —'),deptNames.map(d=>h('option',{key:d,value:d},d)))),
     ),
     h(F,{label:'Tên công việc *'},h('input',{value:f.name,onChange:e=>s('name',e.target.value),placeholder:'Bốc xếp, Vận chuyển...'})),
     h(F,{label:'Mô tả công việc'},h('textarea',{value:f.desc||'',onChange:e=>s('desc',e.target.value),rows:3,placeholder:'Mô tả chi tiết nội dung cần thực hiện...'})),
@@ -240,17 +263,24 @@ function WorkCatForm({cat,depts,onSave,onClose}){
 }
 function WorkCatsTab({workcats,setWorkcats,depts}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[q,sq]=useState('');
+  const[department,setDepartment]=useState('');const[createDept,setCreateDept]=useState('');
+  const departmentOptions=[...new Set([...(depts||[]).map(dept=>dept.name),...(workcats||[]).map(row=>String(row.dept||'').trim())].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const addForDept=dept=>{setCreateDept(dept==='__unassigned__'?'':dept);se(null);sm('f');};
   const save=d=>{if(edit)setWorkcats(p=>p.map(x=>x.id===edit.id?d:x));else setWorkcats(p=>[...p,d]);sm(null);se(null);};
   const del=id=>{window.scfConfirm('Bạn có chắc muốn xóa công việc này?','Xóa công việc',true).then(ok=>{if(ok){setWorkcats(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa công việc','success');}});};
-  const list=workcats.filter(x=>!q||[x.code,x.name,x.dept,x.desc,x.duration,x.qualityReq,x.note].some(v=>(v||'').toLowerCase().includes(q.toLowerCase())));
+  const groups=scfWorkCatGroups(workcats,q,department);
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-checklist',style:{fontSize:20}}),'Danh mục công việc'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
-      h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm công việc...'}),
-      h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Thêm công việc'})
+      h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm công việc...'}),
+        h('select',{'aria-label':'Bộ phận công việc',value:department,onChange:event=>setDepartment(event.target.value),style:{width:'auto',minWidth:180}},h('option',{value:''},'Tất cả bộ phận'),departmentOptions.map(dept=>h('option',{key:dept,value:dept},dept)),(workcats||[]).some(row=>!String(row.dept||'').trim())&&h('option',{value:'__unassigned__'},'Chưa phân bộ phận'))
+      ),
+      h(AddBtn,{onClick:()=>addForDept(department),label:'Thêm công việc'})
     ),
-    h(TableWrap,{cols:['Mã','Tên công việc','Bộ phận','Mô tả','Thời gian','Yêu cầu chất lượng','ĐV khối lượng','Đơn giá công','Ghi chú',''],empty:'Chưa có danh mục công việc nào.',
-      rows:list.map(x=>h('tr',{key:x.id},
+    groups.map(group=>h('section',{key:group.key,className:'card workcat-group',style:{padding:0,marginBottom:14,overflow:'hidden'}},
+      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'12px 14px',background:'var(--bg2)',borderBottom:'1px solid var(--bd)'}},h('b',null,group.department||'Chưa phân bộ phận',' · ',group.rows.length,' công việc'),h(AddBtn,{onClick:()=>addForDept(group.department),label:'Thêm công việc'})),
+      h(TableWrap,{cols:['Mã','Tên công việc','Bộ phận','Mô tả','Thời gian','Yêu cầu chất lượng','ĐV khối lượng','Đơn giá công','Ghi chú',''],empty:'Chưa có danh mục công việc nào.',
+      rows:group.rows.map(x=>h('tr',{key:x.id},
         h('td',null,h('span',{style:{color:'var(--pri)',fontWeight:500}},x.code||x.id)),
         h('td',null,h('div',{style:{fontWeight:500}},x.name)),
         h('td',null,h('span',{className:'badge',style:{background:'var(--bg2)',color:'var(--tx)'}},x.dept)),
@@ -265,8 +295,10 @@ function WorkCatsTab({workcats,setWorkcats,depts}){
           h('button',{className:'bi',onClick:()=>del(x.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
         ))
       ))
-    }),
-    modal==='f'&&h(WorkCatForm,{cat:edit,depts,onSave:save,onClose:()=>{sm(null);se(null);}})
+      })
+    )),
+    !groups.length&&h('div',{className:'empty-st'},q?'Không tìm thấy công việc phù hợp.':'Bộ phận này chưa có công việc. Bấm Thêm công việc để tạo danh mục riêng.'),
+    modal==='f'&&h(WorkCatForm,{cat:edit,depts,defaultDept:createDept,onSave:save,onClose:()=>{sm(null);se(null);}})
   );
 }
 
@@ -275,23 +307,25 @@ function TaskForm({task,workcats,employees,currentUser,onSave,onClose}){
   const staff=employees.filter(e=>e.role!=='admin'||e.id===currentUser.id);
   const deptOptions=[...new Set([...(workcats||[]).map(w=>w.dept).filter(Boolean),...(staff||[]).flatMap(employeeDepartments)])].sort((a,b)=>a.localeCompare(b,'vi'));
   const taskEmp=task?employees.find(e=>e.id===task.empId):null;
-  const taskWc=task?workcats.find(w=>w.id===task.workCatId||w.code===task.workCatId):null;
-  const initialDept=task?(task.dept||taskEmp?.dept||taskWc?.dept||''):(canManage?'':(currentUser.dept||''));
+  const taskWc=task?scfFindWorkCat(workcats,task.workCatId,task.dept):null;
+  const initialDept=task?(task.dept||taskWc?.dept||taskEmp?.dept||''):(canManage?'':(currentUser.dept||''));
   const[f,sf]=useState(task?{...task,dept:initialDept}:{date:fmtDate(),dept:initialDept,empId:canManage?'':currentUser.id,workCatId:'',qtyAssign:0,dueDate:fmtDate(),shift:'',location:'',note:'',status:'assigned'});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
   const groupStaff=staff.filter(e=>!f.dept||employeeHasDepartment(e,f.dept));
-  const groupWorkcats=workcats.filter(w=>!f.dept||w.dept===f.dept);
+  const groupWorkcats=workcats.filter(w=>!f.dept||scfWorkCatDeptKey(w.dept)===scfWorkCatDeptKey(f.dept));
   const setDept=v=>sf(p=>({...p,dept:v,empId:canManage?'':p.empId,workCatId:''}));
-  const emp=employees.find(e=>e.id===f.empId)||{};
-  const wc=workcats.find(w=>w.id===f.workCatId||w.code===f.workCatId)||{};
+  const emp=groupStaff.find(e=>e.id===f.empId)||{};
+  const wc=scfFindWorkCat(workcats,f.workCatId,f.dept)||{};
   const submit=()=>{
     if(!f.dept){window.showToast('Chọn nhóm/bộ phận.','warn');return;}
     if(!f.empId){window.showToast('Chọn nhân viên.','warn');return;}
+    if(!emp.id){window.showToast('Chọn nhân viên thuộc đúng bộ phận.','warn');return;}
     if(!f.workCatId){window.showToast('Chọn công việc.','warn');return;}
+    if(!wc.id){window.showToast('Chọn lại công việc thuộc đúng bộ phận; mã cũ có thể đã thay đổi hoặc bị trùng.','warn');return;}
     const taskDate=parseAnyDate(f.date);
     const dueDate=parseAnyDate(f.dueDate);
     if(taskDate&&dueDate&&dueDate<taskDate){window.showToast('Hạn hoàn thành không được nhỏ hơn ngày giao việc.','warn');return;}
-    onSave({...f,empName:emp.name||'',dept:f.dept||emp.dept||wc.dept||'',workCatName:wc.name||'',workCatCode:wc.code||wc.id||'',workDesc:wc.desc||'',workDuration:wc.duration||'',qualityReq:wc.qualityReq||'',unit:wc.unit||'',rate:numFmt(wc.rate),status:f.status||'assigned',updatedBy:currentUser.name,updatedAt:fmtDT()});
+    onSave({...f,workCatId:wc.id,empName:emp.name||'',dept:f.dept,workCatName:wc.name||'',workCatCode:wc.code||wc.id||'',workDesc:wc.desc||'',workDuration:wc.duration||'',qualityReq:wc.qualityReq||'',unit:wc.unit||'',rate:numFmt(wc.rate),status:f.status||'assigned',updatedBy:currentUser.name,updatedAt:fmtDT()});
   };
   return h(Modal,{title:task?'Sửa phiếu giao việc':'Giao việc cho nhân viên',onClose,lg:true},
     h('div',{className:'g3'},
@@ -302,10 +336,10 @@ function TaskForm({task,workcats,employees,currentUser,onSave,onClose}){
       h(F,{label:'Hạn hoàn thành'},h('input',{value:f.dueDate,onChange:e=>s('dueDate',e.target.value),placeholder:'DD/MM/YYYY'}))
     ),
     h('div',{className:'g3'},
-      h(F,{label:'Nhân viên *'},h('select',{value:f.empId,onChange:e=>s('empId',e.target.value),disabled:!f.dept},
+      h(F,{label:'Nhân viên *'},h('select',{value:emp.id||'',onChange:e=>s('empId',e.target.value),disabled:!f.dept},
         h('option',{value:''},f.dept?'— Chọn nhân viên trong nhóm —':'— Chọn nhóm trước —'),groupStaff.map(e=>h('option',{key:e.id,value:e.id},e.id+' - '+e.name))
       )),
-      h(F,{label:'Công việc *'},h('select',{value:f.workCatId,onChange:e=>s('workCatId',e.target.value),disabled:!f.dept},
+      h(F,{label:'Công việc *'},h('select',{value:wc.id||'',onChange:e=>s('workCatId',e.target.value),disabled:!f.dept},
         h('option',{value:''},f.dept?'— Chọn việc của nhóm —':'— Chọn nhóm trước —'),groupWorkcats.map(w=>h('option',{key:w.id,value:w.id},(w.code||w.id)+' - '+w.name+' ('+(w.unit||'')+')'))
       )),
       h(F,{label:'Khối lượng giao'},h('input',{type:'number',min:0,step:'0.01',value:f.qtyAssign,onChange:e=>s('qtyAssign',numFmt(e.target.value))})),

@@ -63,59 +63,82 @@ function BirthdayVisual({name,effect='fireworks'}){
     h('div',{className:'birthday-visual-text'},'Chúc mừng sinh nhật ',name,'!')
   );
 }
+// Tọa độ Sông Công từ Open-Meteo Geocoding (id 13513037).
+// Dùng riêng cho dự báo; W_LAT/W_LON còn phục vụ cấu hình chấm công.
+const SCF_WEATHER_LOCATION={lat:21.4772,lon:105.84137,name:'Sông Công, Thái Nguyên',timezone:'Asia/Ho_Chi_Minh'};
+function scfWeatherInfo(code,isDay=true){
+  const codes={0:['ti-sun',isDay?'Trời quang':'Đêm quang','#d49b00'],1:['ti-cloud','Ít mây','#93b7dd'],2:['ti-cloud','Có mây','#8496aa'],3:['ti-cloud','Nhiều mây','#64748b'],45:['ti-mist','Sương mù','#94a3b8'],48:['ti-mist','Sương mù đóng băng','#94a3b8'],51:['ti-cloud-rain','Mưa phùn nhẹ','#60a5fa'],53:['ti-cloud-rain','Mưa phùn','#60a5fa'],55:['ti-cloud-rain','Mưa phùn dày','#3b82f6'],56:['ti-cloud-rain','Mưa phùn đóng băng nhẹ','#60a5fa'],57:['ti-cloud-rain','Mưa phùn đóng băng','#3b82f6'],61:['ti-cloud-rain','Mưa nhẹ','#60a5fa'],63:['ti-cloud-rain','Mưa vừa','#3b82f6'],65:['ti-cloud-rain','Mưa to','#1d4ed8'],66:['ti-cloud-rain','Mưa đóng băng nhẹ','#60a5fa'],67:['ti-cloud-rain','Mưa đóng băng','#3b82f6'],71:['ti-snowflake','Tuyết nhẹ','#94a3b8'],73:['ti-snowflake','Tuyết vừa','#94a3b8'],75:['ti-snowflake','Tuyết dày','#64748b'],77:['ti-snowflake','Hạt tuyết','#94a3b8'],80:['ti-cloud-rain','Mưa rào nhẹ','#60a5fa'],81:['ti-cloud-rain','Mưa rào vừa','#3b82f6'],82:['ti-cloud-rain','Mưa rào mạnh','#1d4ed8'],85:['ti-snowflake','Mưa tuyết nhẹ','#94a3b8'],86:['ti-snowflake','Mưa tuyết mạnh','#64748b'],95:['ti-cloud-storm','Dông','#6d28d9'],96:['ti-cloud-storm','Dông kèm mưa đá nhẹ','#6d28d9'],99:['ti-cloud-storm','Dông kèm mưa đá mạnh','#6d28d9']};
+  if(code===null||code===undefined||code==='')return ['ti-cloud','Chưa xác định','#8496aa'];
+  return codes[Number(code)]||['ti-cloud','Chưa xác định','#8496aa'];
+}
+function scfWeatherTime(value){
+  const raw=String(value||'');
+  return raw?Date.parse(raw+(/(?:Z|[+-]\d{2}:\d{2})$/.test(raw)?'':'+07:00')):NaN;
+}
+function scfWeatherDay(now=Date.now()){
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:SCF_WEATHER_LOCATION.timezone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now).map(part=>[part.type,part.value]));
+  return parts.year+'-'+parts.month+'-'+parts.day;
+}
+function scfNormalizeWeather(payload,now=Date.now()){
+  const current=payload?.current,measuredAt=scfWeatherTime(current?.time);
+  if(payload?.error||!current||typeof current.temperature_2m!=='number'||!Number.isFinite(current.temperature_2m)||!Number.isFinite(measuredAt))throw Error('Nguồn thời tiết chưa trả đủ dữ liệu.');
+  const today=scfWeatherDay(now),daily=payload.daily||{};
+  const days=(Array.isArray(daily.time)?daily.time:[]).map((date,i)=>({date,code:daily.weather_code?.[i],max:daily.temperature_2m_max?.[i],min:daily.temperature_2m_min?.[i],rain:daily.precipitation_probability_max?.[i]})).filter(day=>/^\d{4}-\d{2}-\d{2}$/.test(day.date)&&day.date>today).slice(0,2);
+  return {current,days,measuredAt,fetchedAt:now};
+}
+function scfWeatherUrl(){
+  const place=SCF_WEATHER_LOCATION;
+  return 'https://api.open-meteo.com/v1/forecast?latitude='+place.lat+'&longitude='+place.lon+'&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&forecast_days=3&temperature_unit=celsius&wind_speed_unit=kmh&timezone='+encodeURIComponent(place.timezone);
+}
 function WeatherWidget(){
-  const[w,sw]=useState(null);const[fc,sf]=useState([]);const[ld,sl]=useState(true);
+  const[data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[retry,setRetry]=useState(0);
   useEffect(()=>{
-    fetch('https://api.open-meteo.com/v1/forecast?latitude='+W_LAT+'&longitude='+W_LON+'&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=3&timezone=Asia%2FBangkok')
-      .then(r=>r.json()).then(d=>{
-        sw(d.current||null);
-        const days=((d.daily&&d.daily.time)||[]).slice(1,3).map((dt,i)=>({
-          date:dt,
-          code:(d.daily.weather_code||[])[i+1],
-          max:(d.daily.temperature_2m_max||[])[i+1],
-          min:(d.daily.temperature_2m_min||[])[i+1]
-        }));
-        sf(days);
-      }).catch(()=>{sw(null);sf([]);}).finally(()=>sl(false));
-  },[]);
-  const WC2={0:['ti-sun','Trời quang','#f8c30f'],1:['ti-cloud','Ít mây','#93c5fd'],2:['ti-cloud','Có mây','#94a3b8'],3:['ti-cloud','Nhiều mây','#64748b'],45:['ti-mist','Sương mù','#94a3b8'],51:['ti-cloud-rain','Mưa phùn','#60a5fa'],61:['ti-cloud-rain','Mưa nhẹ','#60a5fa'],63:['ti-cloud-rain','Mưa','#3b82f6'],65:['ti-cloud-rain','Mưa to','#1d4ed8'],80:['ti-cloud-rain','Mưa rào','#3b82f6'],95:['ti-cloud-storm','Dông','#6d28d9']};
-  const inf=w?(WC2[w.weather_code]||WC2[Math.floor(w.weather_code/10)*10]||WC2[0]):null;
+    let active=true,inFlight=false,controller=null,lastAttempt=0;
+    const load=async()=>{
+      if(inFlight)return;inFlight=true;lastAttempt=Date.now();setLoading(true);
+      controller=new AbortController();const timeout=setTimeout(()=>controller?.abort(),12000);
+      try{
+        const response=await fetch(scfWeatherUrl(),{signal:controller.signal,cache:'no-store'});
+        if(!response.ok)throw Error('Nguồn thời tiết phản hồi lỗi '+response.status+'.');
+        const next=scfNormalizeWeather(await response.json());
+        if(active){setData(next);setError('');}
+      }catch(err){if(active)setError(err?.name==='AbortError'?'Tải thời tiết quá thời gian chờ.':(err?.message||'Chưa tải được thời tiết.'));}
+      finally{clearTimeout(timeout);inFlight=false;if(active)setLoading(false);}
+    };
+    load();
+    const interval=setInterval(()=>{if(document.visibilityState!=='hidden')load();},15*60*1000);
+    const visible=()=>{if(document.visibilityState!=='hidden'&&Date.now()-lastAttempt>=60000)load();};
+    document.addEventListener('visibilitychange',visible);window.addEventListener('online',visible);
+    return()=>{active=false;controller?.abort();clearInterval(interval);document.removeEventListener('visibilitychange',visible);window.removeEventListener('online',visible);};
+  },[retry]);
+  const w=data?.current,info=scfWeatherInfo(w?.weather_code,w?.is_day!==0),value=(number,suffix='')=>typeof number==='number'&&Number.isFinite(number)?number+suffix:'—';
+  const stale=data&&Date.now()-data.measuredAt>2*60*60*1000;
+  const timeLabel=data?new Date(data.measuredAt).toLocaleString('vi-VN',{timeZone:SCF_WEATHER_LOCATION.timezone,hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'';
   return h('div',{className:'weather-card'},
-    h('div',{className:'weather-current-card',style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexWrap:'wrap'}},
-      h('div',{style:{minWidth:220,flex:1}},
-        h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4}},h('i',{className:'ti ti-map-pin',style:{fontSize:11,marginRight:3}}),W_CITY),
-        h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:6}},'Hôm nay'),
-        ld?h('div',{style:{fontSize:26,color:'var(--tx2)'}},'...')
-        :w?h('div',{style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}},
-          h('span',{style:{fontSize:40,fontWeight:300,color:'var(--pri)'}},w.temperature_2m+'°'),
-          h('i',{className:'ti '+(inf?inf[0]:'ti-sun'),style:{fontSize:34,color:inf?inf[2]:'#f8c30f'}}),
-          h('div',null,
-            h('div',{style:{fontSize:14,fontWeight:600,color:'var(--pri3)'}},inf?inf[1]:''),
-            h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:2}},h('i',{className:'ti ti-droplet',style:{fontSize:12,marginRight:3}}),w.relative_humidity_2m+'% · ',h('i',{className:'ti ti-wind',style:{fontSize:12,marginRight:3,marginLeft:6}}),w.wind_speed_10m+' km/h')
-          )
-        ):h('span',{style:{color:'var(--tx2)',fontSize:13}},'Không có dữ liệu')
+    h('div',{className:'weather-current-card'},
+      h('div',null,
+        h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:4}},h('i',{className:'ti ti-map-pin'}),' ',SCF_WEATHER_LOCATION.name),
+        h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:6}},data?'Dữ liệu lúc '+timeLabel:'Thời tiết hiện tại'),
+        w?h('div',{style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}},
+          h('span',{style:{fontSize:40,fontWeight:300,color:'var(--pri)'}},value(w.temperature_2m,'°C')),
+          h('i',{className:'ti '+info[0],style:{fontSize:34,color:info[2]}}),
+          h('div',null,h('div',{style:{fontSize:14,fontWeight:600,color:'var(--pri3)'}},info[1]),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:2}},'Ẩm '+value(w.relative_humidity_2m,'%')+' · Gió '+value(w.wind_speed_10m,' km/h')))
+        ):h('span',{role:'status',style:{fontSize:13}},loading?'Đang tải thời tiết…':'Chưa có dữ liệu thời tiết')
       )
     ),
-    fc.length?h('div',{className:'weather-three-wrap',style:{marginTop:10,display:'grid',gridTemplateColumns:'1fr',gap:10}},
-      fc.map((d,i)=>{
-        const f=WC2[d.code]||WC2[Math.floor((d.code||0)/10)*10]||WC2[0];
-        const dt=new Date(d.date+'T00:00:00');
-        const dayLabel=dt.toLocaleDateString('vi-VN',{weekday:'long'});
-        return h('div',{key:i,style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 12px',border:'1px solid var(--bd)',borderRadius:12,background:'linear-gradient(135deg,#fbfdfb,#f2f8f4)'}},
-          h('div',{style:{display:'flex',alignItems:'center',gap:10}},
-            h('i',{className:'ti '+f[0],style:{fontSize:28,color:f[2],minWidth:28,textAlign:'center'}}),
-            h('div',null,
-              h('div',{style:{fontSize:12,color:'var(--tx2)'}},dayLabel),
-              h('div',{style:{fontSize:13,fontWeight:600,color:'var(--pri3)'}},f[1])
-            )
-          ),
-          h('div',{style:{textAlign:'right'}},
-            h('div',{style:{fontSize:18,fontWeight:600,color:'var(--pri)'}},Math.round(d.max)+'°'),
-            h('div',{style:{fontSize:11,color:'var(--tx2)'}},Math.round(d.min)+'°')
-          )
-        );
-      })
-    ):null
+    !!data?.days.length&&h('div',{className:'weather-three-wrap'},data.days.map(day=>{
+      const forecast=scfWeatherInfo(day.code),date=new Date(day.date+'T12:00:00+07:00');
+      return h('div',{key:day.date,style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 12px',gap:10,border:'1px solid var(--bd)',borderRadius:12,background:'linear-gradient(135deg,#fbfdfb,#f2f8f4)'}},
+        h('div',{style:{display:'flex',alignItems:'center',gap:10}},h('i',{className:'ti '+forecast[0],style:{fontSize:28,color:forecast[2]}}),
+          h('div',null,h('div',{style:{fontSize:12,color:'var(--tx2)'}},date.toLocaleDateString('vi-VN',{timeZone:SCF_WEATHER_LOCATION.timezone,weekday:'long',day:'2-digit',month:'2-digit'})),h('div',{style:{fontSize:13,fontWeight:600}},forecast[1]),h('small',null,'Khả năng mưa: '+value(day.rain,'%')))),
+        h('div',{style:{textAlign:'right'}},h('div',{style:{fontSize:18,fontWeight:600}},typeof day.max==='number'?Math.round(day.max)+'°':'—'),h('small',null,typeof day.min==='number'?Math.round(day.min)+'°':'—'))
+      );
+    })),
+    h('div',{className:'weather-source',style:{gridColumn:'1/-1',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',fontSize:11,color:'var(--tx2)'}},
+      h('span',null,'Nguồn: ',h('a',{href:'https://open-meteo.com/en/docs',target:'_blank',rel:'noopener noreferrer'},'Open-Meteo'),' · Dự báo theo mô hình · Tự làm mới 15 phút'),
+      h('button',{type:'button','data-scf-action':'view',disabled:loading,onClick:()=>setRetry(n=>n+1),style:{fontSize:12,padding:'5px 9px'}},h('i',{className:'ti ti-refresh'}),loading?' Đang tải…':' Làm mới')
+    ),
+    (error||stale)&&h('div',{role:'status',style:{gridColumn:'1/-1',fontSize:12,color:'#925400'}},error?(error+(data?' Đang hiển thị lần tải trước.':'')):'Dữ liệu thời tiết đã quá 2 giờ. Hãy bấm Làm mới.')
   );
 }
 function CalendarWidget(){
@@ -1125,8 +1148,9 @@ function isPrivilegedEmployeeRecord(employee){
       const dept=isFaceMaskPrivilegedProfile?'Ban Giám Đốc':f.dept;
       const departments=isFaceMaskPrivilegedProfile?['Ban Giám Đốc']:[dept,...selectedDepartments.filter(value=>normalizeEmployeeDept(value)!==normalizeEmployeeDept(dept))];
       const driverDepartment=departments.some(value=>normalizeEmployeeDept(value)==='lai xe');
-      const tripPermissions=driverDepartment?{...normalizedTripPermissions({...f,dept,departments}),actualQty:true,driverWorkflow:true,summaryInvoice:true}:f.tripPermissions;
-      onSave({...f,dept,departments,tripPermissions,permissions,permLevels,tripActualQtyLimitDays:actualQtyLimitDays,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
+      const tripPermissions=driverDepartment?normalizedTripPermissions({...f,dept,departments}):f.tripPermissions;
+      const mobileStartPage=scfMobileStartTarget({...f,dept,departments,permissions,permLevels});
+      onSave({...f,dept,departments,tripPermissions,permissions,permLevels,mobileStartPage,tripActualQtyLimitDays:actualQtyLimitDays,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
     }catch(e){window.showToast(e.message||'Không thể lưu mật khẩu.','error');}
     finally{setBusy(false);}
   };
@@ -1191,7 +1215,7 @@ function isPrivilegedEmployeeRecord(employee){
       h('hr',{className:'divider'}),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
         h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phân quyền chi tiết (có thể chỉnh riêng cho nhân viên này)'),
-        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,salesDebtAllCustomers:false,driverReportMonthlyWeight:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
+        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,salesDebtAllCustomers:false,driverReportMonthlyWeight:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
       ),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = chỉ đọc dữ liệu | Thêm + Xem + Sửa = không được xóa | Thêm + Xem + Sửa + Xóa = toàn quyền'),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 2rem'}},
@@ -1224,6 +1248,7 @@ function isPrivilegedEmployeeRecord(employee){
           })
         ))
       ),
+      !isFaceMask&&h(MobilePermissionFields,{employee:f,onChange:value=>s('mobilePermissions',value),onStartPageChange:value=>s('mobileStartPage',value)}),
       canAccess(f.role,'trips',f.permissions,selectedDepartments)&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,marginTop:10,background:'var(--bg2)'}},
         h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền nghiệp vụ trong Chuyến giao hàng'),
         h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:8}},'Số lượng thực giao tách khỏi quyền sửa thông tin chuyến.'),

@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V540';
+const SCF_BUILD_VERSION='V545';
 const PTITLES = {
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
@@ -474,12 +474,16 @@ function App(){
     :(session?employees.find(e=>String(e.id)===String(session.id)):null);
   const cuAccessDepartments=employeeDepartments(cu);
   quickSummaryUserRef.current=cu;
-  useEffect(()=>setQuickTripSummaryOpen(false),[cu?.id]);
+  const mobileStartTarget=user=>!isFaceMask&&window.matchMedia?.('(max-width:768px)')?.matches?scfMobileStartTarget(user):'';
+  const canOpenCurrentPage=user=>canAccess(user.role,page,user.permissions,employeeDepartments(user))&&(isFaceMask||page===homePage||!window.matchMedia?.('(max-width:768px)')?.matches||canMobileFeature(user,page));
+  const applyMobileStart=user=>{const target=mobileStartTarget(user);if(target)setPage(target==='quick-summary'?homePage:target);};
+  useEffect(()=>setQuickTripSummaryOpen(mobileStartTarget(cu)==='quick-summary'),[cu?.id]);
   const loadQuickSummaryData=async()=>{
     const owner=quickSummaryUserRef.current;
+    const ownerId=String(owner?.id||''),ownerAccess=scfQuickSummaryAccessKey(owner);
     const data=await scfLoadQuickTripSummaryData(owner);
     const current=quickSummaryUserRef.current;
-    if(!current||String(current.id)!==String(owner?.id)||!canViewTripQuickSummary(current))throw Error('Phiên đăng nhập đã thay đổi. Hãy mở lại đơn tổng.');
+    if(!current||String(current.id)!==ownerId||scfQuickSummaryAccessKey(current)!==ownerAccess||!canViewTripQuickSummary(current)||!canMobileFeature(current,'quick-summary'))throw Error('Phiên đăng nhập hoặc quyền xem đã thay đổi. Hãy mở lại đơn tổng.');
     _st(data.trips);_so(data.orders);_sp(data.products);_scu(data.customers);_spc(data.prodCats);
     return data;
   };
@@ -499,7 +503,7 @@ function App(){
     ...Object.fromEntries(Object.entries(PROCESS_POST_KEYS).map(([name,key])=>[key.replace(/^scf_/,''),[[],value=>_spp(prev=>({...prev,[name]:value}))]]))
   };
   const requiredKeys=scfPageDataKeys(page,Object.keys(resources));
-  const pageReady=readyPage===page&&!pageError;
+  const pageReady=readyPage===page&&!pageError&&!!cu&&canOpenCurrentPage(cu);
   const browserNavReadyRef=React.useRef(false);
   const browserPopRef=React.useRef(false);
   const[serverAuthReady,setServerAuthReady]=useState(false);
@@ -572,10 +576,12 @@ function App(){
           const current=context.currentEmployee;
           if(!current||String(current.id)!==employeeId)throw new Error('Chưa tải được hồ sơ của tài khoản đang đăng nhập.');
           window.__SCF_CURRENT_EMPLOYEE=current;
-          _se(context.employees);setAuthEmployee(current);setSession({id:current.id});
+          applyMobileStart(current);_se(context.employees);setAuthEmployee(current);setSession({id:current.id});
         }else{
           const rows=await dbGet(employeeStorageKey,DEF_EMPS);
           if(cancelled)return;
+          const current=rows.find(employee=>String(employee.id)===String(session?.id));
+          if(current)applyMobileStart(current);
           _se(rows);
         }
       }catch(err){
@@ -603,7 +609,7 @@ function App(){
   useEffect(()=>{
     if(!serverAuthReady||bootError||!cu)return;
     if(isFaceMask&&!['admin','administrator'].includes(String(cu.role||'').toLowerCase()))return;
-    if(!canAccess(cu.role,page,cu.permissions,cuAccessDepartments))return;
+    if(!canOpenCurrentPage(cu))return;
     let cancelled=false;
     setReadyPage(null);setPageError('');
     const loader=dataLoaderRef.current;
@@ -611,7 +617,7 @@ function App(){
       .then(()=>{if(!cancelled){setAutoSyncReady(true);setReadyPage(page);}})
       .catch(error=>{if(!cancelled)setPageError(error.message||'Không tải được dữ liệu màn hình.');});
     return()=>{cancelled=true;};
-  },[serverAuthReady,bootError,cu?.id,page,pageAttempt]);
+  },[serverAuthReady,bootError,cu?.id,cu?.permissions,cu?.mobilePermissions,employeeDepartmentLabel(cu),page,pageAttempt]);
   useEffect(()=>{
     const vars=uiSettingsToCssVars(uiSettings);
     Object.entries(vars).forEach(([key,val])=>document.documentElement.style.setProperty(key,val));
@@ -739,8 +745,8 @@ function App(){
     }
   },[cu?.id,cu?.mustChangePw]);
   useEffect(()=>{
-    if(cu&&!canAccess(cu.role,page,cu.permissions,cuAccessDepartments))setPage(homePage);
-  },[cu?.id,cu?.role,employeeDepartmentLabel(cu),page]);
+    if(cu&&!canOpenCurrentPage(cu))setPage(homePage);
+  },[cu?.id,cu?.role,cu?.permissions,cu?.mobilePermissions,employeeDepartmentLabel(cu),page]);
   if(bootError)return h('div',{className:'login-bg'},h('div',{className:'login-card',role:'alert'},
     h('h2',null,'Chưa tải được hồ sơ đăng nhập'),
     h('p',null,'App chưa xác định được hồ sơ của bạn. Không cần thay đổi quyền hay nhập lại đơn hàng.'),
@@ -774,7 +780,7 @@ function App(){
     await dbSet('scf_employees',next);
     window.showToast&&window.showToast('Đã tạo tài khoản Admin. Hãy đăng nhập để tiếp tục.','success');
   }});
-  if(!cu)return h(LoginPage,{employees,onLogin:u=>{setSession({id:u.id});if(SCF_SERVER_AUTH_ENABLED)setBootAttempt(v=>v+1);}});
+  if(!cu)return h(LoginPage,{employees,onLogin:u=>{if(!SCF_SERVER_AUTH_ENABLED)applyMobileStart(u);setSession({id:u.id});if(SCF_SERVER_AUTH_ENABLED)setBootAttempt(v=>v+1);}});
   if(isFaceMask&&!['admin','administrator'].includes(String(cu.role||'').toLowerCase()))return h('div',{className:'login-bg'},
     h('div',{className:'login-card',style:{textAlign:'center'}},
       h('div',{className:'face-mask-login-icon',style:{margin:'0 auto 12px'}},h('i',{className:'ti ti-shield-lock'})),
@@ -906,8 +912,8 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         wips.includes(page)&&h(PlaceholderTab,{title:PTITLES[page],icon:PICONS[page]||'ti-clock'})
         )
       ),
-      quickTripSummaryOpen&&!isFaceMask&&canViewTripQuickSummary(cu)&&h(TripQuickSummaryModal,{key:cu.id,currentUser:cu,employees,loadData:loadQuickSummaryData,onClose:()=>setQuickTripSummaryOpen(false)}),
-      (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,onLogout:logout,onQuickTripSummary:!isFaceMask&&canViewTripQuickSummary(cu)?()=>setQuickTripSummaryOpen(true):undefined})
+      quickTripSummaryOpen&&!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')&&h(TripQuickSummaryModal,{key:cu.id,currentUser:cu,employees,loadData:loadQuickSummaryData,onClose:()=>setQuickTripSummaryOpen(false)}),
+      (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,currentUser:cu,onLogout:logout,onQuickTripSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>setQuickTripSummaryOpen(true):undefined})
     ),
     cu.mustChangePw&&h(CpwModal,{
       emp:cu,cu,forced:true,onClose:logout,onExit:logout,

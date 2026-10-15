@@ -746,12 +746,14 @@ function TopNav({page,setPage,role,perms,dept}){
   );
 }
 
-function MobileNav({page,setPage,role,perms,dept,onLogout,onQuickTripSummary}){
+function MobileNav({page,setPage,role,perms,dept,currentUser,onLogout,onQuickTripSummary}){
   const[open,setOpen]=useState(false);
+  const viewer=currentUser||{role,permissions:perms,dept};
+  const allowed=key=>canMobileFeature(viewer,key);
   const groups=[]; let cur=null;
   NAV.forEach(item=>{
     if(item.sec){cur={sec:item.sec,pages:[]};groups.push(cur);return;}
-    if(!canAccess(role,item.key,perms,dept))return;
+    if(!canAccess(role,item.key,perms,dept)||!allowed(item.key))return;
     if(cur)cur.pages.push(item);
     else groups.push({sec:item.label,pages:[item],single:true});
   });
@@ -760,14 +762,14 @@ function MobileNav({page,setPage,role,perms,dept,onLogout,onQuickTripSummary}){
   const productionDept=(Array.isArray(dept)?dept:[dept]).some(value=>String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('san xuat'));
   if(productionDept)preferred.push('prodsummary');
   const quick=preferred.map(key=>NAV.find(item=>item.key===key))
-    .filter(item=>item&&canAccess(role,item.key,perms,dept));
+    .filter(item=>item&&canAccess(role,item.key,perms,dept)&&allowed(item.key));
   const currentIsQuick=quick.some(item=>item.key===page);
-  const go=key=>{setPage(key);setOpen(false);};
-  const items=[...quick,...(onQuickTripSummary?[{key:'quick-summary',icon:'ti-photo-search',label:'Đơn tổng'}]:[]),{key:'more',icon:'ti-grid-dots',label:'Thêm'}];
+  const go=key=>{if(allowed(key)&&canAccess(role,key,perms,dept)){setPage(key);setOpen(false);}};
+  const items=[...quick,...(onQuickTripSummary&&allowed('quick-summary')?[{key:'quick-summary',icon:'ti-photo-search',label:'Đơn tổng'}]:[]),...(allowed('more')?[{key:'more',icon:'ti-grid-dots',label:'Thêm'}]:[])];
 
   return h(React.Fragment,null,
-    open&&h('div',{className:'mobile-nav-backdrop',onClick:()=>setOpen(false),role:'presentation'}),
-    open&&h('section',{className:'mobile-nav-sheet','aria-label':'Danh sách chức năng'},
+    open&&allowed('more')&&h('div',{className:'mobile-nav-backdrop',onClick:()=>setOpen(false),role:'presentation'}),
+    open&&allowed('more')&&h('section',{className:'mobile-nav-sheet','aria-label':'Danh sách chức năng'},
       h('div',{className:'mobile-nav-sheet-head'},
         h('div',null,h('b',null,'Tất cả chức năng'),h('span',null,'Chọn mục bạn muốn mở')),
         h('button',{className:'mobile-nav-close',onClick:()=>setOpen(false),'aria-label':'Đóng menu',title:'Đóng menu'},
@@ -795,14 +797,14 @@ function MobileNav({page,setPage,role,perms,dept,onLogout,onQuickTripSummary}){
         )
       )
     ),
-    h('nav',{className:'mobile-nav','aria-label':'Điều hướng nhanh',style:{gridTemplateColumns:'repeat('+items.length+',1fr)'}},
+    !!items.length&&h('nav',{className:'mobile-nav','aria-label':'Điều hướng nhanh',style:{gridTemplateColumns:'repeat('+items.length+',1fr)'}},
       items.map(item=>item.key==='quick-summary'
         ?h('button',{type:'button',key:item.key,className:'mobile-nav-btn mobile-nav-summary',onClick:()=>{setOpen(false);onQuickTripSummary();},'aria-label':'Xem nhanh đơn tổng',title:item.label},h('i',{className:'ti '+item.icon}),h('span',null,item.label))
         :item.key==='more'
         ?h('button',{key:item.key,className:'mobile-nav-btn'+(open||!currentIsQuick?' on':''),onClick:()=>setOpen(v=>!v),'aria-label':'Mở tất cả chức năng',title:'Thêm'},
           h('i',{className:'ti '+(open?'ti-x':item.icon)})
         )
-        :h('button',{key:item.key,className:'mobile-nav-btn'+(item.key==='prodsummary'?' mobile-nav-summary':'')+(page===item.key?' on':''),onClick:()=>go(item.key),'aria-label':item.key==='prodsummary'?'Tổng hợp sản xuất':item.label,title:item.key==='prodsummary'?'Tổng hợp sản xuất':item.label},
+        :h('button',{key:item.key,className:'mobile-nav-btn'+(item.key==='prodsummary'?' mobile-nav-summary':'')+(page===item.key?' on':''),onClick:()=>{if(allowed(item.key))go(item.key);},'aria-label':item.key==='prodsummary'?'Tổng hợp sản xuất':item.label,title:item.key==='prodsummary'?'Tổng hợp sản xuất':item.label},
           h('i',{className:'ti '+item.icon}),
           item.key==='prodsummary'&&h('span',null,'SX')
         )
