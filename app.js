@@ -1,6 +1,7 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V550';
+const SCF_BUILD_VERSION='V554';
 const PTITLES = {
+  kpi4p:'KPI & Lương 4P',
   attp_process:'Tài liệu ATTP · Quy trình',
   attp_standards:'Tài liệu ATTP · Tiêu chuẩn',
   attp_daily:'Tài liệu ATTP · Nhật ký hàng ngày',
@@ -230,6 +231,7 @@ function scfLoadOptionalScript(name,url){
 }
 // Kiểm tra thành phần trước khi render: một tệp tải lỗi không được làm trắng trang.
 const SCF_PAGE_COMPONENTS={
+  kpi4p:'KPI4PTab',
   attp_process:'ATTPDocumentsTab',attp_standards:'ATTPDocumentsTab',attp_daily:'ATTPDocumentsTab',attp_legal:'ATTPDocumentsTab',
   welcome:'WelcomePage',company:'CompanySettings',appearance:'AppearanceSettingsTab',printtemplates:'PrintTemplateSettingsTab',
   employees:'EmployeeTab EmpForm CpwModal',permission_settings:'PermissionSettingsTab',
@@ -249,6 +251,7 @@ function scfMissingPageComponents(page){
   return names.split(' ').filter(name=>typeof globalThis[name]!=='function');
 }
 async function scfEnsurePageTools(page){
+  if(page==='kpi4p'){await scfLoadOptionalScript('KPI4PTab','./kpi-4p.js?v=551');return;}
   const missing=scfMissingPageComponents(page);
   if(missing.length){
     console.warn('Chưa nạp được thành phần giao diện:',page,missing.join(', '));
@@ -264,6 +267,7 @@ async function scfEnsurePageTools(page){
 }
 
 const PICONS = {
+  kpi4p:'ti-chart-bar',
   attp_process:'ti-list-check',
   attp_standards:'ti-certificate',
   attp_daily:'ti-notebook',
@@ -866,8 +870,8 @@ function App(){
         canAccess(cu.role,'permission_settings',cu.permissions)&&page==='permission_settings'&&h(PermissionSettingsTab,{profiles:permissionProfiles,setProfiles:setPermissionProfiles,employees,setEmployees,currentUser:cu}),
         canAccess(cu.role,'attendance',cu.permissions)&&page==='attendance'&&h(AttendanceTab,{section:'punch',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones}),
         canAccess(cu.role,'attendance_settings',cu.permissions)&&page==='attendance_settings'&&h(AttendanceTab,{section:'settings',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones,onKioskExit:logout}),
-        canAccess(cu.role,'attendance_report',cu.permissions)&&page==='attendance_report'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones}),
-        canAccess(cu.role,'workreport_total',cu.permissions,cuAccessDepartments)&&page==='workreport_total'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones,reportTitle:'Tổng công'}),
+        canAccess(cu.role,'attendance_report',cu.permissions)&&page==='attendance_report'&&h(AttendanceTab,{onKPI4P:canAccess(cu.role,'kpi4p',cu.permissions,cuAccessDepartments)?()=>setPage('kpi4p'):undefined,section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones}),
+        canAccess(cu.role,'workreport_total',cu.permissions,cuAccessDepartments)&&page==='workreport_total'&&h(AttendanceTab,{onKPI4P:canAccess(cu.role,'kpi4p',cu.permissions,cuAccessDepartments)?()=>setPage('kpi4p'):undefined,section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones,reportTitle:'Tổng công'}),
         canAccess(cu.role,'advances',cu.permissions)&&page==='advances'&&h(MoneyTab,{mode:'advance',records:advances,setRecords:setAdvances,employees,currentUser:cu}),
         canAccess(cu.role,'rewards',cu.permissions)&&page==='rewards'&&h(MoneyTab,{mode:'reward',records:rewards,setRecords:setRewards,employees,currentUser:cu}),
         canAccess(cu.role,'employee_errors',cu.permissions)&&page==='employee_errors'&&h(EmployeeErrorsTab,{records:employeeErrors,setRecords:setEmployeeErrors,employees,currentUser:cu}),
@@ -918,6 +922,7 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,prodCats,currentUser:cu}),
         canAccess(cu.role,'syncreport',cu.permissions)&&page==='syncreport'&&h(SyncDataReportTab),
         canAccess(cu.role,'dbusage',cu.permissions)&&page==='dbusage'&&h(SupabaseUsageReportTab,{employees,materials,assets,prodCats,products,customers,areas,workcats,tasks,nccs,purchases,goodsPurchases,quotes,orders,trips,attendance,advances,rewards,employeeErrors,employeeUniforms,leaves,depts,shifts,prodShifts,prodShiftRules,prodOrders,stock,company}),
+        page==='kpi4p'&&canAccess(cu.role,page,cu.permissions,cuAccessDepartments)&&h(KPI4PTab,{currentUser:cu,setPage}),
         page.startsWith('attp_')&&canAccess(cu.role,page,cu.permissions,cuAccessDepartments)&&h(ATTPDocumentsTab,{key:page,page,title:PTITLES[page],icon:PICONS[page],currentUser:cu}),
         !page.startsWith('attp_')&&PROCESS_POST_KEYS[page]&&canAccess(cu.role,page,cu.permissions,cuAccessDepartments)&&h(ProcessPostsTab,{key:page,page,title:PTITLES[page],icon:PICONS[page],items:processPosts[page]||[],setItems:setProcessPosts(page),currentUser:cu}),
         wips.includes(page)&&h(PlaceholderTab,{title:PTITLES[page],icon:PICONS[page]||'ti-clock'})

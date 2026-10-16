@@ -2275,6 +2275,7 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
   const [pointKey,setPointKey]=useState('');
   const [productId,setProductId]=useState('');
   const [driverName,setDriverName]=useState('');
+  const [debtDifferenceProductKey,setDebtDifferenceProductKey]=useState('');
   useEffect(()=>{
     if(!defaultCustomerId)return;
     // Người không có quyền xem tổng hợp vẫn được chọn từng khách hàng. Chỉ
@@ -2344,6 +2345,25 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
   orderCounts.withoutInvoice=orderCounts.total-orderCounts.withInvoice;
   const filtered=matchedOrders.filter(scfDebtOrderHasInvoice);
   const productMap=new Map();
+  const debtProductKey=line=>String(line.productId||line.productName||(products||[]).find(item=>String(item.id||'')===String(line.productId||''))?.name||'unknown');
+  const differenceOrdersByProduct=new Map();
+  filtered.forEach(order=>{
+    const quantities=new Map();
+    visibleLines(order).forEach(line=>{
+      const key=debtProductKey(line);
+      const entry=quantities.get(key)||{order,invoice:0,delivered:0,notes:[]};
+      entry.invoice+=numFmt(line.qtyInvoice)||0;
+      entry.delivered+=deliveredQty(line,order);
+      const note=String(line.note||'').trim();
+      if(note&&!entry.notes.includes(note))entry.notes.push(note);
+      quantities.set(key,entry);
+    });
+    quantities.forEach((entry,key)=>{
+      if(Math.abs(entry.delivered-entry.invoice)<0.000001)return;
+      if(!differenceOrdersByProduct.has(key))differenceOrdersByProduct.set(key,[]);
+      differenceOrdersByProduct.get(key).push(entry);
+    });
+  });
   filtered.forEach(order=>visibleLines(order).forEach(line=>{
     const product=(products||[]).find(item=>String(item.id||'')===String(line.productId||''));
     const key=String(line.productId||line.productName||product?.name||'unknown');
@@ -2353,6 +2373,8 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
     current.orders+=1;productMap.set(key,current);
   }));
   const productRows=[...productMap.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi'));
+  const differenceProduct=productRows.find(row=>row.key===debtDifferenceProductKey);
+  const differenceOrders=differenceOrdersByProduct.get(debtDifferenceProductKey)||[];
   const totals=filtered.reduce((sum,order)=>{sum.invoice+=visibleLines(order).reduce((value,line)=>value+(numFmt(line.qtyInvoice)||0),0);sum.delivered+=visibleLines(order).reduce((value,line)=>value+deliveredQty(line,order),0);return sum;},{invoice:0,delivered:0});
   const invoiceRows=filtered.flatMap(order=>{
     const lines=visibleLines(order);
@@ -2425,9 +2447,18 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
     h('div',{className:'card',style:{marginBottom:14}},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:showQuantitySummary?10:0}},h('b',{style:{color:'var(--pri3)'}},'Tổng hợp sản phẩm theo hóa đơn'),h('button',{type:'button','aria-expanded':showQuantitySummary===true,'aria-controls':'debt-quantity-summary',onClick:()=>setShowQuantitySummary(!showQuantitySummary)},showQuantitySummary?'Ẩn bảng tổng hợp':'Hiện bảng tổng hợp')),
       showQuantitySummary&&h('div',{className:'tw',id:'debt-quantity-summary'},h('table',null,
-        h('thead',null,h('tr',null,...['STT','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch'].map(label=>h('th',{key:label},label)))),
-        h('tbody',null,productRows.length?productRows.map((row,index)=>h('tr',{key:row.key},h('td',null,index+1),h('td',null,h('b',null,row.name)),h('td',null,row.unit||'—'),h('td',null,qty(row.invoice)),h('td',null,h('b',{style:{color:'var(--pri)'}},qty(row.delivered))),h('td',null,qty(row.delivered-row.invoice)))):h('tr',null,h('td',{colSpan:6,className:'empty-st'},'Không có hóa đơn đã nhập theo bộ lọc.')))
-      ))
+        h('thead',null,h('tr',null,...['STT','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch','Đơn lệch'].map(label=>h('th',{key:label},label)))),
+        h('tbody',null,productRows.length?productRows.map((row,index)=>h('tr',{key:row.key},h('td',null,index+1),h('td',null,h('b',null,row.name)),h('td',null,row.unit||'—'),h('td',null,qty(row.invoice)),h('td',null,h('b',{style:{color:'var(--pri)'}},qty(row.delivered))),h('td',null,qty(row.delivered-row.invoice)),h('td',null,(differenceOrdersByProduct.get(row.key)||[]).length?h('span',null,differenceOrdersByProduct.get(row.key).length+' đơn · ',h('button',{type:'button','data-scf-action':'view','aria-expanded':debtDifferenceProductKey===row.key,'aria-controls':'debt-difference-orders',style:{color:'var(--pri)',textDecoration:'underline'},onClick:()=>setDebtDifferenceProductKey(debtDifferenceProductKey===row.key?'':row.key)},debtDifferenceProductKey===row.key?'Ẩn':'Xem')):'—'))):h('tr',null,h('td',{colSpan:7,className:'empty-st'},'Không có hóa đơn đã nhập theo bộ lọc.')))
+      )),
+      showQuantitySummary&&differenceProduct&&differenceOrders.length>0&&h('div',{id:'debt-difference-orders',style:{marginTop:16}},
+        h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:10}},'Các đơn lệch · '+differenceProduct.name+' ('+differenceOrders.length+' đơn)'),
+        h('div',{className:'tw'},h('table',null,
+          h('thead',null,h('tr',null,...['Lái xe','Ngày giao','Khách hàng','Địa điểm','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch','Giờ giao','Chú ý'].map(label=>h('th',{key:label},label)))),
+          h('tbody',null,differenceOrders.map(({order,invoice,delivered,notes},index)=>h('tr',{key:(order.id||order.orderId||'order')+'-'+index},
+            h('td',null,driverFor(order)),h('td',null,fmtAnyDate(order.deliveryDate||order.date)||'—'),h('td',null,order.customer||order.customerName||'—'),h('td',null,order.pointName||order.address||'—'),h('td',null,differenceProduct.name),h('td',null,differenceProduct.unit||'—'),h('td',null,qty(invoice)),h('td',null,qty(delivered)),h('td',null,h('b',{style:{color:'var(--danger,#c0392b)'}},qty(delivered-invoice))),h('td',null,order.deliveryTime||'—'),h('td',{className:'debt-invoice-note',style:{whiteSpace:'pre-wrap'}},notes.join('\n')||'—')
+          )))
+        ))
+      )
     ),
     h('div',{className:'card'},
       h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:10}},'Các hóa đơn đã nhập'),

@@ -1,5 +1,6 @@
 /* Cấu hình quyền mặc định theo chức vụ. */
 const SCF_PERMISSION_SECTIONS=[
+  {sec:'KPI & Lương 4P',pages:[["kpi4p","KPI & Lương 4P"],["kpi4p_manage","Tổng hợp / đánh giá KPI theo bộ phận"],["kpi4p_approve","Duyệt / chốt / mở lại KPI"],["kpi4p_settings","Cấu hình 4P"],["payroll4p","Xem lương 4P"],["payroll4p_approve","Duyệt / khóa lương 4P"]]},
   {sec:'Tài liệu ATTP',pages:[["attp_process","Quy trình"],["attp_standards","Tiêu chuẩn"],["attp_daily","Nhật ký hàng ngày"],["attp_legal","Tài liệu pháp lý"]]},
   {sec:'Giới thiệu công ty',pages:[['company','Giới thiệu công ty']]},
   {sec:'Cài đặt',pages:[['appearance','Cài đặt giao diện'],['printtemplates','Mẫu in Excel'],['employees','Nhân viên'],['permission_settings','Cài đặt phân quyền'],['backup','Backup dữ liệu']]},

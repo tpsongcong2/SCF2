@@ -614,6 +614,7 @@ const NAV=[
   {key:'backup',icon:'ti-database-export',label:'Backup dữ liệu'},
   {key:'dbusage',icon:'ti-database',label:'Dung lượng Supabase'},
   {sec:'Quản lý nhân sự'},
+  {key:'kpi4p',icon:'ti-chart-bar',label:'KPI & Lương 4P'},
   {key:'attendance',icon:'ti-face-id',label:'Chấm công'},
   {key:'attendance_settings',icon:'ti-settings',label:'Cài đặt chấm công'},
   {key:'advances',icon:'ti-cash-banknote',label:'Ứng lương'},

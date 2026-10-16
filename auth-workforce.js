@@ -405,7 +405,7 @@ function scfEmployeeAttendanceZone(employee,zones){
 function scfBuildFaceTemplate(capture,employeeName){
   return capture?{hash:[...(capture.faceHash||[])],descriptor:[...(capture.faceDescriptor||[])],model:capture.faceModel||'',detectionScore:capture.faceDetectionScore||0,image:capture.image||'',box:capture.faceBox?{...capture.faceBox}:null,updatedAt:fmtDT(),updatedBy:employeeName}:null;
 }
-function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,replaceEmployees,currentUser,company,saveAttendanceZones,loadAttendanceZones,reportTitle='Báo cáo chấm công',onKioskExit}) {
+function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,replaceEmployees,currentUser,company,saveAttendanceZones,loadAttendanceZones,reportTitle='Báo cáo chấm công',onKioskExit,onKPI4P}) {
   const settingsKey='scf_att_settings';
   const defaultWorkShifts=[
     {id:'night',name:'Ca đêm',start:'22:00',end:'03:00',color:'#EDE7F6',textColor:'#4527A0'},
@@ -984,12 +984,14 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     if(!canManage){
       return h('div',{className:'attendance-personal-report'},
         h('div',{className:'ptitle'},h('i',{className:'ti ti-report-analytics'}),reportTitle),
+        onKPI4P&&h('button',{type:'button',className:'bs',onClick:onKPI4P},'KPI & Lương 4P — đối chiếu chấm công'),
         renderMonthlyReport()
       );
     }
     const pendingRows=attendance.filter(r=>(isAdmin||managerEmployeeIds.has(r.empId))&&r.status!=='valid').sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
     return h('div',{className:'attendance-manager-page'},
       h('div',{className:'ptitle'},h('i',{className:'ti ti-report-analytics'}),reportTitle),
+        onKPI4P&&h('button',{type:'button',className:'bs',onClick:onKPI4P},'KPI & Lương 4P — đối chiếu chấm công'),
       pendingRows.length>0&&h('div',{className:'card'},
         h('div',{className:'attendance-manager-title'},'Bản ghi cần duyệt'),
         h('div',{className:'attendance-manager-approvals'},pendingRows.map(r=>h('div',{className:'attendance-approval-row',key:r.id},
