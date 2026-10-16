@@ -2301,12 +2301,6 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
     const product=(products||[]).find(item=>String(item.id||'')===String(line?.productId||''));
     return String(line?.productId||'legacy:'+scfReportCustomerNameKey(line?.productName||product?.name||''));
   };
-  const productOptions=[...new Map(reportOrders.flatMap(order=>(order.lines||[]).map(line=>{
-    const product=(products||[]).find(item=>String(item.id||'')===String(line.productId||''));
-    const id=productIdentity(line),label=line.productName||product?.name||'Chưa xác định';
-    return[id,{id,label}];
-  }))).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
-  const visibleLines=order=>(order?.lines||[]).filter(line=>!productId||productIdentity(line)===productId);
   const driverOptions=[...new Set(reportOrders.map(driverFor).filter(name=>name&&name!=='—'))].sort((a,b)=>a.localeCompare(b,'vi'));
   const customerChoices=customerOptions;
   const pointIdentity=order=>{
@@ -2319,7 +2313,7 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
     const key=pointIdentity(order);return[key,{key,label:order.pointName||order.address||'Chưa xác định'}];
   }).filter(([key])=>key)).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
   const fromTime=fromDate?dateValue(fromDate):NaN,toTime=toDate?dateValue(toDate):NaN;
-  const matchedOrders=reportOrders.filter(order=>{
+  const baseMatchedOrders=reportOrders.filter(order=>{
     const orderDate=dateKey(order.deliveryDate||order.date);
     if(dateMode==='day'&&orderDate!==selectedDate)return false;
     if(dateMode==='month'&&(!selectedMonth||!orderDate.startsWith(selectedMonth+'-')))return false;
@@ -2333,10 +2327,19 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
     if(invoiceImageFilter==='without'&&hasInvoiceImage)return false;
     if(!customerMatch(order))return false;
     if(pointKey&&pointIdentity(order)!==pointKey)return false;
-    if(productId&&!visibleLines(order).length)return false;
     if(driverName&&driverFor(order)!==driverName)return false;
     return true;
   }).sort((a,b)=>dateValue(b.deliveryDate||b.date)-dateValue(a.deliveryDate||a.date));
+  const productSourceOrders=baseMatchedOrders.filter(scfDebtOrderHasInvoice);
+  const productOptions=[...new Map(productSourceOrders.flatMap(order=>(order.lines||[]).map(line=>{
+    const product=(products||[]).find(item=>String(item.id||'')===String(line.productId||''));
+    const id=productIdentity(line),label=line.productName||product?.name||'Chưa xác định';
+    return[id,{id,label}];
+  }))).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
+  const effectiveProductId=productOptions.some(item=>item.id===productId)?productId:'';
+  useEffect(()=>{if(productId&&!productOptions.some(item=>item.id===productId))setProductId('');},[productId,productOptions.map(item=>item.id).join('|')]);
+  const visibleLines=order=>(order?.lines||[]).filter(line=>!effectiveProductId||productIdentity(line)===effectiveProductId);
+  const matchedOrders=baseMatchedOrders.filter(order=>!effectiveProductId||visibleLines(order).length);
   const orderCounts={total:matchedOrders.length,withInvoice:matchedOrders.filter(order=>String(order.invoiceImage||'').trim().length>0).length};
   orderCounts.withoutInvoice=orderCounts.total-orderCounts.withInvoice;
   const filtered=matchedOrders.filter(scfDebtOrderHasInvoice);

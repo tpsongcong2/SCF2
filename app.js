@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V549';
+const SCF_BUILD_VERSION='V550';
 const PTITLES = {
   attp_process:'Tài liệu ATTP · Quy trình',
   attp_standards:'Tài liệu ATTP · Tiêu chuẩn',
