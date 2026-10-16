@@ -77,6 +77,10 @@ const SCF_SENSITIVE_KEYS=new Set([
 // Khi bật xác thực máy chủ, không cho trình duyệt ghi trực tiếp các collection
 // nghiệp vụ. Edge Function sẽ đối chiếu quyền trang và mức r/rw/rwd của nhân viên.
 const SCF_EDGE_WRITE_KEYS=new Set([
+  'scf_attp_process',
+  'scf_attp_standards',
+  'scf_attp_daily',
+  'scf_attp_legal',
   'scf_company','scf_materials','scf_assets','scf_garages','scf_prodcats','scf_products',
   'scf_prod_shifts','scf_prod_shift_rules','scf_areas','scf_customers','scf_workcats','scf_depts',
   'scf_permission_profiles','scf_tasks','scf_nccs','scf_ncc_goods','scf_purchases','scf_goods_purchases',

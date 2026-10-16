@@ -1,6 +1,10 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V545';
+const SCF_BUILD_VERSION='V549';
 const PTITLES = {
+  attp_process:'Tài liệu ATTP · Quy trình',
+  attp_standards:'Tài liệu ATTP · Tiêu chuẩn',
+  attp_daily:'Tài liệu ATTP · Nhật ký hàng ngày',
+  attp_legal:'Tài liệu ATTP · Tài liệu pháp lý',
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
   backup:'Backup dữ liệu', materials:'Nguyên vật liệu', assets:'Danh mục tài sản', products:'Sản phẩm', depts:'Bộ phận',
@@ -14,7 +18,7 @@ const PTITLES = {
   prodsummary:'Tổng hợp sản xuất', prodorders:'Đơn sản xuất', stock:'Tồn kho',
 };
 
-const PROCESS_POST_KEYS={process_accounting:'scf_process_posts_accounting',process_bun:'scf_process_posts_bun',process_pho:'scf_process_posts_pho',process_banhcuon:'scf_process_posts_banhcuon'};
+const PROCESS_POST_KEYS={attp_process:'scf_attp_process',attp_standards:'scf_attp_standards',attp_daily:'scf_attp_daily',attp_legal:'scf_attp_legal',process_accounting:'scf_process_posts_accounting',process_bun:'scf_process_posts_bun',process_pho:'scf_process_posts_pho',process_banhcuon:'scf_process_posts_banhcuon'};
 
 // Every editable page must load all of its input collections before mounting.
 // Names below are kv_store keys without the scf_ prefix; employees load separately.
@@ -50,6 +54,7 @@ const SCF_PAGE_DATA={
 function scfPageDataKeys(page,allKeys){
   const keys=['company','ui_settings','notifications'];
   if(page==='backup'||page==='dbusage')return [...new Set([...keys,...allKeys])];
+  if(page.startsWith('attp_'))return keys;
   if(PROCESS_POST_KEYS[page])keys.push(PROCESS_POST_KEYS[page].replace(/^scf_/,''));
   else keys.push(...(SCF_PAGE_DATA[page]||[]));
   return [...new Set(keys)];
@@ -225,6 +230,7 @@ function scfLoadOptionalScript(name,url){
 }
 // Kiểm tra thành phần trước khi render: một tệp tải lỗi không được làm trắng trang.
 const SCF_PAGE_COMPONENTS={
+  attp_process:'ATTPDocumentsTab',attp_standards:'ATTPDocumentsTab',attp_daily:'ATTPDocumentsTab',attp_legal:'ATTPDocumentsTab',
   welcome:'WelcomePage',company:'CompanySettings',appearance:'AppearanceSettingsTab',printtemplates:'PrintTemplateSettingsTab',
   employees:'EmployeeTab EmpForm CpwModal',permission_settings:'PermissionSettingsTab',
   attendance:'AttendanceTab',attendance_settings:'AttendanceTab',attendance_report:'AttendanceTab',workreport_total:'AttendanceTab',
@@ -258,6 +264,10 @@ async function scfEnsurePageTools(page){
 }
 
 const PICONS = {
+  attp_process:'ti-list-check',
+  attp_standards:'ti-certificate',
+  attp_daily:'ti-notebook',
+  attp_legal:'ti-file-certificate',
   garages:'ti-building-store',
   purchase:'ti-shopping-cart', tasks:'ti-clipboard-check', notifications:'ti-bell', userguide:'ti-book-2', prodsummary:'ti-clipboard-list',
   prodorders:'ti-building-factory', stock:'ti-package', attendance:'ti-face-id', attendance_settings:'ti-settings', attendance_report:'ti-report-analytics', advances:'ti-cash-banknote', rewards:'ti-scale', employee_errors:'ti-alert-triangle', employee_uniforms:'ti-shirt', permission_settings:'ti-shield-lock', leaves:'ti-calendar-minus', assets:'ti-building-warehouse', appearance:'ti-typography', printtemplates:'ti-file-spreadsheet',
@@ -908,7 +918,8 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,prodCats,currentUser:cu}),
         canAccess(cu.role,'syncreport',cu.permissions)&&page==='syncreport'&&h(SyncDataReportTab),
         canAccess(cu.role,'dbusage',cu.permissions)&&page==='dbusage'&&h(SupabaseUsageReportTab,{employees,materials,assets,prodCats,products,customers,areas,workcats,tasks,nccs,purchases,goodsPurchases,quotes,orders,trips,attendance,advances,rewards,employeeErrors,employeeUniforms,leaves,depts,shifts,prodShifts,prodShiftRules,prodOrders,stock,company}),
-        ['process_accounting','process_bun','process_pho','process_banhcuon'].includes(page)&&h(ProcessPostsTab,{page,title:PTITLES[page],icon:PICONS[page],items:processPosts[page]||[],setItems:setProcessPosts(page),currentUser:cu}),
+        page.startsWith('attp_')&&canAccess(cu.role,page,cu.permissions,cuAccessDepartments)&&h(ATTPDocumentsTab,{key:page,page,title:PTITLES[page],icon:PICONS[page],currentUser:cu}),
+        !page.startsWith('attp_')&&PROCESS_POST_KEYS[page]&&canAccess(cu.role,page,cu.permissions,cuAccessDepartments)&&h(ProcessPostsTab,{key:page,page,title:PTITLES[page],icon:PICONS[page],items:processPosts[page]||[],setItems:setProcessPosts(page),currentUser:cu}),
         wips.includes(page)&&h(PlaceholderTab,{title:PTITLES[page],icon:PICONS[page]||'ti-clock'})
         )
       ),

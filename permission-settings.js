@@ -1,5 +1,6 @@
 /* Cấu hình quyền mặc định theo chức vụ. */
 const SCF_PERMISSION_SECTIONS=[
+  {sec:'Tài liệu ATTP',pages:[["attp_process","Quy trình"],["attp_standards","Tiêu chuẩn"],["attp_daily","Nhật ký hàng ngày"],["attp_legal","Tài liệu pháp lý"]]},
   {sec:'Giới thiệu công ty',pages:[['company','Giới thiệu công ty']]},
   {sec:'Cài đặt',pages:[['appearance','Cài đặt giao diện'],['printtemplates','Mẫu in Excel'],['employees','Nhân viên'],['permission_settings','Cài đặt phân quyền'],['backup','Backup dữ liệu']]},
   {sec:'Nhân sự',pages:[['attendance','Chấm công'],['attendance_settings','Cài đặt chấm công'],['attendance_report','Báo cáo chấm công'],['advances','Ứng lương'],['rewards','Thưởng phạt'],['employee_errors','Ghi lỗi nhân viên'],['employee_uniforms','Cấp đồng phục nhân viên'],['leaves','Xin nghỉ'],['tasks','Giao việc']]},

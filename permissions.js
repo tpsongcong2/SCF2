@@ -1,5 +1,9 @@
 /* --- Phân quyền menu --- */
 const PAGE_ACCESS = {
+  attp_process:['admin','manager','staff'],
+  attp_standards:['admin','manager','staff'],
+  attp_daily:['admin','manager','staff'],
+  attp_legal:['admin','manager','staff'],
   welcome:      ['admin','manager','staff','driver'],
   company:      ['admin','manager','staff','driver'],
   appearance:   ['admin','manager'],

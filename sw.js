@@ -1,4 +1,4 @@
-const CACHE = 'scf-v545';
+const CACHE = 'scf-v549';
 const ASSETS = [
   './',
   './index.html',
@@ -7,9 +7,9 @@ const ASSETS = [
   './vendor/supabase.min.js?v=358',
   './vendor/react.production.min.js?v=358',
   './vendor/react-dom.production.min.js?v=358',
-  './styles.css?v=544',
+  './styles.css?v=548',
   './runtime.js?v=457',
-  './storage.js?v=535',
+  './storage.js?v=546',
   './print-agent.js',
   './helpers.js?v=473',
   './defaults.js?v=218',
@@ -25,7 +25,8 @@ const ASSETS = [
   './organization.js?v=545',
   './notifications.js?v=475',
   './user-guide.js?v=424',
-  './operations.js?v=544',
+  './attp-documents.js?v=547',
+  './operations.js?v=546',
   './navigation-reports.js?v=541',
   './order-detail.js?v=424',
   './delivery-shifts.js?v=455',
@@ -34,16 +35,16 @@ const ASSETS = [
   './finance.js?v=347',
   './delivery-orders.js?v=532',
   './qrcode.min.js?v=357',
-  './import-tools.js?v=545',
-  './trips.js?v=544',
+  './import-tools.js?v=546',
+  './trips.js?v=549',
   './delivery-excel.js?v=491',
   './vendor/exceljs-4.4.0.min.js',
   './production.js?v=534',
   './production-assignments.js?v=537',
-  './permissions.js?v=545',
-  './permission-settings.js?v=544',
-  './app.js?v=545',
-  './bootstrap.js?v=545',
+  './permissions.js?v=546',
+  './permission-settings.js?v=546',
+  './app.js?v=549',
+  './bootstrap.js?v=549',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -55,7 +56,7 @@ const ASSETS = [
 // thật sự cần tới; tránh tải lặp toàn bộ ứng dụng và ba bản font ngay lần mở đầu.
 const PRECACHE_ASSETS = [
   './index.html',
-  './styles.css?v=544',
+  './styles.css?v=548',
   './vendor/tabler-icons.min.css?v=394'
 ];
 

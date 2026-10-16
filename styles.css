@@ -1262,3 +1262,20 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 .workshop-roster-person small{display:block;color:var(--tx2);font-size:11px;margin-top:3px}
 .workshop-roster-empty{grid-column:1/-1;color:var(--tx2);padding:10px}
 @media(max-width:640px){.workshop-roster-list{grid-template-columns:minmax(0,1fr)}}
+.attp-toolbar{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.attp-toolbar label{display:flex;flex-direction:column;gap:5px;font-size:13px}
+.attp-toolbar input[type=date]{max-width:170px}
+.attp-pagination{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin:12px 0}
+.attp-meta{font-size:13px;color:var(--txt2);line-height:1.8;overflow-wrap:anywhere}
+.attp-detail-images{display:flex;flex-direction:column;gap:14px;margin-top:16px}
+.attp-detail-images img{display:block;width:100%;height:auto;min-height:120px;border-radius:8px}
+.attp-edit-images{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px}
+.attp-edit-images>div{width:130px;display:flex;flex-direction:column;gap:5px}
+.attp-edit-images img{width:130px;height:100px;object-fit:cover;border-radius:6px}
+@media(max-width:600px){.attp-toolbar>*{max-width:100%}.attp-pagination{justify-content:flex-start;flex-wrap:wrap}.attp-toolbar label{flex:1;min-width:130px}}
+.trip-summary-photo-actions{display:flex;align-items:center;gap:8px}
+.trip-summary-photo-view{min-width:42px;min-height:42px;color:var(--pri);font-size:23px;background:#fff;border:1px solid var(--bd);border-radius:9px}
+.trip-summary-photo-preview{position:fixed;inset:0;z-index:12000;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:16px}
+.trip-summary-photo-preview-panel{position:relative;max-width:100%;max-height:100%;overflow:auto;background:#fff;border-radius:10px;padding:42px 8px 8px}
+.trip-summary-photo-preview-panel img{display:block;max-width:100%;height:auto}
+.trip-summary-photo-close{position:absolute;top:4px;right:6px;min-width:36px;min-height:36px;font-size:26px}

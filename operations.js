@@ -266,7 +266,11 @@ function CommunityPanel({emp,news=[],setNews,messages=[],setMessages,onRefresh})
   );
 }
 function ProcessPostsTab({page,title,icon,items=[],setItems,currentUser}){
-  const empty=()=>({id:'',category:page,title:'',publishDate:new Date().toISOString().slice(0,10),content:'',images:[]});
+  const isATTP=page.startsWith('attp_');
+  const isDaily=page==='attp_daily';
+  const noun=isATTP?(isDaily?'nhật ký':'tài liệu'):'bài đăng quy trình';
+  const guidance={attp_process:'Lưu hướng dẫn thao tác, vệ sinh, kiểm soát nguyên liệu và xử lý sự cố trong sản xuất.',attp_standards:'Lưu tiêu chuẩn nguyên liệu, thành phẩm, bao bì và các chỉ tiêu kiểm soát áp dụng tại cơ sở.',attp_daily:'Ghi nhận kiểm tra theo ngày, ca sản xuất; nêu kết quả, sai lệch và biện pháp khắc phục.',attp_legal:'Lưu thông tin hồ sơ pháp lý, giấy chứng nhận, kết quả kiểm nghiệm và văn bản áp dụng.'};
+  const empty=()=>({id:'',category:page,title:'',publishDate:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),content:'',images:[],documentCode:'',revision:'',responsible:'',effectiveDate:'',expiryDate:'',shift:''});
   const[form,setForm]=useState(empty);
   const[open,setOpen]=useState(false);
   const[viewImage,setViewImage]=useState('');
@@ -274,11 +278,11 @@ function ProcessPostsTab({page,title,icon,items=[],setItems,currentUser}){
   const[query,setQuery]=useState('');
   const role=String(currentUser?.role||'').toLowerCase();
   const explicitLevel=currentUser?.permLevels?.[page]||'r';
-  const canManage=['admin','administrator','manager'].includes(role)||['rw','rwd'].includes(explicitLevel);
-  const canRemove=['admin','administrator'].includes(role)&&canDel(currentUser?.role,page,currentUser?.permLevels);
+  const canManage=isATTP?canWrite(role,page,currentUser?.permLevels):(['admin','administrator','manager'].includes(role)||['rw','rwd'].includes(explicitLevel));
+  const canRemove=(isATTP||['admin','administrator'].includes(role))&&canDel(role,page,currentUser?.permLevels);
   const rows=[...(items||[])].filter(item=>item.category===page).filter(item=>{
     const q=String(query||'').trim().toLowerCase();
-    return !q||(String(item.title||'')+' '+String(item.content||'')+' '+String(item.authorName||'')).toLowerCase().includes(q);
+    return !q||(String(item.title||'')+' '+String(item.content||'')+' '+String(item.authorName||'')+' '+String(item.documentCode||'')+' '+String(item.responsible||'')+' '+String(item.shift||'')).toLowerCase().includes(q);
   }).sort((a,b)=>String(b.publishDate||b.createdAt||'').localeCompare(String(a.publishDate||a.createdAt||'')));
   const openCreate=()=>{setForm(empty());setOpen(true);};
   const openEdit=item=>{setForm({...item,images:[...(item.images||[])]});setOpen(true);};
@@ -294,9 +298,11 @@ function ProcessPostsTab({page,title,icon,items=[],setItems,currentUser}){
     finally{setUploading(false);}
   };
   const save=()=>{
+    if(!canManage||uploading)return;
+    if(isATTP&&form.expiryDate&&form.effectiveDate&&form.expiryDate<form.effectiveDate){window.showToast('Ngày hết hạn phải từ ngày hiệu lực trở đi.','warn');return;}
     const postTitle=String(form.title||'').trim();
     const postContent=String(form.content||'').trim();
-    if(!form.publishDate||!postTitle||!postContent){window.showToast('Vui lòng nhập ngày đăng, tiêu đề và nội dung quy trình.','warn');return;}
+    if(!form.publishDate||!postTitle||!postContent){window.showToast('Vui lòng nhập ngày, tiêu đề và nội dung.','warn');return;}
     const now=new Date().toISOString();
     if(form.id){
       setItems(prev=>(prev||[]).map(row=>row.id===form.id?{...row,...form,category:page,title:postTitle,content:postContent,updatedAt:now,updatedBy:currentUser?.name||''}:row));
@@ -304,13 +310,14 @@ function ProcessPostsTab({page,title,icon,items=[],setItems,currentUser}){
       setItems(prev=>[{...form,id:'PP'+uid(),category:page,title:postTitle,content:postContent,authorId:currentUser?.id||'',authorName:currentUser?.name||'Người đăng',createdAt:now,updatedAt:now},...(prev||[])]);
     }
     setOpen(false);
-    window.showToast(form.id?'Đã cập nhật bài đăng quy trình.':'Đã đăng bài quy trình.','success');
+    window.showToast(form.id?'Đã cập nhật '+noun+'.':'Đã lưu '+noun+'.','success');
   };
   const remove=async item=>{
+    if(!canRemove)return;
     const ok=window.scfConfirm?await window.scfConfirm('Bạn có chắc muốn xóa bài đăng “'+item.title+'”?','Xóa bài đăng',true):window.confirm('Bạn có chắc muốn xóa bài đăng này?');
     if(!ok)return;
     setItems(prev=>(prev||[]).filter(row=>row.id!==item.id));
-    window.showToast('Đã xóa bài đăng quy trình.','success');
+    window.showToast('Đã xóa '+noun+'.','success');
   };
   const dateLabel=value=>{
     const parts=String(value||'').split('-');
@@ -318,9 +325,10 @@ function ProcessPostsTab({page,title,icon,items=[],setItems,currentUser}){
   };
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti '+(icon||'ti-news'),style:{fontSize:20}}),title),
+    isATTP&&h('div',{className:'card',style:{padding:16,marginBottom:14}},h('strong',null,'Tài liệu ATTP'),h('p',{style:{margin:'6px 0 0',color:'var(--txt2)'}},guidance[page])),
     h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:14,flexWrap:'wrap'}},
-      h(SearchBar,{value:query,onChange:setQuery,placeholder:'Tìm bài đăng quy trình...'}),
-      canManage&&h('button',{type:'button',className:'bp','data-scf-action':'write',onClick:openCreate},h('i',{className:'ti ti-plus'}),' Đăng bài')
+      h(SearchBar,{value:query,onChange:setQuery,placeholder:'Tìm '+noun+'...'}),
+      canManage&&h('button',{type:'button',className:'bp','data-scf-action':'write',onClick:openCreate},h('i',{className:'ti ti-plus'}),isATTP?' Thêm '+noun:' Đăng bài')
     ),
     rows.length?h('div',{className:'delivery-rule-list'},rows.map(item=>h('article',{key:item.id,className:'card delivery-rule-card'},
       h('div',{className:'delivery-rule-head'},
@@ -334,14 +342,16 @@ function ProcessPostsTab({page,title,icon,items=[],setItems,currentUser}){
           canRemove&&h('button',{type:'button',className:'bi','data-scf-action':'delete',title:'Xóa bài đăng',onClick:()=>remove(item),style:{color:'var(--danger)'}},h('i',{className:'ti ti-trash'}))
         )
       ),
+      isATTP&&h('div',{style:{display:'flex',flexWrap:'wrap',gap:12,marginBottom:12,fontSize:13}},[['Mã',item.documentCode],['Phiên bản',item.revision],['Phụ trách',item.responsible],['Ca',item.shift],['Hiệu lực',dateLabel(item.effectiveDate)],['Hết hạn',dateLabel(item.expiryDate)]].filter(([,v])=>v).map(([label,value])=>h('span',{key:label},label+': '+value))),
       h('div',{className:'delivery-rule-content',style:{whiteSpace:'pre-wrap'}},item.content),
       !!(item.images||[]).length&&h('div',{className:'delivery-rule-images'},(item.images||[]).map((src,index)=>h('button',{type:'button',key:index,className:'delivery-rule-image',onClick:()=>setViewImage(src)},h('img',{src,alt:'Ảnh bài đăng '+(index+1)}))))
-    ))):h('div',{className:'empty'},h('i',{className:'ti ti-news'}),h('div',null,query?'Không tìm thấy bài đăng phù hợp.':'Chưa có bài đăng quy trình nào.')),
-    open&&h(Modal,{title:form.id?'Sửa bài đăng quy trình':'Đăng bài quy trình',lg:true,onClose:()=>setOpen(false)},
+    ))):h('div',{className:'empty'},h('i',{className:'ti ti-news'}),h('div',null,query?'Không tìm thấy bài đăng phù hợp.':'Chưa có '+noun+' nào.')),
+    open&&h(Modal,{title:(form.id?'Sửa ':'Thêm ')+noun,lg:true,onClose:()=>setOpen(false)},
       h('div',{className:'form-grid'},
-        h(F,{label:'Ngày đăng *'},h('input',{type:'date',value:form.publishDate||'',onChange:e=>setForm(prev=>({...prev,publishDate:e.target.value}))})),
+        h(F,{label:isDaily?'Ngày ghi nhận *':'Ngày đăng *'},h('input',{type:'date',value:form.publishDate||'',onChange:e=>setForm(prev=>({...prev,publishDate:e.target.value}))})),
+        isATTP&&[['documentCode','Mã tài liệu / biểu mẫu','text'],...(isDaily?[['shift','Ca sản xuất','text']]:[['revision','Phiên bản','text'],['effectiveDate','Ngày hiệu lực','date'],['expiryDate','Ngày hết hạn / rà soát','date']]),['responsible','Người phụ trách','text']].map(([field,label,type])=>h(F,{key:field,label},h('input',{type,value:form[field]||'',onChange:e=>setForm(prev=>({...prev,[field]:e.target.value}))}))),
         h(F,{label:'Tiêu đề *',full:true},h('input',{value:form.title||'',placeholder:'Nhập tiêu đề bài đăng...',onChange:e=>setForm(prev=>({...prev,title:e.target.value}))})),
-        h(F,{label:'Nội dung quy trình *',full:true},h('textarea',{rows:12,value:form.content||'',placeholder:'Nhập nội dung, các bước thực hiện, lưu ý...',onChange:e=>setForm(prev=>({...prev,content:e.target.value}))})),
+        h(F,{label:isDaily?'Kết quả kiểm tra, sai lệch và khắc phục *':isATTP?'Nội dung tài liệu *':'Nội dung quy trình *',full:true},h('textarea',{rows:12,value:form.content||'',placeholder:'Nhập nội dung, các bước thực hiện, lưu ý...',onChange:e=>setForm(prev=>({...prev,content:e.target.value}))})),
         h(F,{label:'Hình ảnh minh họa',full:true},
           h('div',null,
             h('label',{className:'btn',style:{display:'inline-flex',cursor:'pointer'}},h('i',{className:'ti ti-photo-plus'}),uploading?' Đang xử lý ảnh...':' Chọn ảnh',h('input',{type:'file',accept:'image/*',multiple:true,disabled:uploading,onChange:e=>addImages(e.target.files),style:{display:'none'}})),
@@ -349,7 +359,7 @@ function ProcessPostsTab({page,title,icon,items=[],setItems,currentUser}){
           )
         )
       ),
-      h('div',{className:'modal-actions'},h('button',{type:'button',onClick:()=>setOpen(false)},'Hủy'),h('button',{type:'button',className:'bp','data-scf-action':'write',disabled:uploading,onClick:save},h('i',{className:'ti ti-send'}),form.id?' Cập nhật':' Đăng bài'))
+      h('div',{className:'modal-actions'},h('button',{type:'button',onClick:()=>setOpen(false)},'Hủy'),h('button',{type:'button',className:'bp','data-scf-action':'write',disabled:uploading,onClick:save},h('i',{className:'ti ti-send'}),form.id?' Cập nhật':isATTP?' Lưu':' Đăng bài'))
     ),
     viewImage&&h('div',{className:'delivery-rule-lightbox',onClick:()=>setViewImage('')},h('button',{type:'button',className:'delivery-rule-lightbox-close',onClick:()=>setViewImage('')},'×'),h('img',{src:viewImage,alt:'Xem ảnh bài đăng',onClick:e=>e.stopPropagation()}))
   );
