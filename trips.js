@@ -1425,6 +1425,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
   const[driverInvoiceColumnPreference,setDriverInvoiceColumnPreference]=useLS('scf_trip_driver_invoice_column_'+String(currentUser?.id||''),false);
   const invoiceSize=['small','medium','large'].includes(inlineInvoiceSize)?inlineInvoiceSize:'medium';
   const _td1=fmtDate();const _ti1=_td1.split('/').reverse().join('-');const[fPeriod,sfPeriod]=useState('day');const[fDate,sfDate]=useState(_ti1);const[fMonth,sfMonth]=useState(_ti1.slice(0,7));const[fTrip,sfTrip]=useState('');const[fTripGroup,sfTripGroup]=useState('');const[fShift,sfShift]=useState('');const[fDriver,sfDriver]=useState('');const[fOrderState,sfOrderState]=useState('with');
+  const[fCustomer,sfCustomer]=useState('');const[fPoint,sfPoint]=useState('');
   const isDriver=currentUser?.role==='driver'||employeeHasDepartment(currentUser,'Lái xe');
   const canOpenTrips=canAccess(currentUser?.role,'trips',currentUser?.permissions,employeeDepartments(currentUser));
   const canManageTrips=canOpenTrips&&canTripAction(currentUser,'manage');
@@ -1935,6 +1936,12 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
     const value=String(shift?.timeStart||shift?.startTime||'').trim();
     return value?timeToMin(value):Number.MAX_SAFE_INTEGER;
   };
+  const tripCustomerKey=order=>String(order.customerId||order.custId||order.customer||order.customerName||'');
+  const tripPointKey=order=>JSON.stringify([tripCustomerKey(order),String(order.pointId||order.pointName||order.address||'')]);
+  const tripOrderMatchesFilters=order=>(!fCustomer||tripCustomerKey(order)===fCustomer)&&(!fPoint||tripPointKey(order)===fPoint);
+  const filterSourceOrders=[...new Map(visibleTrips.flatMap(trip=>tripOrderReader.orders(trip)).map(order=>[String(order.id),order])).values()];
+  const tripCustomerOptions=[...new Map(filterSourceOrders.map(order=>[tripCustomerKey(order),order.customer||order.customerName||(customers||[]).find(item=>String(item.id)===tripCustomerKey(order))?.name||'Chưa xác định']).filter(([key])=>key)).entries()].sort((a,b)=>a[1].localeCompare(b[1],'vi'));
+  const tripPointOptions=[...new Map(filterSourceOrders.filter(order=>!fCustomer||tripCustomerKey(order)===fCustomer).map(order=>[tripPointKey(order),(order.pointName||order.address||'Chưa xác định')+(order.customer?' · '+order.customer:'')])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'vi'));
   const filteredTrips=visibleTrips.filter(t=>{
     const dateMatched=tripMatchesSelectedPeriod(t);
     const tripMatched=!fTrip||String(t.id||'')===fTrip;
@@ -1946,6 +1953,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
       ||(fDriver==='__without_driver__'&&!hasDriver)
       ||t.driverName===fDriver;
     if(!driverMatched)return false;
+    if((fCustomer||fPoint)&&!tripOrderReader.orders(t).some(tripOrderMatchesFilters))return false;
     if(fOrderState==='all')return true;
     const hasOrders=tripOrderReader.hasOrders(t);
     return fOrderState==='with'?hasOrders:!hasOrders;
@@ -1957,7 +1965,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
     return 0;
   });
   const mobileActionTrip=filteredTrips.length===1?filteredTrips[0]:null;
-  const listKey=JSON.stringify([fPeriod,fDate,fMonth,fTrip,fTripGroup,fShift,fDriver,fOrderState]);
+  const listKey=JSON.stringify([fPeriod,fDate,fMonth,fTrip,fTripGroup,fShift,fDriver,fOrderState,fCustomer,fPoint]);
   const tripList=scfTripListWindow(filteredTrips,listSelection,listKey);
   // Ngày/tháng đã có bộ lọc riêng; danh sách này chỉ cần hiện ca giao hàng
   // thực sự có trong khoảng thời gian đang chọn.
@@ -2290,7 +2298,6 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
       canCreateTripImages&&canMobileFeature(currentUser,'tripSummary')&&h('button',{className:'mobile-only trip-filter-image trip-filter-day-image','data-scf-action':'view',disabled:!fDate||!filteredTrips.length,onClick:()=>sm('day-image')},h('i',{className:'ti ti-photo-search'}),' Xem ảnh đơn tổng'),
       canUseMobileQuickUpdate&&h('button',{className:'mobile-only trip-filter-image trip-mobile-quick-action trip-mobile-update','data-scf-action':'write',disabled:!mobileActionTrip,title:mobileActionTrip?'Cập nhật chuyến đã lọc':'Chọn ca giao và lái xe trước',onClick:()=>sm('quick-update')},h('i',{className:'ti ti-checkup-list'}),' Cập nhật SL giao và HĐ'),
       canCreateTripImages&&canMobileFeature(currentUser,'tripPrint')&&h('button',{className:'mobile-only trip-filter-image trip-mobile-quick-action trip-mobile-print','data-scf-action':'view',disabled:!mobileActionTrip,title:mobileActionTrip?'In đơn của chuyến đã lọc':'Chọn ca giao và lái xe trước',onClick:()=>sm('mobile-print')},h('i',{className:'ti ti-printer'}),' In đơn'),
-      canCreateTripImages&&h('button',{className:'trip-filter-image'+(canMobileFeature(currentUser,'tripImage')?'':' desktop-only'),'data-scf-action':'view',disabled:!filteredTrips.length,onClick:()=>sm('images')},h('i',{className:'ti ti-photo'}),' Tạo ảnh chuyến'),
       canCreateTripImages&&fPeriod==='day'&&h('button',{className:'desktop-only trip-filter-image trip-filter-day-image','data-scf-action':'view',disabled:!fDate||!filteredTrips.length,onClick:()=>sm('day-image')},h('i',{className:'ti ti-photo-search'}),' Xem đơn tổng'),
       h('select',{className:'desktop-only trip-filter-period',value:fPeriod,onChange:e=>{sfTrip('');sfPeriod(e.target.value);},style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},
         h('option',{value:'day'},'Theo ngày'),
@@ -2324,7 +2331,9 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
         h('option',{value:'empty'},'Chuyến chưa có đơn'),
         h('option',{value:'all'},'Tất cả chuyến')
       ),
-      ((fPeriod==='month'?fMonth:fDate)||fTrip||fTripGroup||fShift||fDriver||fOrderState!=='with')&&h('button',{className:'trip-filter-clear','data-scf-action':'view',onClick:()=>{sfDate('');sfMonth('');sfTrip('');sfTripGroup('');sfShift('');sfDriver('');sfOrderState('with');},style:{padding:'6px 10px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)',cursor:'pointer',color:'var(--tx2)'}},'✕ Xóa lọc')
+      h('select',{'aria-label':'Lọc khách hàng',value:fCustomer,onChange:e=>{sfCustomer(e.target.value);sfPoint('');},style:{padding:'6px 10px',maxWidth:250}},h('option',{value:''},'Tất cả khách hàng'),tripCustomerOptions.map(([key,label])=>h('option',{key,value:key},label))),
+      h('select',{'aria-label':'Lọc địa điểm',value:fPoint,onChange:e=>sfPoint(e.target.value),style:{padding:'6px 10px',maxWidth:280}},h('option',{value:''},'Tất cả địa điểm'),tripPointOptions.map(([key,label])=>h('option',{key,value:key},label))),
+      ((fPeriod==='month'?fMonth:fDate)||fTrip||fTripGroup||fShift||fDriver||fCustomer||fPoint||fOrderState!=='with')&&h('button',{className:'trip-filter-clear','data-scf-action':'view',onClick:()=>{sfDate('');sfMonth('');sfTrip('');sfTripGroup('');sfShift('');sfDriver('');sfOrderState('with');sfCustomer('');sfPoint('');},style:{padding:'6px 10px',fontSize:12,borderRadius:'var(--r)',border:'1px solid var(--bd)',cursor:'pointer',color:'var(--tx2)'}},'✕ Xóa lọc')
     ),
     canCreateTripImages&&modal==='images'&&h(TripImagesModal,{trips:filteredTrips.filter(trip=>trip.status!=='cancelled'),orders,products,customers,prodCats,onClose:()=>sm(null)}),
     canCreateTripImages&&fPeriod==='day'&&modal==='day-image'&&h(TripDayImageModal,{trips:filteredTrips.filter(trip=>trip.status!=='cancelled'),orders,products,customers,prodCats,date:fDate?fDate.split('-').reverse().join('/'):fmtDate(),onClose:()=>sm(null)}),
@@ -2333,7 +2342,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
     filteredTrips.length?h('div',{style:{display:'flex',flexDirection:'column',gap:'1rem'}},
       tripList.trips.map(trip=>{
         const isOpen=open===trip.id;
-        const tripOrders=isOpen?sortedTripOrders(trip):tripOrderReader.orders(trip);
+        const tripOrders=(isOpen?sortedTripOrders(trip):tripOrderReader.orders(trip)).filter(tripOrderMatchesFilters);
         const totalW=calcTripWeight(trip);
         const completionLocked=isDriverCompletionLocked(trip);
         const canEditTripQty=canEditQtyForTrip(trip);
@@ -2408,7 +2417,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
             // Bảng đơn hàng
             tripOrders.length?h('div',{className:'desktop-only tw'},
               h('table',{className:'trip-detail-table'+(showInlineInvoices?' trip-invoice-review-table':'')},
-                showInlineInvoices&&h('colgroup',null,...[76,110,150,78,122,64,...(hideTripOptionalColumns?[]:[200,80,80]),null,...(showDriverInvoiceColumn?[120]:[]),48].map((width,index)=>h('col',{key:index,style:width?{width}:undefined}))),
+                showInlineInvoices&&h('colgroup',null,...[76,110,150,122,122,64,...(hideTripOptionalColumns?[]:[200,80,80]),null,...(showDriverInvoiceColumn?[120]:[]),48].map((width,index)=>h('col',{key:index,style:width?{width}:undefined}))),
                 h('thead',null,h('tr',null,...['STT','Địa điểm','Hàng hóa','SL HĐ','SL đã giao','Giờ',...(hideTripOptionalColumns?[]:['Chú ý','Rổ đi','Rổ về']),'Ảnh HĐ',...(showDriverInvoiceColumn?['HĐ LX']:[]),'In đơn'].map(c=>h('th',{key:c},c)))),
                 h('tbody',null,tripOrders.map((o,orderIndex)=>{
                   return h('tr',{key:o.id},
@@ -2418,7 +2427,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
                     ),
                     h('td',null,h('span',{style:{fontWeight:600}},o.pointName||o.customer||'—'),o.isAdditionalTripOrder&&h('div',{className:'additional-order-status '+(o.additionalApprovalStatus||'pending')},o.additionalApprovalStatus==='approved'?'Đơn PS · Đã duyệt':'Đơn PS · Chờ KT duyệt'),canReviewTrips&&o.isAdditionalTripOrder&&o.additionalApprovalStatus==='pending'&&h('button',{className:'bi additional-order-approve',onClick:()=>approveAdditionalOrder(trip,o)},h('i',{className:'ti ti-check'}),' Duyệt đơn')),
                     h('td',null,h('div',{style:{fontSize:11,display:'grid',gap:4}},(o.lines||[]).map((l,i)=>h('div',{key:l.id||i,style:{minHeight:30,display:'flex',alignItems:'center',gap:4,...scfTripProductHighlightStyle(l.productName)}},l.productName||'Sản phẩm',l.isAdditionalProduct&&h('span',{className:'trip-product-ps-badge'},'PS'))))),
-                    h('td',null,h('div',{style:{display:'grid',gap:4,minWidth:64}},(o.lines||[]).map((l,i)=>h('span',{key:l.id||i,style:{minHeight:30,display:'flex',alignItems:'center',fontWeight:600,...scfTripProductHighlightStyle(l.productName)}},numFmt(l.qtyInvoice??0).toLocaleString('vi-VN')+(l.unit?' '+l.unit:''))))),
+                    h('td',null,h('div',{style:{display:'grid',gap:4,minWidth:104}},(o.lines||[]).map((l,i)=>h('span',{key:l.id||i,style:{minHeight:30,display:'flex',alignItems:'center',fontWeight:600,...scfTripProductHighlightStyle(l.productName)}},(isAdmin||isAccounting)&&canEditInvoiceQtyForTrip(trip)?h(TripDeliveredQtyConfirm,{line:l,field:'qtyInvoice',onCommit:value=>updateInvoiceQty(trip,o.id,l.id,i,value),style:{width:76,fontSize:12,padding:'4px 6px'}}):numFmt(l.qtyInvoice??0).toLocaleString('vi-VN')+(l.unit?' '+l.unit:''))))),
                     h('td',null,h('div',{style:{display:'grid',gap:4,minWidth:104}},(o.lines||[]).map(l=>h('div',{key:l.id,style:{minHeight:30,display:'flex',alignItems:'center',...scfTripProductHighlightStyle(l.productName)}},canEditTripQty
                       ?h(TripDeliveredQtyConfirm,{line:l,onCommit:value=>updateDeliveredQty(trip,o.id,l.id,value),style:{fontSize:12,padding:'4px 6px',width:76,borderColor:(l.qtyDelivered!==undefined&&numFmt(l.qtyDelivered)!==tripOrderedQty(l))?'#E0A800':'var(--bd)' }})
                       :h('span',{style:{fontWeight:600}},tripDeliveredQty(l))
@@ -2487,8 +2496,8 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
                         h('b',null,(i+1)+'. '+(l.productName||'Sản phẩm'),l.isAdditionalProduct&&h('span',{className:'trip-product-ps-badge'},'PS'))
                       ),
                       h('label',{className:'trip-order-qty trip-order-ordered'},
-                        h('span',null,'SL đơn'+(l.unit?' ('+l.unit+')':'')),
-                        h('b',{className:'trip-order-ordered-qty'},lineQty(l))
+                        h('span',null,'SL HĐ'+(l.unit?' ('+l.unit+')':'')),
+                        (isAdmin||isAccounting)&&canEditInvoiceQtyForTrip(trip)?h(TripDeliveredQtyConfirm,{line:l,field:'qtyInvoice',onCommit:value=>updateInvoiceQty(trip,o.id,l.id,i,value)}):h('b',{className:'trip-order-ordered-qty'},numFmt(l.qtyInvoice)||0)
                       ),
                       h('label',{className:'trip-order-qty trip-order-delivered'},
                         h('span',null,'SL giao'),

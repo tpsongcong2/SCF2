@@ -21,7 +21,6 @@ function scfDeliveryExcelGroups({orders=[],trips=[],products=[],customers=[],pro
         const row=[order.deliveryDate||trip.deliveryDate||'',order.pointName||order.address||'—',line?.productName||product?.name||'',line?mobileDeliveryQty(line,'qtyProd'):null,line?.unit||product?.unit||'',normalizeTimeInput(order.deliveryTime||trip.deliveryTime||''),note];
         row.isGoods=!!line&&isGoodsProduct(product||line,prodCats);
         row.qtyInvoice=line?mobileDeliveryQty(line,'qtyInvoice'):null;
-        row.qtyDelivered=line?mobileDeliveryQty(line,'qtyDelivered'):null;
         row.orderId=order.id;
         row.fill=scfTripSummaryRowFill(trip,row,fill);
         return row;
@@ -42,58 +41,58 @@ function scfCreateDeliveryExcelWorkbook(Excel,groups,{group='all'}={}){
   const wb=new Excel.Workbook();wb.creator='SCFOOD';
   wb.calcProperties.fullCalcOnLoad=true;
   const sheet=wb.addWorksheet('Don giao hang',{views:[{showGridLines:false,state:'frozen',ySplit:2}],pageSetup:{paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.25,right:.25,top:.35,bottom:.35,header:.15,footer:.15}}});
-  const widths=[16,28,32,13,13,13,12,42];sheet.columns=widths.map(width=>({width}));
+  const widths=[16,28,32,13,13,12,42];sheet.columns=widths.map(width=>({width}));
   const border={style:'thin',color:{argb:'FF777777'}};
   const paint=(row,fill,bold=false)=>{
-    for(let col=1;col<=8;col++){
+    for(let col=1;col<=7;col++){
       const cell=row.getCell(col);
       cell.font={name:'Arial',size:11,bold,color:{argb:'FF000000'}};
       cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF'+fill.replace('#','').toUpperCase()}};
       cell.border={top:border,bottom:border,left:border,right:border};
-      cell.alignment={vertical:'middle',horizontal:col>=4&&col<=6?'right':'left',wrapText:true};
+      cell.alignment={vertical:'middle',horizontal:col>=4&&col<=5?'right':'left',wrapText:true};
     }
   };
   const label=group==='dt'?'ĐIỀM THỤY':group==='samsung'?'SAMSUNG':'TẤT CẢ NHÓM CHUYẾN';
-  sheet.mergeCells('A1:H1');sheet.getCell('A1').value='ĐƠN GIAO HÀNG — '+label;
+  sheet.mergeCells('A1:G1');sheet.getCell('A1').value='ĐƠN GIAO HÀNG — '+label;
   sheet.getCell('A1').font={name:'Arial',size:16,bold:true};sheet.getRow(1).height=30;
-  sheet.mergeCells('A2:H2');sheet.getCell('A2').value=groups.reduce((n,g)=>n+g.orders.length,0)+' đơn theo bộ lọc · '+groups.length+' nhóm chuyến';
+  sheet.mergeCells('A2:G2');sheet.getCell('A2').value=groups.reduce((n,g)=>n+g.orders.length,0)+' đơn theo bộ lọc · '+groups.length+' nhóm chuyến';
   sheet.getCell('A2').font={name:'Arial',size:11};sheet.getRow(2).height=24;
   groups.forEach(({trip,orders,rows,fill,weight})=>{
     const heading=sheet.addRow([String(trip.deliveryDate||'')+'\n'+String(trip.shiftName||trip.shiftCode||trip.shiftId||'Chưa có ca giao'),tripImageDriverName(trip.driverName)]);
     paint(heading,fill,true);heading.height=36;
     sheet.mergeCells(heading.number,2,heading.number,3);
     heading.getCell(2).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFF00'}};
-    sheet.mergeCells(heading.number,4,heading.number,8);
+    sheet.mergeCells(heading.number,4,heading.number,7);
     heading.getCell(4).value=orders.length+' đơn · Khối lượng các đơn xuất: '+weight.toLocaleString('vi-VN',{maximumFractionDigits:2})+' kg';
     heading.getCell(4).alignment={vertical:'middle',horizontal:'left',wrapText:true};
-    const header=sheet.addRow(['Ngày giao','Địa điểm','Sản phẩm','SL đặt','SL HĐ','SL giao','Giờ giao','Chú ý']);
+    const header=sheet.addRow(['Ngày giao','Địa điểm','Sản phẩm','SL đặt','SL HĐ','Giờ giao','Chú ý']);
     paint(header,fill,true);header.height=25;
     const firstDetailRow=header.number+1;
     rows.forEach(data=>{
       const time=/^\d{1,2}:\d{2}$/.test(data[5])?data[5].split(':').map(Number):null;
       const timeValue=time&&time[0]<24&&time[1]<60?(time[0]*60+time[1])/1440:data[5];
-      const values=[scfDeliveryExcelDate(data[0]),data[1],data[2],data[3],data.qtyInvoice,data.qtyDelivered,timeValue,data[6]||null];
+      const values=[scfDeliveryExcelDate(data[0]),data[1],data[2],data[3],data.qtyInvoice,timeValue,data[6]||null];
       const row=sheet.addRow(values);paint(row,data.fill);
-      row.getCell(1).numFmt='dd/mm/yyyy';row.getCell(7).numFmt='hh:mm';
-      [4,5,6].forEach(col=>row.getCell(col).numFmt=Number.isInteger(values[col-1])?'#,##0':'#,##0.########');
-      const wrapped=Math.max(1,...[1,2,7].map(col=>String(values[col]||'').split('\n').reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/(widths[col]-2))),0)));
+      row.getCell(1).numFmt='dd/mm/yyyy';row.getCell(6).numFmt='hh:mm';
+      [4,5].forEach(col=>row.getCell(col).numFmt=Number.isInteger(values[col-1])?'#,##0':'#,##0.########');
+      const wrapped=Math.max(1,...[1,2,6].map(col=>String(values[col]||'').split('\n').reduce((n,line)=>n+Math.max(1,Math.ceil(line.length/(widths[col]-2))),0)));
       row.height=Math.min(409,Math.max(23,wrapped*15+8));
     });
     const lastDetailRow=sheet.rowCount;
     const total=sheet.addRow(['Tổng chuyến']);
     paint(total,fill,true);total.height=26;
     sheet.mergeCells(total.number,1,total.number,3);
-    [4,5,6].forEach(col=>{
+    [4,5].forEach(col=>{
       const letter=String.fromCharCode(64+col);
       const result=rows.reduce((sum,data)=>{
-        const value=col===4?data[3]:col===5?data.qtyInvoice:data.qtyDelivered;
+        const value=col===4?data[3]:data.qtyInvoice;
         return sum+(typeof value==='number'&&Number.isFinite(value)?value:0);
       },0);
       total.getCell(col).value={formula:rows.length?'SUM('+letter+firstDetailRow+':'+letter+lastDetailRow+')':'SUM(0)',result};
       total.getCell(col).numFmt='#,##0.########';
     });
   });
-  sheet.pageSetup.printArea='A1:H'+sheet.rowCount;
+  sheet.pageSetup.printArea='A1:G'+sheet.rowCount;
   return wb;
 }
 async function scfExportDeliverySummary(groups,group){
@@ -121,7 +120,7 @@ function DeliveryExcelExportModal({orders,trips,products,customers,prodCats,trip
     h(F,{label:'Mẫu xuất'},h('select',{'aria-label':'Mẫu xuất',value:format,disabled:busy,onChange:e=>setFormat(e.target.value)},h('option',{value:'summary'},'Theo chuyến, tô màu như ảnh đơn tổng'),h('option',{value:'detail'},'Dữ liệu đầy đủ (mẫu cũ)'))),
     format==='summary'&&h(F,{label:'Nhóm chuyến'},h('select',{'aria-label':'Nhóm chuyến',value:group,disabled:busy,onChange:e=>setGroup(e.target.value)},h('option',{value:'all'},'Tất cả nhóm chuyến'),h('option',{value:'samsung'},'Samsung'),h('option',{value:'dt'},'Điềm Thụy'))),
     h('p',{style:{margin:'12px 0'}},count+' đơn theo bộ lọc hiện tại, gồm tất cả các trang.'),
-    format==='summary'&&h('p',{style:{marginBottom:12}},'Ba cột số lượng: SL đặt, SL HĐ, SL giao.'),
+    format==='summary'&&h('p',{style:{marginBottom:12}},'Hai cột số lượng: SL đặt, SL HĐ.'),
     error&&h('p',{role:'alert',style:{color:'var(--danger)',marginBottom:12}},error),
     h(Row,null,h('button',{disabled:busy,onClick:onClose},'Hủy'),h('button',{className:'bp',disabled:busy||!count,onClick:save},busy?'Đang xuất…':'Tải Excel'))
   );
