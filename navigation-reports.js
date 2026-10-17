@@ -2392,13 +2392,13 @@ function SalesDebtReportTab({orders,customers,products,trips=[],currentUser}){
     const overview=[
       ['BÁO CÁO CÔNG NỢ - TẤT CẢ HÓA ĐƠN ĐÃ NHẬP'],...periodRows,['Ảnh hóa đơn',imageLabel],
       ['Khách hàng',customerLabel],['Địa điểm',pointLabel],['Sản phẩm',productLabel],['Lái xe',driverLabel],[],['Tổng số đơn',orderCounts.total],['Đơn có ảnh hóa đơn',orderCounts.withInvoice],['Đơn chưa có ảnh hóa đơn',orderCounts.withoutInvoice],
-      ['Tổng SL hóa đơn',totals.invoice],['Tổng SL đã giao',totals.delivered],['Chênh lệch',totals.delivered-totals.invoice]
+      ['Tổng SL hóa đơn',totals.invoice]
     ];
-    const productsData=[['STT','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch'],...productRows.map((row,index)=>[index+1,row.name,row.unit||'',row.invoice,row.delivered,row.delivered-row.invoice])];
-    const ordersData=[['Lái xe','Ngày giao','Địa điểm','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch','Giờ giao','Ảnh hóa đơn','Chú ý']];
+    const productsData=[['STT','Sản phẩm','ĐVT','SL hóa đơn'],...productRows.map((row,index)=>[index+1,row.name,row.unit||'',row.invoice])];
+    const ordersData=[['Lái xe','Ngày giao','Địa điểm','Sản phẩm','ĐVT','SL hóa đơn','Giờ giao','Ảnh hóa đơn','Chú ý']];
     filtered.forEach(order=>visibleLines(order).forEach(line=>ordersData.push([
       driverFor(order),fmtAnyDate(order.deliveryDate||order.date)||'',order.pointName||order.address||'',line.productName||'',line.unit||'',
-      numFmt(line.qtyInvoice)||0,deliveredQty(line,order),deliveredQty(line,order)-(numFmt(line.qtyInvoice)||0),order.deliveryTime||'',order.invoiceImage||'',String(line.note||'')
+      numFmt(line.qtyInvoice)||0,order.deliveryTime||'',order.invoiceImage||'',String(line.note||'')
     ])));
     const wb=XLSX.utils.book_new();
     [['Tong quan',overview],['Tong hop san pham',productsData],['Hoa don da nhap',ordersData]].forEach(([name,data])=>{
