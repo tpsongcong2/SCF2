@@ -2528,7 +2528,12 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
       }
       XLSX.utils.book_append_sheet(wb,ws,name);
     });
-    XLSX.writeFile(wb,'Bao_cao_cong_no_hoa_don_'+(fromDate||'')+'_'+(toDate||'')+'.xlsx');
+    const fileCustomer=customerLabel.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^a-zA-Z0-9 -]/g,' ').trim().replace(/\s+/g,'_').slice(0,80)||'Tat_ca_khach_hang';
+    const monthEnd=selectedMonth?new Date(Number(selectedMonth.slice(0,4)),Number(selectedMonth.slice(5,7)),0).getDate():0;
+    const fileFrom=dateMode==='day'?selectedDate:dateMode==='month'?selectedMonth+'-01':fromDate;
+    const fileTo=dateMode==='day'?selectedDate:dateMode==='month'?selectedMonth+'-'+String(monthEnd).padStart(2,'0'):toDate;
+    const fileDate=value=>{const key=scfDebtDateKey(value);return key?key.split('-').reverse().join('-'):'Khong_gioi_han';};
+    XLSX.writeFile(wb,'Cong_no_'+fileCustomer+'_tu_'+fileDate(fileFrom)+'_den_'+fileDate(fileTo)+'.xlsx');
     }catch(error){window.showToast(error?.message||'Chưa xuất được Excel. Vui lòng thử lại.','error');}
     finally{debtExportBusy.current=false;}
   };

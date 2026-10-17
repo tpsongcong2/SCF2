@@ -77,6 +77,8 @@ function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',
   const[natural,setNatural]=useState({width:0,height:0});
   const[manualRotation,setManualRotation]=useState(null);
   const[viewer,setViewer]=useState(false);
+  const[zoom,setZoom]=useState(1);
+  useEffect(()=>setZoom(1),[src]);
   const[recognitionImage,setRecognitionImage]=useState(null);
   const[orientation,setOrientation]=useState(null);
   const[recognitionRetry,setRecognitionRetry]=useState(0);
@@ -144,7 +146,8 @@ function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',
     h('button',{type:'button',className:'bs','data-scf-action':'view','aria-label':'Trả về chiều gốc ảnh '+label,title:'Trả về chiều ảnh gốc',onClick:original},'Ảnh gốc'),
     landscape&&((manualRotation?.src===src&&manualRotation?.landscape===landscape)||(shared&&orientation?.mode==='manual'))&&h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>{setManualRotation(null);setSharedSave(null);if(shared||orientation?.status!=='ready')setRecognitionRetry(value=>value+1);}},'Theo chiều chữ')
   );
-  const imageStage=full=>h('div',{className:'invoice-photo-stage',style:{'--invoice-ratio':layout.ratio,aspectRatio:String(layout.ratio)}},
+  const zoomWidth=Math.min(1020,Math.max(200,(window.innerWidth||1100)-80),(window.innerHeight||800)*0.68*layout.ratio)*zoom;
+  const imageStage=full=>h('div',{className:'invoice-photo-stage',style:{'--invoice-ratio':layout.ratio,aspectRatio:String(layout.ratio),...(full?{width:zoomWidth,maxWidth:'none'}:{})}},
     // This component renews expired URLs once; skip the document-wide image retry.
     h('img',{key:reload,src:url,alt:label,loading:full?'eager':'lazy',decoding:'async','data-scf-photo-refreshing':'1',
       style:{width:layout.imageWidth,height:layout.imageHeight,transform:'translate(-50%, -50%) rotate('+layout.rotation+'deg)'},
@@ -170,13 +173,22 @@ function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',
   );
   return h('figure',{className:'trip-invoice-preview invoice-size-'+safeSize+(layout.sideways?' invoice-rotated-sideways':'')},
     h('figcaption',null,label),
-    h('button',{type:'button',className:'trip-invoice-image-button','data-scf-action':'view','aria-label':'Mở ảnh '+label,onClick:()=>setViewer(true),style:phase==='failed'?{display:'none'}:undefined},imageStage(false)),
+    h('button',{type:'button',className:'trip-invoice-image-button','data-scf-action':'view','aria-label':'Mở ảnh '+label,onClick:()=>{setZoom(1);setViewer(true);},style:phase==='failed'?{display:'none'}:undefined},imageStage(false)),
     phase!=='failed'&&controls(),
     phase!=='failed'&&orientationStatus(),
     phase==='refreshing'&&h('small',{role:'status'},'Đang tải lại ảnh…'),
     phase==='failed'&&failure(),
     viewer&&h(Modal,{title:label,lg:'xl',className:'invoice-photo-viewer',onClose:()=>setViewer(false)},
-      controls(),phase==='failed'?failure():imageStage(true),phase!=='failed'&&orientationStatus(),
+      controls(),
+      h('div',{className:'invoice-zoom-controls'},
+        h('button',{type:'button',className:'bs','data-scf-action':'view','aria-label':'Thu nhỏ hóa đơn',disabled:zoom<=1,onClick:()=>setZoom(value=>Math.max(1,value-0.25))},h('i',{className:'ti ti-zoom-out'}),' Thu nhỏ'),
+        h('b',{'aria-live':'polite'},Math.round(zoom*100)+'%'),
+        h('button',{type:'button',className:'bs','data-scf-action':'view','aria-label':'Phóng to hóa đơn',disabled:zoom>=4,onClick:()=>setZoom(value=>Math.min(4,value+0.25))},h('i',{className:'ti ti-zoom-in'}),' Phóng to'),
+        h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>setZoom(1)},'Vừa khung')
+      ),
+      phase==='failed'?failure():h('div',{className:'invoice-zoom-viewport',tabIndex:0,'aria-label':'Ảnh hóa đơn; cuộn hoặc vuốt để xem khi phóng to'},imageStage(true)),
+      zoom>1&&h('small',null,'Cuộn hoặc vuốt ngang/dọc để xem phần ảnh phóng to.'),
+      phase!=='failed'&&orientationStatus(),
       phase==='refreshing'&&h('small',{role:'status'},'Đang tải lại ảnh…'),
       h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>window.open(url,'_blank','noopener')},'Mở tệp ảnh gốc')
     )
