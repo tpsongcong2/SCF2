@@ -98,7 +98,19 @@ function AreasTab({areas,setAreas,customers,orders}){
 
 function CustomersTab({customers,setCustomers,shifts,orders,areas,cu}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[open,so]=useState(null);const[q,sq]=useState('');
-  const save=(d,close)=>{if(edit)setCustomers(p=>p.map(x=>x.id===edit.id?d:x));else setCustomers(p=>[...p,d]);if(close!==false){sm(null);se(null);}};
+  const save=(d,close)=>{
+    const stamp=new Date().toISOString();
+    const history=[...(edit?.pointMembershipHistory||[])];
+    const retainedIds=new Set((d.points||[]).flatMap(pt=>[String(pt.id),...(pt.mergedPointIds||[]).map(String)]));
+    (edit?.points||[]).filter(pt=>!retainedIds.has(String(pt.id))).forEach(pt=>history.push({pointId:pt.id,pointName:pt.name,customerId:edit.id,addedAt:pt.customerAddedAt||null,removedAt:stamp}));
+    (d.points||[]).filter(pt=>!(edit?.points||[]).some(old=>String(old.id)===String(pt.id))).forEach(pt=>history.push({pointId:pt.id,pointName:pt.name,customerId:d.id,addedAt:pt.customerAddedAt||stamp}));
+    (d.points||[]).filter(pt=>pt.customerStoppedAt&&!(edit?.points||[]).find(old=>String(old.id)===String(pt.id))?.customerStoppedAt).forEach(pt=>history.push({pointId:pt.id,pointName:pt.name,customerId:d.id,addedAt:pt.customerAddedAt||null,removedAt:pt.customerStoppedAt}));
+    (d.points||[]).forEach(pt=>{const old=(edit?.points||[]).find(item=>String(item.id)===String(pt.id));if(old&&(old.customerAddedAt!==pt.customerAddedAt||old.customerStoppedAt!==pt.customerStoppedAt))history.push({pointId:pt.id,pointName:pt.name,customerId:d.id,action:'Sửa thời gian bán',previousStart:old.customerAddedAt||null,previousEnd:old.customerStoppedAt||null,addedAt:pt.customerAddedAt||null,removedAt:pt.customerStoppedAt||null,changedAt:stamp});});
+    d={...d,pointMembershipHistory:history,points:(d.points||[]).map(pt=>{
+      const previous=(edit?.points||[]).find(old=>String(old.id)===String(pt.id));
+      return {...pt,ownerCustomerId:d.id,customerAddedAt:Object.prototype.hasOwnProperty.call(pt,'customerAddedAt')?pt.customerAddedAt:(previous?.customerAddedAt||stamp)};
+    })};
+    if(edit)setCustomers(p=>p.map(x=>x.id===edit.id?d:x));else setCustomers(p=>[...p,d]);if(close!==false){sm(null);se(null);}};
   const del=id=>{window.scfConfirm('Bạn có chắc muốn xóa khách hàng này?','Xóa khách hàng',true).then(ok=>{if(ok){setCustomers(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa khách hàng','success');}});};
   const ECOLS=[['code','Mã KH'],['name','Tên KH'],['group','Nhóm khách hàng'],['taxCode','MST'],['address','Địa chỉ'],['note','Ghi chú']];
   const list=customers.filter(x=>!q||x.name.toLowerCase().includes(q.toLowerCase())||(x.group||'').toLowerCase().includes(q.toLowerCase())||x.taxCode.includes(q)).sort((a,b)=>(a.code||a.id||'').localeCompare(b.code||b.id||''));
@@ -143,6 +155,8 @@ function CustomersTab({customers,setCustomers,shifts,orders,areas,cu}){
                 h('div',{style:{fontWeight:500,display:'flex',alignItems:'center',gap:5}},h('i',{className:'ti ti-map-pin',style:{fontSize:12,color:'var(--pri)'}}),pt.name),
                 h('div',{style:{color:'var(--tx2)',marginTop:2}},pt.address),
               pt.area&&h('span',{className:'badge',style:{background:'var(--bg2)',color:'var(--tx)',marginTop:3,fontSize:10}},h('i',{className:'ti ti-map-pin',style:{fontSize:10,marginRight:3}}),pt.area),
+                h('div',{style:{color:'var(--tx2)',fontSize:11,marginTop:4}},'Bắt đầu bán: '+(pt.customerAddedAt?new Date(pt.customerAddedAt).toLocaleString('vi-VN'):'Chưa biết thời điểm bắt đầu giao')),
+                pt.customerStoppedAt&&h('div',{style:{color:'#A32D2D',fontSize:11}},'Ngừng bán: '+new Date(pt.customerStoppedAt).toLocaleString('vi-VN')),
                 pt.contact&&h('div',{style:{color:'var(--tx2)',marginTop:1}},pt.contact+' • '+pt.phone)
               ))
             ):h('span',{style:{fontSize:12,color:'var(--tx2)'}},'Chưa có địa điểm giao hàng.')

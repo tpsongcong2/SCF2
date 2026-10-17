@@ -609,7 +609,7 @@ function ProductsTab({products,setProducts,prodCats,setProdCats}){
 }
 
 /* ─── POINT ROW ─── */
-function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
+function PointRow({pt,allAreas,onAreaChange,onNameChange,onPeriodChange,onDelete}){
   const[showNew,setShowNew]=useState(false);
   const[newAreaTxt,setNewAreaTxt]=useState('');
   const normalizeAreaValue=v=>{
@@ -682,9 +682,15 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onDelete}){
             !isKnown&&curArea&&h('option',{value:curArea},curArea),
             h('option',{value:'__new__',style:{color:'var(--pri)',fontStyle:'italic'}},'+ Thêm khu vực mới...')
           ),
-      h('button',{className:'bi',onClick:()=>onDelete(pt.id,pt),style:{color:'#A32D2D',flexShrink:0}},
-        h('i',{className:'ti ti-trash',style:{fontSize:14}}))
+      h('button',{className:'bi',disabled:!!pt.customerStoppedAt,title:pt.customerStoppedAt?'Đã ngừng bán':'Ngừng bán cho khách hàng này',onClick:()=>onDelete(pt.id,pt),style:{color:'#A32D2D',flexShrink:0}},
+        h('i',{className:pt.customerStoppedAt?'ti ti-ban':'ti ti-player-stop',style:{fontSize:14}}))
     ),
+    h('small',{style:{paddingLeft:22,color:'var(--tx2)'}},'Bắt đầu bán: '+(pt.customerAddedAt?new Date(pt.customerAddedAt).toLocaleString('vi-VN'):'Chưa biết thời điểm bắt đầu giao')),
+    onPeriodChange&&h('div',{style:{display:'flex',gap:10,flexWrap:'wrap',paddingLeft:22}},
+      h('label',{style:{fontSize:11}},'Bắt đầu bán ',h('input',{type:'datetime-local',value:scfPointLocalDateTime(pt.customerAddedAt),'aria-label':'Bắt đầu bán '+pt.name,onChange:e=>onPeriodChange(pt.id,'customerAddedAt',e.target.value),style:{fontSize:12,padding:3}})),
+      h('label',{style:{fontSize:11}},'Ngừng bán ',h('input',{type:'datetime-local',value:scfPointLocalDateTime(pt.customerStoppedAt),'aria-label':'Ngừng bán '+pt.name,onChange:e=>onPeriodChange(pt.id,'customerStoppedAt',e.target.value),style:{fontSize:12,padding:3}}))
+    ),
+    pt.customerStoppedAt&&h('small',{style:{paddingLeft:22,color:'#A32D2D'}},'Ngừng bán: '+new Date(pt.customerStoppedAt).toLocaleString('vi-VN')),
     pt.address&&h('div',{style:{fontSize:11,color:'var(--tx2)',paddingLeft:22}},
       pt.address+(pt.contact?' • '+pt.contact+' '+pt.phone:''))
   );
@@ -702,6 +708,44 @@ function customerAreaOptions(areas,shifts,customers,points){
   (customers||[]).forEach(customer=>(customer?.points||[]).forEach(point=>add(point?.area)));
   (points||[]).forEach(point=>add(point?.area));
   return [...values.values()].sort((a,b)=>a.localeCompare(b,'vi'));
+}
+function scfPointLocalDateTime(value){
+  if(!value)return '';
+  const d=new Date(value);if(!Number.isFinite(d.getTime()))return '';
+  const pad=v=>String(v).padStart(2,'0');
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+function scfPointPeriodConflicts(point,ownerId,customers){
+  const start=point.customerAddedAt?Date.parse(point.customerAddedAt):-Infinity,end=point.customerStoppedAt?Date.parse(point.customerStoppedAt):Infinity;
+  const names=[point.name,...(point.nameAliases||[])].map(scfPointMergeKey).filter(Boolean);
+  return (customers||[]).filter(c=>String(c.id)!==String(ownerId)).flatMap(customer=>(customer.points||[]).filter(other=>{
+    const sameId=point.id&&String(point.id)===String(other.id);
+    const sameName=[other.name,...(other.nameAliases||[])].map(scfPointMergeKey).some(name=>names.includes(name));
+    if(!sameId&&!sameName)return false;
+    const otherStart=other.customerAddedAt?Date.parse(other.customerAddedAt):-Infinity,otherEnd=other.customerStoppedAt?Date.parse(other.customerStoppedAt):Infinity;
+    return start<otherEnd&&otherStart<end;
+  }).map(other=>({customer,point:other})));
+}
+function scfPointMergeKey(name){return normalizeLookupText(name).replace(/\s/g,'');}
+function scfMergeCustomerPoints(points,near=false){
+  const result=[];
+  const close=(a,b)=>{
+    if(a===b)return true;
+    if(!near||a.length<4||a.length!==b.length)return false;
+    const diffs=[];for(let i=0;i<a.length;i++)if(a[i]!==b[i])diffs.push(i);
+    return diffs.length===2&&diffs[1]===diffs[0]+1&&a[diffs[0]]===b[diffs[1]]&&a[diffs[1]]===b[diffs[0]];
+  };
+  for(const point of points||[]){
+    const key=scfPointMergeKey(point.name);
+    const keep=key&&!point.customerStoppedAt&&result.find(p=>!p.customerStoppedAt&&close(scfPointMergeKey(p.name),key)&&normalizeLookupText(p.area)===normalizeLookupText(point.area));
+    if(!keep){result.push({...point});continue;}
+    keep.mergedPointIds=[...new Set([...(keep.mergedPointIds||[]),point.id,...(point.mergedPointIds||[])].filter(id=>id&&id!==keep.id))];
+    keep.nameAliases=[...new Set([...(keep.nameAliases||[]),point.name,...(point.nameAliases||[])].filter(name=>name&&name!==keep.name))];
+    for(const field of ['address','contact','phone'])if(!keep[field]&&point[field])keep[field]=point[field];
+    keep.customerAddedAt=keep.customerAddedAt&&point.customerAddedAt?[keep.customerAddedAt,point.customerAddedAt].sort()[0]:null;
+    keep.mergeHistory=[...(keep.mergeHistory||[]),{pointId:point.id,name:point.name,customerAddedAt:point.customerAddedAt||null,mergedAt:new Date().toISOString()}];
+  }
+  return result;
 }
 function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
   const normalize=s=>(s||'').trim().toUpperCase().replace(/\s+/g,' ').replace(/[^A-Z0-9\u00C0-\u024F\u1E00-\u1EFF ]/g,'');
@@ -738,19 +782,20 @@ function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
     });
   };
   // Dedup theo tên khi load - dọn sạch dữ liệu trùng từ lần trước
-  const initPoints=dedup(ensureUniquePointIds((cust?.points||[]).map(pt=>({...pt,area:normalizeAreaValue(pt.area)}))))
+  const initPoints=ensureUniquePointIds((cust?.points||[]).map(pt=>({...pt,area:normalizeAreaValue(pt.area)})))
     .sort((a,b)=>{const ac=(a.area||'zzz').localeCompare(b.area||'zzz','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');});
   const[f,sf]=useState(cust?{...cust,points:initPoints}:{id:'',code:'',name:'',group:'',taxCode:'',address:'',note:'',points:[]});
-  const[np,snp]=useState({name:'',address:'',contact:'',phone:'',area:'',newAreaText:''});
+  const[np,snp]=useState({name:'',address:'',contact:'',phone:'',area:'',newAreaText:'',customerAddedAt:scfPointLocalDateTime(new Date())});
   const[saved,setSaved]=useState(false);
   // pendingAreas: lưu thay đổi khu vực mà KHÔNG trigger re-render
   const pendingAreas=React.useRef(Object.fromEntries(initPoints.map(p=>[p.id,normalizeAreaValue(p.area)||''])));
   const set=(k,v)=>sf(p=>({...p,[k]:v}));
   const addPt=()=>{
     if(!np.name){window.showToast('Nhập tên địa điểm!','warn');return;}
+    if(!np.customerAddedAt||!Number.isFinite(Date.parse(np.customerAddedAt))){window.showToast('Chọn thời điểm bắt đầu bán hợp lệ.','warn');return;}
     // Kiểm tra trùng tên
     const norm=s=>(s||'').trim().toLowerCase().replace(/\s+/g,' ');
-    const isDupPt=f.points.some(pt=>norm(pt.name)===norm(np.name));
+    const isDupPt=f.points.some(pt=>!pt.customerStoppedAt&&norm(pt.name)===norm(np.name));
     if(isDupPt){
       window.showToast('⚠ Địa điểm "'+np.name+'" đã có trong danh sách!\nVui lòng kiểm tra lại hoặc dùng tên khác.','info');
       return;
@@ -758,8 +803,8 @@ function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
     const newId='PT'+uid();
     const areaVal=normalizeAreaValue(np.area==='__new__'?(np.newAreaText||'').trim():(np.area||''));
     pendingAreas.current[newId]=areaVal;
-    sf(p=>({...p,points:[...p.points,{...np,id:newId,area:areaVal}]}));
-    snp({name:'',address:'',contact:'',phone:'',area:'',newAreaText:''});
+    sf(p=>({...p,points:[...p.points,{...np,id:newId,area:areaVal,createdAt:new Date().toISOString(),customerAddedAt:new Date(np.customerAddedAt).toISOString(),ownerCustomerId:f.id||f.code||null}]}));
+    snp({name:'',address:'',contact:'',phone:'',area:'',newAreaText:'',customerAddedAt:scfPointLocalDateTime(new Date())});
   };
   // onAreaChange: chỉ cập nhật ref, KHÔNG re-render
   const onAreaChange=(id,v)=>{pendingAreas.current[id]=normalizeAreaValue(v);};
@@ -768,10 +813,16 @@ function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
     const code=(f.code||'').trim().toUpperCase()||'KH'+String(Date.now()).slice(-6);
     const isDup=customers&&customers.some(c=>c.id===code&&c.id!==(cust?.id||''));
     if(isDup){window.showToast('Mã KH "'+code+'" đã tồn tại! Vui lòng dùng mã khác.','error');return;}
+    for(const point of f.points){
+      const start=point.customerAddedAt?Date.parse(point.customerAddedAt):-Infinity,end=point.customerStoppedAt?Date.parse(point.customerStoppedAt):Infinity;
+      if(Number.isNaN(start)||Number.isNaN(end)||start>=end){window.showToast('Thời điểm ngừng bán phải sau bắt đầu bán: '+point.name,'warn');return;}
+    }
+    const conflicts=f.points.flatMap(point=>scfPointPeriodConflicts(point,cust?.id||code,customers).map(hit=>point.name+' trùng thời gian với '+hit.customer.name+' ('+(hit.point.customerAddedAt?new Date(hit.point.customerAddedAt).toLocaleString('vi-VN'):'chưa biết bắt đầu')+' → '+(hit.point.customerStoppedAt?new Date(hit.point.customerStoppedAt).toLocaleString('vi-VN'):'chưa ngừng bán')+')'));
+    if(conflicts.length&&!confirm('Cảnh báo địa điểm có thời gian bán chồng lấn giữa khách hàng:\n'+[...new Set(conflicts)].join('\n')+'\nVẫn lưu thông tin này?'))return;
     // Merge pendingAreas + dedup + sort theo khu vực → tên
     const seen=new Set();
     const finalPoints=f.points
-      .map(pt=>({...pt,area:normalizeAreaValue(pendingAreas.current[pt.id]!==undefined?pendingAreas.current[pt.id]:pt.area)}))
+      .map(pt=>({...pt,ownerCustomerId:code,area:normalizeAreaValue(pendingAreas.current[pt.id]!==undefined?pendingAreas.current[pt.id]:pt.area)}))
       .filter(pt=>{const k=pt.id+'|'+(pt.name||'').trim().toUpperCase();if(seen.has(k))return false;seen.add(k);return true;})
       .sort((a,b)=>{const ac=(a.area||'zzz').localeCompare(b.area||'zzz','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');});
     // Cập nhật state để UI hiện đúng (khi giữ mở)
@@ -796,6 +847,7 @@ function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
   const AddPtForm=()=>h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:10,marginTop:4}},
     h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500,marginBottom:6}},'Thêm địa điểm mới'),
     h('div',{className:'g2'},
+      h(F,{label:'Bắt đầu bán *'},h('input',{type:'datetime-local',value:np.customerAddedAt||'',onChange:e=>snp(p=>({...p,customerAddedAt:e.target.value}))})),
       h(F,{label:'Tên địa điểm *'},h('input',{value:np.name,onChange:e=>snp(p=>({...p,name:e.target.value})),placeholder:'Kho, Văn phòng, Cửa hàng...'})),
       h(F,{label:'Khu vực'},np.area==='__new__'
         ?h('div',{style:{display:'flex',gap:4}},
@@ -844,84 +896,24 @@ function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
             // Nút gộp địa điểm gần giống
             h('button',{
               onClick:()=>{
-                // Tìm các nhóm địa điểm có tên gần giống (sau khi trim + normalize)
-                const normalize=s=>(s||'').trim().toLowerCase().replace(/\s+/g,' ');
-                const groups={};
-                f.points.forEach(pt=>{
-                  const key=norm2(pt.name);
-                  if(!groups[key])groups[key]=[];
-                  groups[key].push(pt);
-                });
-                const dupGroups=Object.values(groups).filter(g=>g.length>1);
-                if(dupGroups.length===0){window.showToast('Không tìm thấy địa điểm trùng hoặc gần giống!','error');return;}
-                // Hiện confirm với danh sách
-                const lines=dupGroups.map(g=>g.map(p=>'  • "'+p.name+'" ('+( p.area||'chưa có khu vực')+')').join('\n')).join('\n---\n');
-                const msg='Tìm thấy '+dupGroups.length+' nhóm trùng:\n\n'+lines+'\n\nGộp lại? (giữ địa điểm đầu tiên mỗi nhóm, xóa các địa điểm trùng)';
-                if(!confirm(msg))return;
-                // Gộp: giữ pt đầu tiên mỗi nhóm
-                const keepIds=new Set();
-                const mergeMap={}; // id cũ → id giữ lại
-                dupGroups.forEach(g=>{
-                  const keep=g[0];
-                  keepIds.add(keep.id);
-                  g.slice(1).forEach(dup=>{mergeMap[dup.id]=keep.id;});
-                });
-                // Giữ tất cả điểm không trùng + điểm đầu tiên mỗi nhóm
-                const newPoints=f.points.filter(pt=>{
-                  const key=normalize(pt.name);
-                  const grp=groups[key];
-                  if(grp.length===1)return true; // không trùng
-                  return pt.id===grp[0].id; // chỉ giữ cái đầu
-                });
-                sf(p=>({...p,points:newPoints}));
-                window.showToast('Đã gộp '+dupGroups.reduce((s,g)=>s+g.length-1,0)+' địa điểm trùng!','success');
+                const source=f.points.map(pt=>({...pt,area:pendingAreas.current[pt.id]??pt.area}));
+                const merged=scfMergeCustomerPoints(source,true);
+                if(merged.length===source.length){window.showToast('Không tìm thấy địa điểm trùng hoặc đảo chữ trong cùng khu vực.','info');return;}
+                if(!confirm('Gộp '+(source.length-merged.length)+' địa điểm trùng/gần giống trong khách hàng này?\nGiữ mã cũ làm mã tham chiếu, không chuyển đơn sang khách hàng khác.'))return;
+                sf(p=>({...p,points:merged}));merged.forEach(pt=>{pendingAreas.current[pt.id]=pt.area||'';});
+                window.showToast('Đã gộp. Bấm Lưu để hoàn tất.','success');
               },
               style:{fontSize:11,padding:'3px 10px',display:'flex',alignItems:'center',gap:4,border:'1px solid #E06060',color:'#A32D2D',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
             },h('i',{className:'ti ti-git-merge',style:{fontSize:13}}),'Gộp địa điểm trùng'),
             // Nút dọn trùng tên chính xác
             h('button',{
               onClick:()=>{
-                // Debug: log tất cả điểm ra console
-                
-                
-                f.points.forEach((p,i)=>{
-                  const k=normalize(p.name);
-                  
-                });
-                // Tìm trùng bằng normalize mạnh
-                const seen=new Map();
-                const dups=[];
-                const dupPairs=[];
-                f.points.forEach(p=>{
-                  const k=normalize(p.name);
-                  if(seen.has(k)){
-                    dups.push(p.name+' ('+p.area+')');
-                    dupPairs.push({keep:seen.get(k),remove:p});
-                  } else seen.set(k,p);
-                });
-                if(dups.length===0){
-                  // Thử tìm bằng exact string match
-                  const exactSeen=new Map();
-                  const exactDups=[];
-                  f.points.forEach(p=>{
-                    const k=p.name;
-                    if(exactSeen.has(k))exactDups.push(k);
-                    else exactSeen.set(k,p);
-                  });
-                  if(exactDups.length>0){
-                    window.showToast('Tìm thấy '+exactDups.length+' trùng exact:\n'+exactDups.join('\n')+'\n\nNhưng normalize không bắt được - có thể có ký tự ẩn. Xem console để debug.','error');
-                    return;
-                  }
-                  window.showToast('Không tìm thấy địa điểm trùng!\nĐã kiểm tra '+f.points.length+' địa điểm.\nXem Console (F12) để debug chi tiết.','error');
-                  return;
-                }
-                const msg='Tìm thấy '+dups.length+' địa điểm trùng:\n• '+dups.slice(0,10).join('\n• ')+(dups.length>10?'\n...':'')+'\n\nGiữ bản có thông tin đầy đủ hơn. Tiếp tục?';
-                if(confirm(msg)){
-                  const cleaned=dedup(f.points).sort((a,b)=>{const ac=(a.area||'zzz').localeCompare(b.area||'zzz','vi');return ac!==0?ac:(a.name||'').localeCompare(b.name||'','vi');});
-                  sf(p=>({...p,points:cleaned}));
-                  cleaned.forEach(pt=>{pendingAreas.current[pt.id]=pt.area||'';});
-                  window.showToast('Đã xóa '+dups.length+' địa điểm trùng! Còn lại '+cleaned.length+' địa điểm.','success');
-                }
+                const source=f.points.map(pt=>({...pt,area:pendingAreas.current[pt.id]??pt.area}));
+                const cleaned=scfMergeCustomerPoints(source);
+                if(cleaned.length===source.length){window.showToast('Không tìm thấy địa điểm trùng tên trong cùng khu vực.','info');return;}
+                if(!confirm('Gộp '+(source.length-cleaned.length)+' địa điểm trùng tên? Các mã cũ được giữ để nhận diện đơn.'))return;
+                sf(p=>({...p,points:cleaned}));cleaned.forEach(pt=>{pendingAreas.current[pt.id]=pt.area||'';});
+                window.showToast('Đã dọn trùng. Bấm Lưu để hoàn tất.','success');
               },
               style:{fontSize:11,padding:'3px 10px',display:'flex',alignItems:'center',gap:4,border:'1px solid #856404',color:'#856404',background:'transparent',borderRadius:'var(--r)',cursor:'pointer'}
             },h('i',{className:'ti ti-eraser',style:{fontSize:13}}),'Dọn trùng tên'),
@@ -963,19 +955,12 @@ function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
               key:pt.id,pt,allAreas,
               onNameChange:(id,v)=>sf(p=>({...p,points:p.points.map(x=>x.id===id?{...x,name:v}:x)})),
               onAreaChange:onAreaChange,
+              onPeriodChange:(id,field,value)=>sf(previous=>({...previous,points:previous.points.map(point=>point.id===id?{...point,[field]:value?new Date(value).toISOString():null}:point)})),
               onDelete:(delId,delPt)=>{
-                const delName=(delPt?.name||'').trim().toUpperCase();
-                const hasOrders=(orders||[]).some(o=>
-                  (o.pointId===delId)||(o.pointName||'').trim().toUpperCase()===delName
-                );
-                if(hasOrders){
-                  const cnt=(orders||[]).filter(o=>(o.pointId===delId)||(o.pointName||'').trim().toUpperCase()===delName).length;
-                  if(!confirm('⚠ Địa điểm "'+delPt?.name+'" có '+cnt+' đơn hàng liên quan!\n\nNếu xóa, các đơn hàng này vẫn còn nhưng sẽ mất thông tin địa điểm.\n\nBạn có chắc muốn xóa?'))return;
-                } else {
-                  if(!confirm('Địa điểm "'+delPt?.name+'" không có đơn hàng nào.\nXóa địa điểm này?'))return;
-                }
-                delete pendingAreas.current[delId];
-                sf(p=>({...p,points:p.points.filter(x=>x.id!==delId)}));
+                if(delPt.customerStoppedAt){window.showToast('Địa điểm đã ngừng bán cho khách hàng này.','info');return;}
+                if(!confirm('Ngừng bán tại "'+delPt.name+'" cho khách hàng này từ thời điểm hiện tại?\nGiữ địa điểm và công nợ trước thời điểm ngừng. Bấm Lưu để áp dụng.'))return;
+                const stoppedAt=new Date().toISOString();
+                sf(p=>({...p,points:p.points.map(x=>x.id===delId?{...x,customerStoppedAt:stoppedAt}:x)}));
               }
             }));
           });

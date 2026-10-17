@@ -1140,6 +1140,8 @@ function isPrivilegedEmployeeRecord(employee){
   const submit=async()=>{
     if(!f.name||!f.username){window.showToast('Nhập tên và tên đăng nhập!','warn');return;}
     if(!f.dept){window.showToast('Chọn bộ phận chính!','warn');return;}
+    const viewDays=Number(f.orderHistoryDays??orderHistoryDays(f));
+    if(f.orderHistoryDays===''||!Number.isInteger(viewDays)||viewDays<0||viewDays>3650){window.showToast('Số ngày xem đơn hàng phải từ 0 đến 3650.','warn');return;}
     const actualQtyLimitDays=Number(f.tripActualQtyLimitDays??2);
     if(f.tripActualQtyLimitDays===''||!Number.isInteger(actualQtyLimitDays)||actualQtyLimitDays<0||actualQtyLimitDays>365){window.showToast('Số ngày giới hạn nhập SL thực giao phải từ 0 đến 365.','warn');return;}
     const requestsAdmin=f.permissionProfileId==='admin'||['admin','administrator'].includes(String(f.role||'').toLowerCase());
@@ -1160,7 +1162,7 @@ function isPrivilegedEmployeeRecord(employee){
       const driverDepartment=departments.some(value=>normalizeEmployeeDept(value)==='lai xe');
       const tripPermissions=driverDepartment?normalizedTripPermissions({...f,dept,departments}):f.tripPermissions;
       const mobileStartPage=scfMobileStartTarget({...f,dept,departments,permissions,permLevels});
-      onSave({...f,dept,departments,tripPermissions,permissions,permLevels,mobileStartPage,tripActualQtyLimitDays:actualQtyLimitDays,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
+      onSave({...f,dept,departments,tripPermissions,permissions,permLevels,mobileStartPage,orderHistoryDays:viewDays,tripActualQtyLimitDays:actualQtyLimitDays,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
     }catch(e){window.showToast(e.message||'Không thể lưu mật khẩu.','error');}
     finally{setBusy(false);}
   };
@@ -1225,7 +1227,7 @@ function isPrivilegedEmployeeRecord(employee){
       h('hr',{className:'divider'}),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
         h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phân quyền chi tiết (có thể chỉnh riêng cho nhân viên này)'),
-        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,salesDebtAllCustomers:false,driverReportMonthlyWeight:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
+        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,orderHistoryDays:60,salesDebtAllCustomers:false,driverReportMonthlyWeight:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
       ),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = chỉ đọc dữ liệu | Thêm + Xem + Sửa = không được xóa | Thêm + Xem + Sửa + Xóa = toàn quyền'),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 2rem'}},
@@ -1265,6 +1267,7 @@ function isPrivilegedEmployeeRecord(employee){
         h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}},SCF_TRIP_PERMISSION_OPTIONS.map(([key,label])=>h('label',{key,style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'6px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer'}},
           h('input',{type:'checkbox',checked:!!normalizedTripPermissions(f)[key],onChange:event=>sf(prev=>({...prev,tripPermissions:{...normalizedTripPermissions(prev),[key]:event.target.checked}}))}),label
         ))),
+        h('label',{style:{display:'flex',gap:10,alignItems:'center',marginTop:10}},'Số ngày được xem đơn hàng (0 = tất cả)',h('input',{type:'number',min:0,max:3650,step:1,value:f.orderHistoryDays??orderHistoryDays(f),onChange:event=>s('orderHistoryDays',event.target.value),style:{width:90}})),
         h('label',{style:{display:'flex',alignItems:'center',gap:10,marginTop:10,fontSize:12,fontWeight:600,flexWrap:'wrap'}},'Số ngày giới hạn nhập SL thực giao',h('input',{type:'number',min:0,max:365,step:1,value:f.tripActualQtyLimitDays??2,onChange:event=>s('tripActualQtyLimitDays',event.target.value),style:{width:90}})),
         h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:4}},'2 = khóa từ ngày thứ 2 sau ngày giao; 0 = không giới hạn ngày. Chỉ có tác dụng khi nhân viên được cấp quyền nhập số lượng thực giao.')
       ),

@@ -2307,6 +2307,19 @@ function scfDebtSalePrice(order,line,products,quotes,customers){
   for(const key of ['salePrice','sellPrice','priceSale'])if(product?.[key]!==undefined&&product[key]!==null&&product[key]!=='')return numFmt(product[key])||0;
   return null;
 }
+function scfDebtOrderMembership(order,customers){
+  const id=String(order.customerId||order.custId||'');
+  const name=normalizeLookupText(order.customer||order.customerName||'');
+  const owners=id?(customers||[]).filter(c=>String(c.id)===id):name?(customers||[]).filter(c=>normalizeLookupText(c.name)===name):(customers||[]);
+  const pointId=String(order.pointId||order.ptId||''),pointName=normalizeLookupText(order.pointName||order.address||'');
+  const matches=owners.flatMap(customer=>(customer.points||[]).filter(point=>{
+    const ids=[String(point.id||''),...(point.mergedPointIds||[]).map(String)];
+    const names=[point.name,...(point.nameAliases||[])].map(normalizeLookupText);
+    return ((pointId&&ids.includes(pointId))||(pointName&&names.includes(pointName)))&&scfPointCoversOrder(point,order);
+  }).map(point=>({customer,point})));
+  if(!matches.length||new Set(matches.map(m=>String(m.customer.id))).size>1)return null;
+  return matches[0];
+}
 function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips=[],currentUser}){
   const today=isoDate();
   const [showQuantitySummary,setShowQuantitySummary]=useLS('scf_debt_quantity_summary_'+String(currentUser?.id||''),false);
@@ -2371,7 +2384,7 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
     const key=pointIdentity(order);return[key,{key,label:order.pointName||order.address||'Chưa xác định'}];
   }).filter(([key])=>key)).values()].sort((a,b)=>a.label.localeCompare(b.label,'vi'));
   const fromTime=fromDate?dateValue(fromDate):NaN,toTime=toDate?dateValue(toDate):NaN;
-  const baseMatchedOrders=reportOrders.filter(order=>{
+  const scopedMatchedOrders=reportOrders.filter(order=>{
     const orderDate=dateKey(order.deliveryDate||order.date);
     if(dateMode==='day'&&orderDate!==selectedDate)return false;
     if(dateMode==='month'&&(!selectedMonth||!orderDate.startsWith(selectedMonth+'-')))return false;
@@ -2383,11 +2396,13 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
     const hasInvoiceImage=String(order.invoiceImage||'').trim().length>0;
     if(invoiceImageFilter==='with'&&!hasInvoiceImage)return false;
     if(invoiceImageFilter==='without'&&hasInvoiceImage)return false;
-    if(!customerMatch(order))return false;
+    if(!customerMatch(order)&&customerIdentity(order))return false;
     if(pointKey&&pointIdentity(order)!==pointKey)return false;
     if(driverName&&driverFor(order)!==driverName)return false;
     return true;
   }).sort((a,b)=>dateValue(b.deliveryDate||b.date)-dateValue(a.deliveryDate||a.date));
+  const unassignedDebtOrders=scopedMatchedOrders.filter(order=>scfDebtOrderHasInvoice(order)&&!scfDebtOrderMembership(order,customers));
+  const baseMatchedOrders=scopedMatchedOrders.filter(order=>{const membership=scfDebtOrderMembership(order,customers);return !!membership&&(!customerId||customerIdentity(order)===customerId||String(membership.customer.id)===customerId);});
   const productSourceOrders=baseMatchedOrders.filter(scfDebtOrderHasInvoice);
   const productOptions=[...new Map(productSourceOrders.flatMap(order=>(order.lines||[]).map(line=>{
     const product=(products||[]).find(item=>String(item.id||'')===String(line.productId||''));
@@ -2481,7 +2496,7 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
       const row=pricedProducts.get(key)||{name:line.productName||(products||[]).find(p=>String(p.id)===String(line.productId))?.name||'Chưa xác định',unit:line.unit||'',price,quantity:0,amount:price===null?null:0};
       row.quantity+=quantity;if(amount!==null)row.amount+=amount;pricedProducts.set(key,row);
     }));
-    overview.push(['TỔNG THÀNH TIỀN',totalAmount],['Dòng chưa có giá bán',missingPrices]);
+    overview.push(['TỔNG THÀNH TIỀN',totalAmount],['Dòng chưa có giá bán',missingPrices],['Đơn cần kiểm tra khách hàng/địa điểm (chưa tính công nợ)',unassignedDebtOrders.length]);
     const productsData=[['STT','Sản phẩm','ĐVT','SL hóa đơn','Giá','Thành tiền'],...[...pricedProducts.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi')).map((row,index)=>[index+1,row.name,row.unit,row.quantity,row.price,row.amount])];
     const ordersData=[['Lái xe','Ngày giao','Địa điểm','Sản phẩm','ĐVT','SL hóa đơn','Giá','Thành tiền','Giờ giao','Ảnh hóa đơn','Chú ý']];
     filtered.forEach(order=>visibleLines(order).forEach(line=>ordersData.push([
@@ -2548,6 +2563,13 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
         h(F,{label:'Lái xe'},h('select',{value:driverName,onChange:event=>setDriverName(event.target.value)},h('option',{value:''},'Tất cả lái xe'),driverOptions.map(name=>h('option',{key:name,value:name},name)))),
         h('div',null)
       )
+    ),
+    unassignedDebtOrders.length>0&&h('div',{className:'card',role:'alert',style:{marginBottom:14,border:'1px solid #e0a800'}},
+      h('b',null,'Có '+unassignedDebtOrders.length+' đơn có địa điểm chưa xác định được khách hàng trong thời gian giao hoặc đã ngừng bán. Các đơn này chưa tính vào công nợ.'),
+      h('div',{className:'tw',style:{marginTop:8}},h('table',null,
+        h('thead',null,h('tr',null,...['Ngày giao','Giờ giao','Địa điểm','Khách hàng trên đơn','SL hóa đơn'].map(label=>h('th',{key:label},label)))),
+        h('tbody',null,unassignedDebtOrders.map(order=>h('tr',{key:order.id},h('td',null,scfDebtFormatDate(order.deliveryDate||order.date)),h('td',null,order.deliveryTime||'—'),h('td',null,order.pointName||order.address||'Chưa có địa điểm'),h('td',null,order.customer||order.customerName||'Chưa có khách hàng'),h('td',null,qty((order.lines||[]).reduce((sum,line)=>sum+(numFmt(line.qtyInvoice)||0),0))))))
+      ))
     ),
     h('div',{className:'g3',style:{marginBottom:14}},
       h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Tổng số đơn'),h('div',{style:{fontSize:24,fontWeight:700,color:'var(--pri3)'}},orderCounts.total.toLocaleString('vi-VN')),h('div',{style:{fontSize:13,marginTop:6}},'Có ảnh hóa đơn: ',h('b',null,orderCounts.withInvoice.toLocaleString('vi-VN')),' · Chưa có ảnh hóa đơn: ',h('b',null,orderCounts.withoutInvoice.toLocaleString('vi-VN')))),

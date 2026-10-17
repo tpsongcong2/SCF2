@@ -691,12 +691,12 @@ function AdditionalTripOrderForm({trip,customers,products,onSave,onClose}){
   const[pointId,setPointId]=useState('');
   const[lines,setLines]=useState([{id:uid(),productId:'',qty:''}]);
   const customer=(customers||[]).find(c=>String(c.id)===String(customerId));
-  const points=customer?.points||[];
+  const points=(customer?.points||[]).filter(point=>scfPointCoversOrder(point,{deliveryDate:trip.deliveryDate,deliveryTime:trip.deliveryTime}));
   const updateLine=(id,data)=>setLines(prev=>prev.map(l=>l.id===id?{...l,...data}:l));
   const submit=()=>{
     const point=points.find(p=>String(p.id)===String(pointId));
     const validLines=lines.filter(l=>l.productId&&numFmt(l.qty)>0).map(l=>{const product=(products||[]).find(p=>String(p.id)===String(l.productId))||{};return{id:l.id,productId:product.id||l.productId,productName:product.name||'',qtyProd:numFmt(l.qty),qtyInvoice:numFmt(l.qty),qtyDelivered:'',unit:product.unit||'',weightPerUnit:numFmt(product.weightPerUnit)};});
-    if(!customerId||!pointId){window.showToast('Hãy chọn khách hàng và địa điểm giao.','warn');return;}
+    if(!customerId||!pointId||!point){window.showToast('Hãy chọn khách hàng và địa điểm giao.','warn');return;}
     if(!validLines.length){window.showToast('Hãy chọn sản phẩm và nhập số lượng lớn hơn 0.','warn');return;}
     onSave({customer,point,lines:validLines});
   };
@@ -1151,6 +1151,7 @@ function scfQuickSummaryAccessKey(user){
 }
 function scfScopeQuickSummaryData(data,user,employees=[]){
   if(!canViewTripQuickSummary(user))return {...data,trips:[],orders:[]};
+  data={...data,orders:(data.orders||[]).filter(order=>scfOrderInViewPeriod(order,user)),trips:(data.trips||[]).filter(trip=>scfOrderInViewPeriod(trip,user))};
   if(scfQuickSummaryFullAccess(user))return data;
   const userId=String(user.id||'').trim(),name=scfDriverReportName(user.name);
   const people=[...new Map([...(employees||[]),user].filter(person=>person?.id).map(person=>[String(person.id),person])).values()];

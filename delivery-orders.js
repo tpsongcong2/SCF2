@@ -399,7 +399,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
   const matchedPointArea=matchedPoint?.area||f.area||'';
   const resolvedPointName=matchedPoint?.name||f.pointName||f.address||'';
   const normPoint=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/\s+/g,' ');
-  const allPoints=customers.flatMap(c=>(c.points||[]).filter(pt=>pt&&String(pt.name||'').trim()).map((pt,index)=>({...pt,
+  const allPoints=customers.flatMap(c=>(c.points||[]).filter(pt=>pt&&String(pt.name||'').trim()&&scfPointCoversOrder(pt,f)).map((pt,index)=>({...pt,
     customerId:c.id,customerName:c.name,
     pointKey:String(c.id||'')+'\u001f'+String(pt.id||('name_'+index+'_'+pt.name)),
     searchLabel:pt.name+(c.name?' - '+c.name:'')
@@ -864,7 +864,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
   },[newOrders,sortedProducts]);
 
   // Tìm địa điểm gần giống (>= 75%) trong tất cả khách hàng
-  const allExistingPts = customers.flatMap(c=>(c.points||[]).map(p=>({...p, custId:c.id, custName:c.name})));
+  const allExistingPts = customers.flatMap(c=>(c.points||[]).filter(p=>!p.customerStoppedAt).map(p=>({...p, custId:c.id, custName:c.name})));
   const similarMap = {}; // ptName -> [{pt, score}]
   unknownPts.forEach(pt=>{
     const matches = allExistingPts
@@ -1480,7 +1480,7 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,c
   readImageRef.current=runOcr;
   const updateOrder=(id,data)=>setRows(p=>p.map(o=>o.id===id?{...o,...data}:o));
   const updateLine=(oid,lid,data)=>setRows(p=>p.map(o=>o.id===oid?{...o,lines:o.lines.map(l=>l.id===lid?{...l,...data}:l)}:o));
-  const allPoints=(customers||[]).flatMap(c=>(c.points||[]).map(pt=>({...pt,customerId:c.id,customerName:c.name})));
+  const allPoints=(customers||[]).flatMap(c=>(c.points||[]).filter(pt=>!pt.customerStoppedAt).map(pt=>({...pt,customerId:c.id,customerName:c.name})));
   const updatePointName=(id,value)=>{
     const m=findPoint(value);
     updateOrder(id,{pointName:value,pointId:m?.pt?.id||'',address:m?.pt?.address||'',area:m?.pt?.area||'',customerId:m?.cust?.id||'',customer:m?.cust?.name||''});
@@ -2514,7 +2514,7 @@ function mergeMobileDeliveryOrder(live,base,draft,canEditDelivered){
 function DeliveryMobileOrderEditor({order,customers,canEditDelivered,onSave,onClose}){
   const[draft,setDraft]=useState(()=>mobileDeliveryOrderDraft(order));
   const[query,setQuery]=useState(order.pointName||'');const[searchOpen,setSearchOpen]=useState(false);const[saving,setSaving]=useState(false);const[error,setError]=useState('');
-  const points=React.useMemo(()=>(customers||[]).flatMap(customer=>(customer.points||[]).filter(point=>point.name).map(point=>({...point,customerId:customer.id,customerName:customer.name}))),[customers]);
+  const points=React.useMemo(()=>(customers||[]).flatMap(customer=>(customer.points||[]).filter(point=>point.name&&!point.customerStoppedAt).map(point=>({...point,customerId:customer.id,customerName:customer.name}))),[customers]);
   const matches=points.filter(point=>normalizeLookupText(point.name+' '+point.customerName).includes(normalizeLookupText(query))).slice(0,25);
   const set=(key,value)=>setDraft(previous=>({...previous,[key]:value}));
   const choose=point=>{setDraft(previous=>({...previous,pointId:point.id||'',pointName:point.name,customerId:point.customerId,customer:point.customerName,address:point.address||'',area:point.area||''}));setQuery(point.name);setSearchOpen(false);};
@@ -2667,7 +2667,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const contextCache=new WeakMap();
   const orderContext=o=>{
     if(contextCache.has(o))return contextCache.get(o);
-    const resolved=pointMatchById.get(String(o?.pointId||o?.ptId||''))||pointMatchByName.get(normalizeLookupText(o?.pointName||''))||findOrderPointMatch(o,customers||[]);
+    const resolved=findOrderPointMatch(o,customers||[]);
     const pt=resolved?.point||{};
     const cust=resolved?.customer||{};
     const ctx={
@@ -2677,8 +2677,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       pointName:pt.name||o?.pointName||o?.address||'',
       address:pt.address||o?.address||'',
       area:pt.area||o?.area||'',
-      customerId:cust.id||o?.customerId||'',
-      customer:cust.name||o?.customer||''
+      customerId:o?.customerId||o?.custId||cust.id||'',
+      customer:o?.customer||o?.customerName||cust.name||''
     };
     contextCache.set(o,ctx);contextCache.set(ctx,ctx);return ctx;
   };
@@ -3276,7 +3276,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const sortableOrderMeta=React.useMemo(()=>sortMode==='trip'?orderMeta.map(enrichOrderTripMeta):orderMeta,[orderMeta,sortMode,trips,prodShifts,customers,shifts]);
   const configuredDeliverySequence=o=>{
     const ctx=o?._ctx||orderContext(o);
-    const resolved=pointMatchById.get(String(ctx?.pointId||ctx?.ptId||''))||pointMatchByName.get(normalizeLookupText(ctx?.pointName||''))||findOrderPointMatch(ctx,customers||[]);
+    const resolved=findOrderPointMatch(ctx,customers||[]);
     const trip=o._effectiveTrip||o._autoTrip;
     const shift=matchShiftSchedule({shiftId:trip?.shiftId,shiftName:trip?.shiftName||o._preferredTripShiftName,area:trip?.area||o._area,deliveryTime:trip?.deliveryTime||ctx.deliveryTime});
     return scfPointDeliverySequence(resolved?.point,{shiftId:trip?.shiftId||shift?.id,shiftName:trip?.shiftName||o._preferredTripShiftName||''});

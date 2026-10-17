@@ -266,3 +266,27 @@ function guardPermissionAction(e,role,page,lvls){
   if(!blocked)return;
   e.preventDefault();e.stopPropagation();
 }
+
+function orderHistoryDays(user={}){
+ if(['admin','administrator'].includes(String(user?.role||'').toLowerCase()))return 0;
+ const raw=user?.orderHistoryDays;
+ if(raw===undefined||raw===null||raw==='')return 60;
+ const days=Number(raw);return Number.isInteger(days)&&days>=0&&days<=3650?days:60;
+}
+function scfOrderInViewPeriod(order,user,now=new Date()){
+ const days=orderHistoryDays(user);if(!days)return true;
+ const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
+ const part=key=>Number(parts.find(p=>p.type===key).value);
+ const cutoff=Date.UTC(part('year'),part('month')-1,part('day')-(days-1));
+ const raw=String(order?.deliveryDate||order?.date||'');
+ const vn=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/),iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+ if(!vn&&!iso)return false;
+ const y=Number(vn?vn[3]:iso[1]),m=Number(vn?vn[2]:iso[2]),d=Number(vn?vn[1]:iso[3]);
+ const stamp=Date.UTC(y,m-1,d),date=new Date(stamp);
+ return date.getUTCFullYear()===y&&date.getUTCMonth()===m-1&&date.getUTCDate()===d&&stamp>=cutoff;
+}
+function scfMergePeriodView(previous,next,user){
+ const hidden=(previous||[]).filter(item=>!scfOrderInViewPeriod(item,user));
+ const hiddenIds=new Set(hidden.map(item=>String(item.id)));
+ return [...hidden,...(next||[]).filter(item=>!hiddenIds.has(String(item.id))&&scfOrderInViewPeriod(item,user))];
+}

@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V562';
+const SCF_BUILD_VERSION='V568';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_process:'Tài liệu ATTP · Quy trình',
@@ -369,8 +369,8 @@ function App(){
   const[materialMonthOpenings,_smo]=useState([]);
   const[shifts,_ssh]=useState(D_SHIFTS);
   const[quotes,_sq]=useState([]);
-  const[orders,_so]=useState([]);
-  const[trips,_st]=useState([]);
+  const[allOrders,_so]=useState([]);
+  const[allTrips,_st]=useState([]);
   const[prodOrders,_spo]=useState([]);
   const[prodActuals,_spa]=useState({});
   const[stock,_sstk]=useState([]);
@@ -416,8 +416,10 @@ function App(){
   const setMaterialMonthOpenings=mkSet('scf_material_month_openings',_smo);
   const setShifts=mkSet('scf_shifts',_ssh);
   const setQuotes=mkSet('scf_quotes',_sq);
-  const setOrders=mkSet('scf_orders',_so);
-  const setTrips=mkSet('scf_trips',_st);
+  const saveAllOrders=mkSet('scf_orders',_so);
+  const setOrders=value=>saveAllOrders(previous=>scfMergePeriodView(previous,typeof value==='function'?value(previous.filter(item=>scfOrderInViewPeriod(item,cu))):value,cu));
+  const saveAllTrips=mkSet('scf_trips',_st);
+  const setTrips=value=>saveAllTrips(previous=>scfMergePeriodView(previous,typeof value==='function'?value(previous.filter(item=>scfOrderInViewPeriod(item,cu))):value,cu));
   const setAutoTrips=valOrFn=>_st(prev=>{
     const pending=readSyncQueue().scf_trips;
     if(pending&&pending.mode!=='auto-trips')return prev;
@@ -486,6 +488,9 @@ function App(){
   const cu=SCF_SERVER_AUTH_ENABLED
     ?(authEmployee&&(employees.find(e=>String(e.id)===String(authEmployee.id))||authEmployee))
     :(session?employees.find(e=>String(e.id)===String(session.id)):null);
+  const viewDays=orderHistoryDays(cu),viewToday=isoDate();
+  const orders=React.useMemo(()=>allOrders.filter(item=>scfOrderInViewPeriod(item,cu)),[allOrders,cu?.id,viewDays,viewToday]);
+  const trips=React.useMemo(()=>allTrips.filter(item=>scfOrderInViewPeriod(item,cu)),[allTrips,cu?.id,viewDays,viewToday]);
   const cuAccessDepartments=employeeDepartments(cu);
   quickSummaryUserRef.current=cu;
   const mobileStartTarget=user=>!isFaceMask&&window.matchMedia?.('(max-width:768px)')?.matches?scfMobileStartTarget(user):'';
