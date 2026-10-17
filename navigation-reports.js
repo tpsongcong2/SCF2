@@ -2357,8 +2357,9 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
   const completedTrips=trips.filter(trip=>['completion_pending','completed'].includes(trip.status));
   const completedOrderIds=new Set(completedTrips.flatMap(trip=>trip.orderIds||[]).map(String));
   // Công nợ phải lấy mọi hóa đơn đã nhập, không phụ thuộc đơn đã giao hay chưa.
-  const reportOrders=(orders||[]).filter(order=>!['cancelled','failed'].includes(order?.status));
-  const deliveredQty=(line,order)=>scfDebtDeliveredQty(line,order,completedOrderIds,completedTrips);
+  const reportOrders=(orders||[]).filter(order=>order?.status!=='failed'&&(order?.lines||[]).length>0);
+  const deliveredQty=(line,order)=>order?.status==='cancelled'?0:scfDebtDeliveredQty(line,order,completedOrderIds,completedTrips);
+  const invoiceQty=(line,order)=>order?.status==='cancelled'?0:(numFmt(line?.qtyInvoice)||0);
   const customersByName=scfReportCustomerByName(customers);
   const customerFor=order=>scfResolveReportCustomer(order,customers,customersByName);
   const customerIdentity=order=>scfReportCustomerIdentity(order,customers,customersByName);
@@ -2401,9 +2402,9 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
     if(driverName&&driverFor(order)!==driverName)return false;
     return true;
   }).sort((a,b)=>dateValue(b.deliveryDate||b.date)-dateValue(a.deliveryDate||a.date));
-  const unassignedDebtOrders=scopedMatchedOrders.filter(order=>scfDebtOrderHasInvoice(order)&&!scfDebtOrderMembership(order,customers));
+  const unassignedDebtOrders=scopedMatchedOrders.filter(order=>!scfDebtOrderMembership(order,customers));
   const baseMatchedOrders=scopedMatchedOrders.filter(order=>{const membership=scfDebtOrderMembership(order,customers);return !!membership&&(!customerId||customerIdentity(order)===customerId||String(membership.customer.id)===customerId);});
-  const productSourceOrders=baseMatchedOrders.filter(scfDebtOrderHasInvoice);
+  const productSourceOrders=baseMatchedOrders;
   const productOptions=[...new Map(productSourceOrders.flatMap(order=>(order.lines||[]).map(line=>{
     const product=(products||[]).find(item=>String(item.id||'')===String(line.productId||''));
     const id=productIdentity(line),label=line.productName||product?.name||'Chưa xác định';
@@ -2415,7 +2416,7 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
   const matchedOrders=baseMatchedOrders.filter(order=>!effectiveProductId||visibleLines(order).length);
   const orderCounts={total:matchedOrders.length,withInvoice:matchedOrders.filter(order=>String(order.invoiceImage||'').trim().length>0).length};
   orderCounts.withoutInvoice=orderCounts.total-orderCounts.withInvoice;
-  const filtered=matchedOrders.filter(scfDebtOrderHasInvoice);
+  const filtered=matchedOrders;
   const productMap=new Map();
   const debtProductKey=line=>String(line.productId||line.productName||(products||[]).find(item=>String(item.id||'')===String(line.productId||''))?.name||'unknown');
   const differenceOrdersByProduct=new Map();
@@ -2425,7 +2426,7 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
       const key=debtProductKey(line);
       const entry=quantities.get(key)||{order,invoice:0,delivered:0,notes:[],lines:[]};
       entry.lines.push({line,index:(order.lines||[]).indexOf(line)});
-      entry.invoice+=numFmt(line.qtyInvoice)||0;
+      entry.invoice+=invoiceQty(line,order);
       entry.delivered+=deliveredQty(line,order);
       const note=String(line.note||'').trim();
       if(note&&!entry.notes.includes(note))entry.notes.push(note);
@@ -2441,14 +2442,14 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
     const product=(products||[]).find(item=>String(item.id||'')===String(line.productId||''));
     const key=String(line.productId||line.productName||product?.name||'unknown');
     const current=productMap.get(key)||{key,name:line.productName||product?.name||'Chưa xác định',unit:line.unit||product?.unit||'',invoice:0,delivered:0,orders:0};
-    current.invoice+=numFmt(line.qtyInvoice)||0;
+    current.invoice+=invoiceQty(line,order);
     current.delivered+=deliveredQty(line,order);
     current.orders+=1;productMap.set(key,current);
   }));
   const productRows=[...productMap.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi'));
   const differenceProduct=productRows.find(row=>row.key===debtDifferenceProductKey);
   const differenceOrders=differenceOrdersByProduct.get(debtDifferenceProductKey)||[];
-  const totals=filtered.reduce((sum,order)=>{sum.invoice+=visibleLines(order).reduce((value,line)=>value+(numFmt(line.qtyInvoice)||0),0);sum.delivered+=visibleLines(order).reduce((value,line)=>value+deliveredQty(line,order),0);return sum;},{invoice:0,delivered:0});
+  const totals=filtered.reduce((sum,order)=>{sum.invoice+=visibleLines(order).reduce((value,line)=>value+(invoiceQty(line,order)),0);sum.delivered+=visibleLines(order).reduce((value,line)=>value+deliveredQty(line,order),0);return sum;},{invoice:0,delivered:0});
   const invoiceRows=filtered.flatMap(order=>{
     const lines=visibleLines(order);
     return lines.map((line,lineIndex)=>({order,line,lineIndex}));
@@ -2488,7 +2489,7 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
     const pricedProducts=new Map();
     let totalAmount=0,missingPrices=0;
     filtered.forEach(order=>visibleLines(order).forEach(line=>{
-      const price=scfDebtSalePrice(order,line,products,quotes,customers),quantity=numFmt(line.qtyInvoice)||0;
+      const price=scfDebtSalePrice(order,line,products,quotes,customers),quantity=invoiceQty(line,order);
       const amount=price===null?null:quantity*price;
       if(price===null)missingPrices++;
       totalAmount+=amount||0;
@@ -2498,15 +2499,15 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
     }));
     overview.push(['TỔNG THÀNH TIỀN',totalAmount],['Dòng chưa có giá bán',missingPrices],['Đơn cần kiểm tra khách hàng/địa điểm (chưa tính công nợ)',unassignedDebtOrders.length]);
     const productsData=[['STT','Sản phẩm','ĐVT','SL hóa đơn','Giá','Thành tiền'],...[...pricedProducts.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi')).map((row,index)=>[index+1,row.name,row.unit,row.quantity,row.price,row.amount])];
-    const ordersData=[['Lái xe','Ngày giao','Địa điểm','Sản phẩm','ĐVT','SL hóa đơn','Giá','Thành tiền','Giờ giao','Ảnh hóa đơn','Chú ý']];
+    const ordersData=[['Lái xe','Ngày giao','Địa điểm','Sản phẩm','ĐVT','SL hóa đơn','Giá','Thành tiền','Giờ giao','Ảnh hóa đơn','Chú ý','Trạng thái']];
     filtered.forEach(order=>visibleLines(order).forEach(line=>ordersData.push([
       driverFor(order),scfDebtFormatDate(order.deliveryDate||order.date)||'',order.pointName||order.address||'',line.productName||'',line.unit||'',
-      numFmt(line.qtyInvoice)||0,scfDebtSalePrice(order,line,products,quotes,customers),scfDebtSalePrice(order,line,products,quotes,customers)===null?null:(numFmt(line.qtyInvoice)||0)*scfDebtSalePrice(order,line,products,quotes,customers),order.deliveryTime||'',invoiceLinks.get(String(order.invoiceImage||'').trim())||'',String(line.note||'')
+      invoiceQty(line,order),scfDebtSalePrice(order,line,products,quotes,customers),scfDebtSalePrice(order,line,products,quotes,customers)===null?null:(invoiceQty(line,order))*scfDebtSalePrice(order,line,products,quotes,customers),order.deliveryTime||'',invoiceLinks.get(String(order.invoiceImage||'').trim())||'',String(line.note||''),order.status==='cancelled'?'Đã hủy':order.status||''
     ])));
     const productTotalRow=productsData.length;
     const orderTotalRow=ordersData.length;
     productsData.push(['','TỔNG','',totals.invoice,'',totalAmount]);
-    ordersData.push(['TỔNG','','','','',totals.invoice,'',totalAmount,'','','']);
+    ordersData.push(['TỔNG','','','','',totals.invoice,'',totalAmount,'','','','']);
     const wb=XLSX.utils.book_new();
     [['Tong quan',overview],['Tong hop san pham',productsData],['Hoa don da nhap',ordersData]].forEach(([name,data])=>{
       const ws=XLSX.utils.aoa_to_sheet(data);ws['!cols']=data[0].map((_,column)=>({wch:Math.min(45,Math.max(12,...data.map(row=>String(row[column]??'').length+2)))}));
@@ -2573,7 +2574,7 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
       h('b',null,'Có '+unassignedDebtOrders.length+' đơn có địa điểm chưa xác định được khách hàng trong thời gian giao hoặc đã ngừng bán. Các đơn này chưa tính vào công nợ.'),
       h('div',{className:'tw',style:{marginTop:8}},h('table',null,
         h('thead',null,h('tr',null,...['Ngày giao','Giờ giao','Địa điểm','Khách hàng trên đơn','SL hóa đơn'].map(label=>h('th',{key:label},label)))),
-        h('tbody',null,unassignedDebtOrders.map(order=>h('tr',{key:order.id},h('td',null,scfDebtFormatDate(order.deliveryDate||order.date)),h('td',null,order.deliveryTime||'—'),h('td',null,order.pointName||order.address||'Chưa có địa điểm'),h('td',null,order.customer||order.customerName||'Chưa có khách hàng'),h('td',null,qty((order.lines||[]).reduce((sum,line)=>sum+(numFmt(line.qtyInvoice)||0),0))))))
+        h('tbody',null,unassignedDebtOrders.map(order=>h('tr',{key:order.id},h('td',null,scfDebtFormatDate(order.deliveryDate||order.date)),h('td',null,order.deliveryTime||'—'),h('td',null,order.pointName||order.address||'Chưa có địa điểm'),h('td',null,order.customer||order.customerName||'Chưa có khách hàng'),h('td',null,qty((order.lines||[]).reduce((sum,line)=>sum+(invoiceQty(line,order)),0))))))
       ))
     ),
     h('div',{className:'g3',style:{marginBottom:14}},
@@ -2598,7 +2599,7 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
         h('div',{className:'tw'},h('table',{id:'debt-difference-invoice-table'},
           h('thead',null,h('tr',null,...['Lái xe','Ngày giao','Khách hàng','Địa điểm','Sản phẩm','ĐVT','SL hóa đơn','SL đã giao','Chênh lệch','Giờ giao','Chú ý',...(canShowInlineInvoices&&showDifferenceInvoices?['Ảnh HĐ']:[])].map(label=>h('th',{key:label},label)))),
           h('tbody',null,differenceOrders.flatMap(({order})=>(order.lines||[]).map((line,lineIndex)=>{
-            const invoice=numFmt(line.qtyInvoice)||0,delivered=deliveredQty(line,order);
+            const invoice=invoiceQty(line,order),delivered=deliveredQty(line,order);
             return h('tr',{key:String(order.id)+'-'+(line.id||lineIndex)},
               h('td',null,driverFor(order)),h('td',null,scfDebtFormatDate(order.deliveryDate||order.date)),h('td',null,order.customer||order.customerName||'—'),h('td',null,order.pointName||order.address||'—'),
               h('td',null,line.productName||'—'),h('td',null,line.unit||'—'),
@@ -2613,23 +2614,23 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
       )
     ),
     h('div',{className:'card'},
-      h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:10}},'Các hóa đơn đã nhập'),
+      h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:10}},'Các đơn hàng và hóa đơn (gồm đơn hủy, đơn số lượng 0)'),
       h('div',{className:'tw'},h('table',{className:'debt-invoice-table',style:{'--debt-invoice-image-width':showInlineInvoices?({small:'205px',medium:'280px',large:'420px'}[invoiceSize]):'90px'}},
         h('colgroup',null,...['driver','date','point','product','qty','qty','time','image','note'].map((kind,index)=>h('col',{key:index,className:'debt-invoice-col-'+kind}))),
         h('thead',null,h('tr',null,...['Lái xe','Ngày giao','Địa điểm','Sản phẩm','SL hóa đơn','SL đã giao','Giờ giao','Ảnh HĐ','Chú ý'].map(label=>h('th',{key:label},label)))),
         h('tbody',null,invoiceRows.length?invoiceRows.map(({order,line,lineIndex})=>{
-          const invoice=line?(numFmt(line.qtyInvoice)||0):0;
+          const invoice=line?(invoiceQty(line,order)):0;
           const delivered=line?deliveredQty(line,order):0;
           return h('tr',{key:(order.id||order.orderId||'order')+'-'+(line?.id||lineIndex)},
             h('td',null,h('b',null,driverFor(order))),
             h('td',null,scfDebtFormatDate(order.deliveryDate||order.date)||'—'),
             h('td',null,order.pointName||order.address||'—'),
-            h('td',null,line?.productName||'—'),
+            h('td',null,line?.productName||'—',order.status==='cancelled'&&h('div',{style:{color:'#a32d2d',fontWeight:700}},'Đã hủy')),
             h('td',{className:'debt-invoice-qty'},qty(invoice)),
             h('td',{className:'debt-invoice-qty'},h('b',{style:{color:'var(--pri)'}},qty(delivered))),
             h('td',null,h('b',null,order.deliveryTime||'—')),
             // One image cell spans this order's visible product lines.
-            lineIndex===0&&h('td',{rowSpan:visibleLines(order).length,style:{textAlign:'center'}},order.invoiceImage
+            lineIndex===0&&h('td',{rowSpan:Math.max(1,visibleLines(order).length),style:{textAlign:'center'}},order.invoiceImage
               ?showInlineInvoices?h(TripInvoicePreview,{key:order.invoiceImage,src:order.invoiceImage,orderId:order.id,size:invoiceSize,landscape:true,label:'Hóa đơn '+(order.pointName||order.address||'')+' · '+(scfDebtFormatDate(order.deliveryDate||order.date)||'')})
                 :h('button',{type:'button',className:'bi',title:'Xem ảnh hóa đơn',onClick:()=>window.open(order.invoiceImage,'_blank')},h('i',{className:'ti ti-photo-check',style:{fontSize:16,color:'var(--pri)'}}))
               :'—'),

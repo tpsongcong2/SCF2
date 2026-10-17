@@ -2455,8 +2455,10 @@ function DeliveryMobileOrderCard({order,rowKey,trip,tripMode,preferredTripDate,p
       h('div',{className:'delivery-card-dates'},field('Ngày giao',mobileDeliveryDate(order.deliveryDate)),field('Giờ giao',order.deliveryTime)),
       h('div',{className:'delivery-card-products'},(order.lines||[]).length?(order.lines||[]).map((line,index)=>h('div',{key:line.id||index,className:'delivery-card-product'},
         h('div',{className:'delivery-card-product-name'},(index+1)+'. '+(line.productName||'Sản phẩm'),line.unit&&h('span',null,' ('+line.unit+')')),
-        h('div',{className:'delivery-card-quantities'},... [['qtyProd','SL đặt'],['qtyInvoice','SL HĐ'],['qtyDelivered','SL giao']].map(([key,label])=>key==='qtyDelivered'?field(label,mobileDeliveryQty(line,key).toLocaleString('vi-VN',{maximumFractionDigits:2})):h('div',{key,className:'delivery-card-field'},h('span',null,label),h(DeliveryQuantityCell,{order,lineIndex:index,field:key,canEdit:canEdit&&!window.__SCF_ACCESS_CONTEXT?.readOnly,onSave:onSaveQuantity}))))
-      )):h('div',{className:'delivery-card-empty'},'Chưa có sản phẩm'))
+        h('div',{className:'delivery-card-quantities'},... [['qtyProd','SL đặt'],['qtyInvoice','SL HĐ'],['qtyDelivered','SL giao']].map(([key,label])=>key==='qtyDelivered'?field(label,mobileDeliveryQty(line,key).toLocaleString('vi-VN',{maximumFractionDigits:2})):h('div',{key,className:'delivery-card-field'},h('span',null,label),h(DeliveryQuantityCell,{order,lineIndex:index,field:key,canEdit:canEdit&&!window.__SCF_ACCESS_CONTEXT?.readOnly,onSave:onSaveQuantity})))),
+        h('div',{className:'delivery-card-field',style:{marginTop:8,whiteSpace:'pre-wrap'}},h('span',null,'Chú ý'),h('b',null,String(line.note||'').trim()||'—'))
+      )):h('div',{className:'delivery-card-empty'},'Chưa có sản phẩm')),
+      String(order.note||'').trim()&&h('div',{className:'delivery-card-field',style:{marginTop:10,whiteSpace:'pre-wrap'}},h('span',null,'Chú ý đơn hàng'),h('b',null,order.note))
     ),
     h('section',{className:'delivery-card-secondary'},toggle('trip','2. Thông tin chuyến giao',tripOpen,setTripOpen),
       tripOpen&&h('div',{id:'delivery-trip-'+sectionId,className:'delivery-card-section-body'},
