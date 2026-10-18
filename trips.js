@@ -1780,6 +1780,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
   };
   const canEditQtyForTrip=trip=>{
     if(!canEnterActualQty)return false;
+    if(isAdmin)return !!trip&&trip.status!=='cancelled';
     const limitDays=tripActualQtyLimitDays(currentUser);
     const withinLimit=limitDays===0||tripAgeDays(trip)<limitDays;
     // Quyền nhập thực giao là quyền độc lập. Chuyến tự động đã

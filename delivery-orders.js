@@ -2280,8 +2280,8 @@ function mobileDeliveryQty(line,field){
 function deliveryMatchesTripGroup(trip,group){
   return !group||group==='all'||!!trip&&scfTripImageGroup(trip)===group;
 }
-function mergeDeliveryLineQuantity(live,base,lineIndex,field,raw){
-  const label={qtyProd:'SL đặt',qtyInvoice:'SL HĐ'}[field];
+function mergeDeliveryLineQuantity(live,base,lineIndex,field,raw,allowDelivered=false){
+  const label={qtyProd:'SL đặt',qtyInvoice:'SL HĐ',...(allowDelivered?{qtyDelivered:'SL giao'}:{})}[field];
   if(!label)throw new Error('Không được sửa cột số lượng này.');
   const input=String(raw??'').trim().replace(',','.');
   if(!/^\d+(?:\.\d+)?$/.test(input)||!Number.isFinite(Number(input)))throw new Error(label+' phải là số từ 0 trở lên.');
@@ -2333,7 +2333,7 @@ function deliveryQuantityIcon(kind){
 }
 function DeliveryQuantityCell({order,lineIndex,field,canEdit,onSave}){
   const [editing,setEditing]=useState(null),[value,setValue]=useState(''),[error,setError]=useState('');
-  const label=field==='qtyProd'?'SL đặt':'SL HĐ',line=order.lines?.[lineIndex];
+  const label=field==='qtyProd'?'SL đặt':field==='qtyDelivered'?'SL giao':'SL HĐ',line=order.lines?.[lineIndex];
   const title=label+' '+(line?.productName||'')+' · '+(order.pointName||order.id);
   const close=()=>{setEditing(null);setError('');};
   const save=()=>{try{onSave(editing,lineIndex,field,value);close();}catch(e){setError(e.message||'Chưa lưu được số lượng.');}};
@@ -2439,7 +2439,7 @@ function scfMergeMobileProduction(live,base,index,plan,field,value,livePlans,aut
   return {...live,...(live.prodShiftAssignMode==='manual'?{prodShiftAssignMode:'auto',prodShiftId:'',prodDate:'',prodTime:'',labelDate:'',labelTime:''}:{}),lines:lines.map((line,i)=>i===target?next:line)};
 }
 
-function DeliveryMobileOrderCard({order,rowKey,trip,tripMode,preferredTripDate,preferredTripShiftName,plans,firstPlan,canEdit,onEdit,onSaveQuantity,onSaveProduction,productionLocked,renderTripControls,selection}){
+function DeliveryMobileOrderCard({order,rowKey,trip,tripMode,preferredTripDate,preferredTripShiftName,plans,firstPlan,canEdit,onEdit,onSaveQuantity,onSaveProduction,productionLocked,renderTripControls,selection,canEditDelivered=false}){
   const[tripOpen,setTripOpen]=useState(false),[productionOpen,setProductionOpen]=useState(false);
   const field=(label,value)=>h('div',{className:'delivery-card-field'},h('span',null,label),h('b',null,value||'—'));
   const timingRows=plans?.length?plans:(firstPlan?[firstPlan]:[{}]);
@@ -2455,7 +2455,7 @@ function DeliveryMobileOrderCard({order,rowKey,trip,tripMode,preferredTripDate,p
       h('div',{className:'delivery-card-dates'},field('Ngày giao',mobileDeliveryDate(order.deliveryDate)),field('Giờ giao',order.deliveryTime)),
       h('div',{className:'delivery-card-products'},(order.lines||[]).length?(order.lines||[]).map((line,index)=>h('div',{key:line.id||index,className:'delivery-card-product'},
         h('div',{className:'delivery-card-product-name'},(index+1)+'. '+(line.productName||'Sản phẩm'),line.unit&&h('span',null,' ('+line.unit+')')),
-        h('div',{className:'delivery-card-quantities'},... [['qtyProd','SL đặt'],['qtyInvoice','SL HĐ'],['qtyDelivered','SL giao']].map(([key,label])=>key==='qtyDelivered'?field(label,mobileDeliveryQty(line,key).toLocaleString('vi-VN',{maximumFractionDigits:2})):h('div',{key,className:'delivery-card-field'},h('span',null,label),h(DeliveryQuantityCell,{order,lineIndex:index,field:key,canEdit:canEdit&&!window.__SCF_ACCESS_CONTEXT?.readOnly,onSave:onSaveQuantity})))),
+        h('div',{className:'delivery-card-quantities'},... [['qtyProd','SL đặt'],['qtyInvoice','SL HĐ'],['qtyDelivered','SL giao']].map(([key,label])=>key==='qtyDelivered'&&!canEditDelivered?field(label,mobileDeliveryQty(line,key).toLocaleString('vi-VN',{maximumFractionDigits:2})):h('div',{key,className:'delivery-card-field'},h('span',null,label),h(DeliveryQuantityCell,{order,lineIndex:index,field:key,canEdit:canEdit&&!window.__SCF_ACCESS_CONTEXT?.readOnly,onSave:onSaveQuantity})))),
         h('div',{className:'delivery-card-field',style:{marginTop:8,whiteSpace:'pre-wrap'}},h('span',null,'Chú ý'),h('b',null,String(line.note||'').trim()||'—'))
       )):h('div',{className:'delivery-card-empty'},'Chưa có sản phẩm')),
       String(order.note||'').trim()&&h('div',{className:'delivery-card-field',style:{marginTop:10,whiteSpace:'pre-wrap'}},h('span',null,'Chú ý đơn hàng'),h('b',null,order.note))
@@ -2641,7 +2641,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   },[]);
   const canEditMobileOrder=canWrite(currentUser?.role,'delivery',currentUser?.permLevels);
   const canChangeTripDriver=canEditMobileOrder&&canTripAction(currentUser,'manage');
-  const isAdmin=String(currentUser?.role||'').trim().toLowerCase()==='admin';
+  const isAdmin=['admin','administrator'].includes(String(currentUser?.role||'').trim().toLowerCase());
   const currentDeptKey=normalizeLookupText(currentUser?.dept||'');
   const isAccounting=currentDeptKey.includes('ke toan');
   const canWithdrawStartedOrder=isAdmin||isAccounting;
@@ -2719,15 +2719,18 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const saveLineQuantity=(base,lineIndex,field,value)=>{
     if(!canEditMobileOrder||window.__SCF_ACCESS_CONTEXT?.readOnly)throw new Error('Tài khoản chỉ có quyền xem đơn hàng.');
     let failure=null,updated=null;
-    const stamp=fmtDT(),audit=historyEntry('Sửa nhanh số lượng');
+    const stamp=fmtDT(),audit=historyEntry(field==='qtyDelivered'?'Sửa số lượng đã giao':'Sửa nhanh số lượng');
     // Commit one field against the latest state. No trip reassignment or full-list sync.
     ReactDOM.flushSync(()=>setOrders(previous=>{
       try{
         const matches=previous.filter(order=>String(order.id)===String(base.id));
         if(matches.length>1)throw new Error('Mã đơn bị trùng. Cần kiểm tra đơn trước khi sửa nhanh.');
-        const live=matches[0],result=mergeDeliveryLineQuantity(live,base,lineIndex,field,value);
+        const live=matches[0];
+        const allowDelivered=field==='qtyDelivered'&&canMobileEditDelivered(live);
+        if(field==='qtyDelivered'&&!allowDelivered)throw new Error('Tài khoản chưa có quyền sửa SL giao hoặc đơn đã quá thời hạn được sửa.');
+        const result=mergeDeliveryLineQuantity(live,base,lineIndex,field,value,allowDelivered);
         if(!result.changes.length)return previous;
-        updated={...result.order,updatedAt:stamp,updatedBy:currentUser?.name||'',orderHistory:[...(live.orderHistory||[]),{...audit,changes:result.changes}]};
+        updated={...result.order,...(field==='qtyDelivered'?{lines:result.order.lines.map((line,index)=>(base.lines?.[lineIndex]?.id?String(line.id)===String(base.lines[lineIndex].id):index===lineIndex)?{...line,deliveredAt:stamp,deliveredBy:currentUser?.name||''}:line)}:{}),updatedAt:stamp,updatedBy:currentUser?.name||'',orderHistory:[...(live.orderHistory||[]),{...audit,changes:result.changes}]};
         return previous.map(order=>order===live?updated:order);
       }catch(error){failure=error;return previous;}
     }));
@@ -2943,8 +2946,9 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const dispatchedTrip=trip=>!!trip?.driverDispatchedAt||startedTrip(trip);
   const closedTrip=trip=>['completion_pending','completed'].includes(trip?.status);
   const canMobileEditDelivered=order=>{
+    if(['admin','administrator'].includes(String(currentUser?.role||'').trim().toLowerCase()))return true;
     const trip=orderTrip(order),limitDays=tripActualQtyLimitDays(currentUser);
-    if(!canTripAction(currentUser,'actualQty')||closedTrip(trip)||trip?.status==='cancelled'||['done','cancelled'].includes(order?.status))return false;
+    if(!canTripAction(currentUser,'orderActualQty')||closedTrip(trip)||trip?.status==='cancelled'||['done','cancelled'].includes(order?.status))return false;
     const isDriver=currentUser?.role==='driver'||employeeHasDepartment(currentUser,'Lái xe');
     if(isDriver&&(!trip||!(String(trip.driverId||'')===String(currentUser?.id||'')||normalizeLookupText(trip.driverName)===normalizeLookupText(currentUser?.name))))return false;
     const iso=toIsoDate(trip?.deliveryDate||order?.deliveryDate),now=new Date(),today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
@@ -4177,7 +4181,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                       h('div',{className:'delivery-product-name'},(pi+1)+'. '+row.productName)
                     ),
                     ...['qtyInvoice','qtyProd'].map(field=>h('div',{key:field,className:(field==='qtyProd'?'delivery-order-qty':'delivery-invoice-qty')+' delivery-product-qty-value'},h(DeliveryQuantityCell,{order:o,lineIndex:row.line?.id?(o.lines||[]).findIndex(line=>String(line.id)===String(row.line.id)):pi,field,canEdit:canEditMobileOrder&&!window.__SCF_ACCESS_CONTEXT?.readOnly,onSave:saveLineQuantity}))),
-                    h('div',{className:'delivery-delivered-qty delivery-product-qty-value'},(row.line?.qtyDelivered!==undefined&&row.line?.qtyDelivered!==null&&row.line?.qtyDelivered!==''?numFmt(row.line.qtyDelivered):numFmt(row.line?.qtyProd??row.line?.qty??row.line?.quantity??row.line?.qtyInvoice??0)).toLocaleString('vi-VN',{minimumFractionDigits:0,maximumFractionDigits:2}))
+                    canMobileEditDelivered(o)?h(DeliveryQuantityCell,{order:o,lineIndex:row.line?.id?(o.lines||[]).findIndex(line=>String(line.id)===String(row.line.id)):pi,field:'qtyDelivered',canEdit:canEditMobileOrder&&!window.__SCF_ACCESS_CONTEXT?.readOnly,onSave:saveLineQuantity}):h('div',{className:'delivery-delivered-qty delivery-product-qty-value'},(row.line?.qtyDelivered!==undefined&&row.line?.qtyDelivered!==null&&row.line?.qtyDelivered!==''?numFmt(row.line.qtyDelivered):numFmt(row.line?.qtyProd??row.line?.qty??row.line?.quantity??row.line?.qtyInvoice??0)).toLocaleString('vi-VN',{minimumFractionDigits:0,maximumFractionDigits:2}))
                   )
                   :h('span',{style:{fontSize:11,color:'var(--tx2)'}},'—')
               )
@@ -4228,7 +4232,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         const assignmentTitle=assignmentClosed?'Chuyến đã chờ duyệt/hoàn thành':assignmentLocked?'Bạn không có quyền chuyển đơn này':'';
         const {plans,firstPlan}=productionDisplayForOrder(ctx);
         return h(DeliveryMobileOrderCard,{key:'mod_'+o._rowKey,rowKey:o._rowKey,order:ctx,trip:displayTrip,tripMode,preferredTripDate,preferredTripShiftName,plans,firstPlan,
-          canEdit:canEditMobileOrder,onEdit:()=>setMobileEdit(cleanDeliveryOrderRecord(o)),onSaveQuantity:saveLineQuantity,onSaveProduction:saveMobileProduction,productionLocked:assignmentLocked||window.__SCF_ACCESS_CONTEXT?.readOnly,
+          canEditDelivered:canMobileEditDelivered(o),canEdit:canEditMobileOrder,onEdit:()=>setMobileEdit(cleanDeliveryOrderRecord(o)),onSaveQuantity:saveLineQuantity,onSaveProduction:saveMobileProduction,productionLocked:assignmentLocked||window.__SCF_ACCESS_CONTEXT?.readOnly,
           selection:isAdmin&&h('input',{type:'checkbox',checked:bulkSelected.has(o._rowKey),onChange:()=>toggleBulkOrder(o),'aria-label':'Chọn đơn '+(ctx.pointName||'')+' '+(ctx.deliveryTime||'')}),
           renderTripControls:()=>{
             if(!canEditMobileOrder)return null;

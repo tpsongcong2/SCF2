@@ -194,7 +194,8 @@ const SCF_TRIP_PERMISSION_OPTIONS=[
   ['editOrders','Sửa đơn hàng trong chuyến'],
   ['delete','Xóa chuyến'],
   ['dispatch','Giao / thu hồi chuyến của lái xe'],
-  ['actualQty','Nhập số lượng thực giao'],
+  ['orderActualQty','Nhập / sửa SL thực giao ở Đơn hàng'],
+  ['actualQty','Nhập / sửa SL thực giao ở Chuyến giao hàng'],
   ['invoiceQty','Sửa SL hóa đơn trong cập nhật chuyến'],
   ['driverWorkflow','Lái xe nhận chuyến, tải HĐ đơn và báo hoàn thành'],
   ['summaryInvoice','Tải hóa đơn tổng chuyến'],
@@ -203,8 +204,8 @@ const SCF_TRIP_PERMISSION_OPTIONS=[
 function defaultTripPermissions(user={}){
   const role=String(user?.role||'').trim().toLowerCase();
   const isAdmin=['admin','administrator'].includes(role),isDriver=role==='driver'||employeeHasDepartment(user,'Lái xe'),isAccounting=employeeDepartmentIncludes(user,'Kế toán');
-  if(isAdmin)return{manage:true,editOrders:true,delete:true,dispatch:true,actualQty:true,invoiceQty:true,driverWorkflow:true,summaryInvoice:true,review:true};
-  if(isDriver)return{manage:false,editOrders:false,delete:false,dispatch:false,actualQty:true,invoiceQty:isAccounting,driverWorkflow:true,summaryInvoice:true,review:false};
+  if(isAdmin)return{manage:true,editOrders:true,delete:true,dispatch:true,actualQty:true,orderActualQty:true,invoiceQty:true,driverWorkflow:true,summaryInvoice:true,review:true};
+  if(isDriver)return{manage:false,editOrders:false,delete:false,dispatch:false,actualQty:true,orderActualQty:true,invoiceQty:isAccounting,driverWorkflow:true,summaryInvoice:true,review:false};
   const pageWrite=canWrite(role,'trips',user?.permLevels),pageDelete=canDel(role,'trips',user?.permLevels);
   return{
     manage:pageWrite,
@@ -212,6 +213,7 @@ function defaultTripPermissions(user={}){
     delete:pageDelete,
     dispatch:pageWrite&&(isAccounting||role==='manager'),
     actualQty:false,
+    orderActualQty:false,
     invoiceQty:isAccounting,
     driverWorkflow:false,
     summaryInvoice:pageWrite&&isAccounting,
@@ -221,15 +223,16 @@ function defaultTripPermissions(user={}){
 function normalizedTripPermissions(user={}){
   const defaults=defaultTripPermissions(user),configured=user?.tripPermissions;
   if(!configured||typeof configured!=='object')return defaults;
-  return Object.fromEntries(SCF_TRIP_PERMISSION_OPTIONS.map(([key])=>[key,Object.prototype.hasOwnProperty.call(configured,key)?configured[key]===true:defaults[key]]));
+  return Object.fromEntries(SCF_TRIP_PERMISSION_OPTIONS.map(([key])=>[key,Object.prototype.hasOwnProperty.call(configured,key)?configured[key]===true:(key==='orderActualQty'&&Object.prototype.hasOwnProperty.call(configured,'actualQty')?configured.actualQty===true:defaults[key])]));
 }
 function canTripAction(user,action){
   if(['admin','administrator'].includes(String(user?.role||'').trim().toLowerCase()))return true;
-  if(!canAccess(user?.role,'trips',user?.permissions,user?.dept))return false;
+  if(!canAccess(user?.role,action==='orderActualQty'?'delivery':'trips',user?.permissions,user?.departments?.length?user.departments:user?.dept))return false;
   return normalizedTripPermissions(user)[action]===true;
 }
 // 0 = không giới hạn; tài khoản cũ chưa cấu hình giữ quy tắc khóa từ ngày thứ 2.
 function tripActualQtyLimitDays(user){
+  if(['admin','administrator'].includes(String(user?.role||'').trim().toLowerCase()))return 0;
   const raw=user?.tripActualQtyLimitDays;
   if(raw===undefined||raw===null||raw==='')return 2;
   const days=Number(raw);
