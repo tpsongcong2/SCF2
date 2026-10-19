@@ -328,7 +328,7 @@ const scfRemoteVersions=new Map();
 const scfRemoteSnapshots=new Map();
 function syncSnapshot(value){try{return JSON.parse(JSON.stringify(value))}catch{return value}}
 function scfPublishMergedCollection(key,value,requested,writeToken){
-  if(!Array.isArray(value)||readSyncQueue()[key]?.updatedAt!==writeToken)return;
+  if((!Array.isArray(value)&&!(key==='scf_prod_actuals'&&value&&typeof value==='object'))||readSyncQueue()[key]?.updatedAt!==writeToken)return;
   if(JSON.stringify(value)===JSON.stringify(requested))return;
   scfLocalWrites.set(key,{value});
   window.dispatchEvent(new CustomEvent('scf-collection-reconciled',{detail:{key,value,writeToken}}));
@@ -643,9 +643,10 @@ async function performDbSet(key,val,queuedAt='',mode=''){
       if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
       scfVerifyOrderTripSave(key,saved,val,patches);
       scfVerifyTripDriverSave(key,saved,val);
-      const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(val);
-      if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(val));
-      scfRemoteVersions.set(key,merged||patches?'':String(saved?.updatedAt||''));
+      const hasSavedValue=Array.isArray(saved?.value)||(key==='scf_prod_actuals'&&saved?.value&&typeof saved.value==='object');
+      const merged=hasSavedValue&&JSON.stringify(saved.value)!==JSON.stringify(val);
+      if(hasSavedValue)scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(val));
+      scfRemoteVersions.set(key,(merged&&key!=='scf_prod_actuals')||patches?'':String(saved?.updatedAt||''));
       scfPublishMergedCollection(key,saved?.value,val,queuedAt);
       removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:queuedAt};setSyncState('synced');
       if(merged)setTimeout(()=>window.scfSyncNow?.(),100);return true;
@@ -779,9 +780,10 @@ async function runPendingWrites(){
         if(readSyncQueue()[key]?.updatedAt!==item.updatedAt)return false;
         scfVerifyOrderTripSave(key,saved,item.value,patches);
         scfVerifyTripDriverSave(key,saved,item.value);
-        const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(item.value);
-        if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(item.value));
-        scfRemoteVersions.set(key,merged||patches?'':String(saved?.updatedAt||''));
+        const hasSavedValue=Array.isArray(saved?.value)||(key==='scf_prod_actuals'&&saved?.value&&typeof saved.value==='object');
+        const merged=hasSavedValue&&JSON.stringify(saved.value)!==JSON.stringify(item.value);
+        if(hasSavedValue)scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(item.value));
+        scfRemoteVersions.set(key,(merged&&key!=='scf_prod_actuals')||patches?'':String(saved?.updatedAt||''));
         scfPublishMergedCollection(key,saved?.value,item.value,item.updatedAt);
         if(merged)setTimeout(()=>window.scfSyncNow?.(),100);
       }

@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V579';
+const SCF_BUILD_VERSION='V581';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_process:'Tài liệu ATTP · Quy trình',
@@ -482,7 +482,9 @@ function App(){
   useEffect(()=>{
     const receive=event=>{
       const {key,value,writeToken}=event.detail||{};
-      if(readSyncQueue()[key]?.updatedAt!==writeToken||!Array.isArray(value))return;
+      if(readSyncQueue()[key]?.updatedAt!==writeToken)return;
+      if(key==='scf_prod_actuals'&&value&&typeof value==='object'&&!Array.isArray(value)){_spa(value);return;}
+      if(!Array.isArray(value))return;
       // Apply the server's merged record through raw setters, without queuing
       // another write or overwriting a newer local edit.
       if(key==='scf_trips')_st(value);
