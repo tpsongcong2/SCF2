@@ -41,14 +41,10 @@ function normalizeOrderForStorage(order){
   const raw=String(order.deliveryTime??'').trim();
   const deliveryTime=/^\d{1,2}:\d{2}$/.test(raw)?raw:normalizeTimeInput(raw);
   const prodShiftAssignMode=order.prodShiftAssignMode==='manual'?'manual':'auto';
-  if(order.deliveryTime===deliveryTime&&order.prodShiftAssignMode===prodShiftAssignMode)return order;
   return {...order,deliveryTime,prodShiftAssignMode};
 }
 function normalizeOrdersForStorage(list){
-  if(!Array.isArray(list))return list;
-  let changed=false;
-  const next=list.map(order=>{const normalized=normalizeOrderForStorage(order);if(normalized!==order)changed=true;return normalized;});
-  return changed?next:list;
+  return Array.isArray(list)?list.map(normalizeOrderForStorage):list;
 }
 function ordersNeedTimeNormalization(list){
   return Array.isArray(list)&&list.some(o=>{
@@ -78,22 +74,10 @@ function getOrderPointIndex(customers){
     const cName=normalizeLookupText(c.name||'');
     (c.points||[]).forEach(pt=>{
       const row={c,pt,cName,pName:normalizeLookupText(pt.name||''),pAddress:normalizeLookupText(pt.address||'')};all.push(row);
-      (pt.mergedPointIds||[]).forEach(id=>add(byPointId,String(id).trim(),row));
-      (pt.nameAliases||[]).forEach(name=>add(byPointName,normalizeLookupText(name),row));
       add(byPointId,String(pt.id||'').trim(),row);add(byPointName,row.pName,row);add(byAddress,row.pAddress,row);add(byCustomerId,String(c.id||'').trim(),row);add(byCustomerName,cName,row);
     });
   });
   const index={all,byPointId,byPointName,byAddress,byCustomerId,byCustomerName};ORDER_POINT_INDEX_CACHE.set(customers,index);return index;
-}
-function scfPointCoversOrder(point,order){
-  const text=String(order?.deliveryDate||order?.date||'');
-  const vn=text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/),iso=text.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if(!vn&&!iso)return !point.customerAddedAt&&!point.customerStoppedAt;
-  const day=vn?new Date(+vn[3],+vn[2]-1,+vn[1]):new Date(+iso[1],+iso[2]-1,+iso[3]);
-  const time=String(order.deliveryTime||'').match(/^(\d{1,2}):(\d{2})/);
-  if(time)day.setHours(+time[1],+time[2],0,0);
-  const start=point.customerAddedAt?new Date(point.customerAddedAt):null,end=point.customerStoppedAt?new Date(point.customerStoppedAt):null;
-  return (!start||!Number.isFinite(start.getTime())||day>=start)&&(!end||!Number.isFinite(end.getTime())||day<end);
 }
 function findOrderPointMatch(order,customers){
   if(!order||!(customers&&customers.length))return null;
@@ -108,23 +92,19 @@ function findOrderPointMatch(order,customers){
   include(index.byPointId.get(pointId));include(index.byPointName.get(pointName));include(index.byAddress.get(address));
   if(!candidateSet.size){include(index.byCustomerId.get(customerId));include(index.byCustomerName.get(customerName));}
   const candidates=candidateSet.size?[...candidateSet]:index.all;
-  let best=null,bestScore=-1,ambiguous=false;
+  let best=null,bestScore=-1;
   candidates.forEach(row=>{
     const {c,pt,cName,pName,pAddress}=row;
-    if(customerId&&String(c.id)!==customerId)return;
-    if(!customerId&&customerName&&cName!==customerName)return;
-    if(!scfPointCoversOrder(pt,order))return;
     const customerScore=customerId&&String(c.id||'')===customerId?1000:(customerName&&cName===customerName?700:(customerName&&(cName.includes(customerName)||customerName.includes(cName))?350:0));
     let score=customerScore,hit=false;
-    if(pointId&&(String(pt.id||'')===pointId||(pt.mergedPointIds||[]).some(id=>String(id)===pointId))){score+=5000;hit=true;}
-    if(pointName&&(pName===pointName||(pt.nameAliases||[]).some(name=>normalizeLookupText(name)===pointName))){score+=800;hit=true;}
+    if(pointId&&String(pt.id||'')===pointId){score+=5000;hit=true;}
+    if(pointName&&pName===pointName){score+=800;hit=true;}
     else if(pointName&&pName&&(pName.includes(pointName)||pointName.includes(pName))){score+=500;hit=true;}
     if(address&&pAddress===address){score+=300;hit=true;}
     else if(address&&pAddress&&(pAddress.includes(address)||address.includes(pAddress))){score+=180;hit=true;}
-    if(hit&&score>bestScore){bestScore=score;best={customer:c,point:pt,score};ambiguous=false;}
-    else if(hit&&score===bestScore&&best&&String(best.customer.id)!==String(c.id))ambiguous=true;
+    if(hit&&score>bestScore){bestScore=score;best={customer:c,point:pt,score};}
   });
-  return ambiguous?null:best;
+  return best;
 }function getProdShift(deliveryTime, prodShifts, location){
   if(!deliveryTime||!prodShifts)return null;
   const tMin=timeToMin(deliveryTime);
@@ -164,34 +144,17 @@ function resolveOrderPointAliases(order,customers){
     .filter(Boolean);
   return {resolved,pt,aliases:[...new Set(aliases)]};
 }
-const PROD_ORDER_SHIFT_CACHE=new WeakMap();
-const PROD_ORDER_EMPTY_CUSTOMERS=[];
 function getProdShiftForOrder(order,prodShifts,customers){
-  if(!order||!Array.isArray(prodShifts))return null;
-  const points=Array.isArray(customers)?customers:PROD_ORDER_EMPTY_CUSTOMERS;
-  let byCustomers=PROD_ORDER_SHIFT_CACHE.get(prodShifts);
-  if(!byCustomers){byCustomers=new WeakMap();PROD_ORDER_SHIFT_CACHE.set(prodShifts,byCustomers);}
-  let matches=byCustomers.get(points);
-  if(!matches){matches=new Map();byCustomers.set(points,matches);}
-  // Ngày và số lượng không ảnh hưởng đến việc chọn ca. Các đơn cùng điểm/giờ
-  // dùng lại kết quả; lịch SX hoặc danh mục điểm mới có bộ nhớ riêng.
-  const key=JSON.stringify([normalizeTimeInput(order.deliveryTime),order.pointId,order.ptId,order.pointName,order.address,order.customerId,order.custId,order.customer,order.area]);
-  if(matches.has(key))return matches.get(key);
-  const shift=scfMatchProdShiftForOrder(order,prodShifts,points);
-  if(matches.size>=4096)matches.clear();
-  matches.set(key,shift);return shift;
-}
-function scfMatchProdShiftForOrder(order,prodShifts,customers){
   if(!order||!prodShifts)return null;
-  if(!/^\d{1,2}:\d{2}$/.test(normalizeTimeInput(order.deliveryTime)))return null;
   const tMin=timeToMin(order.deliveryTime);
   const {resolved,pt,aliases}=resolveOrderPointAliases(order,customers||[]);
-  const matchesTime=sh=>{
+  const matches=(prodShifts||[]).filter(sh=>{
+    if(sh.active===false)return false;
     const from=sh.orderTimeFrom||sh.startTime||sh.orderTime;
     const to=sh.orderTimeTo||sh.endTime||sh.orderTime;
     return (from&&to&&from!==to)?timeInRange(order.deliveryTime,from,to):(sh.orderTime&&tMin===timeToMin(sh.orderTime));
-  };
-  const active=(prodShifts||[]).filter(sh=>sh.active!==false);
+  });
+  if(!matches.length)return null;
   // Ưu tiên định danh cụ thể: điểm giao > địa chỉ > khách hàng > khu vực.
   // Tránh trường hợp khu vực cũ (ví dụ BN/SS TN) có điểm bằng tên điểm giao và thắng do thứ tự ID.
   const aliasGroups=[
@@ -200,7 +163,7 @@ function scfMatchProdShiftForOrder(order,prodShifts,customers){
     {values:[order.customer,resolved?.customer?.name],exact:4000,partial:2400},
     {values:[order.area,pt.area],exact:1000,partial:600}
   ].map(group=>({...group,values:[...new Set(group.values.map(normalizeLookupText).filter(Boolean))]}));
-  const scored=active.map(sh=>{
+  const scored=matches.map(sh=>{
     const shLoc=normalizeLookupText(sh.location||'');
     if(!aliases.length){
       return {sh,score:shLoc?10:1};
@@ -218,12 +181,7 @@ function scfMatchProdShiftForOrder(order,prodShifts,customers){
   }).filter(x=>x.score>0);
   if(aliases.length){
     if(!scored.length)return null;
-    // Chọn cấu hình địa điểm trước, rồi mới xét giờ. Nếu điểm đã có lịch
-    // riêng nhưng giờ nằm ngoài lịch, không lấy ca chung của khu vực thay thế.
-    const bestScore=Math.max(...scored.map(item=>item.score));
-    const matches=scored.filter(item=>item.score===bestScore&&matchesTime(item.sh));
-    if(!matches.length)return null;
-    return matches.sort((a,b)=>{
+    return scored.sort((a,b)=>{
       const ad=(Number(a.sh.startTime?timeToMin(a.sh.startTime):timeToMin(a.sh.orderTime))||0);
       const bd=(Number(b.sh.startTime?timeToMin(b.sh.startTime):timeToMin(b.sh.orderTime))||0);
       const byScore=b.score-a.score;
@@ -231,27 +189,7 @@ function scfMatchProdShiftForOrder(order,prodShifts,customers){
       return ad-bd||(String(a.sh.id||'').localeCompare(String(b.sh.id||''),'vi'));
     })[0].sh;
   }
-  const matches=active.filter(matchesTime);
   return matches.find(sh=>!normalizeLookupText(sh.location||''))||matches[0];
-}
-// Lưu cùng một kế hoạch SX cho mở danh sách, tạo đơn và cập nhật lại.
-// Chỉ sửa trường kế hoạch; ảnh, số lượng và các dòng chọn ca tay được giữ lại.
-function scfApplyAutomaticProduction(order,plannedShift){
-  if(order?.prodShiftAssignMode==='manual')return order;
-  const values={
-    prodShiftAssignMode:'auto',prodShiftId:plannedShift?.id||'',
-    prodDate:plannedShift?addDaysVN(order.deliveryDate,plannedShift.prodDateOffset||0):'',
-    prodTime:plannedShift?.actualProdTime||plannedShift?.endTime||'',
-    labelDate:plannedShift?addDaysVN(order.deliveryDate,plannedShift.labelPrintDateOffset||0):'',
-    labelTime:plannedShift?.labelPrintTime||''
-  };
-  let touched=Object.entries(values).some(([key,value])=>String(order[key]||'')!==String(value));
-  const lineValues={prodDate:values.prodDate,prodTime:values.prodTime,labelDate:values.labelDate,labelTime:values.labelTime};
-  const lines=(order.lines||[]).map(line=>{
-    if(line.shiftOverride||!Object.entries(lineValues).some(([key,value])=>String(line[key]||'')!==String(value)))return line;
-    touched=true;return {...line,...lineValues};
-  });
-  return touched?{...order,...values,lines}:order;
 }
 function getProdShiftByProdTime(prodTime, prodShifts){
   if(!prodTime||!prodShifts)return null;
@@ -315,14 +253,12 @@ function getOrderTripShiftId(order,prodShifts){
   const manualShift=order?.prodShiftAssignMode==='manual'&&order?.prodShiftId?(prodShifts||[]).find(s=>s.id===order.prodShiftId):null;
   const autoShift=getProdShiftForOrder(order,prodShifts||[],window.__SCF_CUSTOMERS||[]);
   const plannedShift=manualShift||autoShift;
-  if(!plannedShift)return '';
   return String(resolveCurrentDeliveryShift(order,plannedShift)?.id||plannedShift?.tripShiftId||'');
 }
 function getOrderTripShiftName(order,prodShifts){
   const manualShift=order?.prodShiftAssignMode==='manual'&&order?.prodShiftId?(prodShifts||[]).find(s=>s.id===order.prodShiftId):null;
   const autoShift=getProdShiftForOrder(order,prodShifts||[],window.__SCF_CUSTOMERS||[]);
   const plannedShift=manualShift||autoShift;
-  if(!plannedShift)return '';
   const currentShift=resolveCurrentDeliveryShift(order,plannedShift);
   const resolved=findOrderPointMatch(order,window.__SCF_CUSTOMERS||[]);
   const area=String(order?.area||resolved?.point?.area||'');
@@ -390,22 +326,9 @@ function prodShiftPlansForOrder(order,prodShifts,prodShiftRules){
     return defaultPlan?{...defaultPlan,line:l,index:i,productName:l.productName||('Sản phẩm '+(i+1))}:null;
   }).filter(Boolean);
 }
-const PROD_SHIFT_AUDIT_FIELDS=[
-  ['location','Địa điểm'],['startTime','Giờ ĐH từ'],['endTime','Giờ ĐH đến'],
-  ['name','Tên ca'],['actualProdTime','Giờ SX'],['prodDateOffset','Ngày sản xuất'],
-  ['tripDateOffset','Ngày chuyến'],['tripShiftName','Ca giao hàng'],
-  ['labelPrintDateOffset','Ngày in tem'],['labelPrintTime','Giờ in tem'],
-  ['active','Trạng thái'],['color','Màu nền'],['textColor','Màu chữ']
-];
-function prodShiftAuditChanges(before,after){
-  const display=(key,value)=>key==='active'?(value?'Đang hoạt động':'Tạm tắt'):String(value??'—');
-  return PROD_SHIFT_AUDIT_FIELDS.filter(([key])=>String(before?.[key]??'')!==String(after?.[key]??''))
-    .map(([key,label])=>label+': '+display(key,before?.[key])+' → '+display(key,after?.[key]));
-}
-function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts,currentUser}){
+function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts}){
   const[modal,sm]=useState(null);
   const[edit,se]=useState(null);
-  const[auditShiftId,setAuditShiftId]=useState(null);
   const empty={name:'',location:'',orderTime:'',startTime:'',endTime:'',actualProdTime:'',prodDateOffset:0,tripDateOffset:0,tripShiftId:'',tripShiftName:'',labelPrintTime:'',labelPrintDateOffset:0,color:'#FFF8E1',textColor:'#333',active:true};
   const shiftNamePresets=[
     {name:'Ca sáng',orderTime:'03:00',startTime:'03:00',endTime:'12:00',actualProdTime:'03:00',prodDateOffset:0,tripDateOffset:0,tripShiftId:'',tripShiftName:'',labelPrintTime:'04:00',labelPrintDateOffset:0,color:'#FFF8E1',textColor:'#E65100'},
@@ -566,19 +489,10 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
     const {_missingCount,_missingReason,_missingOrderIds,_missingSummary,...cleanForm}=form;
     const chosenTripShift=(shifts||[]).find(x=>x.id===form.tripShiftId);
     const data={...cleanForm,name:autoName,color:autoRule?.color||form.color,textColor:autoRule?.textColor||form.textColor,orderTime:form.startTime||form.orderTime,startTime:form.startTime||form.orderTime,endTime:form.endTime||form.orderTime,prodDateOffset:Number(form.prodDateOffset||0),tripDateOffset:Number(form.tripDateOffset||0),tripShiftId:String(form.tripShiftId||''),tripShiftName:chosenTripShift?.name||form.tripShiftName||'',labelPrintDateOffset:Number(form.labelPrintDateOffset||0)};
-    const stamp=fmtDT(),atIso=new Date().toISOString(),actor=currentUser?.name||'Người dùng',actorId=currentUser?.id||'';
-    if(edit) setProdShifts(p=>p.map(s=>{
-      if(s.id!==edit.id)return s;
-      const changes=prodShiftAuditChanges(normalize(s),data);
-      if(!changes.length)return s;
-      return {...s,...data,id:s.id,createdAt:s.createdAt||'',createdBy:s.createdBy||'',createdById:s.createdById||'',updatedAt:stamp,updatedBy:actor,updatedById:actorId,
-        shiftHistory:[...(s.shiftHistory||[]),{id:'PSHLOG'+uid(),action:'Sửa dòng cài đặt ca',changes,at:stamp,atIso,by:actor,byId:actorId}]};
-    }));
-    else setProdShifts(p=>[...p,{...data,id:'PSH'+uid(),createdAt:stamp,createdBy:actor,createdById:actorId,updatedAt:stamp,updatedBy:actor,updatedById:actorId,
-      shiftHistory:[{id:'PSHLOG'+uid(),action:'Tạo dòng cài đặt ca',changes:['Địa điểm: '+(data.location||'—'),'Giờ ĐH: '+(data.startTime||'—')+' - '+(data.endTime||'—'),'Giờ SX: '+(data.actualProdTime||'—')],at:stamp,atIso,by:actor,byId:actorId}]}]);
+    if(edit) setProdShifts(p=>p.map(s=>s.id===edit.id?{...s,...data}:s));
+    else setProdShifts(p=>[...p,{...data,id:'PSH'+uid()}]);
     sm(null);
   };
-  const auditShift=(prodShifts||[]).find(s=>s.id===auditShiftId);
   const del=sh=>window.scfConfirm('Bạn có chắc muốn xóa ca "'+sh.name+'"?','Xóa ca sản xuất',true).then(ok=>ok&&setProdShifts(p=>p.filter(s=>s.id!==sh.id)));
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-clock-play',style:{fontSize:20}}),'Cài đặt ca SX + ca GH tự động'),
@@ -661,7 +575,6 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
               h('td',{style:{padding:'10px 12px'}},r.labelPrintTime||'—'),
               h('td',{style:{padding:'10px 12px'}},h('span',{className:'badge',style:{background:r.active?'#E8F5E9':'#F1EFE8',color:r.active?'#1B5E20':'#777'}},r.active?'Đang hoạt động':'Tạm tắt')),
               h('td',{style:{padding:'8px 12px',textAlign:'right',whiteSpace:'nowrap'}},
-                h('button',{className:'bi',onClick:()=>setAuditShiftId(r.id),title:'Xem người tạo và lịch sử sửa'},h('i',{className:'ti ti-history',style:{fontSize:15}})),
                 h('button',{className:'bi',onClick:()=>open(r),title:'Sửa'},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
                 h('button',{className:'bi',onClick:()=>del(r),title:'Xóa',style:{color:'#A32D2D',marginLeft:4}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
               )
@@ -700,25 +613,11 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
             h('div',{className:'prodshift-mobile-item'},h('b',null,'Giờ in tem'),h('span',null,r.labelPrintTime||'—'))
           ),
           h('div',{className:'mobile-data-actions'},
-            h('button',{className:'bi',onClick:()=>setAuditShiftId(r.id),title:'Xem người tạo và lịch sử sửa'},h('i',{className:'ti ti-history',style:{fontSize:15}})),
             h('button',{className:'bi',onClick:()=>open(r),title:'Sửa'},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
             h('button',{className:'bi',onClick:()=>del(r),title:'Xóa',style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
           )
         );
       })
-    ),
-    auditShift&&h(Modal,{title:'Lịch sử cài đặt ca — '+(auditShift.location||auditShift.name||auditShift.id),onClose:()=>setAuditShiftId(null)},
-      h('div',{style:{display:'grid',gap:8,fontSize:13}},
-        h('div',null,h('b',null,'Người tạo: '),auditShift.createdBy||'Chưa ghi nhận (dữ liệu cũ)',auditShift.createdAt?' · '+auditShift.createdAt:''),
-        h('div',null,h('b',null,'Người sửa gần nhất: '),auditShift.updatedBy||'Chưa ghi nhận',auditShift.updatedAt?' · '+auditShift.updatedAt:''),
-        h('div',{style:{borderTop:'1px solid var(--bd)',paddingTop:10,marginTop:4,fontWeight:700}},'Các lần thay đổi'),
-        (auditShift.shiftHistory||[]).length
-          ?[...auditShift.shiftHistory].reverse().map((entry,i)=>h('div',{key:entry.id||i,style:{padding:'9px 12px',background:'var(--bg2)',borderRadius:'var(--r)',border:'1px solid var(--bd)'}},
-            h('div',{style:{fontWeight:700}},entry.action||'Cập nhật',' · ',entry.by||'Không rõ người sửa',' · ',entry.at||'Không rõ thời gian'),
-            (entry.changes||[]).map((change,j)=>h('div',{key:j,style:{marginTop:4,color:'var(--tx2)'}},change))
-          ))
-          :h('div',{style:{color:'var(--tx2)'}},'Dòng này được tạo trước khi bật lịch sử, nên chưa có bản ghi thay đổi.')
-      )
     ),
     modal==='f'&&h(Modal,{title:edit?'Sửa ca sản xuất':'Thêm ca sản xuất',onClose:()=>sm(null)},
       h('div',{style:{marginBottom:10,padding:'8px 12px',background:'#EAF4EF',borderRadius:'var(--r)',fontSize:13,color:'var(--pri3)'}},

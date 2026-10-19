@@ -1,20 +1,6 @@
-// Bắt lỗi JavaScript của chính SCF để tránh trang trắng. Một số trình duyệt nhúng
-// trên iPhone (đặc biệt Zalo) tự chèn bridge vào mọi trang; lỗi bridge đó không
-// thuộc ứng dụng và không được phép xóa giao diện SCF.
-function scfIsInjectedBrowserError(msg,src,line){
-  const text=String(msg||'');
-  if(/zaloJSV2|instantSearchSDKJSBridgeClearHighlight|Java bridge method invocation error/i.test(text))return true;
-  // Safari/WebView thường không cung cấp nguồn cho lỗi của script được app chủ
-  // chèn ở dòng 1. Chỉ bỏ qua mẫu lỗi không nguồn này; lỗi từ file SCF vẫn hiện.
-  return !String(src||'').trim()&&Number(line||0)<=1&&/can't find variable|is not defined/i.test(text);
-}
-window.scfIsInjectedBrowserError=scfIsInjectedBrowserError;
+// Bat loi JS - hien thi thay vi trang trang
 
 window.onerror = function(msg, src, line) {
-  if(scfIsInjectedBrowserError(msg,src,line)){
-    console.warn('Đã bỏ qua lỗi do trình duyệt nhúng chèn vào trang:',String(msg||''));
-    return true;
-  }
   const app=document.getElementById('app');
   if(!app)return false;
   app.replaceChildren();
@@ -28,7 +14,7 @@ window.onerror = function(msg, src, line) {
 };
 
 const SCF_EXTERNAL_SCRIPTS={
-  tesseract:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
+  tesseract:'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
   faceapi:'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js'
 };
 const scfScriptPromises={};

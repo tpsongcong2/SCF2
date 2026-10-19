@@ -41,35 +41,15 @@ function scfDeviceLabel(){
   const system=ua.includes('Windows')?'Windows':ua.includes('Android')?'Android':/iPhone|iPad/.test(ua)?'iPhone/iPad':ua.includes('Mac OS')?'macOS':'Thiết bị';
   return system+' · '+browser;
 }
-function scfDeviceType(){
-  const ua=String(navigator.userAgent||'');
-  const mobileHint=navigator.userAgentData&&typeof navigator.userAgentData.mobile==='boolean'?navigator.userAgentData.mobile:null;
-  const ipadDesktopMode=/Macintosh|Mac OS/i.test(ua)&&Number(navigator.maxTouchPoints||0)>1;
-  return mobileHint===true||ipadDesktopMode||/Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(ua)?'mobile':'desktop';
-}
-window.scfDeviceId=scfDeviceId;window.scfDeviceLabel=scfDeviceLabel;window.scfDeviceType=scfDeviceType;
+window.scfDeviceId=scfDeviceId;window.scfDeviceLabel=scfDeviceLabel;
 let sb=null;
-// Chỉ dùng header thiết bị đã được Edge Function cũ cho phép. Loại thiết bị
-// được gửi trong body lúc đăng nhập; như vậy web mới vẫn đăng nhập được trong
-// khoảng thời gian máy chủ chưa kịp triển khai bản Edge Function mới.
 try{sb=window.supabase.createClient(SUPA_URL,SUPA_KEY,{global:{headers:{'x-scf-device-id':scfDeviceId()}}});}catch(e){}
 const DB_REMOTE_TIMEOUT_MS=10000;
 const DB_REMOTE_MAX_TIMEOUT_MS=30000;
-// Gom các thay đổi rất ngắn để tránh gửi cả danh sách nhiều lần khi người dùng
-// vừa lưu đơn; vẫn đủ thời gian gom các trường được cập nhật liên tiếp.
-const SCF_SYNC_DEBOUNCE_MS=120;
+const SCF_SYNC_DEBOUNCE_MS=700;
 const SCF_SYNC_QUEUE_KEY='scf_sync_queue_v1';
-const SCF_SYNC_METRICS_KEY='scf_sync_metrics_v1';
-const SCF_SYNC_LABELS={
-  scf_employees:'Nhân viên SCFOOD',scf_privileged_employees:'Admin & Ban Giám Đốc',scf_orders:'Đơn giao hàng',scf_trips:'Chuyến giao hàng',scf_attendance:'Chấm công',
-  scf_advances:'Ứng lương',scf_rewards:'Thưởng phạt',scf_employee_errors:'Lỗi nhân viên',scf_employee_uniforms:'Cấp đồng phục',scf_leaves:'Nghỉ phép',scf_finance_entries:'Dòng tiền',
-  scf_finance_debts:'Công nợ',scf_finance_openings:'Số dư đầu kỳ',scf_internal_messages:'Tin nhắn nội bộ',scf_tasks:'Giao việc',scf_notifications:'Thông báo',
-  scf_customers:'Khách hàng',scf_products:'Sản phẩm',scf_materials:'Nguyên vật liệu',scf_quotes:'Báo giá',scf_ncc_goods:'Nhà cung cấp hàng hóa',scf_goods_purchases:'Đơn mua hàng hóa',scf_fuelpurchases:'Đơn mua xăng dầu'
-};
 let scfMemorySyncQueue={};
 let scfMemorySyncQueueReady=false;
-let scfQueuePersistHandle=null;
-let scfLastSyncErrorNotice={message:'',at:0};
 const SCF_SENSITIVE_KEYS=new Set([
   'scf_employees','scf_privileged_employees','scf_orders','scf_trips','scf_attendance','scf_advances','scf_rewards','scf_employee_errors','scf_leaves',
   'scf_finance_entries','scf_finance_debts','scf_finance_openings','scf_internal_messages','scf_tasks','scf_notifications'
@@ -77,10 +57,6 @@ const SCF_SENSITIVE_KEYS=new Set([
 // Khi bật xác thực máy chủ, không cho trình duyệt ghi trực tiếp các collection
 // nghiệp vụ. Edge Function sẽ đối chiếu quyền trang và mức r/rw/rwd của nhân viên.
 const SCF_EDGE_WRITE_KEYS=new Set([
-  'scf_attp_process',
-  'scf_attp_standards',
-  'scf_attp_daily',
-  'scf_attp_legal',
   'scf_company','scf_materials','scf_assets','scf_garages','scf_prodcats','scf_products',
   'scf_prod_shifts','scf_prod_shift_rules','scf_areas','scf_customers','scf_workcats','scf_depts',
   'scf_permission_profiles','scf_tasks','scf_nccs','scf_ncc_goods','scf_purchases','scf_goods_purchases',
@@ -100,21 +76,11 @@ function readSyncQueue(){
   try{scfMemorySyncQueue=JSON.parse(sessionStorage.getItem(SCF_SYNC_QUEUE_KEY)||'{}')||{};}catch{scfMemorySyncQueue={};}
   scfMemorySyncQueueReady=true;return {...scfMemorySyncQueue};
 }
-function persistSyncQueueNow(){
-  scfQueuePersistHandle=null;
-  try{sessionStorage.setItem(SCF_SYNC_QUEUE_KEY,JSON.stringify(scfMemorySyncQueue));}catch(e){console.warn('Sync queue only kept in memory:',e.message);}
-}
-function scheduleSyncQueuePersistence(){
-  if(scfQueuePersistHandle!==null)return;
-  if(typeof requestIdleCallback==='function')scfQueuePersistHandle=requestIdleCallback(persistSyncQueueNow,{timeout:500});
-  else scfQueuePersistHandle=setTimeout(persistSyncQueueNow,50);
-}
 function writeSyncQueue(queue){
   scfMemorySyncQueue={...queue};scfMemorySyncQueueReady=true;
-  scheduleSyncQueuePersistence();
+  try{sessionStorage.setItem(SCF_SYNC_QUEUE_KEY,JSON.stringify(queue));}catch(e){console.warn('Sync queue only kept in memory:',e.message);}
   return Object.keys(queue).length;
 }
-window.addEventListener('pagehide',persistSyncQueueNow);
 let scfSyncedIdleTimer=null;
 function setSyncState(status,detail=''){
   if(scfSyncedIdleTimer){clearTimeout(scfSyncedIdleTimer);scfSyncedIdleTimer=null;}
@@ -130,98 +96,13 @@ function setSyncState(status,detail=''){
     if(window.__SCF_SYNC_STATE?.status==='synced'&&!Object.keys(readSyncQueue()).length)setSyncState(navigator.onLine?'idle':'offline');
   },5000);
 }
-function syncCollectionLabel(key){return SCF_SYNC_LABELS[key]||String(key||'').replace(/^scf_/,'').replaceAll('_',' ');}
-function duplicateItemGroups(value){
-  if(!Array.isArray(value))return [];
-  const groups=new Map();
-  value.forEach(item=>{const id=String(item?.id||'').trim();if(id)groups.set(id,[...(groups.get(id)||[]),item]);});
-  return [...groups.entries()].filter(([,items])=>items.length>1).map(([id,items])=>({id,items}));
-}
-function syncOrderActor(order){
-  const history=Array.isArray(order?.orderHistory)?order.orderHistory:[];
-  return order?.updatedBy||order?.createdBy||history[history.length-1]?.by||'không rõ người tạo/cập nhật';
-}
-function duplicateOrderMessage(groups){
-  const details=groups.slice(0,3).map(group=>{
-    const records=group.items.slice(0,3).map((order,index)=>(index+1)+') ngày '+(order?.deliveryDate||'chưa có')+', địa điểm '+(order?.pointName||order?.address||order?.customer||'chưa có')+', người tạo/cập nhật '+syncOrderActor(order));
-    return 'mã đơn hàng '+group.id+' bị trùng: '+records.join('; ');
-  });
-  return details.join(' | ')+(groups.length>3?' | …':'' );
-}
-function syncErrorMessage(key,error,value){
-  const reason=String(error?.message||error||'Không đồng bộ được dữ liệu');
-  const groups=/mã bị trùng/i.test(reason)?duplicateItemGroups(value):[];
-  if(key==='scf_orders'&&groups.length)return syncCollectionLabel(key)+': '+duplicateOrderMessage(groups);
-  const ids=groups.map(group=>group.id);
-  return syncCollectionLabel(key)+': '+(ids.length?'trùng mã '+ids.slice(0,5).join(', ')+(ids.length>5?'…':''):reason);
-}
-function reportSyncError(key,error,value){
-  const message=syncErrorMessage(key,error,value);setSyncState('error',message);
-  const noticeKey=message.replace(/(?:Mã kiểm tra:|— mã)\s*[a-zA-Z0-9_-]+/gi,'Mã kiểm tra');
-  const now=Date.now();
-  if(window.showToast&&(scfLastSyncErrorNotice.message!==noticeKey||now-scfLastSyncErrorNotice.at>60000)){
-    scfLastSyncErrorNotice={message:noticeKey,at:now};window.showToast(message,'error',12000);
-  }
-  if(key!=='scf_notifications'){
-    let hash=0;for(let i=0;i<noticeKey.length;i++)hash=((hash<<5)-hash+noticeKey.charCodeAt(i))|0;
-    const detail={key,message,actorId:String(window.__SCF_ACCESS_CONTEXT?.employeeId||''),fingerprint:'sync-'+key+'-'+Math.abs(hash)};
-    window.__SCF_LAST_SYNC_ERROR=detail;
-    window.dispatchEvent(new CustomEvent('scf-sync-error-notification',{detail}));
-  }
-}
 function syncPayloadBytes(value){try{return new Blob([JSON.stringify(value??null)]).size;}catch{return 0;}}
-function remoteTimeoutFor(value){
-  // A small order patch still verifies a session and writes a database row.
-  // Its deadline must not shrink to ~11s just because its JSON is small.
-  const minimum=value?.key==='scf_orders'&&Array.isArray(value?.patches)?DB_REMOTE_MAX_TIMEOUT_MS:DB_REMOTE_TIMEOUT_MS;
-  return Math.min(DB_REMOTE_MAX_TIMEOUT_MS,minimum+Math.ceil(syncPayloadBytes(value)/65536)*750);
-}
-function readSyncMetrics(){try{const value=JSON.parse(localStorage.getItem(SCF_SYNC_METRICS_KEY)||'[]');return Array.isArray(value)?value:[];}catch{return[];}}
-function recordSyncMetric(key,mode,payload,startedAt,ok,error){
-  const rows=readSyncMetrics();rows.unshift({key,mode,bytes:syncPayloadBytes(payload),durationMs:Math.max(0,Math.round(performance.now()-startedAt)),ok:!!ok,at:new Date().toISOString(),...(error?{code:String(error.code||'SCF_SYNC_ERROR'),conflictIds:Array.isArray(error.conflictIds)?error.conflictIds.slice(0,10):[]}:{} )});
-  try{localStorage.setItem(SCF_SYNC_METRICS_KEY,JSON.stringify(rows.slice(0,30)));}catch{}
-}
-async function measuredCollectionSave(key,mode,payload,task){
-  const startedAt=performance.now();
-  try{const result=await task();recordSyncMetric(key,mode,payload,startedAt,true);return result;}
-  catch(error){recordSyncMetric(key,mode,payload,startedAt,false,error);throw error;}
-}
-function mergeRecordPatches(previous,next){
-  const merged=new Map();
-  for(const patch of previous||[])merged.set(String(patch.id),patch);
-  for(const patch of next||[]){
-    const id=String(patch.id),old=merged.get(id),base=old?.base||patch.base,value=patch.value;
-    if(JSON.stringify(base)===JSON.stringify(value))merged.delete(id);else merged.set(id,{id,base,value});
-  }
-  return[...merged.values()];
-}
-function collectionRecordPatches(previous,next){
-  if(!Array.isArray(previous)||!Array.isArray(next)||previous.length!==next.length)return null;
-  const previousMap=new Map();
-  for(const item of previous){const id=String(item?.id||'').trim();if(!id||previousMap.has(id))return null;previousMap.set(id,item);}
-  const patches=[];
-  for(const item of next){const id=String(item?.id||'').trim(),base=previousMap.get(id);if(!id||!base)return null;if(base===item)continue;if(JSON.stringify(base)!==JSON.stringify(item))patches.push({id,base:syncSnapshot(base),value:syncSnapshot(item)});}
-  if(patches.length>25)return null;
-  // Patch tối đa 25 bản ghi luôn phù hợp hơn việc JSON hóa và gửi lại toàn bộ
-  // danh sách đơn; tránh stringify mảng lớn ngay trong thao tác nhập liệu.
-  return patches;
-}
-let scfLastQueueStamp=0;
+function remoteTimeoutFor(value){return Math.min(DB_REMOTE_MAX_TIMEOUT_MS,DB_REMOTE_TIMEOUT_MS+Math.ceil(syncPayloadBytes(value)/65536)*750);}
 function queueRemoteWrite(key,value,options={}){
   const queue=readSyncQueue();
-  scfLastQueueStamp=Math.max(Date.now(),scfLastQueueStamp+1);
-  const updatedAt=options.updatedAt||new Date(scfLastQueueStamp).toISOString();
-  const previous=queue[key];
-  const expectedUpdatedAt=previous?.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
-  // Không được đổi một lần lưu toàn bộ đang chờ thành patch, vì lần lưu toàn
-  // bộ có thể chứa đơn vừa thêm/xóa mà patch kế tiếp không mang theo.
-  const patches=Array.isArray(options.patches)&&(!previous||Array.isArray(previous.patches))?mergeRecordPatches(previous?.patches,options.patches):null;
-  const usePatches=key==='scf_orders'&&patches?.length&&patches.length<=25;
-  const baseValue=usePatches?undefined:(Object.prototype.hasOwnProperty.call(previous||{},'baseValue')?previous.baseValue:syncSnapshot(scfRemoteSnapshots.get(key)));
-  queue[key]={value,updatedAt,expectedUpdatedAt,...(baseValue===undefined?{}:{baseValue}),...(usePatches?{patches}:{}),bytes:syncPayloadBytes(usePatches?patches:value),attempts:Number(options.attempts)||0,mode:options.mode||''};
+  const updatedAt=options.updatedAt||new Date().toISOString();
+  queue[key]={value,updatedAt,bytes:syncPayloadBytes(value),attempts:Number(options.attempts)||0,mode:options.mode||''};
   writeSyncQueue(queue);
-  window.__SCF_COLLECTION_SYNC_RESULTS=window.__SCF_COLLECTION_SYNC_RESULTS||{};
-  window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'pending',updatedAt};
   setSyncState(options.syncing?'syncing':(navigator.onLine?'error':'offline'),options.detail||(options.syncing?'Đang gộp thay đổi để đồng bộ':'Thay đổi đang chờ đồng bộ'));
   return updatedAt;
 }
@@ -230,64 +111,29 @@ function removeQueuedWrite(key,updatedAt=''){
   if(updatedAt&&queue[key]?.updatedAt!==updatedAt)return false;
   delete queue[key];writeSyncQueue(queue);return true;
 }
-function scfRememberSyncFailure(key,writeToken,error){
-  const queue=readSyncQueue();if(queue[key]?.updatedAt!==writeToken)return;
-  queue[key]={...queue[key],attempts:(Number(queue[key].attempts)||0)+1,lastError:{code:String(error?.code||'SCF_SYNC_ERROR'),message:String(error?.message||'Không đồng bộ được dữ liệu'),conflictIds:Array.isArray(error?.conflictIds)?error.conflictIds.slice(0,10):[]}};
-  writeSyncQueue(queue);
-}
 window.scfClearSensitiveLocalData=function(){
   SCF_SENSITIVE_KEYS.forEach(key=>{try{localStorage.removeItem(localCacheKey(key));}catch{}});
   scfMemorySyncQueue={};
   scfMemorySyncQueueReady=true;
   try{sessionStorage.removeItem(SCF_SYNC_QUEUE_KEY);}catch{}
-  delete window.__SCF_LAST_SYNC_ERROR;
-  delete window.__SCF_COLLECTION_SYNC_RESULTS;
-  delete window.__SCF_CONFIRMED_INVOICES;
-  delete window.__SCF_AUTH_DIAGNOSTICS;
-  delete window.__SCF_FUEL_SYNC_CONFLICT;
-  delete window.__SCF_ACCESS_CONTEXT;
-  try{sessionStorage.removeItem('scf_auth_diagnostics');}catch{}
-  try{localStorage.removeItem(SCF_SYNC_METRICS_KEY);}catch{}
-  scfLastSyncErrorNotice={message:'',at:0};
   setSyncState(navigator.onLine?'idle':'offline');
 };
 window.scfGetSyncState=function(){return window.__SCF_SYNC_STATE||{status:navigator.onLine?'idle':'offline',pending:0};};
-window.scfOrderAutomationPending=function(){
-  const queue=readSyncQueue();return !!(queue.scf_orders||queue.scf_trips);
-};
 window.scfGetSyncReport=function(){
   const queue=readSyncQueue();
-  const metrics=readSyncMetrics();
   const labels={
     scf_employees:'Nhân viên SCFOOD',scf_privileged_employees:'Admin & Ban Giám Đốc',scf_orders:'Đơn giao hàng',scf_trips:'Chuyến giao hàng',scf_attendance:'Chấm công',
     scf_advances:'Ứng lương',scf_rewards:'Thưởng phạt',scf_employee_errors:'Lỗi nhân viên',scf_employee_uniforms:'Cấp đồng phục',scf_leaves:'Nghỉ phép',scf_finance_entries:'Dòng tiền',
     scf_finance_debts:'Công nợ',scf_finance_openings:'Số dư đầu kỳ',scf_internal_messages:'Tin nhắn nội bộ',scf_tasks:'Giao việc',scf_notifications:'Thông báo',
     scf_customers:'Khách hàng',scf_products:'Sản phẩm',scf_materials:'Nguyên vật liệu',scf_quotes:'Báo giá',
-    scf_ncc_goods:'Nhà cung cấp hàng hóa',scf_goods_purchases:'Đơn mua hàng hóa',scf_fuelpurchases:'Đơn mua xăng dầu'
+    scf_ncc_goods:'Nhà cung cấp hàng hóa',scf_goods_purchases:'Đơn mua hàng hóa'
   };
   return {
     ...window.scfGetSyncState(),
     online:navigator.onLine,
     serverReady:!!sb,
-    metrics,
-    items:Object.entries(queue).map(([key,item])=>({key,label:labels[key]||key.replace(/^scf_/,'').replaceAll('_',' '),updatedAt:item?.updatedAt||'',bytes:Number(item?.bytes)||syncPayloadBytes(item?.patches||item?.value),recordCount:Array.isArray(item?.patches)?item.patches.length:(Array.isArray(item?.value)?item.value.length:(item?.value&&typeof item.value==='object'?Object.keys(item.value).length:1)),attempts:Number(item?.attempts)||0,mode:item?.patches?'patch':(item?.mode||'full'),errorMessage:item?.lastError?.message||'',errorCode:item?.lastError?.code||''}))
+    items:Object.entries(queue).map(([key,item])=>({key,label:labels[key]||key.replace(/^scf_/,'').replaceAll('_',' '),updatedAt:item?.updatedAt||'',bytes:Number(item?.bytes)||syncPayloadBytes(item?.value),recordCount:Array.isArray(item?.value)?item.value.length:(item?.value&&typeof item.value==='object'?Object.keys(item.value).length:1),attempts:Number(item?.attempts)||0,mode:item?.mode||''}))
   };
-};
-function scfBuildSyncDiagnostics(){
-  const report=window.scfGetSyncReport?.()||{},actorId=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
-  const entries=(window.__SCF_AUTH_DIAGNOSTICS||[]).filter(entry=>!entry.actorId||String(entry.actorId)===actorId).map(entry=>({
-    id:entry.id,stage:entry.stage,ms:entry.ms,status:entry.status,outcome:entry.outcome,at:entry.at,
-    server:entry.server?{ms:entry.server.ms,steps:(entry.server.steps||[]).map(step=>({stage:step.stage,ms:step.ms,ok:step.ok,code:step.code}))}:undefined
-  }));
-  return {version:typeof SCF_BUILD_VERSION==='undefined'?'':SCF_BUILD_VERSION,createdAt:new Date().toISOString(),accountId:actorId,
-    connection:{online:!!navigator.onLine,status:report.status,pending:report.pending},
-    queue:(report.items||[]).map(item=>({key:item.key,mode:item.mode,updatedAt:item.updatedAt,bytes:item.bytes,recordCount:item.recordCount,attempts:item.attempts})),
-    metrics:(report.metrics||[]).map(item=>({key:item.key,mode:item.mode,bytes:item.bytes,durationMs:item.durationMs,ok:item.ok,at:item.at,code:item.code,conflictIds:item.conflictIds})),requests:entries};
-}
-window.scfDownloadSyncDiagnostics=function(){
-  const url=URL.createObjectURL(new Blob([JSON.stringify(scfBuildSyncDiagnostics(),null,2)],{type:'application/json'}));
-  const link=document.createElement('a');link.href=url;link.download='SCFOOD-kiem-tra-dong-bo.json';
-  document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
 function withRemoteTimeout(promise,ms=DB_REMOTE_TIMEOUT_MS){
   let timer;
@@ -325,14 +171,6 @@ document.addEventListener('keydown',e=>{
 // editable collection. Keep the legacy offline fallback for older standalone tabs.
 const scfLocalWrites=new Map();
 const scfRemoteVersions=new Map();
-const scfRemoteSnapshots=new Map();
-function syncSnapshot(value){try{return JSON.parse(JSON.stringify(value))}catch{return value}}
-function scfPublishMergedCollection(key,value,requested,writeToken){
-  if(!Array.isArray(value)||readSyncQueue()[key]?.updatedAt!==writeToken)return;
-  if(JSON.stringify(value)===JSON.stringify(requested))return;
-  scfLocalWrites.set(key,{value});
-  window.dispatchEvent(new CustomEvent('scf-collection-reconciled',{detail:{key,value,writeToken}}));
-}
 async function dbGetRequired(key,def){
   if(!serverAuthEnabled())return dbGet(key,def);
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
@@ -341,16 +179,15 @@ async function dbGetRequired(key,def){
   if(SCF_EDGE_WRITE_KEYS.has(key)){
     const before=scfLocalWrites.get(key);
     try{
-      setSyncState('syncing','Đang nhận '+syncCollectionLabel(key));
       const loaded=await serverLoadPermittedCollection(key);
       const latest=scfLocalWrites.get(key),queued=readSyncQueue()[key];
       if(queued)return queued.value;
       if(latest!==before)return latest.value;
-      const value=loaded&&Object.prototype.hasOwnProperty.call(loaded,'value')&&loaded.value!==undefined?loaded.value:def;
+      const value=loaded&&Object.prototype.hasOwnProperty.call(loaded,'value')?loaded.value:def;
       if(Array.isArray(def)&&!Array.isArray(value))throw new Error('Dữ liệu trả về không đúng định dạng.');
       scfRemoteVersions.set(key,String(loaded?.updatedAt||''));
-      scfRemoteSnapshots.set(key,syncSnapshot(value));setSyncState('synced');return value;
-    }catch(error){setSyncState('error','Không tải được '+syncCollectionLabel(key));throw new Error('Không tải được '+key+': '+(error.message||'Lỗi kết nối'));}
+      return value;
+    }catch(error){throw new Error('Không tải được '+key+': '+(error.message||'Lỗi kết nối'));}
   }
   const before=scfLocalWrites.get(key);
   try{
@@ -363,7 +200,6 @@ async function dbGetRequired(key,def){
     if(latest!==before)return latest.value;
     const value=data&&Object.prototype.hasOwnProperty.call(data,'value')?data.value:def;
     scfRemoteVersions.set(key,String(data?.updated_at||''));
-    if(Array.isArray(value))scfRemoteSnapshots.set(key,syncSnapshot(value));
     if(Array.isArray(def)&&!Array.isArray(value))throw new Error('Dữ liệu trả về không đúng định dạng.');
     return value;
   }catch(error){
@@ -375,7 +211,7 @@ async function dbGetChangedKeys(keys){
   const wanted=[...new Set((keys||[]).map(String).filter(Boolean))];
   if(!wanted.length||!sb)return[];
   if(serverAuthEnabled()){
-    const versions=await serverLoadPermittedCollectionVersions(wanted);
+    const versions=await withRemoteTimeout(serverLoadPermittedCollectionVersions(wanted),10000);
     return versions.filter(row=>String(row?.updatedAt||'')!==String(scfRemoteVersions.get(String(row?.key||''))||'')).map(row=>String(row.key));
   }
   const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('key,updated_at').in('key',wanted),10000);
@@ -393,20 +229,19 @@ async function dbGet(key,def){
   }
   if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
     try{
-      setSyncState('syncing','Đang nhận '+syncCollectionLabel(key));
       const loaded=await serverLoadPermittedCollection(key);
-      const value=loaded&&Object.prototype.hasOwnProperty.call(loaded,'value')&&loaded.value!==undefined?loaded.value:def;
-      scfRemoteVersions.set(key,String(loaded?.updatedAt||''));scfRemoteSnapshots.set(key,syncSnapshot(value));setSyncState('synced');return value;
-    }catch(error){setSyncState('error','Không tải được '+syncCollectionLabel(key));return def;}
+      const value=loaded&&Object.prototype.hasOwnProperty.call(loaded,'value')?loaded.value:def;
+      scfRemoteVersions.set(key,String(loaded?.updatedAt||''));
+      if(allowPersistentLocalCache(key))try{localStorage.setItem(localCacheKey(key),JSON.stringify(value));}catch{}
+      setSyncState('synced');return value;
+    }catch(e){console.warn('serverLoadPermittedCollection:',e.message);setSyncState('error','Không tải được dữ liệu');}
   }
   // Khi online thì ưu tiên dữ liệu mới từ Supabase để các máy đồng bộ với nhau.
   if(sb)try{
     setSyncState('syncing','Đang nhận dữ liệu');
-    const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('value,updated_at').eq('key',key).maybeSingle());
+    const{data,error}=await withRemoteTimeout(sb.from('kv_store').select('value').eq('key',key).maybeSingle());
     if(error)throw error;
     if(data&&Object.prototype.hasOwnProperty.call(data,'value')){
-      scfRemoteVersions.set(key,String(data.updated_at||''));
-      if(Array.isArray(data.value))scfRemoteSnapshots.set(key,syncSnapshot(data.value));
       if(allowPersistentLocalCache(key))try{localStorage.setItem(localCacheKey(key),JSON.stringify(data.value));}catch{}
       setSyncState('synced');return data.value;
     }
@@ -415,163 +250,7 @@ async function dbGet(key,def){
   if(allowPersistentLocalCache(key))try{const ls=localStorage.getItem(localCacheKey(key));if(ls)return JSON.parse(ls);}catch{}
   return def;
 }
-function scfVerifyInvoiceSave(key,saved,value,patches){
-  if(key!=='scf_orders')return;
-  const rows=Array.isArray(saved?.items)?saved.items:saved?.value;
-  const changed=patches||((value||[]).map(item=>({id:item.id,value:item})));
-  for(const patch of changed){
-    for(const field of ['invoiceImage','driverInvoiceImage']){
-      if(!patch.value?.[field]||patch.base?.[field]===patch.value[field])continue;
-      const row=rows?.find(item=>String(item.id)===String(patch.id));
-      if(row?.[field]!==patch.value[field])throw new Error('Máy chủ chưa xác nhận ảnh hóa đơn của đơn '+patch.id+'. Ảnh vẫn đang chờ đồng bộ.');
-    }
-  }
-  window.__SCF_CONFIRMED_INVOICES=window.__SCF_CONFIRMED_INVOICES||{};
-  for(const row of rows||[])window.__SCF_CONFIRMED_INVOICES[String(row.id)]=row.invoiceImage||'';
-}
-function scfVerifyOrderTripSave(key,saved,value,patches){
-  if(key!=='scf_orders')return;
-  const rows=Array.isArray(saved?.items)?saved.items:saved?.value;
-  const changed=patches||((value||[]).map(item=>({id:item.id,value:item})));
-  for(const patch of changed){
-    if(patch.base&&String(patch.base.tripId||'')===String(patch.value?.tripId||'')&&patch.base.tripAssignMode===patch.value?.tripAssignMode)continue;
-    const row=rows?.find(item=>String(item.id)===String(patch.id));
-    if(!row||String(row.tripId||'')!==String(patch.value?.tripId||'')||row.tripAssignMode!==patch.value?.tripAssignMode){
-      throw new Error('Máy chủ chưa xác nhận chuyến của đơn '+patch.id+'. Thay đổi vẫn đang chờ đồng bộ.');
-    }
-  }
-  window.__SCF_CONFIRMED_ORDER_TRIPS=window.__SCF_CONFIRMED_ORDER_TRIPS||{};
-  for(const row of rows||[])window.__SCF_CONFIRMED_ORDER_TRIPS[String(row.id)]={tripId:String(row.tripId||''),tripAssignMode:row.tripAssignMode||''};
-}
-function scfSavedOrderPatchesMatch(saved,patches){
-  if(!Array.isArray(saved?.items)||!Array.isArray(patches)||!patches.length)return false;
-  return patches.every(patch=>{
-    const row=saved.items.find(item=>String(item?.id||'')===String(patch.id||''));
-    if(!row)return false;
-    const before=patch.base||{},after=patch.value||{};
-    return [...new Set([...Object.keys(before),...Object.keys(after)])].every(field=>{
-      if(field==='id')return true;
-      const baseHas=Object.prototype.hasOwnProperty.call(before,field),nextHas=Object.prototype.hasOwnProperty.call(after,field);
-      if(baseHas===nextHas&&JSON.stringify(before[field])===JSON.stringify(after[field]))return true;
-      return Object.prototype.hasOwnProperty.call(row,field)===nextHas&&JSON.stringify(row[field])===JSON.stringify(after[field]);
-    });
-  });
-}
-function scfVerifyTripDriverSave(key,saved,value){
-  if(key!=='scf_trips')return;
-  const before=new Map((scfRemoteSnapshots.get(key)||[]).map(trip=>[String(trip.id),trip]));
-  const rows=new Map((saved?.value||[]).map(trip=>[String(trip.id),trip]));
-  for(const trip of value||[]){
-    if(trip.driverAssignMode!=='manual')continue;
-    const old=before.get(String(trip.id));
-    if(old&&String(old.driverId||'')===String(trip.driverId||'')&&String(old.driverName||'')===String(trip.driverName||'')&&old.driverAssignMode===trip.driverAssignMode)continue;
-    const row=rows.get(String(trip.id));
-    if(!row||String(row.driverId||'')!==String(trip.driverId||'')||String(row.driverName||'')!==String(trip.driverName||'')||row.driverAssignMode!=='manual'){
-      throw new Error('Máy chủ chưa xác nhận lái xe của chuyến '+trip.id+'. Thay đổi vẫn đang chờ đồng bộ.');
-    }
-  }
-}
-function scfRebaseFuelCollection(current,incoming,base){
-  const stable=list=>Array.isArray(list)&&list.every(row=>row&&String(row.id||'').trim())&&new Set(list.map(row=>String(row.id))).size===list.length;
-  if(!stable(current)||!stable(incoming))throw new Error('Danh sách xăng dầu có mã trống hoặc trùng. Thay đổi vẫn được giữ trên máy.');
-  const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-  const currentMap=new Map(current.map(row=>[String(row.id),row]));
-  const incomingMap=new Map(incoming.map(row=>[String(row.id),row]));
-  const baseMap=stable(base)?new Map(base.map(row=>[String(row.id),row])):null;
-  const merged=new Map(currentMap),conflicts=[];
-  const conflict=(id,fields,local=incomingMap.get(id)||null,remote=currentMap.get(id)||null)=>conflicts.push({id,fields,local,remote});
-  for(const local of incoming){
-    const id=String(local.id),remote=currentMap.get(id),before=baseMap?.get(id);
-    if(!remote){
-      if(!before)merged.set(id,local);
-      else if(!same(local,before))conflict(id,['Đơn đã bị xóa trên máy chủ']);
-      continue;
-    }
-    if(same(local,remote))continue;
-    if(!before){conflict(id,['Thiếu dữ liệu nền để xác định thay đổi']);continue;}
-    const row={...remote},fields=[];
-    // Số lít/đơn giá/thành tiền và mã/tên nhân viên phải được chọn cùng nhau.
-    // Ghép từng trường độc lập có thể tạo một đơn sai tổng tiền hoặc sai người.
-    for(const group of [['liters','price','amount'],['buyerId','buyerName']]){
-      const changed=(record)=>group.some(field=>!same(record[field],before[field]));
-      if(changed(local)&&changed(remote)&&group.some(field=>!same(local[field],remote[field])))fields.push(...group);
-    }
-    for(const field of new Set([...Object.keys(before),...Object.keys(local),...Object.keys(remote)])){
-      if(field==='id'||field==='updatedAt'||field==='updatedBy')continue;
-      if(fields.includes(field))continue;
-      const has=(obj)=>Object.prototype.hasOwnProperty.call(obj,field);
-      const localChanged=has(local)!==has(before)||!same(local[field],before[field]);
-      if(!localChanged)continue;
-      const serverChanged=has(remote)!==has(before)||!same(remote[field],before[field]);
-      if(serverChanged&&(has(local)!==has(remote)||!same(local[field],remote[field]))){fields.push(field);continue;}
-      if(has(local))row[field]=local[field];else delete row[field];
-    }
-    if(fields.length){
-      const localChoice={...row,updatedAt:local.updatedAt,updatedBy:local.updatedBy},remoteChoice={...row};
-      for(const field of fields){if(Object.prototype.hasOwnProperty.call(local,field))localChoice[field]=local[field];else delete localChoice[field];}
-      conflict(id,[...new Set(fields)],localChoice,remoteChoice);continue;
-    }
-    if(!same(row,remote)){
-      if(local.updatedAt!==undefined)row.updatedAt=local.updatedAt;
-      if(local.updatedBy!==undefined)row.updatedBy=local.updatedBy;
-    }
-    merged.set(id,row);
-  }
-  if(baseMap)for(const[id,before]of baseMap){
-    if(incomingMap.has(id)||!currentMap.has(id))continue;
-    if(same(currentMap.get(id),before))merged.delete(id);
-    else conflict(id,['Đơn bị xóa ở máy này và được sửa trên máy chủ']);
-  }
-  return{value:[...merged.values()],conflicts};
-}
-async function scfSaveFuelAfterConflict(val,baseValue,timeoutMs){
-  const key='scf_fuelpurchases',pending=readSyncQueue()[key],owner=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
-  if(!pending||pending.value!==val){const stale=new Error('Thay đổi mới đang được chuẩn bị đồng bộ.');stale.code='SCF_STALE_WRITE';throw stale;}
-  const loaded=await withRemoteTimeout(serverLoadPermittedCollection(key),timeoutMs);
-  const stillCurrent=()=>String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')===owner&&readSyncQueue()[key]?.updatedAt===pending?.updatedAt;
-  if(!pending||!stillCurrent()){const stale=new Error('Thay đổi mới đang được chuẩn bị đồng bộ.');stale.code='SCF_STALE_WRITE';throw stale;}
-  const remote=loaded?.value??[],rebased=scfRebaseFuelCollection(remote,val,baseValue);
-  if(rebased.conflicts.length){
-    window.__SCF_FUEL_SYNC_CONFLICT={owner,writeToken:pending.updatedAt,remote,updatedAt:loaded.updatedAt||'',value:rebased.value,conflicts:rebased.conflicts};
-    window.dispatchEvent(new CustomEvent('scf-fuel-sync-conflict'));
-    const error=new Error('Có '+rebased.conflicts.length+' đơn xăng dầu cần đối chiếu. Mở Đơn mua xăng dầu và bấm “Kiểm tra đơn xung đột”. Các đơn chờ vẫn được giữ trên máy.');
-    error.code='SCF_FUEL_WRITE_CONFLICT';error.conflictIds=rebased.conflicts.map(row=>row.id);throw error;
-  }
-  if(JSON.stringify(rebased.value)===JSON.stringify(remote))return{value:remote,updatedAt:loaded.updatedAt||''};
-  if(!stillCurrent()){const stale=new Error('Thay đổi mới đang được chuẩn bị đồng bộ.');stale.code='SCF_STALE_WRITE';throw stale;}
-  return withRemoteTimeout(serverSavePermittedCollection(key,rebased.value,loaded.updatedAt||'',remote,timeoutMs),timeoutMs);
-}
-window.scfResolveFuelSyncConflict=async function(choices){
-  const conflict=window.__SCF_FUEL_SYNC_CONFLICT,key='scf_fuelpurchases',pending=readSyncQueue()[key];
-  if(!conflict||conflict.owner!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')||pending?.updatedAt!==conflict.writeToken)throw new Error('Dữ liệu chờ đã thay đổi. Bấm Đồng bộ lại để kiểm tra phiên bản mới nhất.');
-  if(conflict.conflicts.some(row=>!['local','remote'].includes(choices?.[row.id])))throw new Error('Chọn dữ liệu cần giữ cho từng đơn xung đột.');
-  const rows=new Map(conflict.value.map(row=>[String(row.id),row]));
-  for(const row of conflict.conflicts){const chosen=choices[row.id]==='local'?row.local:row.remote;if(chosen)rows.set(row.id,chosen);else rows.delete(row.id);}
-  const value=[...rows.values()],stamp=queueRemoteWrite(key,value,{syncing:true});
-  const queue=readSyncQueue();queue[key]={...queue[key],baseValue:syncSnapshot(conflict.remote),expectedUpdatedAt:conflict.updatedAt};writeSyncQueue(queue);
-  scfLocalWrites.set(key,{value});window.dispatchEvent(new CustomEvent('scf-collection-reconciled',{detail:{key,value,writeToken:stamp}}));
-  delete window.__SCF_FUEL_SYNC_CONFLICT;window.dispatchEvent(new CustomEvent('scf-fuel-sync-conflict'));
-  return window.scfSendCollectionsNow([key]);
-};
-async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,baseValue,timeoutMs){
-  const payload=patches?{key,patches,expectedUpdatedAt}:{key,value:val,baseValue,expectedUpdatedAt};
-  return measuredCollectionSave(key,patches?'patch':'full',payload,async()=>{
-    try{return await withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt,timeoutMs):serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue,timeoutMs),timeoutMs);}
-    catch(error){
-      if(key==='scf_fuelpurchases'&&error?.code==='SCF_WRITE_CONFLICT')return scfSaveFuelAfterConflict(val,baseValue,timeoutMs);
-      if(!['SCF_REMOTE_TIMEOUT','SCF_DATABASE_TIMEOUT'].includes(error?.code)||key!=='scf_orders'||!patches?.length)throw error;
-      // A timed-out HTTP response is ambiguous: the server may already have
-      // committed the patch. Read only the changed orders before retrying it.
-      try{
-        const saved=await serverLoadOrderSyncRecords(patches.map(patch=>patch.id),15000);
-        if(scfSavedOrderPatchesMatch(saved,patches))return saved;
-      }catch(checkError){console.warn('Order save verification:',checkError?.message||checkError);}
-      throw error;
-    }
-  });
-}
 async function performDbSet(key,val,queuedAt='',mode=''){
-  const invoiceActorId=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
   if(serverAuthEnabled()){
     if(!sb){if(!readSyncQueue()[key])queueRemoteWrite(key,val,{updatedAt:queuedAt});return false;}
     try{
@@ -580,81 +259,16 @@ async function performDbSet(key,val,queuedAt='',mode=''){
     }catch{setSyncState('error','Không kiểm tra được phiên đăng nhập');return false;}
   }
   if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees')){
-    try{const timeoutMs=remoteTimeoutFor(val);setSyncState('syncing','Đang lưu danh sách nhân viên');await withRemoteTimeout(serverSaveEmployees(val,timeoutMs),timeoutMs);removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
+    try{setSyncState('syncing','Đang lưu danh sách nhân viên');await withRemoteTimeout(serverSaveEmployees(val),remoteTimeoutFor(val));removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
     catch(e){console.warn('serverSaveEmployees:',e.message);setSyncState('error','Không lưu được danh sách nhân viên');window.showToast&&window.showToast(e.message||'Không lưu được danh sách nhân viên.','error');scheduleSyncRetry();return false;}
   }
   if(serverAuthEnabled()&&key==='scf_trips'&&mode==='auto-trips'){
-    try{
-      const timeoutMs=remoteTimeoutFor(val);setSyncState('syncing','Đang lưu chuyến tự động');
-      const saved=await withRemoteTimeout(serverSaveAutoTrips(val,timeoutMs),timeoutMs);
-      if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
-      if(!Array.isArray(saved))throw new Error('Máy chủ chưa trả lại danh sách chuyến đã lưu.');
-      scfRemoteSnapshots.set(key,syncSnapshot(saved));scfRemoteVersions.set(key,'');
-      scfPublishMergedCollection(key,saved,val,queuedAt);
-      removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:queuedAt};setSyncState('synced');return true;
-    }
-    catch(e){
-      if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
-      console.warn('serverSaveAutoTrips:',e.message);setSyncState('error',e.message||'Không lưu được chuyến tự động');
-      window.showToast&&window.showToast(e.message||'Không lưu được chuyến tự động.','error');scheduleSyncRetry();return false;
-    }
+    try{setSyncState('syncing','Đang lưu chuyến tự động');await withRemoteTimeout(serverSaveAutoTrips(val),remoteTimeoutFor(val));removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
+    catch(e){console.warn('serverSaveAutoTrips:',e.message);setSyncState('error',e.message||'Không lưu được chuyến tự động');window.showToast&&window.showToast(e.message||'Không lưu được chuyến tự động.','error');scheduleSyncRetry();return false;}
   }
   if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
-    try{
-      setSyncState('syncing','Đang kiểm tra quyền và đồng bộ');
-      const queued=readSyncQueue()[key]||{};
-      // A newer edit owns its own scheduled save. Never mix an old value/token
-      // with patches belonging to that newer edit after awaiting authentication.
-      if(queued.updatedAt!==queuedAt)return false;
-      const expectedUpdatedAt=queued.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
-      const baseValue=Object.prototype.hasOwnProperty.call(queued,'baseValue')?queued.baseValue:scfRemoteSnapshots.get(key);
-      const patches=Array.isArray(queued.patches)&&queued.patches.length?queued.patches:null;
-      const timeoutMs=remoteTimeoutFor(patches?{key,patches,expectedUpdatedAt}:{key,value:val,baseValue,expectedUpdatedAt});
-      const saved=await scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,baseValue,timeoutMs);
-      if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==invoiceActorId)return false;
-      // Keep this photo's server receipt even if a later edit owns the queue.
-      // The later edit still keeps its queue and reconciliation safeguards.
-      scfVerifyInvoiceSave(key,saved,val,patches);
-      if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
-      scfVerifyOrderTripSave(key,saved,val,patches);
-      scfVerifyTripDriverSave(key,saved,val);
-      const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(val);
-      if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(val));
-      scfRemoteVersions.set(key,merged||patches?'':String(saved?.updatedAt||''));
-      scfPublishMergedCollection(key,saved?.value,val,queuedAt);
-      removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:queuedAt};setSyncState('synced');
-      if(merged)setTimeout(()=>window.scfSyncNow?.(),100);return true;
-    }catch(e){
-      console.warn('serverSavePermittedCollection:',e.message);
-      if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
-      scfRememberSyncFailure(key,queuedAt,e);
-      if(e?.code==='SCF_FUEL_WRITE_CONFLICT'){reportSyncError(key,e,val);return false;}
-      if(['SCF_DATABASE_BUSY','SCF_DATABASE_TIMEOUT'].includes(e?.code)){
-        setSyncState('syncing','Máy chủ đang bận. Thay đổi vẫn được giữ để tự đồng bộ lại.');scheduleSyncRetry();return false;
-      }
-      if(e?.code==='SCF_WRITE_CONFLICT'){
-        // Xung đột do máy khác vừa lưu được giữ lại trong hàng đợi. Với các
-        // đơn khác nhau, Edge Function sẽ ghép theo mã đơn ở lần thử lại;
-        // người dùng không cần reset hoặc bấm lưu lại thủ công.
-        setSyncState('syncing','Đang ghép thay đổi với máy khác rồi thử lại');
-        window.showToast&&window.showToast('Máy khác vừa lưu dữ liệu. App đang tự ghép thay đổi và đồng bộ lại…','info',6000);
-        scheduleSyncRetry();
-        return false;
-      }
-      if(e?.code==='SCF_DUPLICATE_ORDER_CODE'){
-        setSyncState('error','Mã đơn hàng bị trùng');
-        window.showToast&&window.showToast(e.message||'Mã đơn hàng bị trùng. Vui lòng nhập lại mã khác.','error',10000);
-        removeQueuedWrite(key,queuedAt);
-        return false;
-      }
-      if(e?.code==='SCF_DUPLICATE_DELIVERY_ORDER'){
-        setSyncState('error','Đơn hàng đã tồn tại trên máy chủ');
-        window.showToast&&window.showToast(e.message||'Đơn hàng đã tồn tại trên máy chủ; app không tạo thêm đơn trùng.','error',12000);
-        removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'rejected',updatedAt:queuedAt,message:e.message||''};
-        return false;
-      }
-      reportSyncError(key,e,val);scheduleSyncRetry();return false;
-    }
+    try{setSyncState('syncing','Đang kiểm tra quyền và đồng bộ');await withRemoteTimeout(serverSavePermittedCollection(key,val),remoteTimeoutFor(val));removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;}
+    catch(e){console.warn('serverSavePermittedCollection:',e.message);setSyncState('error',e.message||'Không đồng bộ được dữ liệu');window.showToast&&window.showToast(e.message||'Không đồng bộ được dữ liệu.','error');scheduleSyncRetry();return false;}
   }
   // Chỉ giữ dữ liệu không nhạy cảm lâu dài khi đã bật xác thực máy chủ.
   if(allowPersistentLocalCache(key))try{localStorage.setItem(localCacheKey(key),JSON.stringify(val));}catch(e){console.warn('localStorage save:',e.message);}
@@ -664,61 +278,39 @@ async function performDbSet(key,val,queuedAt='',mode=''){
     setSyncState('syncing','Đang gửi thay đổi');
     const{error}=await withRemoteTimeout(sb.from('kv_store').upsert({key,value:val,updated_at:new Date().toISOString()}),remoteTimeoutFor(val));
     if(error)throw error;
-    removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:queuedAt};setSyncState('synced');return true;
+    removeQueuedWrite(key,queuedAt);setSyncState('synced');return true;
   }catch(e){console.warn('dbSet Supabase:',e.message);if(!readSyncQueue()[key])queueRemoteWrite(key,val,{updatedAt:queuedAt});scheduleSyncRetry();return false;}
 }
 const scfWriteChains={};
 const scfDebouncedWrites={};
-function scfSendQueuedCollection(key){
-  const pending=scfDebouncedWrites[key];
-  if(pending){clearTimeout(pending.timer);delete scfDebouncedWrites[key];}
-  const task=(scfWriteChains[key]||Promise.resolve()).catch(()=>false).then(()=>{
-    const item=readSyncQueue()[key];
-    return item?performDbSet(key,item.value,item.updatedAt,item.mode):true;
-  });
-  scfWriteChains[key]=task;
-  task.then(ok=>pending?.resolvers.forEach(done=>done(ok)),()=>pending?.resolvers.forEach(done=>done(false)));
-  return task;
-}
-window.scfSendCollectionsNow=function(keys){
-  const send=()=>Promise.all([...new Set(keys||[])].map(key=>scfSendQueuedCollection(key)));
-  // Tránh gửi trùng nếu một lượt gửi lại toàn bộ hàng đợi đã chạy trước đó.
-  return scfFlushPromise?scfFlushPromise.catch(()=>false).then(send):send();
-};
-function dbSetWithMode(key,val,mode='',options={}){
+function dbSetWithMode(key,val,mode=''){
   scfLocalWrites.set(key,{value:val});
   if(allowPersistentLocalCache(key))try{localStorage.setItem(localCacheKey(key),JSON.stringify(val));}catch(e){console.warn('localStorage save:',e.message);}
-  const queuedAt=queueRemoteWrite(key,val,{syncing:true,detail:'Đang chuẩn bị đồng bộ',mode,patches:options.patches});
+  const queuedAt=queueRemoteWrite(key,val,{syncing:true,detail:'Đang chuẩn bị đồng bộ',mode});
   return new Promise(resolve=>{
     const pending=scfDebouncedWrites[key]||{timer:null,value:val,queuedAt,mode,resolvers:[]};
     pending.value=val;pending.queuedAt=queuedAt;pending.mode=mode;pending.resolvers.push(resolve);
     if(pending.timer)clearTimeout(pending.timer);
-    pending.timer=setTimeout(()=>scfSendQueuedCollection(key),SCF_SYNC_DEBOUNCE_MS);
+    pending.timer=setTimeout(()=>{
+      delete scfDebouncedWrites[key];
+      if(readSyncQueue()[key]?.updatedAt!==pending.queuedAt){pending.resolvers.forEach(done=>done(true));return;}
+      const task=(scfWriteChains[key]||Promise.resolve()).catch(()=>false).then(()=>performDbSet(key,pending.value,pending.queuedAt,pending.mode));
+      scfWriteChains[key]=task;
+      task.then(ok=>pending.resolvers.forEach(done=>done(ok)));
+    },SCF_SYNC_DEBOUNCE_MS);
     scfDebouncedWrites[key]=pending;
   });
 }
 function dbSet(key,val){return dbSetWithMode(key,val,'');}
-function dbSetAutoTrips(val){
-  // A scheduled automatic pass must not turn a queued manual driver edit into
-  // an automatic write; that endpoint deliberately preserves server drivers.
-  const pending=readSyncQueue().scf_trips;
-  if(pending&&pending.mode!=='auto-trips')return Promise.resolve(false);
-  return dbSetWithMode('scf_trips',val,'auto-trips');
-}
-let scfRetryTimer=null,scfRetryAttempt=0,scfFlushPromise=null;
-const SCF_MAX_AUTO_RETRIES=6;
+function dbSetAutoTrips(val){return dbSetWithMode('scf_trips',val,'auto-trips');}
+let scfRetryTimer=null,scfRetryAttempt=0;
 function scheduleSyncRetry(){
   if(scfRetryTimer||!navigator.onLine||!sb)return;
-  if(scfRetryAttempt>=SCF_MAX_AUTO_RETRIES){
-    setSyncState('error','Máy chủ phản hồi chậm. Đã tạm dừng tự thử để tránh gửi yêu cầu trùng; dữ liệu vẫn được giữ trên máy.');
-    return;
-  }
-  const delays=[2000,5000,15000,30000,60000,120000];
+  const delays=[3000,10000,30000,60000];
   const delay=delays[Math.min(scfRetryAttempt,delays.length-1)];scfRetryAttempt++;
   scfRetryTimer=setTimeout(async()=>{scfRetryTimer=null;await flushPendingWrites();},delay);
 }
-async function runPendingWrites(){
-  const invoiceActorId=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
+async function flushPendingWrites(){
   if(!navigator.onLine||!sb)return false;
   if(serverAuthEnabled()){
     try{const{data}=await sb.auth.getSession();if(!data?.session)return false;}catch{return false;}
@@ -727,152 +319,33 @@ async function runPendingWrites(){
   if(!entries.length){setSyncState('synced');return true;}
   setSyncState('syncing','Đang gửi '+entries.length+' thay đổi');
   for(const[key]of entries){
-    let waitingResolvers=[],item=null;
+    let waitingResolvers=[];
     try{
       const debounced=scfDebouncedWrites[key];
       if(debounced){clearTimeout(debounced.timer);waitingResolvers=debounced.resolvers||[];delete scfDebouncedWrites[key];}
       if(scfWriteChains[key])await scfWriteChains[key].catch(()=>false);
-      item=readSyncQueue()[key];if(!item){waitingResolvers.forEach(done=>done(true));continue;}
-      if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees')){const timeoutMs=remoteTimeoutFor(item.value);await withRemoteTimeout(serverSaveEmployees(item.value,timeoutMs),timeoutMs);}
-      // Manual trip writes must keep their permission/duplicate validation on
-      // retry, even when the collection also contains automatically made trips.
-      else if(serverAuthEnabled()&&key==='scf_trips'&&item.mode==='auto-trips'){
-        const timeoutMs=remoteTimeoutFor(item.value),saved=await withRemoteTimeout(serverSaveAutoTrips(item.value,timeoutMs),timeoutMs);
-        if(readSyncQueue()[key]?.updatedAt!==item.updatedAt)return false;
-        if(!Array.isArray(saved))throw new Error('Máy chủ chưa trả lại danh sách chuyến đã lưu.');
-        scfRemoteSnapshots.set(key,syncSnapshot(saved));scfRemoteVersions.set(key,'');
-        scfPublishMergedCollection(key,saved,item.value,item.updatedAt);
-      }
-      else if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){
-        const expectedUpdatedAt=item.expectedUpdatedAt??String(scfRemoteVersions.get(key)||'');
-        const baseValue=Object.prototype.hasOwnProperty.call(item,'baseValue')?item.baseValue:scfRemoteSnapshots.get(key);
-        const patches=Array.isArray(item.patches)&&item.patches.length?item.patches:null;
-        const timeoutMs=remoteTimeoutFor(patches?{key,patches,expectedUpdatedAt}:{key,value:item.value,baseValue,expectedUpdatedAt});
-        const saved=await scfSavePermittedCollection(key,item.value,patches,expectedUpdatedAt,baseValue,timeoutMs);
-        if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==invoiceActorId)return false;
-        scfVerifyInvoiceSave(key,saved,item.value,patches);
-        if(readSyncQueue()[key]?.updatedAt!==item.updatedAt)return false;
-        scfVerifyOrderTripSave(key,saved,item.value,patches);
-        scfVerifyTripDriverSave(key,saved,item.value);
-        const merged=Array.isArray(saved?.value)&&JSON.stringify(saved.value)!==JSON.stringify(item.value);
-        if(Array.isArray(saved?.value))scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(item.value));
-        scfRemoteVersions.set(key,merged||patches?'':String(saved?.updatedAt||''));
-        scfPublishMergedCollection(key,saved?.value,item.value,item.updatedAt);
-        if(merged)setTimeout(()=>window.scfSyncNow?.(),100);
-      }
+      const item=readSyncQueue()[key];if(!item){waitingResolvers.forEach(done=>done(true));continue;}
+      if(serverAuthEnabled()&&(key==='scf_employees'||key==='scf_privileged_employees'))await withRemoteTimeout(serverSaveEmployees(item.value),remoteTimeoutFor(item.value));
+      else if(serverAuthEnabled()&&key==='scf_trips'&&(item.mode==='auto-trips'||(Array.isArray(item.value)&&item.value.some(trip=>trip?.autoCreated))))await withRemoteTimeout(serverSaveAutoTrips(item.value),remoteTimeoutFor(item.value));
+      else if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key))await withRemoteTimeout(serverSavePermittedCollection(key,item.value),remoteTimeoutFor(item.value));
       else{
         const{error}=await withRemoteTimeout(sb.from('kv_store').upsert({key,value:item.value,updated_at:item.updatedAt||new Date().toISOString()}),remoteTimeoutFor(item.value));
         if(error)throw error;
       }
-      removeQueuedWrite(key,item.updatedAt||'');window.__SCF_COLLECTION_SYNC_RESULTS=window.__SCF_COLLECTION_SYNC_RESULTS||{};window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:item.updatedAt||''};
+      removeQueuedWrite(key,item.updatedAt||'');
       waitingResolvers.forEach(done=>done(true));
     }catch(e){
       console.warn('flushPendingWrites '+key+':',e?.message||e);
       waitingResolvers.forEach(done=>done(false));
-      if(readSyncQueue()[key]?.updatedAt!==item?.updatedAt)return false;
-      scfRememberSyncFailure(key,item?.updatedAt,e);
-      if(e?.code==='SCF_FUEL_WRITE_CONFLICT'){reportSyncError(key,e,item?.value);return false;}
-      if(['SCF_DATABASE_BUSY','SCF_DATABASE_TIMEOUT'].includes(e?.code)){
-        setSyncState('syncing','Máy chủ đang bận. Thay đổi vẫn được giữ để tự đồng bộ lại.');scheduleSyncRetry();return false;
-      }
-      if(e?.code==='SCF_WRITE_CONFLICT'){
-        setSyncState('syncing','Đang ghép thay đổi với máy khác rồi thử lại');
-        window.showToast&&window.showToast('Máy khác vừa lưu dữ liệu. App đang tự ghép thay đổi và đồng bộ lại…','info',6000);
-        scheduleSyncRetry();
-        return false;
-      }
-      if(e?.code==='SCF_DUPLICATE_ORDER_CODE'){
-        setSyncState('error','Mã đơn hàng bị trùng');
-        window.showToast&&window.showToast(e.message||'Mã đơn hàng bị trùng. Vui lòng nhập lại mã khác.','error',10000);
-        removeQueuedWrite(key,item?.updatedAt||'');window.__SCF_COLLECTION_SYNC_RESULTS=window.__SCF_COLLECTION_SYNC_RESULTS||{};window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'rejected',updatedAt:item?.updatedAt||'',message:e.message||''};
-        return false;
-      }
-      if(e?.code==='SCF_DUPLICATE_DELIVERY_ORDER'){
-        setSyncState('error','Đơn hàng đã tồn tại trên máy chủ');
-        window.showToast&&window.showToast(e.message||'Đơn hàng đã tồn tại trên máy chủ; app không tạo thêm đơn trùng.','error',12000);
-        removeQueuedWrite(key,item?.updatedAt||'');
-        return false;
-      }
-      reportSyncError(key,e,item?.value);scheduleSyncRetry();return false;
+      const latest=readSyncQueue();if(latest[key]){latest[key].attempts=(Number(latest[key].attempts)||0)+1;writeSyncQueue(latest);}
+      setSyncState('error',e?.message||'Còn thay đổi chưa đồng bộ');scheduleSyncRetry();return false;
     }
   }
   scfRetryAttempt=0;setSyncState('synced');return true;
 }
-function flushPendingWrites(){
-  if(scfFlushPromise)return scfFlushPromise;
-  scfFlushPromise=runPendingWrites().finally(()=>{scfFlushPromise=null;});
-  return scfFlushPromise;
-}
-window.scfFlushPendingWrites=function(){scfRetryAttempt=0;return flushPendingWrites();};
-window.scfWaitForCollectionSync=function(key,timeoutMs=35000){
-  const started=Date.now();
-  return new Promise(resolve=>{
-    const check=()=>{
-      const pending=readSyncQueue()[key];
-      const state=window.__SCF_SYNC_STATE||{};
-      if(!pending&&!scfDebouncedWrites[key]){
-        const result=window.__SCF_COLLECTION_SYNC_RESULTS?.[key];
-        resolve(result?.status==='confirmed'||(!result&&state.status!=='error'));
-        return;
-      }
-      if(Date.now()-started>=timeoutMs){resolve(false);return;}
-      setTimeout(check,150);
-    };
-    check();
-  });
-};
-window.scfWaitForOrderInvoiceSync=async function(orderId,url,timeoutMs=50000){
-  const id=String(orderId),deadline=Date.now()+timeoutMs;
-  const actorId=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
-  const verifyAfter=deadline-Math.min(10000,timeoutMs/2);
-  let checked=false;
-  if(!id||!url)return false;
-  if(window.__SCF_CONFIRMED_INVOICES?.[id]===url)return true;
-  if(!navigator.onLine)return false;
-  // The invoice has its own receipt. Later quantity edits or another order's
-  // pending save must not turn an already confirmed photo into a warning.
-  window.scfSendCollectionsNow(['scf_orders']).catch(error=>console.warn('Invoice sync:',error?.message||error));
-  while(true){
-    if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==actorId)return false;
-    if(window.__SCF_CONFIRMED_INVOICES?.[id]===url)return true;
-    if(!navigator.onLine||Date.now()>=deadline)return false;
-    const pending=readSyncQueue().scf_orders||scfDebouncedWrites.scf_orders;
-    if(!checked&&typeof serverLoadOrderSyncRecords==='function'&&(!pending||Date.now()>=verifyAfter)){
-      checked=true;
-      try{
-        const saved=await serverLoadOrderSyncRecords([id],Math.max(1,Math.min(10000,deadline-Date.now())));
-        if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==actorId)return false;
-        const row=saved?.items?.find(item=>String(item.id)===id);
-        if(row?.invoiceImage===url){
-          window.__SCF_CONFIRMED_INVOICES=window.__SCF_CONFIRMED_INVOICES||{};
-          window.__SCF_CONFIRMED_INVOICES[id]=url;
-          return true;
-        }
-      }catch(error){console.warn('Invoice verification:',error?.message||error);}
-      if(window.__SCF_CONFIRMED_INVOICES?.[id]===url)return true;
-      if(!pending)return false;
-    }
-    await new Promise(resolve=>setTimeout(resolve,150));
-  }
-};
-window.scfWaitForTripDriverSync=async function(tripId,driverId,orderIds,timeoutMs=6000){
-  if(!navigator.onLine)return false;
-  // Gửi ngay các thay đổi đã xếp hàng; không giữ cửa sổ chờ toàn bộ thời gian
-  // timeout HTTP hoặc các lần thử lại của máy chủ.
-  // Hai collection vốn độc lập: gửi cùng lúc và không đợi các nhóm dữ liệu
-  // khác trong hàng đợi. Mỗi collection vẫn giữ chuỗi ghi riêng chống gửi trùng.
-  window.scfSendCollectionsNow(['scf_orders','scf_trips']).catch(error=>console.warn('Trip driver sync:',error?.message||error));
-  const results=await Promise.all(['scf_trips','scf_orders'].map(key=>window.scfWaitForCollectionSync(key,timeoutMs)));
-  if(results.some(ok=>!ok))return false;
-  const trip=(scfRemoteSnapshots.get('scf_trips')||[]).find(item=>String(item.id)===String(tripId));
-  if(String(trip?.driverId||'')!==String(driverId)||trip?.driverAssignMode!=='manual')return false;
-  const orders=new Map((scfRemoteSnapshots.get('scf_orders')||[]).map(order=>[String(order.id),order]));
-  return (orderIds||[]).every(id=>{const order=orders.get(String(id));return String(order?.tripId||'')===String(tripId)&&order?.tripAssignMode==='manual';});
-};
+window.scfFlushPendingWrites=flushPendingWrites;
 window.addEventListener('online',()=>flushPendingWrites());
 window.addEventListener('offline',()=>setSyncState('offline','Mất kết nối mạng'));
-window.addEventListener('pagehide',persistSyncQueueNow);
-document.addEventListener('visibilitychange',()=>{if(document.hidden)persistSyncQueueNow();});
 setSyncState(navigator.onLine?'idle':'offline');
 if(navigator.onLine&&Object.keys(readSyncQueue()).length)setTimeout(()=>flushPendingWrites(),1500);
 function mkSet(key,setter){return valOrFn=>{
@@ -880,71 +353,40 @@ function mkSet(key,setter){return valOrFn=>{
   if(access?.readOnly){
     return;
   }
-  setter(prev=>{
-    const nextRaw=typeof valOrFn==='function'?valOrFn(prev):valOrFn;
-    if(nextRaw===prev)return prev;
-    const next=key==='scf_orders'?normalizeOrdersForStorage(nextRaw):nextRaw;
-    const patches=key==='scf_orders'?collectionRecordPatches(prev,next):null;
-    // An empty diff means no edit, not a request to rewrite the collection.
-    if(Array.isArray(patches)&&!patches.length)return prev;
-    dbSetWithMode(key,next,'',{patches});return next;
-  });
+  setter(prev=>{const nextRaw=typeof valOrFn==='function'?valOrFn(prev):valOrFn;const next=key==='scf_orders'?normalizeOrdersForStorage(nextRaw):nextRaw;dbSet(key,next);return next;});
 };}
-// Keep the native picker attached until camera selection is delivered on mobile.
-function scfPickPhoto(onFile,source='camera'){
-  const input=document.createElement('input');
-  input.type='file';input.accept='image/*';
-  if(source==='camera')input.capture='environment';
-  input.style.cssText='position:fixed;left:-9999px;width:1px;height:1px;opacity:0';
-  const cleanup=()=>input.remove();
-  input.oncancel=cleanup;
-  input.onchange=()=>{
-    const file=input.files&&input.files[0];
-    cleanup();
-    if(file)Promise.resolve(onFile(file)).catch(error=>window.showToast(error.message||'Không lưu được ảnh.','error'));
-  };
-  document.body.appendChild(input);
-  try{input.click();}catch(error){cleanup();throw error;}
-}
 function resizeImageFile(file,max=1280,quality=.72){
   return new Promise((resolve,reject)=>{
-    const objectUrl=URL.createObjectURL(file);
-    const release=()=>URL.revokeObjectURL(objectUrl);
-    try{
+    const reader=new FileReader();
+    reader.onload=ev=>{
       const img=new Image();
       img.onload=()=>{
-        try{
         const scale=Math.min(1,max/Math.max(img.width,img.height));
         const canvas=document.createElement('canvas');
         canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));
         const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);
-        const dataUrl=canvas.toDataURL('image/jpeg',quality);
-        canvas.toBlob(blob=>{canvas.width=canvas.height=1;blob?resolve({blob,dataUrl}):reject(new Error('Không nén được ảnh.'));},'image/jpeg',quality);
-        }catch(error){reject(error);}finally{release();}
+        canvas.toBlob(blob=>blob?resolve({blob,dataUrl:canvas.toDataURL('image/jpeg',quality)}):reject(new Error('Không nén được ảnh.')),'image/jpeg',quality);
       };
-      img.onerror=()=>{release();reject(new Error('Không đọc được ảnh.'));};
-      img.src=objectUrl;
-    }catch(error){release();reject(error);}
+      img.onerror=()=>reject(new Error('Không đọc được ảnh.'));
+      img.src=ev.target.result;
+    };
+    reader.onerror=()=>reject(new Error('Không đọc được file ảnh.'));
+    reader.readAsDataURL(file);
   });
 }
 async function uploadPhoto(file,folder='delivery',options={}){
   const img=await resizeImageFile(file,options.max||1280,options.quality||.72);
-  if(options.onPrepared)await options.onPrepared(img.dataUrl);
-  if(!sb){
-    if(options.requireRemote)throw new Error('Chưa kết nối được kho ảnh. Vui lòng kiểm tra mạng rồi thử lại.');
-    return img.dataUrl;
-  }
+  if(!sb)return img.dataUrl;
   const clean=(file.name||'photo.jpg').toLowerCase().replace(/[^a-z0-9.]+/g,'-').replace(/-+/g,'-');
   const path=folder+'/'+new Date().toISOString().slice(0,10)+'/'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)+'-'+clean.replace(/\.[^.]+$/,'')+'.jpg';
   try{
-    const{error}=await withRemoteTimeout(sb.storage.from(SUPA_PHOTO_BUCKET).upload(path,img.blob,{contentType:'image/jpeg',upsert:false}),30000);
+    const{error}=await sb.storage.from(SUPA_PHOTO_BUCKET).upload(path,img.blob,{contentType:'image/jpeg',upsert:false});
     if(error)throw error;
-    const signedUrl=await withRemoteTimeout(createPrivatePhotoUrl(path),15000);
+    const signedUrl=await createPrivatePhotoUrl(path);
     if(!signedUrl)throw new Error('Không tạo được đường dẫn ảnh bảo mật.');
     return signedUrl;
   }catch(e){
     console.warn('Upload Supabase Storage:',e.message||e);
-    if(options.requireRemote)throw new Error('Không tải được ảnh lên kho lưu trữ: '+(e.message||e));
     window.showToast('Chưa upload được ảnh lên Supabase Storage. App tạm lưu ảnh trên máy này. Kiểm tra bucket '+SUPA_PHOTO_BUCKET+' và policy upload/read.','error');
     return img.dataUrl;
   }

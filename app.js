@@ -1,30 +1,25 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V576';
+const SCF_BUILD_VERSION='V555';
 const PTITLES = {
-  kpi4p:'KPI & Lương 4P',
-  attp_process:'Tài liệu ATTP · Quy trình',
-  attp_standards:'Tài liệu ATTP · Tiêu chuẩn',
-  attp_daily:'Tài liệu ATTP · Nhật ký hàng ngày',
-  attp_legal:'Tài liệu ATTP · Tài liệu pháp lý',
   garages:'Gara ô tô',
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
   backup:'Backup dữ liệu', materials:'Nguyên vật liệu', assets:'Danh mục tài sản', products:'Sản phẩm', depts:'Bộ phận',
   customers:'Khách hàng', workcats:'Danh mục công việc', tasks:'Giao việc', notifications:'Thông báo', userguide:'HDSD SCFOOD', shifts:'Ca giao hàng',
   workreport_vp:'Công kế toán', workreport_sx:'Công sản xuất', workreport_lx:'Công lái xe', workreport_total:'Tổng công',
   process_accounting:'QUY TRÌNH KẾ TOÁN', process_bun:'QT SẢN XUẤT BÚN', process_pho:'QT SX PHỞ', process_banhcuon:'QT SX BÁNH CUỐN',
-  quotes:'Báo giá', delivery:'Đơn giao hàng', intem:'Intem', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng', deliverysequence:'Cài đặt thứ tự giao',
-  salesreport:'Báo cáo bán hàng', cashflowreport:'Báo cáo dòng tiền', fuelreport:'Báo cáo mua xăng dầu', marketsales:'Báo cáo công nợ', invoicereport:'Báo cáo hóa đơn', powdersales:'Bán bột bún',
+  quotes:'Báo giá', delivery:'Đơn giao hàng', intem:'Intem', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng',
+  salesreport:'Báo cáo bán hàng', cashflowreport:'Báo cáo dòng tiền', businessreport:'Báo cáo kết quả kinh doanh', fuelreport:'Báo cáo mua xăng dầu', marketsales:'Báo cáo công nợ', powdersales:'Bán bột bún',
   nccs:'Nhà CC NVL', nccgoods:'Nhà CC Hàng hóa', purchaseorders:'Đơn mua hàng NVL', purchasegoods:'Đơn mua hàng hàng hóa', fuelpurchases:'Đơn mua xăng dầu', utilityexpenses:'Chi phí điện nước', purchasereport:'Báo cáo mua hàng', maintreport:'Báo cáo sửa chữa', materialusage:'Báo cáo NVL tồn và tiêu dùng', powderdebtreport:'Báo cáo công nợ', syncreport:'Đồng bộ dữ liệu', dbusage:'Dung lượng Supabase',
   maint_vehicle:'Bảo dưỡng xe', maint_machine:'Bảo dưỡng máy',
   prodsummary:'Tổng hợp sản xuất', prodorders:'Đơn sản xuất', stock:'Tồn kho',
 };
 
-const PROCESS_POST_KEYS={attp_process:'scf_attp_process',attp_standards:'scf_attp_standards',attp_daily:'scf_attp_daily',attp_legal:'scf_attp_legal',process_accounting:'scf_process_posts_accounting',process_bun:'scf_process_posts_bun',process_pho:'scf_process_posts_pho',process_banhcuon:'scf_process_posts_banhcuon'};
+const PROCESS_POST_KEYS={process_accounting:'scf_process_posts_accounting',process_bun:'scf_process_posts_bun',process_pho:'scf_process_posts_pho',process_banhcuon:'scf_process_posts_banhcuon'};
 
 // Every editable page must load all of its input collections before mounting.
 // Names below are kv_store keys without the scf_ prefix; employees load separately.
 const SCF_PAGE_DATA={
-  welcome:['company_news','internal_messages'], company:['company'], appearance:[],
+  welcome:['company_news','internal_messages'], company:[], appearance:[],
   printtemplates:['print_template_settings','products','customers'],
   employees:['depts','permission_profiles'], permission_settings:['permission_profiles'],
   attendance:['attendance'],attendance_settings:['attendance'],attendance_report:['attendance'],workreport_total:['attendance'],
@@ -32,174 +27,36 @@ const SCF_PAGE_DATA={
   materials:['materials','purchases'],assets:['assets'],garages:['garages'],
   products:['products','prodcats'],depts:['depts','workcats'],workcats:['workcats','depts'],
   customers:['customers','shifts','orders','areas'],areas:['areas','customers','orders'],
-  prodshifts:['prod_shifts','prod_shift_rules','orders','customers','shifts'],deliveryrules:['delivery_rules'],deliverysequence:['customers','areas','shifts'],
+  prodshifts:['prod_shifts','prod_shift_rules','orders','customers','shifts'],deliveryrules:['delivery_rules'],
   tasks:['tasks','workcats'],notifications:[],userguide:[],
   nccs:['nccs','purchases'],nccgoods:['ncc_goods','goods_purchases'],
   purchaseorders:['purchases','nccs','materials','products','prodcats'],
   purchasegoods:['goods_purchases','ncc_goods','materials','products','prodcats'],
   fuelpurchases:['fuelpurchases','assets'],utilityexpenses:['finance_entries'],fuelreport:['fuelpurchases'],
   purchasereport:['purchases','goods_purchases','nccs','ncc_goods'],maintreport:[],
-  materialusage:['materials','purchases','material_month_openings'],powderdebtreport:['customers'],marketsales:['orders','customers','products','trips','quotes'],invoicereport:['orders','customers','products','trips'],
+  materialusage:['materials','purchases','material_month_openings'],powderdebtreport:['customers'],marketsales:['orders','customers','products','trips'],
   maint_vehicle:['assets','garages'],maint_machine:['assets'],shifts:['shifts','trips'],
   quotes:['quotes','customers','products'],intem:['products'],
   delivery:['orders','customers','products','prodcats','quotes','trips','prod_shifts','prod_shift_rules','shifts','print_template_settings'],
-  trips:['trips','orders','shifts','prod_shifts','customers','products','prodcats','quotes','finance_debts'],
+  trips:['trips','orders','shifts','prod_shifts','customers','products','quotes','finance_debts'],
   orderdetail:['orders','products','customers','shifts','trips','prod_shifts','quotes','finance_debts'],
   workreport_lx:['trips','orders','products','customers'],
-  salesreport:['orders','customers','products','prod_shifts','quotes'],
+  salesreport:['orders','customers','products','prodcats','prod_shifts','quotes'],
   cashflowreport:['finance_entries','finance_debts','finance_openings','customers','nccs','orders','products','quotes','purchases','goods_purchases'],
+  businessreport:['finance_entries','customers','orders','products','quotes','purchases','goods_purchases'],
   powdersales:['customers','trips'],prodsummary:['orders','products','prod_shifts','prod_shift_rules','prod_actuals'],
-  prodorders:['prodorders','products','orders','prod_shifts','prod_shift_rules'],stock:['stock','products','prodcats'],
+  prodorders:['prodorders','products'],stock:['stock','products','prodcats'],
   syncreport:[],purchase:[],workreport_vp:[],workreport_sx:[]
 };
 function scfPageDataKeys(page,allKeys){
   const keys=['company','ui_settings','notifications'];
   if(page==='backup'||page==='dbusage')return [...new Set([...keys,...allKeys])];
-  if(page.startsWith('attp_'))return keys;
   if(PROCESS_POST_KEYS[page])keys.push(PROCESS_POST_KEYS[page].replace(/^scf_/,''));
   else keys.push(...(SCF_PAGE_DATA[page]||[]));
   return [...new Set(keys)];
 }
-function scfAdvanceTripKey(dateVN,shift){
-  const raw=String(shift?.id||shift?.name||'CA').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toUpperCase();
-  const shiftKey=raw.replace(/[^A-Z0-9]/g,'').slice(0,24)||'CA';
-  const dateKey=String(dateVN||'').split('/').reverse().join('');
-  return {planKey:String(dateVN||'')+'|'+shiftKey,id:'CHA'+dateKey+'_'+shiftKey};
-}
-function scfCreateAdvanceTrips(currentTrips,deliveryShifts,targetDate,actorName){
-  const result=(currentTrips||[]).map(trip=>({...trip,orderIds:[...(trip?.orderIds||[])]}));
-  const norm=value=>normalizeLookupText(value||'');
-  let changed=false;
-  (deliveryShifts||[]).filter(shift=>shift&&shift.active!==false).forEach(shift=>{
-    const shiftId=String(shift.id||'').trim(),shiftName=String(shift.name||'').trim();
-    if(!shiftId&&!shiftName)return;
-    const key=scfAdvanceTripKey(targetDate,shift);
-    const exists=result.some(trip=>String(trip?.autoPlanKey||'')===key.planKey||(String(trip?.deliveryDate||'')===targetDate&&(
-      (shiftId&&String(trip?.shiftId||'')===shiftId)||(!shiftId&&shiftName&&norm(trip?.shiftName)===norm(shiftName))
-    )));
-    if(exists)return;
-    const {driverId,driverName}=scfShiftDriverAt(shift,{deliveryDate:targetDate});
-    const stamp=fmtDT();
-    result.push({
-      id:key.id,deliveryDate:targetDate,deliveryTime:shift.timeStart||shift.startTime||'',shiftId,shiftName:shiftName||shift.area||'Chuyến tự động',area:shift.area||'',
-      driverName,driverId,driverAssignMode:driverId||driverName?'auto':'',orderIds:[],totalWeight:0,status:driverId||driverName?'assigned':'planning',
-      note:'Tự động tạo trước 3 ngày'+(shiftName?': '+shiftName:''),createdAt:stamp,updatedAt:stamp,updatedBy:actorName||'Hệ thống',
-      autoCreated:true,autoPlanned:true,autoPlanKey:key.planKey,plannedDaysAhead:3
-    });
-    changed=true;
-  });
-  return {trips:result,changed};
-}
-function scfCreateAdvanceTripWindow(currentTrips,deliveryShifts,baseDate,daysAhead,actorName){
-  let result={trips:currentTrips||[],changed:false};
-  const horizon=Math.max(0,Number(daysAhead)||0);
-  // Rà cả hôm nay để tự bù nếu tác vụ nửa đêm trước đó bị gián đoạn,
-  // đồng thời luôn duy trì đủ ba ngày tiếp theo.
-  for(let offset=0;offset<=horizon;offset++){
-    const dayResult=scfCreateAdvanceTrips(result.trips,deliveryShifts,addDaysVN(baseDate,offset),actorName);
-    result={trips:dayResult.trips,changed:result.changed||dayResult.changed};
-  }
-  return result;
-}
-function scfOrderTripWeight(order,products,productById){
-  return (order?.lines||[]).reduce((sum,line)=>{
-    const product=productById?productById.get(String(line?.productId||'')):(products||[]).find(item=>String(item?.id||'')===String(line?.productId||''));
-    const qty=numFmt(line?.qtyInvoice)||numFmt(line?.qtyProd)||numFmt(line?.qty)||numFmt(line?.quantity)||0;
-    const unit=String(line?.unit||product?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');
-    return sum+(unit==='kg'||unit==='kgs'||unit==='kilogram'||unit==='kilograms'?qty:qty*numFmt(product?.weightPerUnit||line?.weightPerUnit||0));
-  },0);
-}
-function scfReconcileTripOrderLinks(currentTrips,currentOrders,products,{automaticWrite=false}={}){
-  const originalById=new Map((currentTrips||[]).map(trip=>[String(trip.id),trip]));
-  const orderById=new Map((currentOrders||[]).map(order=>[String(order?.id||''),order]));
-  const productById=new Map();
-  (products||[]).forEach(product=>{const id=String(product?.id||'');if(!productById.has(id))productById.set(id,product);});
-  let changed=false;
-  const trips=scfTripMembershipView(currentTrips,currentOrders).map(trip=>{
-    const wanted=[...new Set((trip.orderIds||[]).map(String))];
-    const original=originalById.get(String(trip.id));
-    const current=[...new Set((original?.orderIds||[]).map(String))];
-    // save_auto_trips can repair membership on a manually created trip, but
-    // only accepts cached weight on autoCreated trips. Keep its server-owned
-    // weight here; page summaries calculate weight from the actual orders.
-    const totalWeight=automaticWrite&&!original?.autoCreated?original?.totalWeight:
-      wanted.reduce((sum,id)=>sum+scfOrderTripWeight(orderById.get(id),products,productById),0);
-    const linksChanged=wanted.length!==current.length||wanted.some((id,index)=>id!==current[index]);
-    const weightChanged=Math.abs(numFmt(original?.totalWeight)-numFmt(totalWeight))>0.001;
-    if(!linksChanged&&!weightChanged)return original||trip;
-    changed=true;return {...trip,orderIds:wanted,totalWeight};
-  });
-  return {trips,changed};
-}
-function scfCreateAutomaticTripLookup(trips){
-  const byShiftId=new Map(),byShiftName=new Map();
-  const key=(date,shift)=>JSON.stringify([String(date||'').trim(),shift]);
-  const add=trip=>{
-    if(trip?.driverDispatchedAt||['active','completion_pending','completed','cancelled'].includes(String(trip?.status||'')))return;
-    const idKey=key(trip.deliveryDate,String(trip.shiftId||'')),nameKey=key(trip.deliveryDate,normalizeLookupText(trip.shiftName||''));
-    if(!byShiftId.has(idKey))byShiftId.set(idKey,trip);
-    if(!byShiftName.has(nameKey))byShiftName.set(nameKey,trip);
-  };
-  (trips||[]).forEach(add);
-  return {add,find:(date,shiftId,shiftName)=>shiftId?byShiftId.get(key(date,shiftId)):(shiftName?byShiftName.get(key(date,normalizeLookupText(shiftName))):undefined)};
-}
-function scfPlanAutomaticOrders(orders,trips,prodShifts,customers,actorName,limit=25){
-  const workingTrips=[...(trips||[])],tripById=new Map(workingTrips.map(trip=>[String(trip.id||''),trip]));
-  const lookup=scfCreateAutomaticTripLookup(workingTrips);
-  const occupiedKey=(date,shift)=>JSON.stringify([String(date||'').trim(),String(shift||'').trim()]);
-  const occupiedIds=new Set(workingTrips.map(trip=>occupiedKey(trip.deliveryDate,trip.shiftId)));
-  const occupiedNames=new Set(workingTrips.map(trip=>occupiedKey(trip.deliveryDate,normalizeLookupText(trip.shiftName))));
-  let changed=0,tripsChanged=false;
-  const nextOrders=(orders||[]).map(order=>{
-    if(changed>=limit||!order||!['','pending','assigned'].includes(String(order.status||'')))return order;
-    const linked=tripById.get(String(order.tripId||''));
-    if(linked&&(linked.driverDispatchedAt||['active','completion_pending','completed','cancelled'].includes(String(linked.status||''))))return order;
-    const plannedShift=order.prodShiftAssignMode==='manual'
-      ?(prodShifts||[]).find(shift=>String(shift.id||'')===String(order.prodShiftId||''))
-      :getProdShiftForOrder(order,prodShifts||[],customers||[]);
-    let next=scfApplyAutomaticProduction(order,plannedShift);
-    if(order.tripAssignMode!=='manual'){
-      let trip=null;
-      const tripDate=plannedShift?addDaysVN(order.deliveryDate,Number(plannedShift.tripDateOffset??0)):'';
-      const deliveryShift=plannedShift&&(plannedShift.tripShiftId||plannedShift.tripShiftName)?resolveCurrentDeliveryShift(order,plannedShift):null;
-      if(tripDate&&deliveryShift&&deliveryShift.active!==false){
-        const shiftId=String(deliveryShift.id||'').trim(),shiftName=String(deliveryShift.name||'').trim();
-        // Keep an existing eligible link when legacy data has multiple trips
-        // for the same date/shift; array order must not move its orders.
-        const linkedMatches=linked&&!linked.driverDispatchedAt&&['planning','assigned',''].includes(String(linked.status||''))
-          &&String(linked.deliveryDate||'')===tripDate
-          &&(shiftId?String(linked.shiftId||'')===shiftId:normalizeLookupText(linked.shiftName)===normalizeLookupText(shiftName));
-        trip=linkedMatches?linked:lookup.find(tripDate,shiftId,shiftName);
-        // Không tạo chuyến trùng một ca đã giao lái xe/đóng, hoặc tự gắn
-        // thêm đơn vào chuyến đó. Để Chờ xếp cho người có quyền xử lý.
-        const existing=shiftId?occupiedIds.has(occupiedKey(tripDate,shiftId)):occupiedNames.has(occupiedKey(tripDate,normalizeLookupText(shiftName)));
-        if(!trip&&!existing){
-          const {driverId,driverName}=scfShiftDriverAt(deliveryShift,{deliveryDate:tripDate});
-          const key=scfAdvanceTripKey(tripDate,deliveryShift),stamp=fmtDT();
-          trip={id:key.id,deliveryDate:tripDate,deliveryTime:deliveryShift.timeStart||deliveryShift.startTime||order.deliveryTime||'',shiftId,shiftName,area:deliveryShift.area||order.area||'',
-            driverId,driverName,driverAssignMode:driverId||driverName?'auto':'',orderIds:[],totalWeight:0,status:driverId||driverName?'assigned':'planning',
-            note:'Tự động tạo khi có đơn phù hợp: '+shiftName,createdAt:stamp,updatedAt:stamp,updatedBy:actorName||'Hệ thống',autoCreated:true};
-          workingTrips.push(trip);tripById.set(String(trip.id),trip);lookup.add(trip);tripsChanged=true;
-          occupiedIds.add(occupiedKey(tripDate,shiftId));occupiedNames.add(occupiedKey(tripDate,normalizeLookupText(shiftName)));
-        }
-      }
-      const tripId=trip?.id||null,status=trip?'assigned':'pending';
-      if(String(next.tripId||'')!==String(tripId||'')||next.status!==status||next.tripAssignMode!=='auto')next={...next,tripId,tripAssignMode:'auto',status};
-    }
-    if(next===order)return order;
-    changed++;
-    return {...next,updatedAt:fmtDT(),updatedBy:actorName||'Hệ thống'};
-  });
-  return {orders:nextOrders,trips:workingTrips,changed,tripsChanged};
-}
 function createScfDataLoader(read,apply){
   const loaded=new Set(),pending=new Map();let disposed=false;
-  let active=0;const waiting=[];
-  const drain=()=>{while(active<3&&waiting.length){active++;waiting.shift()();}};
-  const limitedRead=key=>new Promise((resolve,reject)=>{
-    waiting.push(()=>Promise.resolve().then(()=>disposed?undefined:read(key)).then(resolve,reject).finally(()=>{active--;drain();}));
-    drain();
-  });
   return {
     loaded,
     dispose(){disposed=true;},
@@ -207,7 +64,7 @@ function createScfDataLoader(read,apply){
       if(disposed)return Promise.resolve();
       if(pending.has(key))return pending.get(key);
       if(loaded.has(key)&&!refresh)return Promise.resolve();
-      const task=limitedRead(key).then(value=>{
+      const task=Promise.resolve().then(()=>read(key)).then(value=>{
         if(disposed)return;
         apply(key,value);loaded.add(key);
       }).finally(()=>pending.delete(key));
@@ -229,37 +86,8 @@ function scfLoadOptionalScript(name,url){
   }).catch(error=>{scfScriptLoads.delete(name);throw error;});
   scfScriptLoads.set(name,task);return task;
 }
-// Kiểm tra thành phần trước khi render: một tệp tải lỗi không được làm trắng trang.
-const SCF_PAGE_COMPONENTS={
-  kpi4p:'KPI4PTab',
-  attp_process:'ATTPDocumentsTab',attp_standards:'ATTPDocumentsTab',attp_daily:'ATTPDocumentsTab',attp_legal:'ATTPDocumentsTab',
-  welcome:'WelcomePage',company:'CompanySettings',appearance:'AppearanceSettingsTab',printtemplates:'PrintTemplateSettingsTab',
-  employees:'EmployeeTab EmpForm CpwModal',permission_settings:'PermissionSettingsTab',
-  attendance:'AttendanceTab',attendance_settings:'AttendanceTab',attendance_report:'AttendanceTab',workreport_total:'AttendanceTab',
-  advances:'MoneyTab',rewards:'MoneyTab',employee_errors:'EmployeeErrorsTab',employee_uniforms:'EmployeeUniformsTab',leaves:'LeaveTab',
-  backup:'BackupTab',materials:'MaterialsTab',assets:'AssetsTab',garages:'GaragesTab',depts:'DeptsTab',products:'ProductsTab',customers:'CustomersTab',areas:'AreasTab',
-  prodshifts:'ProdShiftsTab',deliveryrules:'DeliveryRulesTab',deliverysequence:'DeliverySequenceSettingsTab',workcats:'WorkCatsTab',tasks:'TasksTab',
-  notifications:'NotificationsTab',userguide:'UserGuideTab',nccs:'NCCTab',nccgoods:'NCCTab',purchaseorders:'PurchaseTab',purchasegoods:'PurchaseTab',
-  fuelpurchases:'FuelPurchaseTab',utilityexpenses:'UtilityExpenseTab',fuelreport:'FuelPurchaseReportTab',purchasereport:'PurchaseReportTab',
-  maintreport:'MaintenanceReportTab',materialusage:'MaterialUsageReportTab',powderdebtreport:'PowderDebtReportTab',maint_vehicle:'MaintenanceTab',maint_machine:'MaintenanceTab',
-  shifts:'ShiftsTab',quotes:'QuotesTab',delivery:'DeliveryOrdersTab',intem:'IntemTab',trips:'TripsTab',workreport_lx:'DriverTripWorkReportTab',
-  orderdetail:'OrderDetailListTab',salesreport:'SalesReportTab',marketsales:'SalesDebtReportTab',invoicereport:'InvoiceUploadReportTab',cashflowreport:'FinanceReportTab',
-  powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab'
-};
-function scfMissingPageComponents(page){
-  const names=SCF_PAGE_COMPONENTS[page]||(PROCESS_POST_KEYS[page]?'ProcessPostsTab':'PlaceholderTab');
-  return names.split(' ').filter(name=>typeof globalThis[name]!=='function');
-}
-async function scfEnsurePageTools(page){
-  if(page==='kpi4p'){await scfLoadOptionalScript('KPI4PTab','./kpi-4p.js?v=551');return;}
-  const missing=scfMissingPageComponents(page);
-  if(missing.length){
-    console.warn('Chưa nạp được thành phần giao diện:',page,missing.join(', '));
-    throw new Error('Chưa tải được giao diện '+(PTITLES[page]||'màn hình này')+'. Bấm Thử tải lại để tải lại ứng dụng.');
-  }
-  // Chuyến giao hàng không dùng thư viện Excel/ZIP. Không chặn giao diện bằng
-  // hai gói CDN lớn chỉ để mở trang này.
-  if(['welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','deliverysequence'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
+function scfEnsurePageTools(page){
+  if(['welcome','company','appearance','userguide','notifications','syncreport','permission_settings'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
   return Promise.all([
     scfLoadOptionalScript('JSZip','https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'),
     scfLoadOptionalScript('XLSX','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js')
@@ -267,24 +95,18 @@ async function scfEnsurePageTools(page){
 }
 
 const PICONS = {
-  kpi4p:'ti-chart-bar',
-  attp_process:'ti-list-check',
-  attp_standards:'ti-certificate',
-  attp_daily:'ti-notebook',
-  attp_legal:'ti-file-certificate',
   garages:'ti-building-store',
   purchase:'ti-shopping-cart', tasks:'ti-clipboard-check', notifications:'ti-bell', userguide:'ti-book-2', prodsummary:'ti-clipboard-list',
   prodorders:'ti-building-factory', stock:'ti-package', attendance:'ti-face-id', attendance_settings:'ti-settings', attendance_report:'ti-report-analytics', advances:'ti-cash-banknote', rewards:'ti-scale', employee_errors:'ti-alert-triangle', employee_uniforms:'ti-shirt', permission_settings:'ti-shield-lock', leaves:'ti-calendar-minus', assets:'ti-building-warehouse', appearance:'ti-typography', printtemplates:'ti-file-spreadsheet',
   workreport_vp:'ti-building', workreport_sx:'ti-building-factory', workreport_lx:'ti-steering-wheel', workreport_total:'ti-report-analytics',
   process_accounting:'ti-file-invoice', process_bun:'ti-tools-kitchen-2', process_pho:'ti-bowl', process_banhcuon:'ti-cookie',
-  marketsales:'ti-report-money', invoicereport:'ti-file-alert', powdersales:'ti-bowl', intem:'ti-printer', deliverysequence:'ti-list-numbers',
-  cashflowreport:'ti-cash-banknote', powderdebtreport:'ti-report-money', syncreport:'ti-cloud-data-connection', dbusage:'ti-database', purchasegoods:'ti-packages', fuelpurchases:'ti-gas-station', utilityexpenses:'ti-bolt', fuelreport:'ti-gas-station', maintreport:'ti-tool', materialusage:'ti-chart-histogram',
+  marketsales:'ti-report-money', powdersales:'ti-bowl', intem:'ti-printer',
+  cashflowreport:'ti-cash-banknote', businessreport:'ti-chart-pie', powderdebtreport:'ti-report-money', syncreport:'ti-cloud-data-connection', dbusage:'ti-database', purchasegoods:'ti-packages', fuelpurchases:'ti-gas-station', utilityexpenses:'ti-bolt', fuelreport:'ti-gas-station', maintreport:'ti-tool', materialusage:'ti-chart-histogram',
   maint_vehicle:'ti-car', maint_machine:'ti-settings'
 };
 
 function SyncStatus(){
   const[state,setState]=useState(()=>window.scfGetSyncState?window.scfGetSyncState():{status:navigator.onLine?'idle':'offline',pending:0});
-  const[reportOpen,setReportOpen]=useState(false);
   useEffect(()=>{
     const update=e=>setState(e.detail||window.scfGetSyncState());
     window.addEventListener('scf-sync-state',update);
@@ -296,15 +118,9 @@ function SyncStatus(){
   };
   const item=map[state?.status]||map.idle;
   const label=state?.pending?item[0]+' ('+state.pending+')':item[0];
-  const report=reportOpen&&window.scfGetSyncReport?window.scfGetSyncReport():null;
-  const reportRows=(report?.items||[]).map(row=>h('div',{key:row.key,style:{padding:'10px 12px',border:'1px solid var(--bd)',borderRadius:'var(--r)',background:'var(--bg2)'}},h('div',{style:{fontWeight:700}},row.label),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:4}},row.recordCount+' bản ghi · Sửa lúc '+(row.updatedAt?new Date(row.updatedAt).toLocaleString('vi-VN'):'—')+' · Đã thử '+row.attempts+' lần'),row.errorMessage&&h('div',{role:'alert',style:{fontSize:12,color:'#A32D2D',marginTop:6}},row.errorMessage)));
-  const canOpen=!!state?.pending||state?.status==='error'||state?.status==='offline';
   const retry=()=>{if(state?.pending&&state?.status!=='syncing')window.scfFlushPendingWrites?.();};
-  const title=state?.detail?(state.detail+(state?.pending?' — Bấm để đồng bộ lại':'')):(state?.pending?'Bấm để đồng bộ lại':label);
-  const downloadButton=h('button',{type:'button',onClick:()=>window.scfDownloadSyncDiagnostics?.()},h('i',{className:'ti ti-download'}),'Tải thông tin kiểm tra đồng bộ');
-  return h(React.Fragment,null,
-    h('span',{className:'sync-status sync-'+(state?.status||'idle'),title,'aria-live':'polite',role:canOpen?'button':undefined,tabIndex:canOpen?0:undefined,onClick:()=>canOpen&&setReportOpen(true),onKeyDown:event=>{if(canOpen&&(event.key==='Enter'||event.key===' ')){event.preventDefault();setReportOpen(true);}},style:canOpen?{cursor:'pointer'}:null},h('i',{className:'ti '+item[1]+(state?.status==='syncing'?' spin':'')}),label),
-    reportOpen&&h(Modal,{title:'Chi tiết dữ liệu chờ đồng bộ',lg:'xl',onClose:()=>setReportOpen(false)},h('div',{style:{display:'grid',gap:9,overflowWrap:'anywhere',wordBreak:'break-word',minWidth:0}},state?.detail&&h('div',{style:{padding:'9px 11px',border:'1px solid #f0cf7a',borderRadius:'var(--r)',background:'#fff8e1',color:'#6d4b00'}},h('b',null,'Trạng thái: '),state.detail),reportRows.length?reportRows:h('div',{style:{color:'var(--tx2)'}},'Không có bản ghi trong hàng đợi. Đây là trạng thái lỗi của lần đồng bộ trước; hãy kiểm tra nội dung trạng thái ở trên.'),h('div',{style:{display:'flex',justifyContent:'flex-end',flexWrap:'wrap',gap:8,marginTop:6}},downloadButton,h('button',{onClick:()=>setReportOpen(false)},'Đóng'),h('button',{className:'bp',disabled:state?.status==='syncing'||!(report?.items||[]).length,onClick:()=>{retry();setReportOpen(false);}},h('i',{className:'ti ti-refresh'}),'Đồng bộ ngay'))))
+  return h('span',{className:'sync-status sync-'+(state?.status||'idle'),title:state?.pending?'Bấm để đồng bộ lại':(state?.detail||label),'aria-live':'polite',role:state?.pending?'button':undefined,tabIndex:state?.pending?0:undefined,onClick:retry,onKeyDown:event=>{if(state?.pending&&(event.key==='Enter'||event.key===' ')){event.preventDefault();retry();}},style:state?.pending?{cursor:'pointer'}:null},
+    h('i',{className:'ti '+item[1]+(state?.status==='syncing'?' spin':'')}),label
   );
 }
 
@@ -313,39 +129,9 @@ function App(){
   const employeeStorageKey=isFaceMask?'scf_privileged_employees':'scf_employees';
   const homePage=isFaceMask?'workreport_total':'welcome';
   const[session,setSession]=useLS('scf_session',null);
-  const[automaticPlanRevision,setAutomaticPlanRevision]=useState(0);
-  useEffect(()=>{
-    let timer=null;
-    const resume=()=>{
-      if(window.scfOrderAutomationPending?.())return;
-      if(timer)clearTimeout(timer);
-      timer=setTimeout(()=>setAutomaticPlanRevision(value=>value+1),250);
-    };
-    window.addEventListener('scf-sync-state',resume);
-    window.addEventListener('online',resume);
-    return()=>{if(timer)clearTimeout(timer);window.removeEventListener('scf-sync-state',resume);window.removeEventListener('online',resume);};
-  },[]);
-  useEffect(()=>{const replaced=async()=>{if(window.__SCF_SESSION_REPLACEMENT_HANDLED)return;window.__SCF_SESSION_REPLACEMENT_HANDLED=true;try{await sb?.auth?.signOut({scope:'local'});}catch{}window.scfClearSensitiveLocalData?.();setSession(null);window.showToast?.('Phiên đăng nhập trên máy này không còn hiệu lực. Hãy đăng nhập lại; chỉ chọn đăng xuất máy cũ nếu đúng là tài khoản đang dùng ở máy khác.','warn',8000);};window.addEventListener('scf-session-replaced',replaced);return()=>window.removeEventListener('scf-session-replaced',replaced);},[]);
-  useEffect(()=>{
-    if(!SCF_SERVER_AUTH_ENABLED||!session)return;
-    let stopped=false,inFlight=null,lastTouch=Date.now();
-    const intervalMs=5*60*1000;
-    const touch=()=>{
-      if(stopped||inFlight||Date.now()-lastTouch<intervalMs)return inFlight;
-      lastTouch=Date.now();
-      inFlight=serverTouchSession().catch(error=>{
-        if(!stopped&&!String(error?.message||'').includes('Phiên đăng nhập không hợp lệ'))console.warn('Session heartbeat:',error?.message||error);
-      }).finally(()=>{inFlight=null;});
-      return inFlight;
-    };
-    const timer=setInterval(touch,intervalMs);
-    const visible=()=>{if(document.visibilityState==='visible')touch();};
-    document.addEventListener('visibilitychange',visible);
-    return()=>{stopped=true;clearInterval(timer);document.removeEventListener('visibilitychange',visible);};
-  },[session?.id]);
+  useEffect(()=>{const replaced=async()=>{try{await sb?.auth?.signOut({scope:'local'});}catch{}window.scfClearSensitiveLocalData?.();setSession(null);window.showToast?.('Tài khoản đã được đăng nhập trên máy khác. Máy này đã tự đăng xuất.','warn',7000);};window.addEventListener('scf-session-replaced',replaced);return()=>window.removeEventListener('scf-session-replaced',replaced);},[]);
+  useEffect(()=>{if(!SCF_SERVER_AUTH_ENABLED||!session)return;let stopped=false;const touch=()=>serverTouchSession().catch(error=>{if(!stopped&&!String(error?.message||'').includes('Phiên đăng nhập không hợp lệ'))console.warn('Session heartbeat:',error?.message||error);});touch();const timer=setInterval(touch,45000);const visible=()=>{if(document.visibilityState==='visible')touch();};document.addEventListener('visibilitychange',visible);return()=>{stopped=true;clearInterval(timer);document.removeEventListener('visibilitychange',visible);};},[session?.id]);
   const[menuHidden,setMenuHidden]=useLS('scf_topnav_hidden',false);
-  const[quickTripSummaryOpen,setQuickTripSummaryOpen]=useState(false);
-  const quickSummaryUserRef=React.useRef(null);
   const[employees,_se]=useState(SCF_SERVER_AUTH_ENABLED?[]:DEF_EMPS);
   const[company,_sc]=useState(DEF_COMPANY);
   const[materials,_sm]=useState(DEF_MATERIALS);
@@ -369,8 +155,8 @@ function App(){
   const[materialMonthOpenings,_smo]=useState([]);
   const[shifts,_ssh]=useState(D_SHIFTS);
   const[quotes,_sq]=useState([]);
-  const[allOrders,_so]=useState([]);
-  const[allTrips,_st]=useState([]);
+  const[orders,_so]=useState([]);
+  const[trips,_st]=useState([]);
   const[prodOrders,_spo]=useState([]);
   const[prodActuals,_spa]=useState({});
   const[stock,_sstk]=useState([]);
@@ -416,13 +202,9 @@ function App(){
   const setMaterialMonthOpenings=mkSet('scf_material_month_openings',_smo);
   const setShifts=mkSet('scf_shifts',_ssh);
   const setQuotes=mkSet('scf_quotes',_sq);
-  const saveAllOrders=mkSet('scf_orders',_so);
-  const setOrders=value=>saveAllOrders(previous=>scfMergePeriodView(previous,typeof value==='function'?value(previous.filter(item=>scfOrderInViewPeriod(item,cu))):value,cu));
-  const saveAllTrips=mkSet('scf_trips',_st);
-  const setTrips=value=>saveAllTrips(previous=>scfMergePeriodView(previous,typeof value==='function'?value(previous.filter(item=>scfOrderInViewPeriod(item,cu))):value,cu));
+  const setOrders=mkSet('scf_orders',_so);
+  const setTrips=mkSet('scf_trips',_st);
   const setAutoTrips=valOrFn=>_st(prev=>{
-    const pending=readSyncQueue().scf_trips;
-    if(pending&&pending.mode!=='auto-trips')return prev;
     const next=typeof valOrFn==='function'?valOrFn(prev):valOrFn;
     dbSetAutoTrips(next);
     return next;
@@ -443,7 +225,6 @@ function App(){
   const setFinanceOpenings=mkSet('scf_finance_openings',_sfo);
   const mkCommunitySet=(key,setter)=>valOrFn=>setter(prev=>{
     const next=typeof valOrFn==='function'?valOrFn(prev):valOrFn;
-    if(next===prev)return prev;
     dbSet(key,next);
     return next;
   });
@@ -466,46 +247,15 @@ function App(){
   const[page,setPage]=useLS(isFaceMask?'facemask_last_page':'scf_last_page',homePage);
   const[authEmployee,setAuthEmployee]=useState(null);
   const[bootError,setBootError]=useState('');
-  const[bootStatus,setBootStatus]=useState('');
   const[bootAttempt,setBootAttempt]=useState(0);
   const[pageError,setPageError]=useState('');
   const[pageAttempt,setPageAttempt]=useState(0);
   const[readyPage,setReadyPage]=useState(null);
   const[autoSyncReady,setAutoSyncReady]=useState(true);
   const dataLoaderRef=React.useRef(null);
-  useEffect(()=>{
-    const receive=event=>{
-      const {key,value,writeToken}=event.detail||{};
-      if(readSyncQueue()[key]?.updatedAt!==writeToken||!Array.isArray(value))return;
-      // Apply the server's merged record through raw setters, without queuing
-      // another write or overwriting a newer local edit.
-      if(key==='scf_trips')_st(value);
-      if(key==='scf_orders')_so(normalizeOrdersForStorage(value));
-    };
-    window.addEventListener('scf-collection-reconciled',receive);
-    return()=>window.removeEventListener('scf-collection-reconciled',receive);
-  },[]);
   const cu=SCF_SERVER_AUTH_ENABLED
     ?(authEmployee&&(employees.find(e=>String(e.id)===String(authEmployee.id))||authEmployee))
     :(session?employees.find(e=>String(e.id)===String(session.id)):null);
-  const viewDays=orderHistoryDays(cu),viewToday=isoDate();
-  const orders=React.useMemo(()=>allOrders.filter(item=>scfOrderInViewPeriod(item,cu)),[allOrders,cu?.id,viewDays,viewToday]);
-  const trips=React.useMemo(()=>allTrips.filter(item=>scfOrderInViewPeriod(item,cu)),[allTrips,cu?.id,viewDays,viewToday]);
-  const cuAccessDepartments=employeeDepartments(cu);
-  quickSummaryUserRef.current=cu;
-  const mobileStartTarget=user=>!isFaceMask&&window.matchMedia?.('(max-width:768px)')?.matches?scfMobileStartTarget(user):'';
-  const canOpenCurrentPage=user=>canAccess(user.role,page,user.permissions,employeeDepartments(user))&&(isFaceMask||page===homePage||!window.matchMedia?.('(max-width:768px)')?.matches||canMobileFeature(user,page));
-  const applyMobileStart=user=>{const target=mobileStartTarget(user);if(target)setPage(target==='quick-summary'?homePage:target);};
-  useEffect(()=>setQuickTripSummaryOpen(mobileStartTarget(cu)==='quick-summary'),[cu?.id]);
-  const loadQuickSummaryData=async()=>{
-    const owner=quickSummaryUserRef.current;
-    const ownerId=String(owner?.id||''),ownerAccess=scfQuickSummaryAccessKey(owner);
-    const data=await scfLoadQuickTripSummaryData(owner);
-    const current=quickSummaryUserRef.current;
-    if(!current||String(current.id)!==ownerId||scfQuickSummaryAccessKey(current)!==ownerAccess||!canViewTripQuickSummary(current)||!canMobileFeature(current,'quick-summary'))throw Error('Phiên đăng nhập hoặc quyền xem đã thay đổi. Hãy mở lại đơn tổng.');
-    _st(data.trips);_so(data.orders);_sp(data.products);_scu(data.customers);_spc(data.prodCats);
-    return data;
-  };
   const resources={
     company:[DEF_COMPANY,_sc,v=>({...DEF_COMPANY,...v})],ui_settings:[DEF_UI_SETTINGS,_sui,normalizeUiSettings],
     materials:[[],_sm],assets:[[],_sas],garages:[[],_sg],prodcats:[[],_spc],
@@ -522,7 +272,7 @@ function App(){
     ...Object.fromEntries(Object.entries(PROCESS_POST_KEYS).map(([name,key])=>[key.replace(/^scf_/,''),[[],value=>_spp(prev=>({...prev,[name]:value}))]]))
   };
   const requiredKeys=scfPageDataKeys(page,Object.keys(resources));
-  const pageReady=readyPage===page&&!pageError&&!!cu&&canOpenCurrentPage(cu);
+  const pageReady=readyPage===page&&!pageError;
   const browserNavReadyRef=React.useRef(false);
   const browserPopRef=React.useRef(false);
   const[serverAuthReady,setServerAuthReady]=useState(false);
@@ -554,7 +304,7 @@ function App(){
   };
   useEffect(()=>{
     let cancelled=false;
-    setLoading(true);setBootError('');setBootStatus('Đang kiểm tra phiên đăng nhập...');setServerAuthReady(false);setAuthEmployee(null);setReadyPage(null);
+    setLoading(true);setBootError('');setServerAuthReady(false);setAuthEmployee(null);setReadyPage(null);
     window.__SCF_CURRENT_EMPLOYEE=null;
     dataLoaderRef.current?.dispose();
     const loader=createScfDataLoader(
@@ -565,70 +315,37 @@ function App(){
     (async()=>{
       try{
         if(SCF_SERVER_AUTH_ENABLED){
-          const retryableRemoteError=error=>{
-            const message=String(error?.message||'');
-            return error?.code==='SCF_REMOTE_TIMEOUT'||/Supabase timeout|Failed to fetch|Failed to send a request|NetworkError|Load failed|không kết nối được máy chủ|Máy chủ xác thực đang gặp lỗi|Không tải được danh sách nhân viên/i.test(message);
-          };
-          const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-          const retryRemote=async(task,label)=>{
-            const maxAttempts=3;
-            let lastError;
-            for(let attempt=1;attempt<=maxAttempts;attempt++){
-              if(cancelled)return null;
-              setBootStatus(attempt===1?label:(label+' — đang thử lại '+attempt+'/'+maxAttempts+'...'));
-              try{return await task();}
-              catch(error){
-                lastError=error;
-                if(!retryableRemoteError(error)||attempt===maxAttempts)throw error;
-                await wait(attempt*1200);
-              }
-            }
-            throw lastError;
-          };
-          const authSession=await retryRemote(()=>withRemoteTimeout(getServerAuthSession(),12000),'Đang kiểm tra phiên đăng nhập...');
+          const authSession=await withRemoteTimeout(getServerAuthSession(),15000);
           if(cancelled)return;
           if(!authSession){setSession(null);_se([]);return;}
           const employeeId=String(authSession.user?.app_metadata?.employee_id||'');
           if(!employeeId)throw new Error('Phiên đăng nhập thiếu mã nhân viên. Vui lòng đăng nhập lại.');
-          const context=await retryRemote(()=>serverLoadEmployeeContext(12000),'Đang tải hồ sơ từ máy chủ...');
+          const context=await withRemoteTimeout(serverLoadEmployeeContext(),15000);
           if(cancelled)return;
           const current=context.currentEmployee;
           if(!current||String(current.id)!==employeeId)throw new Error('Chưa tải được hồ sơ của tài khoản đang đăng nhập.');
           window.__SCF_CURRENT_EMPLOYEE=current;
-          applyMobileStart(current);_se(context.employees);setAuthEmployee(current);setSession({id:current.id});
+          _se(context.employees);setAuthEmployee(current);setSession({id:current.id});
         }else{
           const rows=await dbGet(employeeStorageKey,DEF_EMPS);
           if(cancelled)return;
-          const current=rows.find(employee=>String(employee.id)===String(session?.id));
-          if(current)applyMobileStart(current);
           _se(rows);
         }
       }catch(err){
         if(!cancelled&&String(err?.message||'').includes('Phiên đăng nhập không hợp lệ')){
-          _se([]);setBootError('');
-          window.dispatchEvent(new CustomEvent('scf-session-replaced'));
-        }else if(!cancelled){
-          const message=String(err?.message||'');
-          setBootError(/Supabase timeout|Failed to fetch|Failed to send a request|NetworkError|Load failed|không kết nối được máy chủ|Máy chủ xác thực đang gặp lỗi|Không tải được danh sách nhân viên/i.test(message)
-            ?'Máy chủ phản hồi chậm sau 3 lần thử. Phiên đăng nhập vẫn được giữ và app sẽ tự thử lại.'
-            :(message||'Không tải được hồ sơ đăng nhập.'));
-        }
+          try{await sb?.auth?.signOut({scope:'local'});}catch{}
+          window.scfClearSensitiveLocalData?.();setSession(null);_se([]);setBootError('');
+          window.showToast?.('Tài khoản đã được đăng nhập trên máy khác. Máy này đã tự đăng xuất.','warn',7000);
+        }else if(!cancelled)setBootError(err.message||'Không tải được hồ sơ đăng nhập.');
       }
-      finally{if(!cancelled){setBootStatus('');setServerAuthReady(true);setLoading(false);}}
+      finally{if(!cancelled){setServerAuthReady(true);setLoading(false);}}
     })();
     return()=>{cancelled=true;loader.dispose();};
   },[bootAttempt]);
   useEffect(()=>{
-    if(!bootError)return;
-    const retry=()=>setBootAttempt(value=>value+1);
-    const timer=navigator.onLine?setTimeout(retry,30000):null;
-    window.addEventListener('online',retry,{once:true});
-    return()=>{if(timer)clearTimeout(timer);window.removeEventListener('online',retry);};
-  },[bootError]);
-  useEffect(()=>{
     if(!serverAuthReady||bootError||!cu)return;
     if(isFaceMask&&!['admin','administrator'].includes(String(cu.role||'').toLowerCase()))return;
-    if(!canOpenCurrentPage(cu))return;
+    if(!canAccess(cu.role,page,cu.permissions,cu.dept))return;
     let cancelled=false;
     setReadyPage(null);setPageError('');
     const loader=dataLoaderRef.current;
@@ -636,7 +353,7 @@ function App(){
       .then(()=>{if(!cancelled){setAutoSyncReady(true);setReadyPage(page);}})
       .catch(error=>{if(!cancelled)setPageError(error.message||'Không tải được dữ liệu màn hình.');});
     return()=>{cancelled=true;};
-  },[serverAuthReady,bootError,cu?.id,cu?.permissions,cu?.mobilePermissions,employeeDepartmentLabel(cu),page,pageAttempt]);
+  },[serverAuthReady,bootError,cu?.id,page,pageAttempt]);
   useEffect(()=>{
     const vars=uiSettingsToCssVars(uiSettings);
     Object.entries(vars).forEach(([key,val])=>document.documentElement.style.setProperty(key,val));
@@ -654,15 +371,13 @@ function App(){
 
   useEffect(()=>{
     if(loading||bootError||!cu||!pageReady||!sb)return;
-    const keys=requiredKeys.filter(key=>['orders','trips','notifications','assets'].includes(key));
+    const keys=requiredKeys.filter(key=>['orders','trips','notifications'].includes(key));
     let stopped=false,busy=false;
     const refresh=async()=>{
       if(stopped||busy||document.hidden||!navigator.onLine)return;
       busy=true;
       try{
-        const watchedKeys=[...keys];
-        if(!isFaceMask&&canAccess(cu.role,'assets',cu.permissions,cuAccessDepartments)&&dataLoaderRef.current?.loaded.has('assets')&&!watchedKeys.includes('assets'))watchedKeys.push('assets');
-        const changed=await dbGetChangedKeys(watchedKeys.map(key=>'scf_'+key));
+        const changed=await dbGetChangedKeys(keys.map(key=>'scf_'+key));
         const changedKeys=changed.map(key=>key.replace(/^scf_/,''));
         if(!changedKeys.length)return;
         const tripRefresh=changedKeys.some(key=>key==='orders'||key==='trips');
@@ -672,37 +387,71 @@ function App(){
       }catch(e){console.warn('Auto sync:',e.message||e);}
       finally{busy=false;}
     };
-    // Phát hiện thay đổi từ máy khác nhanh hơn để giảm thời gian chờ giữa
-    // hai kế toán cùng nhập đơn; chỉ truy vấn phiên bản, chỉ tải lại khi có đổi.
-    const tm=setInterval(refresh,15000);
+    const tm=setInterval(refresh,60000);
     document.addEventListener('visibilitychange',refresh);
     window.scfSyncNow=refresh;
     return()=>{stopped=true;clearInterval(tm);document.removeEventListener('visibilitychange',refresh);if(window.scfSyncNow===refresh)delete window.scfSyncNow;};
   },[loading,bootError,cu?.id,page,pageReady]);
 
-  /* ── TẠO CHUYẾN TRƯỚC 3 NGÀY VÀ TỰ XẾP ĐƠN PHÙ HỢP ── */
+  /* ── TỰ TÌM/TẠO CHUYẾN CHỈ KHI CÓ ĐƠN CHƯA XẾP ── */
   useEffect(()=>{
     const automationUser=cu;
     const tripInputsReady=['orders','trips','shifts','prod_shifts','customers'].every(key=>dataLoaderRef.current?.loaded.has(key));
     if(loading||!pageReady||!autoSyncReady||!tripInputsReady||!['delivery','trips','orderdetail'].includes(page)||isFaceMask||!automationUser||!canAccess(automationUser.role,'delivery',automationUser.permissions,automationUser.dept)||!canWrite(automationUser.role,'delivery',automationUser.permLevels)||!shifts?.length||!prodShifts?.length)return;
-    // Chờ lần lưu đơn/chuyến trước được xác nhận rồi mới sửa tối đa 25 đơn.
-    // Như vậy các đợt không bị gộp thành một lần ghi toàn bộ danh sách lớn.
-    if(!navigator.onLine||window.scfOrderAutomationPending?.())return;
-    const usableTrip=t=>!t?.driverDispatchedAt&&!['active','completion_pending','completed','cancelled'].includes(String(t?.status||''));
+    const norm=v=>normalizeLookupText(v||'');
+    const sameDate=(a,b)=>String(a||'').trim()===String(b||'').trim();
+    const usableTrip=t=>!['active','completion_pending','completed','cancelled'].includes(String(t?.status||''));
     const linkedTripIds=new Set((orders||[]).filter(o=>!['cancelled','done','failed'].includes(String(o?.status||''))).map(o=>String(o?.tripId||'')).filter(Boolean));
-    // Chuyến được lập trước theo lịch phải được giữ lại dù chưa có đơn.
-    const keptTrips=(trips||[]).filter(t=>!(t?.autoCreated&&!t?.autoPlanned&&usableTrip(t)&&!(t.orderIds||[]).length&&!linkedTripIds.has(String(t.id||''))));
-    const advance=scfCreateAdvanceTripWindow(keptTrips,shifts||[],fmtDate(),3,automationUser.name||'Hệ thống');
-    const planned=scfPlanAutomaticOrders(orders,advance.trips,prodShifts,customers,automationUser.name,25);
-    const workingTrips=planned.trips,nextOrders=planned.orders;
-    let tripsChanged=keptTrips.length!==(trips||[]).length||advance.changed||planned.tripsChanged;
-    // Repair only fields accepted by the automatic endpoint, so applying its
-    // merged response reaches a stable state instead of queuing another save.
-    const reconciled=scfReconcileTripOrderLinks(workingTrips,nextOrders,products||[],{automaticWrite:true});
-    if(reconciled.changed)tripsChanged=true;
-    if(tripsChanged)setAutoTrips(reconciled.trips);
-    if(planned.changed)setOrders(nextOrders);
-  },[loading,pageReady,autoSyncReady,page,isFaceMask,session,employees,orders,trips,shifts,prodShifts,customers,products,automaticPlanRevision]);
+    const keptTrips=(trips||[]).filter(t=>!(t?.autoCreated&&usableTrip(t)&&!(t.orderIds||[]).length&&!linkedTripIds.has(String(t.id||''))));
+    const workingTrips=keptTrips.map(t=>({...t,orderIds:[...(t.orderIds||[])]}));
+    const tripById=new Map(workingTrips.map(t=>[String(t.id||''),t]));
+    let tripsChanged=keptTrips.length!==(trips||[]).length,ordersChanged=false;
+    const nextOrders=(orders||[]).map(order=>{
+      if(order?.tripAssignMode==='manual'||!['','pending','assigned'].includes(String(order?.status||'')))return order;
+      const linked=tripById.get(String(order?.tripId||''));
+      if(linked){
+        if(!(linked.orderIds||[]).includes(order.id)){linked.orderIds=[...(linked.orderIds||[]),order.id];tripsChanged=true;}
+        return order;
+      }
+      const plannedShift=order?.prodShiftAssignMode==='manual'&&order?.prodShiftId
+        ?(prodShifts||[]).find(s=>String(s?.id||'')===String(order.prodShiftId))
+        :getProdShiftForOrder(order,prodShifts||[],customers||[]);
+      if(!plannedShift)return order;
+      const tripDate=addDaysVN(order.deliveryDate,Number(plannedShift.tripDateOffset??0));
+      // Chỉ dùng ca giao đã được khai báo trực tiếp trong cấu hình ca SX.
+      // Không suy đoán ca giao theo khu vực, tên điểm hoặc các chuyến cùng ngày.
+      const wantedShiftId=String(plannedShift.tripShiftId||'').trim();
+      const wantedShiftName=String(plannedShift.tripShiftName||'').trim();
+      if(!tripDate||(!wantedShiftId&&!wantedShiftName))return order;
+      const deliveryShift=(shifts||[]).find(s=>wantedShiftId&&String(s.id||'')===wantedShiftId)
+        ||(shifts||[]).find(s=>wantedShiftName&&norm(s.name)===norm(wantedShiftName));
+      if(!deliveryShift)return order;
+      const shiftId=String(deliveryShift.id||'').trim();
+      const shiftName=String(deliveryShift.name||'').trim();
+      let trip=workingTrips.find(t=>usableTrip(t)&&sameDate(t.deliveryDate,tripDate)&&(
+        (shiftId&&String(t.shiftId||'')===shiftId)||(shiftName&&norm(t.shiftName)===norm(shiftName))
+      ));
+      if(!trip){
+        const driverId=String(deliveryShift?.defaultDriverId||'').trim();
+        const driverName=String(deliveryShift?.defaultDriverName||'').trim();
+        trip={
+          id:'CH'+uid(),deliveryDate:tripDate,deliveryTime:deliveryShift?.timeStart||deliveryShift?.startTime||order.deliveryTime||'',
+          shiftId,shiftName:shiftName||deliveryShift?.area||'Chuyến tự động',area:deliveryShift?.area||order.area||'',
+          driverName,driverId,driverAssignMode:driverId||driverName?'auto':'',orderIds:[],totalWeight:0,
+          status:driverId||driverName?'assigned':'planning',
+          note:'Tự động tạo khi có đơn phù hợp'+(shiftName?': '+shiftName:''),
+          createdAt:fmtDT(),updatedAt:fmtDT(),updatedBy:automationUser.name||'Hệ thống',autoCreated:true
+        };
+        workingTrips.push(trip);tripById.set(String(trip.id),trip);tripsChanged=true;
+      }
+      if(!trip.orderIds.includes(order.id)){trip.orderIds.push(order.id);tripsChanged=true;}
+      if(String(order.tripId||'')===String(trip.id)&&order.status==='assigned'&&order.tripAssignMode==='auto')return order;
+      ordersChanged=true;
+      return {...order,tripId:trip.id,tripAssignMode:'auto',status:'assigned',updatedAt:fmtDT(),updatedBy:automationUser.name||'Hệ thống'};
+    });
+    if(tripsChanged)setAutoTrips(workingTrips);
+    if(ordersChanged)setOrders(nextOrders);
+  },[loading,pageReady,autoSyncReady,page,isFaceMask,session,employees,orders,trips,shifts,prodShifts,customers]);
 
   const addNotification=React.useCallback(data=>{
     const recipientIds=[...new Set((data?.recipientIds||[data?.recipientId]).filter(Boolean).map(String))];
@@ -713,36 +462,10 @@ function App(){
       type:data.type||'info',icon:data.icon||'ti-bell',sourceType:data.sourceType||'',sourceId:data.sourceId||'',
       targetPage:data.targetPage||'notifications',createdAt:stamp,createdAtIso:nowIso,createdBy:cu?.name||'Hệ thống',readAt:''
     }));
-    setNotifications(prev=>data?.dedupeKey&&(prev||[]).some(item=>item.sourceType==='sync-error'&&item.sourceId===data.dedupeKey&&!item.readAt)?prev:[...rows,...(prev||[])].slice(0,2000));
+    setNotifications(prev=>[...rows,...(prev||[])].slice(0,2000));
     setTimeout(()=>window.scfFlushPendingWrites&&window.scfFlushPendingWrites(),900);
     return rows.length;
   },[cu?.id,cu?.name]);
-  const [assetReminderDay,setAssetReminderDay]=useState(scfAssetToday);
-  useEffect(()=>{
-    if(loading||!pageReady||!cu||isFaceMask||!canAccess(cu.role,'assets',cu.permissions,cuAccessDepartments))return;
-    // Tải danh mục ở nền sau khi màn hình đã sẵn sàng, không chặn đăng nhập.
-    dataLoaderRef.current?.load('assets').catch(error=>console.warn('Asset reminders:',error?.message||error));
-    const updateDay=()=>setAssetReminderDay(scfAssetToday());
-    updateDay();const timer=setInterval(updateDay,60000);
-    document.addEventListener('visibilitychange',updateDay);
-    return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',updateDay);};
-  },[loading,pageReady,cu?.id,cu?.role,cu?.permissions,isFaceMask]);
-  useEffect(()=>{
-    if(loading||!cu||isFaceMask||!dataLoaderRef.current?.loaded.has('assets')||!canAccess(cu.role,'assets',cu.permissions,cuAccessDepartments))return;
-    const desired=scfAssetExpiryNotifications(assets,cu,assetReminderDay);
-    setNotifications(prev=>scfMergeAssetExpiryNotifications(prev,desired,cu.id));
-  },[assets,assetReminderDay,cu?.id,cu?.role,cu?.permissions,loading,isFaceMask,notifications]);
-  useEffect(()=>{
-    if(loading||!pageReady||!cu||isFaceMask)return;
-    const saveSyncError=event=>{
-      const detail=event?.detail||window.__SCF_LAST_SYNC_ERROR;
-      if(!detail?.message||!detail?.fingerprint||detail.key==='scf_notifications'||String(detail.actorId||'')!==String(cu.id))return;
-      addNotification({recipientId:cu.id,title:'Lỗi đồng bộ cần kiểm tra',message:detail.message,type:'error',icon:'ti-alert-triangle',sourceType:'sync-error',sourceId:detail.fingerprint,dedupeKey:detail.fingerprint,targetPage:detail.key==='scf_orders'?'delivery':'notifications'});
-    };
-    window.addEventListener('scf-sync-error-notification',saveSyncError);
-    if(window.__SCF_LAST_SYNC_ERROR)saveSyncError({detail:window.__SCF_LAST_SYNC_ERROR});
-    return()=>window.removeEventListener('scf-sync-error-notification',saveSyncError);
-  },[loading,pageReady,cu?.id,isFaceMask,addNotification]);
   const notificationReadyRef=React.useRef(false);
   useEffect(()=>{
     if(loading||!cu)return;
@@ -764,14 +487,12 @@ function App(){
     }
   },[cu?.id,cu?.mustChangePw]);
   useEffect(()=>{
-    if(cu&&!canOpenCurrentPage(cu))setPage(homePage);
-  },[cu?.id,cu?.role,cu?.permissions,cu?.mobilePermissions,employeeDepartmentLabel(cu),page]);
+    if(cu&&!canAccess(cu.role,page,cu.permissions,cu.dept))setPage(homePage);
+  },[cu?.id,cu?.role,cu?.dept,page]);
   if(bootError)return h('div',{className:'login-bg'},h('div',{className:'login-card',role:'alert'},
     h('h2',null,'Chưa tải được hồ sơ đăng nhập'),
     h('p',null,'App chưa xác định được hồ sơ của bạn. Không cần thay đổi quyền hay nhập lại đơn hàng.'),
     h('p',null,bootError),
-    window.scfDownloadAuthDiagnostics&&h('button',{type:'button',className:'btn',onClick:()=>window.scfDownloadAuthDiagnostics()},'Tải thông tin kiểm tra đăng nhập'),
-    h('p',{style:{fontSize:12,color:'var(--tx2)'}},'App sẽ tự thử lại sau 30 giây hoặc ngay khi mạng được kết nối lại.'),
     h('button',{className:'bp',onClick:()=>setBootAttempt(v=>v+1)},'Thử tải lại'),
     h('button',{className:'bb',onClick:async()=>{await serverLogout();setSession(null);setBootAttempt(v=>v+1);}},'Đăng nhập lại')
   ));
@@ -780,7 +501,7 @@ function App(){
       h('img',{src:'icon-192.png',className:'load-logo',alt:'Logo Thực Phẩm Sông Công'})
     ),
     h('div',{style:{fontSize:17,fontWeight:600,color:'var(--pri3)',marginBottom:4}},isFaceMask?'FACE MASK':'Thực Phẩm Sông Công'),
-    h('div',{style:{fontSize:13,color:'var(--pri2)',display:'flex',alignItems:'center',gap:6}},h('i',{className:'ti ti-loader-2 spin',style:{fontSize:16}}),bootStatus||'Đang tải dữ liệu...')
+    h('div',{style:{fontSize:13,color:'var(--pri2)',display:'flex',alignItems:'center',gap:6}},h('i',{className:'ti ti-loader-2 spin',style:{fontSize:16}}),'Đang tải dữ liệu...')
   );
   const hasConfiguredAdmin=employees.some(employee=>employee.role==='admin'&&String(employee.username||'').trim()&&String(employee.password||'').length>0);
   if(!SCF_SERVER_AUTH_ENABLED&&!hasConfiguredAdmin)return h(InitialAdminSetup,{onSetup:async({username,password})=>{
@@ -799,7 +520,7 @@ function App(){
     await dbSet('scf_employees',next);
     window.showToast&&window.showToast('Đã tạo tài khoản Admin. Hãy đăng nhập để tiếp tục.','success');
   }});
-  if(!cu)return h(LoginPage,{employees,onLogin:u=>{if(!SCF_SERVER_AUTH_ENABLED)applyMobileStart(u);setSession({id:u.id});if(SCF_SERVER_AUTH_ENABLED)setBootAttempt(v=>v+1);}});
+  if(!cu)return h(LoginPage,{employees,onLogin:u=>{setSession({id:u.id});if(SCF_SERVER_AUTH_ENABLED)setBootAttempt(v=>v+1);}});
   if(isFaceMask&&!['admin','administrator'].includes(String(cu.role||'').toLowerCase()))return h('div',{className:'login-bg'},
     h('div',{className:'login-card',style:{textAlign:'center'}},
       h('div',{className:'face-mask-login-icon',style:{margin:'0 auto 12px'}},h('i',{className:'ti ti-shield-lock'})),
@@ -808,24 +529,12 @@ function App(){
       h('button',{className:'bp',style:{width:'100%',justifyContent:'center'},onClick:async()=>{await serverLogout();window.scfClearSensitiveLocalData&&window.scfClearSensitiveLocalData();setSession(null);}},h('i',{className:'ti ti-logout'}),'Đăng xuất')
     )
   );
-  const isAccounting=employeeDepartmentIncludes(cu,'Kế toán');
+  const isAccounting=String(cu.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('ke toan');
   const activeLevel=getLvl(cu.role,page,cu.permLevels);
   const readOnly=activeLevel==='r';
-  window.__SCF_ACCESS_CONTEXT={employeeId:String(cu.id||''),role:cu.role,page,level:activeLevel,readOnly};
+  window.__SCF_ACCESS_CONTEXT={role:cu.role,page,level:activeLevel,readOnly};
   const wips=['purchase','workreport_vp','workreport_sx'];
   const logout=async()=>{await serverLogout();window.scfClearSensitiveLocalData&&window.scfClearSensitiveLocalData();setSession(null);if(SCF_SERVER_AUTH_ENABLED)location.reload();};
-  const saveAttendanceZones=async zones=>{
-    if(cu?.role!=='admin'||window.__SCF_ACCESS_CONTEXT?.role!=='admin')throw new Error('Chỉ Admin được lưu vị trí chấm công.');
-    const next={...company,attendanceZones:{zones:scfNormalizeAttendanceZones(zones),updatedAt:fmtDT(),updatedBy:cu.name}};
-    _sc(next);
-    const saved=await dbSet('scf_company',next);
-    if(saved!==true)throw new Error('Chưa xác nhận được vị trí trên máy chủ. Thay đổi vẫn được giữ trên máy này; kiểm tra đồng bộ rồi bấm lưu lại.');
-  };
-  const loadAttendanceZones=async()=>{
-    const latest=await dbGetRequired('scf_company',DEF_COMPANY);
-    _sc({...DEF_COMPANY,...latest});
-    return latest?.attendanceZones;
-  };
   return h('div',{className:'layout'},
     h('div',{className:'main'},
       !menuHidden&&h('div',{className:'topbar'+(page!=='welcome'?' mobile-subpage-topbar':'')},
@@ -851,7 +560,7 @@ function App(){
             h('button',{className:'topbar-logout',onClick:logout,style:{fontSize:12,padding:'5px 10px',color:'#A32D2D',borderColor:'#F7C1C1'},title:'Đăng xuất','aria-label':'Đăng xuất'},h('i',{className:'ti ti-logout',style:{fontSize:14}}),h('span',{className:'topbar-logout-label'},'Đăng xuất'))
           )
         ),
-        h(TopNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments})
+        h(TopNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cu.dept})
       ),
       page!=='welcome'&&h('div',{className:'mobile-page-backbar'},
         h('button',{className:'mobile-page-back',onClick:goBackPage,'aria-label':'Quay lại trang trước'},
@@ -865,18 +574,18 @@ function App(){
       },
         !pageReady?h('div',{className:'card',role:pageError?'alert':'status',style:{padding:24}},
           h('p',null,pageError||'Đang tải dữ liệu '+(PTITLES[page]||'màn hình')+'…'),
-          pageError&&h('button',{className:'bp',onClick:()=>{if(scfMissingPageComponents(page).length)location.reload();else setPageAttempt(v=>v+1);}},'Thử tải lại')
+          pageError&&h('button',{className:'bp',onClick:()=>setPageAttempt(v=>v+1)},'Thử tải lại')
         ):h(React.Fragment,null,
         canAccess(cu.role,page)&&page==='welcome'&&h(WelcomePage,{emp:cu,employees,company,uiSettings,news:companyNews,setNews:setCompanyNews,messages:internalMessages,setMessages:setInternalMessages,onRefresh:refreshCommunityData}),
-        canAccess(cu.role,'company',cu.permissions,cuAccessDepartments)&&page==='company'&&h(CompanySettings,{company,setCompany,canEdit:canWrite(cu.role,'company',cu.permLevels)}),
+        canAccess(cu.role,'company',cu.permissions,cu.dept)&&page==='company'&&h(CompanySettings,{company,setCompany,canEdit:canWrite(cu.role,'company',cu.permLevels)}),
         canAccess(cu.role,'appearance',cu.permissions)&&page==='appearance'&&h(AppearanceSettingsTab,{uiSettings,setUiSettings}),
         canAccess(cu.role,'printtemplates',cu.permissions)&&page==='printtemplates'&&h(PrintTemplateSettingsTab,{templateSettings:printTemplateSettings,setTemplateSettings:setPrintTemplateSettings,products,customers}),
         canAccess(cu.role,'employees',cu.permissions)&&page==='employees'&&h(EmployeeTab,{employees,setEmployees,cu,depts,permissionProfiles}),
         canAccess(cu.role,'permission_settings',cu.permissions)&&page==='permission_settings'&&h(PermissionSettingsTab,{profiles:permissionProfiles,setProfiles:setPermissionProfiles,employees,setEmployees,currentUser:cu}),
-        canAccess(cu.role,'attendance',cu.permissions)&&page==='attendance'&&h(AttendanceTab,{section:'punch',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones}),
-        canAccess(cu.role,'attendance_settings',cu.permissions)&&page==='attendance_settings'&&h(AttendanceTab,{section:'settings',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones,onKioskExit:logout}),
-        canAccess(cu.role,'attendance_report',cu.permissions)&&page==='attendance_report'&&h(AttendanceTab,{onKPI4P:canAccess(cu.role,'kpi4p',cu.permissions,cuAccessDepartments)?()=>setPage('kpi4p'):undefined,section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones}),
-        canAccess(cu.role,'workreport_total',cu.permissions,cuAccessDepartments)&&page==='workreport_total'&&h(AttendanceTab,{onKPI4P:canAccess(cu.role,'kpi4p',cu.permissions,cuAccessDepartments)?()=>setPage('kpi4p'):undefined,section:'report',attendance,setAttendance,employees,setEmployees,replaceEmployees:_se,currentUser:cu,company,saveAttendanceZones,loadAttendanceZones,reportTitle:'Tổng công'}),
+        canAccess(cu.role,'attendance',cu.permissions)&&page==='attendance'&&h(AttendanceTab,{section:'punch',attendance,setAttendance,employees,setEmployees,currentUser:cu,company}),
+        canAccess(cu.role,'attendance_settings',cu.permissions)&&page==='attendance_settings'&&h(AttendanceTab,{section:'settings',attendance,setAttendance,employees,setEmployees,currentUser:cu,company}),
+        canAccess(cu.role,'attendance_report',cu.permissions)&&page==='attendance_report'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,currentUser:cu,company}),
+        canAccess(cu.role,'workreport_total',cu.permissions,cu.dept)&&page==='workreport_total'&&h(AttendanceTab,{section:'report',attendance,setAttendance,employees,setEmployees,currentUser:cu,company,reportTitle:'Tổng công'}),
         canAccess(cu.role,'advances',cu.permissions)&&page==='advances'&&h(MoneyTab,{mode:'advance',records:advances,setRecords:setAdvances,employees,currentUser:cu}),
         canAccess(cu.role,'rewards',cu.permissions)&&page==='rewards'&&h(MoneyTab,{mode:'reward',records:rewards,setRecords:setRewards,employees,currentUser:cu}),
         canAccess(cu.role,'employee_errors',cu.permissions)&&page==='employee_errors'&&h(EmployeeErrorsTab,{records:employeeErrors,setRecords:setEmployeeErrors,employees,currentUser:cu}),
@@ -884,23 +593,22 @@ function App(){
         canAccess(cu.role,'leaves',cu.permissions)&&page==='leaves'&&h(LeaveTab,{leaves,setLeaves,employees,currentUser:cu}),
         canAccess(cu.role,'backup',cu.permissions)&&page==='backup'&&h(BackupTab,{employees,materials,assets,garages,prodCats,products,customers,workcats,tasks,advances,rewards,employeeErrors,employeeUniforms,leaves,nccs,nccGoods,purchases,goodsPurchases,depts,prodShiftRules,uiSettings,printTemplateSettings,financeEntries,financeDebts,financeOpenings}),
         canAccess(cu.role,'materials',cu.permissions)&&page==='materials'&&h(MaterialsTab,{materials,setMaterials,purchases}),
-        canAccess(cu.role,'assets',cu.permissions)&&page==='assets'&&h(AssetsTab,{assets,setAssets,currentUser:cu}),
+        canAccess(cu.role,'assets',cu.permissions)&&page==='assets'&&h(AssetsTab,{assets,setAssets}),
         canAccess(cu.role,'garages',cu.permissions)&&page==='garages'&&h(GaragesTab,{garages,setGarages}),
         canAccess(cu.role,'depts',cu.permissions)&&page==='depts'&&h(DeptsTab,{depts,setDepts,employees,workcats}),
         canAccess(cu.role,'products',cu.permissions)&&page==='products'&&h(ProductsTab,{products,setProducts,prodCats,setProdCats}),
         canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers,shifts,orders,areas,cu}),
         canAccess(cu.role,'areas',cu.permissions)&&page==='areas'&&h(AreasTab,{areas,setAreas,customers,setCustomers,orders}),
-        canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts,currentUser:cu}),
+        canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts}),
         canAccess(cu.role,'deliveryrules',cu.permissions)&&page==='deliveryrules'&&h(DeliveryRulesTab,{items:deliveryRules,setItems:setDeliveryRules,currentUser:cu}),
-        canAccess(cu.role,'deliverysequence',cu.permissions,cuAccessDepartments)&&page==='deliverysequence'&&h(DeliverySequenceSettingsTab,{customers,setCustomers,currentUser:cu,shifts}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats,depts}),
         canAccess(cu.role,'tasks',cu.permissions)&&page==='tasks'&&h(TasksTab,{tasks,setTasks,workcats,employees,currentUser:cu,notify:addNotification}),
         canAccess(cu.role,'notifications',cu.permissions)&&page==='notifications'&&h(NotificationsTab,{notifications,setNotifications,currentUser:cu,setPage}),
         canAccess(cu.role,'userguide',cu.permissions)&&page==='userguide'&&h(UserGuideTab,{currentUser:cu}),
         canAccess(cu.role,'nccs',cu.permissions)&&page==='nccs'&&h(NCCTab,{nccs,setNCCs,purchases,setPurchases,title:'Nhà CC NVL',fileName:'Nha_CC_NVL'}),
-        canAccess(cu.role,'nccgoods',cu.permissions,cuAccessDepartments)&&page==='nccgoods'&&h(NCCTab,{nccs:nccGoods,setNCCs:setNccGoods,purchases:goodsPurchases,setPurchases:setGoodsPurchases,title:'Nhà CC Hàng hóa',fileName:'Nha_CC_Hang_hoa',readOnly:!canWrite(cu.role,'nccgoods',cu.permLevels)}),
+        canAccess(cu.role,'nccgoods',cu.permissions,cu.dept)&&page==='nccgoods'&&h(NCCTab,{nccs:nccGoods,setNCCs:setNccGoods,purchases:goodsPurchases,setPurchases:setGoodsPurchases,title:'Nhà CC Hàng hóa',fileName:'Nha_CC_Hang_hoa',readOnly:!canWrite(cu.role,'nccgoods',cu.permLevels)}),
         canAccess(cu.role,'purchaseorders',cu.permissions)&&page==='purchaseorders'&&h(PurchaseTab,{purchases,setPurchases,nccs,setNCCs,materials,products,prodCats,cu,setPage,mode:'material'}),
-        canAccess(cu.role,'purchasegoods',cu.permissions,cuAccessDepartments)&&page==='purchasegoods'&&h(PurchaseTab,{purchases:goodsPurchases,setPurchases:setGoodsPurchases,nccs:nccGoods,setNCCs:setNccGoods,materials,products,prodCats,cu,setPage,mode:'goods'}),
+        canAccess(cu.role,'purchasegoods',cu.permissions,cu.dept)&&page==='purchasegoods'&&h(PurchaseTab,{purchases:goodsPurchases,setPurchases:setGoodsPurchases,nccs:nccGoods,setNCCs:setNccGoods,materials,products,prodCats,cu,setPage,mode:'goods'}),
         canAccess(cu.role,'fuelpurchases',cu.permissions)&&page==='fuelpurchases'&&h(FuelPurchaseTab,{rows:fuelPurchases,setRows:setFuelPurchases,employees,assets,currentUser:cu}),
         canAccess(cu.role,'utilityexpenses',cu.permissions)&&page==='utilityexpenses'&&h(UtilityExpenseTab,{entries:financeEntries,setEntries:setFinanceEntries,currentUser:cu}),
         canAccess(cu.role,'fuelreport',cu.permissions)&&page==='fuelreport'&&h(FuelPurchaseReportTab,{rows:fuelPurchases}),
@@ -910,34 +618,31 @@ function App(){
         canAccess(cu.role,'powderdebtreport',cu.permissions)&&page==='powderdebtreport'&&h(PowderDebtReportTab,{customers}),
         canAccess(cu.role,'maint_vehicle',cu.permissions)&&page==='maint_vehicle'&&h(MaintenanceTab,{title:'Bảo dưỡng xe',icon:'ti-car',assets,employees,garages,setPage}),
         canAccess(cu.role,'maint_machine',cu.permissions)&&page==='maint_machine'&&h(MaintenanceTab,{title:'Bảo dưỡng máy',icon:'ti-settings',assets,employees}),
-        canAccess(cu.role,'shifts',cu.permissions)&&page==='shifts'&&h(ShiftsTab,{shifts,setShifts,employees,trips,setTrips,currentUser:cu}),
+        canAccess(cu.role,'shifts',cu.permissions)&&page==='shifts'&&h(ShiftsTab,{shifts,setShifts,employees,trips,setTrips}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
         canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify:addNotification}),
         canAccess(cu.role,'intem',cu.permissions)&&page==='intem'&&h(IntemTab,{products,company}),
-        canAccess(cu.role,'trips',cu.permissions,cuAccessDepartments)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,prodCats,quotes,financeDebts,setFinanceDebts,company,currentUser:cu,notify:addNotification,onBackToDriverReport:()=>setPage('workreport_lx')}),
-        canAccess(cu.role,'workreport_lx',cu.permissions,cuAccessDepartments)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,orders,products,customers,employees,currentUser:cu,onOpenTrips:()=>setPage('trips')}),
+        canAccess(cu.role,'trips',cu.permissions,cu.dept)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,quotes,financeDebts,setFinanceDebts,currentUser:cu,notify:addNotification}),
+        canAccess(cu.role,'workreport_lx',cu.permissions,cu.dept)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,orders,products,customers,currentUser:cu}),
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,trips,currentUser:cu,prodShifts,quotes,financeDebts,setFinanceDebts,menuHidden,setMenuHidden}),
-        canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),
-        canAccess(cu.role,'marketsales',cu.permissions)&&page==='marketsales'&&h(SalesDebtReportTab,{orders,setOrders,customers,products,quotes,trips,currentUser:cu}),
-        canAccess(cu.role,'invoicereport',cu.permissions)&&page==='invoicereport'&&h(InvoiceUploadReportTab,{orders,customers,products,trips,setPage}),
-canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(FinanceReportTab,{entries:financeEntries,setEntries:setFinanceEntries,debts:financeDebts,setDebts:setFinanceDebts,openings:financeOpenings,setOpenings:setFinanceOpenings,customers,nccs,currentUser:cu,orders,products,quotes,purchases,goodsPurchases}),
+        canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,prodCats,shifts:prodShifts,quotes}),
+        canAccess(cu.role,'marketsales',cu.permissions)&&page==='marketsales'&&h(SalesDebtReportTab,{orders,customers,products,trips}),
+        canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(FinanceReportTab,{reportType:'cashflow',entries:financeEntries,setEntries:setFinanceEntries,debts:financeDebts,setDebts:setFinanceDebts,openings:financeOpenings,setOpenings:setFinanceOpenings,customers,setCustomers,nccs,currentUser:cu,orders,products,quotes,purchases,goodsPurchases}),
+        canAccess(cu.role,'businessreport',cu.permissions)&&page==='businessreport'&&h(FinanceReportTab,{reportType:'business',entries:financeEntries,setEntries:setFinanceEntries,debts:financeDebts,setDebts:setFinanceDebts,openings:financeOpenings,setOpenings:setFinanceOpenings,customers,setCustomers,nccs,currentUser:cu,orders,products,quotes,purchases,goodsPurchases}),
         canAccess(cu.role,'powdersales',cu.permissions)&&page==='powdersales'&&h(PowderSalesTab,{customers,trips,employees,setPage}),
-        canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products,prodShifts,prodShiftRules,prodActuals,setProdActuals,stock,currentUser:cu}),
-        canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,orders,products,employees,prodShifts,prodShiftRules,currentUser:cu}),
+        canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products,prodShifts,prodShiftRules,prodActuals,setProdActuals,currentUser:cu}),
+        canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,products,currentUser:cu}),
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,prodCats,currentUser:cu}),
         canAccess(cu.role,'syncreport',cu.permissions)&&page==='syncreport'&&h(SyncDataReportTab),
         canAccess(cu.role,'dbusage',cu.permissions)&&page==='dbusage'&&h(SupabaseUsageReportTab,{employees,materials,assets,prodCats,products,customers,areas,workcats,tasks,nccs,purchases,goodsPurchases,quotes,orders,trips,attendance,advances,rewards,employeeErrors,employeeUniforms,leaves,depts,shifts,prodShifts,prodShiftRules,prodOrders,stock,company}),
-        page==='kpi4p'&&canAccess(cu.role,page,cu.permissions,cuAccessDepartments)&&h(KPI4PTab,{currentUser:cu,setPage}),
-        page.startsWith('attp_')&&canAccess(cu.role,page,cu.permissions,cuAccessDepartments)&&h(ATTPDocumentsTab,{key:page,page,title:PTITLES[page],icon:PICONS[page],currentUser:cu}),
-        !page.startsWith('attp_')&&PROCESS_POST_KEYS[page]&&canAccess(cu.role,page,cu.permissions,cuAccessDepartments)&&h(ProcessPostsTab,{key:page,page,title:PTITLES[page],icon:PICONS[page],items:processPosts[page]||[],setItems:setProcessPosts(page),currentUser:cu}),
+        ['process_accounting','process_bun','process_pho','process_banhcuon'].includes(page)&&h(ProcessPostsTab,{page,title:PTITLES[page],icon:PICONS[page],items:processPosts[page]||[],setItems:setProcessPosts(page),currentUser:cu}),
         wips.includes(page)&&h(PlaceholderTab,{title:PTITLES[page],icon:PICONS[page]||'ti-clock'})
         )
       ),
-      quickTripSummaryOpen&&!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')&&h(TripQuickSummaryModal,{key:cu.id,currentUser:cu,employees,loadData:loadQuickSummaryData,onClose:()=>setQuickTripSummaryOpen(false)}),
-      (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,currentUser:cu,onLogout:logout,onQuickTripSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>setQuickTripSummaryOpen(true):undefined})
+      (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cu.dept,onLogout:logout})
     ),
     cu.mustChangePw&&h(CpwModal,{
-      emp:cu,cu,forced:true,onClose:logout,onExit:logout,
+      emp:cu,cu,forced:true,onClose:()=>{},
       onSave:(password)=>{
         const update=list=>list.map(employee=>employee.id===cu.id
           ?{...employee,password,mustChangePw:false,updatedBy:cu.name,updatedAt:fmtDT()}
