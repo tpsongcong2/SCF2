@@ -247,6 +247,16 @@ th{font-family:var(--ui-header-family)!important}
 .weather-current-card>div:first-child{min-width:0!important}
 .weather-three-wrap{display:contents!important}
 .trip-summary-day-modal .mh{margin-bottom:4px;padding-bottom:0;border-bottom:0}
+.scf-summary-live{width:100%;min-width:0}
+.scf-summary-live .trip-summary-quick-tools button{min-height:44px}
+.scf-summary-live-hint{font-size:13px;color:var(--tx2);margin:10px 0}
+.scf-summary-live-scroll{width:100%;max-height:70dvh;overflow:auto;border:1px solid var(--bd);border-radius:8px;background:#fff;color:#111;touch-action:pan-x pan-y pinch-zoom}
+.scf-summary-live-scroll table{border-collapse:collapse;min-width:820px;width:100%;font-size:15px;line-height:1.45}
+.scf-summary-live-scroll th,.scf-summary-live-scroll td{padding:10px 12px;border:1px solid #aaa;text-align:left;white-space:normal;vertical-align:top}
+.scf-summary-live-scroll thead th{position:sticky;top:0;background:#e6efe9;z-index:1}
+.scf-summary-live-scroll td:nth-child(4),.scf-summary-live-scroll td:nth-child(6){white-space:nowrap;font-weight:700}
+.scf-summary-live-scroll.enlarged table{font-size:20px;min-width:1100px}
+.scf-summary-live-trip th{font-size:16px}
 @media(max-width:768px){
   .weather-card{grid-template-columns:repeat(2,minmax(0,1fr))}
   .weather-current-card{grid-column:1/-1}
@@ -761,6 +771,12 @@ th{font-family:var(--ui-header-family)!important}
   .trip-summary-quick-modal.image-screen .trip-summary-quick-image{border:0;border-radius:0;overflow:visible;width:calc(100% - 24px);margin-inline:12px;box-sizing:border-box}
   .trip-summary-quick-modal.image-screen .trip-summary-quick-image.zoomed{max-height:none;overflow:auto}
   .mobile-nav-btn.on{color:var(--pri);background:#e5f2eb}
+  body:has(.trip-summary-quick-overlay,.trip-summary-day-overlay) .mobile-nav{z-index:10004}
+  body:has(.trip-summary-quick-overlay,.trip-summary-day-overlay) .mobile-nav-backdrop{z-index:10002}
+  body:has(.trip-summary-quick-overlay,.trip-summary-day-overlay) .mobile-nav-sheet{z-index:10003}
+  .overlay.trip-summary-quick-overlay,.overlay.trip-summary-day-overlay{bottom:calc(68px + env(safe-area-inset-bottom))}
+  .modal.wide.trip-summary-quick-modal{bottom:calc(68px + env(safe-area-inset-bottom));height:calc(100dvh - 68px - env(safe-area-inset-bottom));min-height:0;max-height:calc(100dvh - 68px - env(safe-area-inset-bottom))}
+  .modal.wide.trip-summary-day-modal{max-height:calc(100dvh - 88px - env(safe-area-inset-bottom))}
   .mobile-nav-btn.on::after{content:'';position:absolute;bottom:3px;width:5px;height:5px;border-radius:50%;background:var(--acc)}
   .mobile-nav-backdrop{display:block;position:fixed;inset:0;z-index:205;background:rgba(8,25,18,.45);backdrop-filter:blur(2px)}
   .mobile-nav-sheet{display:flex;position:fixed;left:8px;right:8px;top:8px;bottom:calc(68px + env(safe-area-inset-bottom));z-index:210;max-height:calc(100vh - 76px - env(safe-area-inset-bottom));flex-direction:column;background:#fff;border:1px solid var(--bd);border-radius:18px;box-shadow:0 12px 36px rgba(18,60,45,.22);overflow:hidden}

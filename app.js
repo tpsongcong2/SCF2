@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V577';
+const SCF_BUILD_VERSION='V578';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_process:'Tài liệu ATTP · Quy trình',
@@ -345,6 +345,12 @@ function App(){
   },[session?.id]);
   const[menuHidden,setMenuHidden]=useLS('scf_topnav_hidden',false);
   const[quickTripSummaryOpen,setQuickTripSummaryOpen]=useState(false);
+  const[daySummaryOpen,setDaySummaryOpen]=useState(false);
+  useEffect(()=>{
+    const changed=event=>setDaySummaryOpen(!!event.detail?.open);
+    window.addEventListener('scf-day-summary-open',changed);
+    return()=>window.removeEventListener('scf-day-summary-open',changed);
+  },[]);
   const quickSummaryUserRef=React.useRef(null);
   const[employees,_se]=useState(SCF_SERVER_AUTH_ENABLED?[]:DEF_EMPS);
   const[company,_sc]=useState(DEF_COMPANY);
@@ -934,7 +940,7 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         )
       ),
       quickTripSummaryOpen&&!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')&&h(TripQuickSummaryModal,{key:cu.id,currentUser:cu,employees,loadData:loadQuickSummaryData,onClose:()=>setQuickTripSummaryOpen(false)}),
-      (page==='welcome'||isFaceMask)&&h(MobileNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,currentUser:cu,onLogout:logout,onQuickTripSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>setQuickTripSummaryOpen(true):undefined})
+      (page==='welcome'||isFaceMask||quickTripSummaryOpen||daySummaryOpen)&&h(MobileNav,{page,setPage:next=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(false);setPage(next);},role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,currentUser:cu,onLogout:logout,onQuickTripSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(true);}:undefined})
     ),
     cu.mustChangePw&&h(CpwModal,{
       emp:cu,cu,forced:true,onClose:logout,onExit:logout,
