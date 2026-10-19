@@ -53,6 +53,7 @@ const PAGE_ACCESS = {
   orderdetail:  ['admin','manager','staff','driver'],
   trips:        ['admin','manager','driver'],
   prodsummary:  ['admin','manager','staff'],
+  prodbom:      ['admin','manager'],
   prodorders:   ['admin','manager','staff'],
   stock:        ['admin','manager','staff'],
   purchase:     ['admin','manager'],

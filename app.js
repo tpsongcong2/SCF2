@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V581';
+const SCF_BUILD_VERSION='V590';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_process:'Tài liệu ATTP · Quy trình',
@@ -16,7 +16,7 @@ const PTITLES = {
   salesreport:'Báo cáo bán hàng', cashflowreport:'Báo cáo dòng tiền', fuelreport:'Báo cáo mua xăng dầu', marketsales:'Báo cáo công nợ', invoicereport:'Báo cáo hóa đơn', powdersales:'Bán bột bún',
   nccs:'Nhà CC NVL', nccgoods:'Nhà CC Hàng hóa', purchaseorders:'Đơn mua hàng NVL', purchasegoods:'Đơn mua hàng hàng hóa', fuelpurchases:'Đơn mua xăng dầu', utilityexpenses:'Chi phí điện nước', purchasereport:'Báo cáo mua hàng', maintreport:'Báo cáo sửa chữa', materialusage:'Báo cáo NVL tồn và tiêu dùng', powderdebtreport:'Báo cáo công nợ', syncreport:'Đồng bộ dữ liệu', dbusage:'Dung lượng Supabase',
   maint_vehicle:'Bảo dưỡng xe', maint_machine:'Bảo dưỡng máy',
-  prodsummary:'Tổng hợp sản xuất', prodorders:'Đơn sản xuất', stock:'Tồn kho',
+  prodbom:'Cài đặt định mức sản xuất',prodsummary:'Tổng hợp sản xuất', prodorders:'Đơn sản xuất', stock:'Tồn kho',
 };
 
 const PROCESS_POST_KEYS={attp_process:'scf_attp_process',attp_standards:'scf_attp_standards',attp_daily:'scf_attp_daily',attp_legal:'scf_attp_legal',process_accounting:'scf_process_posts_accounting',process_bun:'scf_process_posts_bun',process_pho:'scf_process_posts_pho',process_banhcuon:'scf_process_posts_banhcuon'};
@@ -48,8 +48,8 @@ const SCF_PAGE_DATA={
   workreport_lx:['trips','orders','products','customers'],
   salesreport:['orders','customers','products','prod_shifts','quotes'],
   cashflowreport:['finance_entries','finance_debts','finance_openings','customers','nccs','orders','products','quotes','purchases','goods_purchases'],
-  powdersales:['customers','trips'],prodsummary:['orders','products','prod_shifts','prod_shift_rules','prod_actuals'],
-  prodorders:['prodorders','products','orders','prod_shifts','prod_shift_rules'],stock:['stock','products','prodcats'],
+  powdersales:['customers','trips'],prodsummary:['orders','products','prodcats','prod_shifts','prod_shift_rules','prod_actuals'],
+  prodbom:['production_recipes','products','prodcats','materials'],prodorders:['prodorders','products','orders','prod_shifts','prod_shift_rules'],stock:['stock','products','prodcats'],
   syncreport:[],purchase:[],workreport_vp:[],workreport_sx:[]
 };
 function scfPageDataKeys(page,allKeys){
@@ -244,7 +244,7 @@ const SCF_PAGE_COMPONENTS={
   maintreport:'MaintenanceReportTab',materialusage:'MaterialUsageReportTab',powderdebtreport:'PowderDebtReportTab',maint_vehicle:'MaintenanceTab',maint_machine:'MaintenanceTab',
   shifts:'ShiftsTab',quotes:'QuotesTab',delivery:'DeliveryOrdersTab',intem:'IntemTab',trips:'TripsTab',workreport_lx:'DriverTripWorkReportTab',
   orderdetail:'OrderDetailListTab',salesreport:'SalesReportTab',marketsales:'SalesDebtReportTab',invoicereport:'InvoiceUploadReportTab',cashflowreport:'FinanceReportTab',
-  powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab'
+  prodbom:'ProductionRecipesTab',powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab'
 };
 function scfMissingPageComponents(page){
   const names=SCF_PAGE_COMPONENTS[page]||(PROCESS_POST_KEYS[page]?'ProcessPostsTab':'PlaceholderTab');
@@ -274,7 +274,7 @@ const PICONS = {
   attp_legal:'ti-file-certificate',
   garages:'ti-building-store',
   purchase:'ti-shopping-cart', tasks:'ti-clipboard-check', notifications:'ti-bell', userguide:'ti-book-2', prodsummary:'ti-clipboard-list',
-  prodorders:'ti-building-factory', stock:'ti-package', attendance:'ti-face-id', attendance_settings:'ti-settings', attendance_report:'ti-report-analytics', advances:'ti-cash-banknote', rewards:'ti-scale', employee_errors:'ti-alert-triangle', employee_uniforms:'ti-shirt', permission_settings:'ti-shield-lock', leaves:'ti-calendar-minus', assets:'ti-building-warehouse', appearance:'ti-typography', printtemplates:'ti-file-spreadsheet',
+  prodbom:'ti-adjustments',prodorders:'ti-building-factory', stock:'ti-package', attendance:'ti-face-id', attendance_settings:'ti-settings', attendance_report:'ti-report-analytics', advances:'ti-cash-banknote', rewards:'ti-scale', employee_errors:'ti-alert-triangle', employee_uniforms:'ti-shirt', permission_settings:'ti-shield-lock', leaves:'ti-calendar-minus', assets:'ti-building-warehouse', appearance:'ti-typography', printtemplates:'ti-file-spreadsheet',
   workreport_vp:'ti-building', workreport_sx:'ti-building-factory', workreport_lx:'ti-steering-wheel', workreport_total:'ti-report-analytics',
   process_accounting:'ti-file-invoice', process_bun:'ti-tools-kitchen-2', process_pho:'ti-bowl', process_banhcuon:'ti-cookie',
   marketsales:'ti-report-money', invoicereport:'ti-file-alert', powdersales:'ti-bowl', intem:'ti-printer', deliverysequence:'ti-list-numbers',
@@ -379,6 +379,7 @@ function App(){
   const[allTrips,_st]=useState([]);
   const[prodOrders,_spo]=useState([]);
   const[prodActuals,_spa]=useState({});
+  const[productionRecipes,_srecipes]=useState([]);
   const[stock,_sstk]=useState([]);
   const[attendance,_sa]=useState([]);
   const[advances,_sadv]=useState([]);
@@ -435,6 +436,7 @@ function App(){
   });
   const setProdOrders=mkSet('scf_prodorders',_spo);
   const setProdActuals=mkSet('scf_prod_actuals',_spa);
+  const setProductionRecipes=mkSet('scf_production_recipes',_srecipes);
   const setStock=mkSet('scf_stock',_sstk);
   const setAttendance=mkSet('scf_attendance',_sa);
   const setAdvances=mkSet('scf_advances',_sadv);
@@ -489,6 +491,7 @@ function App(){
       // another write or overwriting a newer local edit.
       if(key==='scf_trips')_st(value);
       if(key==='scf_orders')_so(normalizeOrdersForStorage(value));
+      if(key==='scf_production_recipes')_srecipes(value);
     };
     window.addEventListener('scf-collection-reconciled',receive);
     return()=>window.removeEventListener('scf-collection-reconciled',receive);
@@ -523,7 +526,7 @@ function App(){
     fuelpurchases:[[],_sfp],material_month_openings:[[],_smo],quotes:[[],_sq],
     orders:[[],_so,normalizeOrdersForStorage],trips:[[],_st],prodorders:[[],_spo],stock:[[],_sstk],
     attendance:[[],_sa],advances:[[],_sadv],rewards:[[],_srw],employee_errors:[[],_see],employee_uniforms:[[],_seu],leaves:[[],_slv],
-    print_template_settings:[DEF_PRINT_TEMPLATE_SETTINGS,_spt,normalizePrintTemplateSettings],prod_actuals:[{},_spa],
+    production_recipes:[[],_srecipes],print_template_settings:[DEF_PRINT_TEMPLATE_SETTINGS,_spt,normalizePrintTemplateSettings],prod_actuals:[{},_spa],
     shifts:[[],_ssh],prod_shifts:[[],_sps],prod_shift_rules:[[],_spr],
     finance_entries:[[],_sfe],finance_debts:[[],_sfd],finance_openings:[[],_sfo],
     company_news:[[],_snews],internal_messages:[[],_sim],notifications:[[],_snotifications],delivery_rules:[[],_sdr],
@@ -930,7 +933,8 @@ function App(){
         canAccess(cu.role,'invoicereport',cu.permissions)&&page==='invoicereport'&&h(InvoiceUploadReportTab,{orders,customers,products,trips,setPage}),
 canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(FinanceReportTab,{entries:financeEntries,setEntries:setFinanceEntries,debts:financeDebts,setDebts:setFinanceDebts,openings:financeOpenings,setOpenings:setFinanceOpenings,customers,nccs,currentUser:cu,orders,products,quotes,purchases,goodsPurchases}),
         canAccess(cu.role,'powdersales',cu.permissions)&&page==='powdersales'&&h(PowderSalesTab,{customers,trips,employees,setPage}),
-        canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products,prodShifts,prodShiftRules,prodActuals,setProdActuals,stock,currentUser:cu}),
+        canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products,prodCats,prodShifts,prodShiftRules,prodActuals,setProdActuals,stock,currentUser:cu}),
+        canAccess(cu.role,'prodbom',cu.permissions)&&page==='prodbom'&&h(ProductionRecipesTab,{recipes:productionRecipes,setRecipes:setProductionRecipes,products,prodCats,materials,currentUser:cu}),
         canAccess(cu.role,'prodorders',cu.permissions)&&page==='prodorders'&&h(ProdOrdersTab,{prodOrders,setProdOrders,orders,products,employees,prodShifts,prodShiftRules,currentUser:cu}),
         canAccess(cu.role,'stock',cu.permissions)&&page==='stock'&&h(StockTab,{stock,setStock,products,prodCats,currentUser:cu}),
         canAccess(cu.role,'syncreport',cu.permissions)&&page==='syncreport'&&h(SyncDataReportTab),
