@@ -680,6 +680,7 @@ const NAV=[
   {key:'maint_machine',icon:'ti-settings',label:'Bảo dưỡng máy'},
   {sec:'Sản xuất'},
   {key:'prodsummary',icon:'ti-clipboard-list',label:'Tổng hợp SX'},
+  {key:'prodreport',icon:'ti-report-analytics',label:'Báo cáo sản xuất'},
   {key:'prodbom',icon:'ti-adjustments',label:'Cài đặt định mức sản xuất'},
   {key:'prodorders',icon:'ti-building-factory',label:'Đơn sản xuất'},
   {key:'stock',icon:'ti-package',label:'Tồn kho'},

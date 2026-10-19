@@ -1227,7 +1227,7 @@ function isPrivilegedEmployeeRecord(employee){
       h('hr',{className:'divider'}),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
         h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phân quyền chi tiết (có thể chỉnh riêng cho nhân viên này)'),
-        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,orderHistoryDays:60,salesDebtAllCustomers:false,driverReportMonthlyWeight:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
+        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,orderHistoryDays:60,salesDebtAllCustomers:false,driverReportMonthlyWeight:false,productionShiftWeight:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
       ),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = chỉ đọc dữ liệu | Thêm + Xem + Sửa = không được xóa | Thêm + Xem + Sửa + Xóa = toàn quyền'),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 2rem'}},
@@ -1270,6 +1270,14 @@ function isPrivilegedEmployeeRecord(employee){
         h('label',{style:{display:'flex',gap:10,alignItems:'center',marginTop:10}},'Số ngày được xem đơn hàng (0 = tất cả)',h('input',{type:'number',min:0,max:3650,step:1,value:f.orderHistoryDays??orderHistoryDays(f),onChange:event=>s('orderHistoryDays',event.target.value),style:{width:90}})),
         h('label',{style:{display:'flex',alignItems:'center',gap:10,marginTop:10,fontSize:12,fontWeight:600,flexWrap:'wrap'}},'Số ngày giới hạn nhập SL thực giao',h('input',{type:'number',min:0,max:365,step:1,value:f.tripActualQtyLimitDays??2,onChange:event=>s('tripActualQtyLimitDays',event.target.value),style:{width:90}})),
         h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:4}},'2 = khóa từ ngày thứ 2 sau ngày giao; 0 = không giới hạn ngày. Chỉ có tác dụng khi nhân viên được cấp quyền nhập số lượng thực giao.')
+      ),
+      canAccess(f.role,'prodsummary',f.permissions,selectedDepartments)&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,marginTop:10,background:'var(--bg2)'}},
+        h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền trong Tổng hợp sản xuất'),
+        h('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'7px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6}},
+          h('input',{type:'checkbox',disabled:f.role==='admin',checked:canViewProductionShiftWeight(f),onChange:event=>s('productionShiftWeight',event.target.checked)}),
+          'Xem tổng khối lượng ca sản xuất'
+        ),
+        h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:5}},'Mặc định chỉ Admin được xem tổng kg bên phải tên ca. Không ảnh hưởng danh sách và số lượng từng sản phẩm.')
       ),
       canAccess(f.role,'workreport_lx',f.permissions,selectedDepartments)&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,marginTop:10,background:'var(--bg2)'}},
         h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền trong Báo công lái xe'),

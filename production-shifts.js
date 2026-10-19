@@ -173,9 +173,8 @@ function getProdShiftForOrder(order,prodShifts,customers){
   if(!byCustomers){byCustomers=new WeakMap();PROD_ORDER_SHIFT_CACHE.set(prodShifts,byCustomers);}
   let matches=byCustomers.get(points);
   if(!matches){matches=new Map();byCustomers.set(points,matches);}
-  // Ngày và số lượng không ảnh hưởng đến việc chọn ca. Các đơn cùng điểm/giờ
-  // dùng lại kết quả; lịch SX hoặc danh mục điểm mới có bộ nhớ riêng.
-  const key=JSON.stringify([normalizeTimeInput(order.deliveryTime),order.pointId,order.ptId,order.pointName,order.address,order.customerId,order.custId,order.customer,order.area]);
+  // Ngày giao ảnh hưởng quyền sở hữu địa điểm; chỉ dùng lại kết quả trong cùng ngày.
+  const key=JSON.stringify([order.deliveryDate,normalizeTimeInput(order.deliveryTime),order.pointId,order.ptId,order.pointName,order.address,order.customerId,order.custId,order.customer,order.area]);
   if(matches.has(key))return matches.get(key);
   const shift=scfMatchProdShiftForOrder(order,prodShifts,points);
   if(matches.size>=4096)matches.clear();
