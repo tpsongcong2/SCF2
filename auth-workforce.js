@@ -78,7 +78,8 @@ function LoginPage({employees,onLogin}){
         h('h1',{style:{fontSize:22,fontWeight:700,color:'var(--pri3)'}},isFaceMask?'FACE MASK':'Thực Phẩm Sông Công')
       ),
       err&&h('div',{style:{background:'#FCEBEB',color:'#A32D2D',padding:'8px 12px',borderRadius:6,fontSize:13,marginBottom:'1rem',textAlign:'center'}},err),
-      h(F,{label:'Tên đăng nhập'},h('input',{value:un,onChange:e=>{su(e.target.value);se('');},onKeyDown:e=>e.key==='Enter'&&submit()})),
+      err&&window.scfDownloadAuthDiagnostics&&h('button',{type:'button',className:'btn',onClick:()=>window.scfDownloadAuthDiagnostics()},'Tải thông tin kiểm tra đăng nhập'),
+      h(F,{label:'Tên đăng nhập hoặc email'},h('input',{value:un,onChange:e=>{su(e.target.value);se('');},onKeyDown:e=>e.key==='Enter'&&submit(),autoComplete:'username'})),
       h(F,{label:'Mật khẩu'},
         h('div',{className:'pw-wrap'},
           h('input',{type:show?'text':'password',value:pw,onChange:e=>{sp(e.target.value);se('');},onKeyDown:e=>e.key==='Enter'&&submit()}),
@@ -275,7 +276,136 @@ function CameraBox({onCapture,preview,setPreview,template,setTemplate,autoOpenSi
   );
 }
 
-function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,currentUser,company,reportTitle='Báo cáo chấm công'}) {
+function kioskFindEmployee(descriptor,employees){
+  if(!descriptor||descriptor.length<128)return null;
+  const candidates=(employees||[]).filter(employee=>employee.faceTemplate?.descriptor?.length>=128).map(employee=>{
+    const saved=employee.faceTemplate.descriptor;
+    let squared=0;
+    for(let index=0;index<128;index++){const delta=Number(descriptor[index])-Number(saved[index]);squared+=delta*delta;}
+    return {employee,distance:Math.sqrt(squared)};
+  }).sort((a,b)=>a.distance-b.distance);
+  const best=candidates[0];
+  if(!best||best.distance>0.43||candidates[1]&&candidates[1].distance-best.distance<0.08)return null;
+  return best;
+}
+function kioskEyeRatio(points){
+  if(!points||points.length!==6)return 0;
+  const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  const width=distance(points[0],points[3]);
+  return width?(distance(points[1],points[5])+distance(points[2],points[4]))/(2*width):0;
+}
+function kioskPunchDecision(records,employeeId,now){
+  const previous=(records||[]).filter(record=>record.empId===employeeId&&record.status==='valid').map(record=>({record,at:Date.parse(String(record.date||'')+'T'+String(record.time||'00:00'))})).filter(item=>Number.isFinite(item.at)&&item.at<=now).sort((a,b)=>b.at-a.at)[0];
+  if(!previous||now-previous.at>18*3600000)return {type:'in',blocked:false,previous:null};
+  if(now-previous.at<2*3600000)return {type:previous.record.type==='in'?'out':'in',blocked:true,previous:previous.record};
+  return {type:previous.record.type==='in'?'out':'in',blocked:false,previous:previous.record};
+}
+function AttendanceKiosk({employees,attendance,setAttendance,currentUser,attendanceZones,workShifts,onClose}){
+  const videoRef=useRef(null),streamRef=useRef(null),positionRef=useRef(null),attendanceRef=useRef(attendance);
+  const scanRef=useRef({employeeId:'',stable:0,closed:false,lastSavedId:'',lastSavedAt:0});
+  const[active,setActive]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState('Bấm Bắt đầu một lần để cấp quyền camera. Sau đó nhân viên không cần chạm máy.'),[lastResult,setLastResult]=useState(null);
+  useEffect(()=>{attendanceRef.current=attendance;},[attendance]);
+  const stop=()=>{streamRef.current?.getTracks().forEach(track=>track.stop());streamRef.current=null;if(videoRef.current)videoRef.current.srcObject=null;setActive(false);};
+  useEffect(()=>()=>stop(),[]);
+  const start=async()=>{
+    if(busy||active)return;
+    setBusy(true);setMessage('Đang mở camera và tải mô hình nhận diện...');
+    try{
+      if(!navigator.mediaDevices?.getUserMedia)throw new Error('Thiết bị hoặc trang này chưa cho phép camera HTTPS.');
+      await ensureFaceAiModels();
+      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:640},height:{ideal:480}},audio:false});
+      streamRef.current=stream;setActive(true);setMessage('Đưa một khuôn mặt vào khung hình, nhắm mắt khoảng 1 giây rồi mở.');
+    }catch(error){setMessage(error.message||'Không mở được camera. Kiểm tra quyền camera rồi thử lại.');stop();}
+    finally{setBusy(false);}
+  };
+  useEffect(()=>{
+    if(active&&videoRef.current&&streamRef.current){videoRef.current.srcObject=streamRef.current;videoRef.current.play?.().catch(()=>{});}
+  },[active]);
+  useEffect(()=>{
+    if(!active)return;
+    if(!navigator.geolocation){setMessage('Thiết bị không hỗ trợ GPS; chưa thể tự ghi chấm công.');return;}
+    const accept=position=>{positionRef.current={lat:position.coords.latitude,lon:position.coords.longitude,acc:position.coords.accuracy,at:Date.now()};};
+    const fail=()=>{positionRef.current=null;};
+    const options={enableHighAccuracy:true,maximumAge:30000,timeout:15000};
+    const watchId=navigator.geolocation.watchPosition(accept,fail,options);
+    const refresh=setInterval(()=>navigator.geolocation.getCurrentPosition(accept,fail,options),120000);
+    return()=>{navigator.geolocation.clearWatch(watchId);clearInterval(refresh);};
+  },[active]);
+  useEffect(()=>{
+    if(!active)return;
+    let cancelled=false,timer;
+    const scan=async()=>{
+      try{
+        if(streamRef.current?.getVideoTracks()[0]?.readyState==='ended'){stop();setMessage('Camera đã ngắt. Bấm Bắt đầu để mở lại.');return;}
+        const video=videoRef.current;
+        if(!video||!video.videoWidth||document.visibilityState!=='visible')return;
+        const faces=await faceapi.detectAllFaces(video,new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:0.65})).withFaceLandmarks(true).withFaceDescriptors();
+        if(cancelled)return;
+        if(faces.length!==1){scanRef.current={...scanRef.current,employeeId:'',stable:0,closed:false};setMessage(faces.length>1?'Chỉ một người đứng trước camera.':'Đưa mặt vào khung hình.');return;}
+        const face=faces[0],box=face.detection.box;
+        if(face.detection.score<0.75||box.width<video.videoWidth*.2||box.height<video.videoHeight*.2){scanRef.current={...scanRef.current,employeeId:'',stable:0,closed:false};setMessage('Hãy đứng gần camera và nhìn thẳng, đủ sáng.');return;}
+        const matched=kioskFindEmployee(face.descriptor,employees);
+        if(!matched){scanRef.current={...scanRef.current,employeeId:'',stable:0,closed:false};setMessage('Chưa nhận diện chắc chắn. Hãy nhìn thẳng hoặc đăng ký lại mẫu mặt.');return;}
+        const state=scanRef.current;
+        if(state.employeeId!==matched.employee.id){state.employeeId=matched.employee.id;state.stable=0;state.closed=false;}
+        state.stable++;
+        const eyes=[face.landmarks.getLeftEye(),face.landmarks.getRightEye()].map(kioskEyeRatio);
+        const eyeRatio=(eyes[0]+eyes[1])/2;
+        if(eyeRatio>0&&eyeRatio<.18)state.closed=true;
+        if(state.stable<2||!state.closed||eyeRatio<.22){setMessage('Đã thấy '+matched.employee.name+'. Nhắm mắt khoảng 1 giây rồi mở để xác nhận.');return;}
+        state.closed=false;state.stable=0;
+        const now=Date.now(),decision=kioskPunchDecision(attendanceRef.current,matched.employee.id,now);
+        if(decision.blocked||state.lastSavedId===matched.employee.id&&now-state.lastSavedAt<120000){setMessage(matched.employee.name+' vừa chấm công; không ghi trùng.');return;}
+        const pos=positionRef.current;
+        if(!pos||now-pos.at>10*60000){setMessage('Chưa có GPS mới. Kiểm tra quyền vị trí trên điện thoại.');return;}
+        const zone=employeeDepartmentIncludes(matched.employee,'Sản xuất')?attendanceZones.production:attendanceZones.office;
+        const gps=gpsStatus(pos,zone);
+        if(!gps.ok){setMessage('Thiết bị ở ngoài vùng chấm công '+zone.name+' ('+gps.distance+'m).');return;}
+        const date=isoDate(),time=timeNow();
+        const toMinutes=value=>{const parts=String(value||'').split(':');return (Number(parts[0])||0)*60+(Number(parts[1])||0);};
+        const minutes=toMinutes(time),currentShift=workShifts.find(item=>{const start=toMinutes(item.start),end=toMinutes(item.end);return start<end?minutes>=start&&minutes<end:minutes>=start||minutes<end;})||workShifts[0];
+        const shift=decision.type==='out'&&decision.previous?(workShifts.find(item=>item.id===decision.previous.workShiftId)||currentShift):currentShift;
+        const shiftStart=toMinutes(shift?.start),shiftEnd=toMinutes(shift?.end),duration=(shiftEnd-shiftStart+1440)%1440||1440,elapsed=(minutes-shiftStart+1440)%1440;
+        const timeStatus=decision.type==='in'?(elapsed>0?'Đi muộn':'Đúng giờ'):(elapsed<duration?'Về sớm':'Đúng giờ');
+        const canvas=videoFrameCanvas(video),photo=canvas.toDataURL('image/jpeg',.72);
+        const record={id:'CC'+uid(),empId:matched.employee.id,empName:matched.employee.name,dept:matched.employee.dept||'',date,time,type:decision.type,workShiftId:shift?.id||'',workShiftName:shift?.name||'',workShiftStart:shift?.start||'',workShiftEnd:shift?.end||'',timeStatus,faceScore:Math.round(100-matched.distance*60),faceOk:true,lat:pos.lat,lon:pos.lon,accuracy:pos.acc,distance:gps.distance,gpsOk:true,attendanceZoneId:zone.id,attendanceZoneName:zone.name,photo,status:'valid',note:'Kiosk tự nhận diện · nhắm/mở mắt',createdBy:currentUser.name,createdAt:fmtDT(),source:'kiosk'};
+        state.lastSavedId=matched.employee.id;state.lastSavedAt=now;
+        attendanceRef.current=[record,...attendanceRef.current];
+        setAttendance(previous=>previous.some(item=>item.id===record.id)?previous:[record,...previous]);
+        setLastResult(record);setMessage((decision.type==='in'?'Vào ca':'Ra ca')+' thành công: '+matched.employee.name+' lúc '+shortTime(time));
+      }catch(error){if(!cancelled)setMessage('Camera đang xử lý hoặc bị gián đoạn. '+(error.message||'Vui lòng thử lại.'));}
+      finally{if(!cancelled)timer=setTimeout(scan,700);}
+    };
+    timer=setTimeout(scan,300);
+    return()=>{cancelled=true;clearTimeout(timer);};
+  },[active,employees,attendanceZones,workShifts,setAttendance,currentUser.name]);
+  return h('div',{className:'attendance-kiosk'},
+    h('div',{className:'attendance-kiosk-head'},h('b',null,'SCFOOD · Chấm công tự động'),h('button',{onClick:()=>{stop();onClose();}},'Thoát & đăng xuất')),
+    h('div',{className:'attendance-kiosk-camera'},h('video',{ref:videoRef,autoPlay:true,playsInline:true,muted:true})),
+    h('div',{className:'attendance-kiosk-message','aria-live':'polite'},message),
+    lastResult&&h('div',{className:'attendance-kiosk-result'},h('b',null,lastResult.empName),h('span',null,(lastResult.type==='in'?'Vào ca':'Ra ca')+' · '+shortTime(lastResult.time))),
+    !active?h('button',{className:'bp',onClick:start,disabled:busy},busy?'Đang chuẩn bị...':'Bắt đầu camera'):h('button',{onClick:stop},'Tạm dừng'),
+    h('p',{className:'attendance-kiosk-hint'},'Bản thử nghiệm có người giám sát. Chỉ lưu khi một khuôn mặt khớp rõ, có thao tác nhắm/mở mắt và GPS hợp lệ. Nhận diện ảnh/video giả chưa thể bảo đảm tuyệt đối; luôn giữ cách chấm công dự phòng.')
+  );
+}
+function scfNormalizeAttendanceZones(zones){
+  const result={};
+  for(const [id,name]of [['office','Vùng 1: KẾ TOÁN'],['production','Vùng 2: SẢN XUẤT']]){
+    const zone=zones?.[id];
+    const lat=Number(zone?.lat),lon=Number(zone?.lon),radius=Number(zone?.radius);
+    if(!zone||zone.lat===''||zone.lon===''||zone.lat==null||zone.lon==null||!Number.isFinite(lat)||!Number.isFinite(lon)||!Number.isFinite(radius)||Math.abs(lat)>90||Math.abs(lon)>180||radius<=0)
+      throw new Error('Kiểm tra lại tọa độ và bán kính của '+name+'.');
+    result[id]={id,name,description:id==='production'?'Áp dụng cho các bộ phận Sản xuất':'Áp dụng cho Kế toán và Lái xe',lat,lon,radius};
+  }
+  return result;
+}
+function scfEmployeeAttendanceZone(employee,zones){
+  return employeeDepartmentIncludes(employee,'Sản xuất')?zones.production:zones.office;
+}
+function scfBuildFaceTemplate(capture,employeeName){
+  return capture?{hash:[...(capture.faceHash||[])],descriptor:[...(capture.faceDescriptor||[])],model:capture.faceModel||'',detectionScore:capture.faceDetectionScore||0,image:capture.image||'',box:capture.faceBox?{...capture.faceBox}:null,updatedAt:fmtDT(),updatedBy:employeeName}:null;
+}
+function AttendanceTab({section='punch',attendance,setAttendance,employees,setEmployees,replaceEmployees,currentUser,company,saveAttendanceZones,loadAttendanceZones,reportTitle='Báo cáo chấm công',onKioskExit,onKPI4P}) {
   const settingsKey='scf_att_settings';
   const defaultWorkShifts=[
     {id:'night',name:'Ca đêm',start:'22:00',end:'03:00',color:'#EDE7F6',textColor:'#4527A0'},
@@ -287,6 +417,9 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     production:{id:'production',name:'Vùng 2: SẢN XUẤT',description:'Áp dụng cho các bộ phận Sản xuất',lat:W_LAT,lon:W_LON,radius:300}
   };
   const[settings,setSettings]=useLS(settingsKey,{lat:W_LAT,lon:W_LON,radius:300,start:'08:00',end:'17:00',workShifts:defaultWorkShifts,zones:defaultAttendanceZones});
+  const[zoneDraftDirty,setZoneDraftDirty]=useState(false);
+  const[zoneSaving,setZoneSaving]=useState(false);
+  const[zoneSaveError,setZoneSaveError]=useState('');
   const workShifts=Array.isArray(settings.workShifts)&&settings.workShifts.length===3?settings.workShifts:defaultWorkShifts;
   const[zaloWebhook,setZaloWebhook]=useLS('scf_zalo_webhook','');
   const[cap,setCap]=useState(null);const[preview,setPreview]=useState('');
@@ -294,7 +427,9 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   const[gpsBusy,setGpsBusy]=useState(false);
   const[punchBusy,setPunchBusy]=useState(false);
   const[punchPending,setPunchPending]=useState(false);
+  const[kioskOpen,setKioskOpen]=useState(()=>{try{return sessionStorage.getItem('scf_attendance_kiosk_active')==='1';}catch{return false;}});
   const[lastPunchShare,setLastPunchShare]=useState(null);
+  const[faceViewer,setFaceViewer]=useState(null);
   const[cameraAutoOpenSignal,setCameraAutoOpenSignal]=useState(0);
   const[isCompactMobile,setIsCompactMobile]=useState(()=>window.innerWidth<=768);
   const[quickPunchMode,setQuickPunchMode]=useState(()=>window.innerWidth<=768);
@@ -303,11 +438,17 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   const isManager=currentUser.role==='manager';
   const canManage=isAdmin||isManager;
   const normalizeDept=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
-  const attendanceZones={
+  const localAttendanceZones={
     office:{...defaultAttendanceZones.office,lat:settings.lat??W_LAT,lon:settings.lon??W_LON,radius:settings.radius??300,...(settings.zones?.office||{})},
     production:{...defaultAttendanceZones.production,...(settings.zones?.production||{})}
   };
-  const attendanceZoneForEmployee=employee=>normalizeDept(employee?.dept).includes('san xuat')?attendanceZones.production:attendanceZones.office;
+  let sharedAttendanceZones=null;
+  try{if(company?.attendanceZones?.zones)sharedAttendanceZones=scfNormalizeAttendanceZones(company.attendanceZones.zones);}catch{}
+  const attendanceZones=section==='settings'&&isAdmin?localAttendanceZones:(sharedAttendanceZones||localAttendanceZones);
+  const attendanceZoneForEmployee=employee=>scfEmployeeAttendanceZone(employee,attendanceZones);
+  useEffect(()=>{
+    if(section==='settings'&&isAdmin&&sharedAttendanceZones&&!zoneDraftDirty)setSettings(previous=>({...previous,zones:sharedAttendanceZones}));
+  },[section,company?.attendanceZones?.updatedAt]);
   useEffect(()=>{
     if(settings.zones?.office&&settings.zones?.production)return;
     setSettings(prev=>({...prev,zones:{
@@ -433,7 +574,22 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     return notes.join(' • ');
   };
   const recentSame=myToday.find(r=>r.type===nextType&&Math.abs(timeToMin(timeNow())-timeToMin(r.time))<2);
-  const updateAttendanceZone=(zoneId,patch)=>setSettings(prev=>({...prev,zones:{...(prev.zones||attendanceZones),[zoneId]:{...attendanceZones[zoneId],...(prev.zones?.[zoneId]||{}),...patch}}}));
+  const updateAttendanceZone=(zoneId,patch)=>{
+    setZoneDraftDirty(true);setZoneSaveError('');
+    setSettings(prev=>({...prev,zones:{...(prev.zones||localAttendanceZones),[zoneId]:{...localAttendanceZones[zoneId],...(prev.zones?.[zoneId]||{}),...patch}}}));
+  };
+  const publishAttendanceZones=async()=>{
+    if(!isAdmin||zoneSaving)return;
+    setZoneSaving(true);setZoneSaveError('');setZoneDraftDirty(true);
+    try{
+      const zones=scfNormalizeAttendanceZones(localAttendanceZones);
+      if(typeof saveAttendanceZones!=='function')throw new Error('Chưa tải được chức năng lưu vị trí. Hãy tải lại ứng dụng.');
+      await saveAttendanceZones(zones);
+      setZoneDraftDirty(false);
+      window.showToast('Đã lưu vị trí chấm công trên máy chủ. Điện thoại nhân viên sẽ lấy vị trí này khi chấm công.','success',6500);
+    }catch(error){setZoneSaveError(error.message||'Chưa lưu được vị trí lên máy chủ.');}
+    finally{setZoneSaving(false);}
+  };
   const requestGps=async(target='attendance',opts={})=>{
     const settingsZoneId=target==='settings-production'?'production':target==='settings-office'?'office':'';
     if(!navigator.geolocation){
@@ -455,7 +611,7 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
           setGpsMsg('Đã lấy GPS lúc '+timeNow());
           if(settingsZoneId){
             updateAttendanceZone(settingsZoneId,{lat:+nextPos.lat.toFixed(6),lon:+nextPos.lon.toFixed(6)});
-            window.showToast('Đã cập nhật tọa độ '+attendanceZones[settingsZoneId].name+' từ GPS hiện tại.','success');
+            window.showToast('Đã lấy GPS mới cho '+attendanceZones[settingsZoneId].name+'. Bấm Lưu vị trí lên máy chủ để áp dụng cho nhân viên.','info',6500);
           }else if(!opts.silentSuccess){
             window.showToast('Đã lấy GPS thành công.','success');
           }
@@ -485,10 +641,17 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     setCap(null);
     return false;
   };
-  const buildFaceTemplate=()=>cap?{hash:[...(cap.faceHash||[])],descriptor:[...(cap.faceDescriptor||[])],model:cap.faceModel||'',detectionScore:cap.faceDetectionScore||0,image:cap.image||'',updatedAt:fmtDT(),updatedBy:currentUser.name}:null;
+  const buildFaceTemplate=()=>scfBuildFaceTemplate(cap,currentUser.name);
   const persistFaceTemplate=template=>{
     if(!template)return;
     setEmployees(list=>list.map(e=>e.id===emp.id?{...e,faceTemplate:template}:e));
+  };
+  const registerOwnFaceTemplate=async template=>{
+    if(!template||canManage||String(emp?.id||'')!==String(currentUser?.id||''))throw new Error('Chỉ được tự đăng ký khuôn mặt cho chính tài khoản đang đăng nhập.');
+    const updated=await serverRegisterOwnFace(template);
+    replaceEmployees?.(list=>(list||[]).map(employee=>String(employee.id)===String(updated.id)?{...employee,...updated}:employee));
+    window.__SCF_CURRENT_EMPLOYEE=updated;
+    return updated.faceTemplate||template;
   };
   const clearFaceTemplate=()=>{
     if(!ensureSelfAttendance())return;
@@ -526,15 +689,44 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     if(!cap){window.showToast('Hãy chụp khuôn mặt khi chấm công.','warn');return;}
     setPunchBusy(true);
     try{
+      let workingZone=activeAttendanceZone;
+      try{
+        const published=typeof loadAttendanceZones==='function'?await loadAttendanceZones():company?.attendanceZones;
+        if(!published?.zones)throw new Error('Admin chưa lưu vị trí chấm công dùng chung. Nhờ Admin mở Cài đặt chấm công và bấm Lưu vị trí lên máy chủ.');
+        workingZone=scfEmployeeAttendanceZone(emp,scfNormalizeAttendanceZones(published.zones));
+      }catch(error){window.showToast(error.message||'Chưa tải được vị trí chấm công từ máy chủ.','error',7500);return;}
       if(recentSame){
         if(!isAdmin){window.showToast('Nhân viên vừa chấm công gần đây, hệ thống không lưu trùng.','warn',5000);return;}
         const ok=await window.scfConfirm('Nhân viên vừa có bản ghi '+(nextType==='in'?'vào ca':'ra ca')+' gần đây. Vẫn lưu tiếp?','Bản ghi gần trùng');
         if(!ok)return;
       }
       let workingTemplate=tpl;
-      if(!workingTemplate){
-        window.showToast('Tài khoản chưa có khuôn mặt mẫu. Hãy liên hệ quản lý để đăng ký.','error',6000);
-        return;
+      let workingPos=isAdmin?pos:null;
+      const firstFaceEnrollment=!workingTemplate;
+      if(firstFaceEnrollment){
+        if(canManage||String(emp.id)!==String(currentUser.id)){
+          window.showToast('Nhân viên này chưa có khuôn mặt mẫu. Hãy đăng ký tại Cài đặt chấm công.','error',6000);
+          return;
+        }
+        if(!workingPos)workingPos=await requestGps('attendance',{silentSuccess:true});
+        if(!workingPos){
+          window.showToast('Lần đăng ký đầu cần GPS hợp lệ. Hãy bật vị trí rồi thử lại.','warn',6000);
+          return;
+        }
+        const enrollmentGps=gpsStatus(workingPos,workingZone);
+        if(!enrollmentGps.ok){
+          window.showToast('Chỉ được đăng ký khuôn mặt lần đầu tại '+workingZone.name+'. Cách vị trí quy định '+enrollmentGps.distance+'m; bán kính '+workingZone.radius+'m.','error',7500);
+          return;
+        }
+        const confirmed=await window.scfConfirm('Dùng ảnh vừa chụp làm khuôn mặt mẫu của '+String(emp.name||'tài khoản này')+'? Sau khi đăng ký, chỉ Admin mới có thể thay đổi mẫu mặt.','Đăng ký khuôn mặt lần đầu');
+        if(!confirmed)return;
+        try{
+          workingTemplate=await registerOwnFaceTemplate(buildFaceTemplate());
+          window.showToast('Đã đăng ký khuôn mặt lần đầu cho '+emp.name+'.','success',4500);
+        }catch(error){
+          window.showToast(error?.message||'Không đăng ký được khuôn mặt. Hãy thử lại.','error',6500);
+          return;
+        }
       }
       const workingMatch=faceMatchResult(cap,workingTemplate);
       const workingScore=workingMatch.score;
@@ -544,7 +736,6 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
         setPreview('');setCap(null);
         return;
       }
-      let workingPos=isAdmin?pos:null;
       if(!workingPos){
         workingPos=await requestGps('attendance',{silentSuccess:true});
         if(!workingPos){
@@ -553,9 +744,9 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
         }
       }
       const now=timeNow();
-      const g=gpsStatus(workingPos,activeAttendanceZone);
+      const g=gpsStatus(workingPos,workingZone);
       if(!g.ok){
-        showPunchInvalidMessage(true,g.ok,g.distance);
+        window.showToast('Chưa đúng vị trí: đang áp dụng '+workingZone.name+' cho bộ phận '+employeeDepartmentLabel(emp)+'. Cách vị trí quy định '+g.distance+'m; bán kính '+workingZone.radius+'m.','error',8500);
         return;
       }
       const tStatus=timeStatus(nextType,now,activeWorkShift);
@@ -579,11 +770,12 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
         accuracy:workingPos.acc,
         distance:g.distance,
         gpsOk:g.ok,
-        attendanceZoneId:activeAttendanceZone.id,
-        attendanceZoneName:activeAttendanceZone.name,
+        attendanceZoneId:workingZone.id,
+        attendanceZoneName:workingZone.name,
         photo:cap.image,
         status:'valid',
-        note:buildNote(tStatus,workingFaceOk,g),
+        note:[buildNote(tStatus,workingFaceOk,g),firstFaceEnrollment?'Đăng ký khuôn mặt lần đầu':''].filter(Boolean).join(' • '),
+        faceEnrollment:firstFaceEnrollment,
         createdBy:currentUser.name,
         createdAt:fmtDT()
       };
@@ -709,11 +901,6 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   );
   const sendWebhook=async()=>{if(!zaloWebhook){window.showToast('Chưa nhập webhook Zalo/server trung gian.','warn');return;}try{await fetch(zaloWebhook,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:zaloText(),date:day,records:filtered})});window.showToast('Đã gửi dữ liệu sang webhook.','success');}catch(e){window.showToast('Không gửi được webhook. Kiểm tra đường dẫn hoặc CORS.','error');}};
   const applyGpsToSettings=zoneId=>{
-    if(pos){
-      updateAttendanceZone(zoneId,{lat:+pos.lat.toFixed(6),lon:+pos.lon.toFixed(6)});
-      window.showToast('Đã cập nhật tọa độ '+attendanceZones[zoneId].name+' từ GPS hiện tại.','success');
-      return;
-    }
     getGps('settings-'+zoneId);
   };
   const resetGpsSettings=zoneId=>{
@@ -726,13 +913,13 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
       h('div',{style:{fontWeight:700,color:'var(--pri3)',marginBottom:3}},zone.name),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:10}},zone.description),
       h('div',{className:'g3 attendance-zone-fields'},
-        h(F,{label:'Vĩ độ'},h('input',{value:zone.lat,onChange:e=>updateAttendanceZone(zoneId,{lat:numFmt(e.target.value)})})),
-        h(F,{label:'Kinh độ'},h('input',{value:zone.lon,onChange:e=>updateAttendanceZone(zoneId,{lon:numFmt(e.target.value)})})),
-        h(F,{label:'Bán kính (m)'},h('input',{value:zone.radius,onChange:e=>updateAttendanceZone(zoneId,{radius:numFmt(e.target.value)})}))
+        h(F,{label:'Vĩ độ'},h('input',{disabled:zoneSaving,value:zone.lat,onChange:e=>updateAttendanceZone(zoneId,{lat:numFmt(e.target.value)})})),
+        h(F,{label:'Kinh độ'},h('input',{disabled:zoneSaving,value:zone.lon,onChange:e=>updateAttendanceZone(zoneId,{lon:numFmt(e.target.value)})})),
+        h(F,{label:'Bán kính (m)'},h('input',{disabled:zoneSaving,value:zone.radius,onChange:e=>updateAttendanceZone(zoneId,{radius:numFmt(e.target.value)})}))
       ),
       h('div',{className:'attendance-zone-actions'},
-        h('button',{type:'button',className:'attendance-zone-gps-button',onClick:()=>applyGpsToSettings(zoneId),disabled:gpsBusy},h('i',{className:'ti '+(gpsBusy?'ti-loader-2 spin':'ti-current-location')}),gpsBusy?' Đang lấy GPS...':' Dùng GPS hiện tại'),
-        h('button',{type:'button',className:'attendance-zone-default-button',onClick:()=>resetGpsSettings(zoneId)},'Mặc định Sông Công')
+        h('button',{type:'button',className:'attendance-zone-gps-button',onClick:()=>applyGpsToSettings(zoneId),disabled:gpsBusy||zoneSaving},h('i',{className:'ti '+(gpsBusy?'ti-loader-2 spin':'ti-current-location')}),gpsBusy?' Đang lấy GPS...':' Dùng GPS hiện tại'),
+        h('button',{type:'button',className:'attendance-zone-default-button',disabled:zoneSaving,onClick:()=>resetGpsSettings(zoneId)},'Mặc định Sông Công')
       )
     );
   };
@@ -797,12 +984,14 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     if(!canManage){
       return h('div',{className:'attendance-personal-report'},
         h('div',{className:'ptitle'},h('i',{className:'ti ti-report-analytics'}),reportTitle),
+        onKPI4P&&h('button',{type:'button',className:'bs',onClick:onKPI4P},'KPI & Lương 4P — đối chiếu chấm công'),
         renderMonthlyReport()
       );
     }
     const pendingRows=attendance.filter(r=>(isAdmin||managerEmployeeIds.has(r.empId))&&r.status!=='valid').sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
     return h('div',{className:'attendance-manager-page'},
       h('div',{className:'ptitle'},h('i',{className:'ti ti-report-analytics'}),reportTitle),
+        onKPI4P&&h('button',{type:'button',className:'bs',onClick:onKPI4P},'KPI & Lương 4P — đối chiếu chấm công'),
       pendingRows.length>0&&h('div',{className:'card'},
         h('div',{className:'attendance-manager-title'},'Bản ghi cần duyệt'),
         h('div',{className:'attendance-manager-approvals'},pendingRows.map(r=>h('div',{className:'attendance-approval-row',key:r.id},
@@ -816,8 +1005,15 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
   }
   if(section==='settings'){
     if(!isAdmin)return null;
+    if(kioskOpen&&sharedAttendanceZones&&!zoneDraftDirty)return h(AttendanceKiosk,{employees,attendance,setAttendance,currentUser,attendanceZones:sharedAttendanceZones,workShifts,onClose:()=>{try{sessionStorage.removeItem('scf_attendance_kiosk_active');}catch{}setKioskOpen(false);onKioskExit?.();}});
     return h('div',{className:'attendance-settings-page'},
       h('div',{className:'ptitle'},h('i',{className:'ti ti-settings'}),'Cài đặt chấm công'),
+      h('div',{className:'card',style:{marginBottom:'1rem'}},
+        h('div',{className:'attendance-manager-title'},'Điện thoại chấm công tại cửa vào'),
+        h('p',{style:{fontSize:13,color:'var(--tx2)'}},'Mở chế độ kiosk trên điện thoại đặt cố định. Cần đăng ký khuôn mặt mẫu cho nhân viên, cấp quyền camera và GPS một lần. Nhân viên chỉ cần đứng trước máy, nhắm mắt khoảng 1 giây rồi mở.'),
+        h('p',{style:{fontSize:13,color:'#92400e',background:'#fffbeb',padding:'9px 12px',borderRadius:8}},'Bản thử nghiệm: cần có người giám sát. Chưa đặt điện thoại đăng nhập Admin ở cửa không người trông; phiên kiosk chuyên dụng và chống ảnh/video giả cần hoàn thiện trước khi vận hành chính thức.'),
+        h('button',{className:'bp',disabled:!sharedAttendanceZones||zoneDraftDirty||zoneSaving,onClick:()=>{try{sessionStorage.setItem('scf_attendance_kiosk_active','1');}catch{}setKioskOpen(true);}},h('i',{className:'ti ti-face-id'}),' Mở kiosk tự nhận diện')
+      ),
       h('div',{className:'att-grid'},
         h('div',{className:'card attendance-face-settings-card'},
           h(F,{label:'Nhân viên đăng ký khuôn mặt'},h('select',{value:empId,onChange:e=>{setEmpId(e.target.value);setPreview('');setCap(null);}},
@@ -838,6 +1034,9 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
             h('div',{className:'attendance-zone-grid'},
               renderAttendanceZoneEditor('office'),renderAttendanceZoneEditor('production')
             ),
+            h('div',{role:'status',style:{fontSize:13,margin:'10px 0',color:zoneDraftDirty||!sharedAttendanceZones?'#854F0B':'var(--pri)'}},zoneDraftDirty?'Vị trí đã thay đổi trên máy này, chưa lưu lên máy chủ.':sharedAttendanceZones?'Vị trí dùng chung đã được lưu'+(company.attendanceZones.updatedAt?' lúc '+company.attendanceZones.updatedAt:'')+'.':'Vị trí hiện tại chỉ lưu trên máy này. Cần lưu lên máy chủ để điện thoại nhân viên nhận được.'),
+            zoneSaveError&&h('div',{role:'alert',style:{color:'#A32D2D',marginBottom:10}},zoneSaveError),
+            h('button',{type:'button',className:'bp',disabled:zoneSaving||gpsBusy,onClick:publishAttendanceZones},zoneSaving?'Đang lưu vị trí…':'Lưu vị trí lên máy chủ'),
             gpsMsg&&h('div',{className:'attendance-gps-message','aria-live':'polite'},h('i',{className:'ti ti-map-pin'}),h('span',null,gpsMsg)),
             h('div',{className:'attendance-workshift-title'},'Ca làm việc theo 3 ca lớn'),
             h('div',{className:'attendance-workshift-grid'},workShifts.map(sh=>h('div',{className:'attendance-workshift-card',key:sh.id,style:{borderColor:sh.color,background:sh.color}},
@@ -871,6 +1070,37 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
             )
           )
         )
+      ),
+      h('div',{className:'card attendance-face-register-card'},
+        h('div',{className:'attendance-face-register-head'},
+          h('div',null,
+            h('div',{className:'attendance-manager-title'},'Danh sách khuôn mặt nhân viên'),
+            h('div',{className:'attendance-report-note'},'Ảnh được lưu cùng mẫu nhận diện. Bấm vào ảnh nhỏ để xem rõ hơn.')
+          ),
+          h('span',{className:'badge',style:{background:'#EAF3DE',color:'#3B6D11'}},employees.filter(employee=>employee.faceTemplate?.image).length+'/'+employees.length+' đã có ảnh')
+        ),
+        h('div',{className:'tw attendance-face-register-table'},h('table',null,
+          h('thead',null,h('tr',null,h('th',null,'Mã NV'),h('th',null,'Nhân viên'),h('th',null,'Bộ phận'),h('th',null,'Khuôn mặt đăng ký'),h('th',null,'Trạng thái'),h('th',null,'Cập nhật'))),
+          h('tbody',null,employees.slice().sort((a,b)=>Number(!!b.faceTemplate?.image)-Number(!!a.faceTemplate?.image)||String(a.name||'').localeCompare(String(b.name||''),'vi')).map(employee=>{
+            const face=employee.faceTemplate,image=face?.image||'';
+            return h('tr',{key:employee.id},
+              h('td',null,employee.id),
+              h('td',null,h('b',null,employee.name||'—')),
+              h('td',null,employee.dept||'—'),
+              h('td',null,image
+                ?h('button',{type:'button',className:'attendance-face-thumb-button',onClick:()=>setFaceViewer(employee),title:'Xem khuôn mặt đã đăng ký của '+employee.name,'aria-label':'Xem khuôn mặt đã đăng ký của '+employee.name},h('img',{src:image,alt:'Khuôn mặt '+employee.name}))
+                :h('span',{className:'attendance-face-empty'},h('i',{className:'ti ti-user-question'}),' Chưa có ảnh')),
+              h('td',null,h('span',{className:'badge',style:{background:face?'#EAF3DE':'#FAEEDA',color:face?'#3B6D11':'#854F0B'}},face?(image?'Đã đăng ký':'Có mẫu, thiếu ảnh'):'Chưa đăng ký')),
+              h('td',null,h('div',{style:{fontSize:12}},face?.updatedAt||'—'),face?.selfRegistered&&h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:3}},'Nhân viên tự đăng ký'))
+            );
+          }))
+        )),
+        faceViewer&&h(Modal,{title:'Khuôn mặt đã đăng ký · '+faceViewer.name,onClose:()=>setFaceViewer(null)},
+          h('div',{className:'attendance-face-viewer'},
+            h('img',{src:faceViewer.faceTemplate?.image,alt:'Khuôn mặt '+faceViewer.name}),
+            h('div',null,h('b',null,faceViewer.id+' · '+faceViewer.name),h('div',{style:{fontSize:12,color:'var(--tx2)',marginTop:4}},(faceViewer.dept||'')+(faceViewer.faceTemplate?.updatedAt?' · Cập nhật '+faceViewer.faceTemplate.updatedAt:'')))
+          )
+        )
       )
     );
   }
@@ -878,8 +1108,10 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
     const ownTimes=myToday.filter(r=>r.status==='valid');
     return h('div',{className:'attendance-employee-simple'},
       h('div',{className:'attendance-employee-camera'},
+        !tpl&&h('div',{style:{marginBottom:10,padding:'9px 11px',border:'1px solid #F0CF7A',borderRadius:8,background:'#FFF8E1',color:'#6D4B00',fontSize:12,lineHeight:1.45}},h('b',null,'Đăng ký lần đầu: '),'Ảnh đầu tiên sẽ được lưu làm khuôn mặt mẫu sau khi GPS xác nhận bạn đang ở đúng vùng chấm công. Từ lần sau hệ thống chỉ chấp nhận khuôn mặt này.'),
         h(CameraBox,{preview,setPreview,template:tpl,onCapture:handleFaceCapture,autoOpenSignal:cameraAutoOpenSignal,simple:true})
       ),
+      h('div',{style:{fontSize:12,color:'var(--tx2)',padding:'8px 2px'}},'Vùng áp dụng: '+activeAttendanceZone.name+' · '+employeeDepartmentLabel(emp)),
       punchBusy&&h('div',{className:'attendance-employee-working'},h('i',{className:'ti ti-loader-2 spin'}),' Đang xác nhận khuôn mặt và GPS...'),
       punchShareCard(),
       h('div',{className:'attendance-employee-times'},
@@ -906,6 +1138,7 @@ function AttendanceTab({section='punch',attendance,setAttendance,employees,setEm
         ?h(CameraBox,{preview,setPreview,template:tpl,onCapture:handleFaceCapture,autoOpenSignal:cameraAutoOpenSignal,simple:true})
         :h('div',{className:'attendance-manager-placeholder'},'Chọn nhân viên để chấm công.')
     ),
+    empId&&h('div',{style:{fontSize:12,color:'var(--tx2)',padding:'8px 2px'}},'Vùng áp dụng: '+activeAttendanceZone.name+' · '+employeeDepartmentLabel(emp)),
     punchBusy&&h('div',{className:'attendance-employee-working'},h('i',{className:'ti ti-loader-2 spin'}),' Đang xác nhận khuôn mặt và GPS...'),
     punchShareCard(),
     empId&&h('div',{className:'attendance-employee-times'},
@@ -1238,7 +1471,7 @@ function EmployeeErrorsTab({records,setRecords,employees,currentUser}){
   );
 }
 function EmployeeUniformForm({record,employees,currentUser,onSave,onClose}){
-  const[f,sf]=useState(record?{...record}:{date:isoDate(),empId:'',uniformType:''});
+  const[f,sf]=useState(record?{amount:0,...record}:{date:isoDate(),empId:'',uniformType:'',amount:0});
   const staff=(employees||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi'));
   const uniformTypes=['Bộ đồng phục','Áo đồng phục','Quần đồng phục','Mũ','Tạp dề','Giày / Ủng','Áo khoác'];
   const submit=()=>{
@@ -1247,7 +1480,8 @@ function EmployeeUniformForm({record,employees,currentUser,onSave,onClose}){
     if(!emp){window.showToast('Chọn nhân viên nhận đồng phục.','warn');return;}
     const uniformType=String(f.uniformType||'').trim();
     if(!uniformType){window.showToast('Nhập loại đồng phục.','warn');return;}
-    onSave({...f,date:f.date,empId:emp.id,empName:emp.name||emp.id,dept:emp.dept||'',uniformType,
+    const amount=Math.max(0,numFmt(f.amount));
+    onSave({...f,date:f.date,empId:emp.id,empName:emp.name||emp.id,dept:emp.dept||'',uniformType,amount,
       createdBy:record?.createdBy||currentUser.name,createdAt:record?.createdAt||fmtDT(),updatedBy:currentUser.name,updatedAt:fmtDT()});
   };
   return h(Modal,{title:record?'Sửa thông tin cấp đồng phục':'Cấp đồng phục nhân viên',onClose},
@@ -1261,14 +1495,20 @@ function EmployeeUniformForm({record,employees,currentUser,onSave,onClose}){
     h(F,{label:'Loại đồng phục'},h('input',{list:'employee-uniform-type-options',value:f.uniformType||'',onChange:e=>sf(p=>({...p,uniformType:e.target.value})),placeholder:'Ví dụ: Bộ đồng phục, áo, mũ...'}),
       h('datalist',{id:'employee-uniform-type-options'},uniformTypes.map(type=>h('option',{key:type,value:type})))
     ),
+    h(F,{label:'Giá trị (đ)'},h(NumInput,{value:f.amount||'',onChange:v=>sf(p=>({...p,amount:v})),placeholder:'0'})),
     h(Row,null,h('button',{onClick:onClose},'Hủy'),h('button',{className:'bp',onClick:submit},'Lưu'))
   );
 }
 
 function EmployeeUniformsTab({records,setRecords,employees,currentUser,canEdit=true,canDelete=true}){
-  const[modal,setModal]=useState(false);const[edit,setEdit]=useState(null);const[q,setQ]=useState('');const[month,setMonth]=useState(isoDate().slice(0,7));const[empFilter,setEmpFilter]=useState('all');
+  const today=isoDate();
+  const[modal,setModal]=useState(false);const[edit,setEdit]=useState(null);const[q,setQ]=useState('');const[period,setPeriod]=useState('year');const[year,setYear]=useState(today.slice(0,4));const[month,setMonth]=useState(today.slice(0,7));const[empFilter,setEmpFilter]=useState('all');
   const employeeOptions=(employees||[]).slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi'));
-  const rows=(records||[]).filter(r=>(!month||String(r.date||'').startsWith(month))&&(empFilter==='all'||String(r.empId)===String(empFilter))&&(!q||[r.empName,r.empId,r.dept,r.uniformType,r.updatedBy].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+  const years=[...new Set([today.slice(0,4),...(records||[]).map(r=>String(r.date||'').slice(0,4)).filter(v=>/^\d{4}$/.test(v))])].sort((a,b)=>b.localeCompare(a));
+  const datePrefix=period==='month'?month:year;
+  const rows=(records||[]).filter(r=>(!datePrefix||String(r.date||'').startsWith(datePrefix))&&(empFilter==='all'||String(r.empId)===String(empFilter))&&(!q||[r.empName,r.empId,r.dept,r.uniformType,r.updatedBy].some(v=>String(v||'').toLowerCase().includes(q.toLowerCase())))).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+  const totalAmount=rows.reduce((sum,r)=>sum+Math.max(0,numFmt(r.amount)),0);
+  const money=v=>Number(v||0).toLocaleString('vi-VN')+'đ';
   const save=data=>{
     if(edit)setRecords(prev=>(prev||[]).map(row=>row.id===edit.id?{...row,...data}:row));
     else setRecords(prev=>[{...data,id:'DP'+uid()},...(prev||[])]);
@@ -1279,18 +1519,22 @@ function EmployeeUniformsTab({records,setRecords,employees,currentUser,canEdit=t
     if(!ok)return;
     setRecords(prev=>(prev||[]).filter(item=>item.id!==row.id));window.showToast('Đã xóa lịch sử cấp đồng phục.','success');
   };
-  const exportCols=[['date','Ngày phát'],['empId','Mã NV'],['empName','Tên nhân viên'],['dept','Bộ phận'],['uniformType','Loại đồng phục'],['updatedBy','Người cập nhật'],['updatedAt','Thời gian cập nhật']];
+  const exportCols=[['date','Ngày phát'],['empId','Mã NV'],['empName','Tên nhân viên'],['dept','Bộ phận'],['uniformType','Loại đồng phục'],['amount','Giá trị'],['updatedBy','Người cập nhật'],['updatedAt','Thời gian cập nhật']];
   const hasActions=canEdit||canDelete;
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-shirt',style:{fontSize:20}}),'Cấp đồng phục nhân viên'),
     h('div',{className:'att-stat'},
-      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Số lần cấp'),h('div',{style:{fontSize:24,fontWeight:650,color:'var(--pri3)'}},rows.length))
+      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Số lần cấp'),h('div',{style:{fontSize:24,fontWeight:650,color:'var(--pri3)'}},rows.length)),
+      h('div',{className:'sc'},h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Tổng chi'),h('div',{style:{fontSize:24,fontWeight:650,color:'var(--pri3)'}},money(totalAmount)))
     ),
     h('div',{className:'card'},
       h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:10}},
         h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},
           h(SearchBar,{value:q,onChange:setQ,placeholder:'Tìm nhân viên, loại đồng phục...'}),
-          h('input',{type:'month',value:month,onChange:e=>setMonth(e.target.value),style:{width:145}}),
+          h('select',{value:period,onChange:e=>setPeriod(e.target.value),style:{minWidth:120}},
+            h('option',{value:'year'},'Cả năm'),h('option',{value:'month'},'Theo tháng')
+          ),
+          period==='year'?h('select',{value:year,onChange:e=>setYear(e.target.value),style:{width:105}},years.map(value=>h('option',{key:value,value},value))):h('input',{type:'month',value:month,onChange:e=>setMonth(e.target.value),style:{width:145}}),
           h('select',{value:empFilter,onChange:e=>setEmpFilter(e.target.value),style:{minWidth:190}},
             h('option',{value:'all'},'Tất cả nhân viên'),employeeOptions.map(e=>h('option',{key:e.id,value:e.id},e.name||e.id))
           )
@@ -1301,17 +1545,23 @@ function EmployeeUniformsTab({records,setRecords,employees,currentUser,canEdit=t
         )
       ),
       h('div',{className:'tw'},h('table',null,
-        h('thead',null,h('tr',null,...['Ngày phát','Tên nhân viên','Loại đồng phục','Người cập nhật',hasActions?'':''].map((c,index)=>h('th',{key:c+'-'+index},c)))),
+        h('thead',null,h('tr',null,...['Ngày phát','Tên nhân viên','Loại đồng phục','Giá trị','Người cập nhật',hasActions?'':''].map((c,index)=>h('th',{key:c+'-'+index},c)))),
         h('tbody',null,rows.length?rows.map(r=>h('tr',{key:r.id},
           h('td',null,vnDateFromISO(r.date||'')),
           h('td',null,h('div',{style:{fontWeight:600}},r.empName||'—'),h('div',{style:{fontSize:11,color:'var(--tx2)'}},[r.empId,r.dept].filter(Boolean).join(' · '))),
           h('td',{style:{minWidth:220,fontWeight:600}},r.uniformType||'—'),
+          h('td',{style:{fontWeight:650,whiteSpace:'nowrap'}},money(r.amount)),
           h('td',null,h('div',null,r.updatedBy||r.createdBy||'—'),r.updatedAt&&h('div',{style:{fontSize:11,color:'var(--tx2)'}},r.updatedAt)),
           hasActions&&h('td',null,h('div',{style:{display:'flex',gap:4}},
             canEdit&&h('button',{className:'bi',title:'Sửa',onClick:()=>{setEdit(r);setModal(true);}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
             canDelete&&h('button',{className:'bdel',title:'Xóa',onClick:()=>remove(r)},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
           ))
-        )):h('tr',null,h('td',{colSpan:hasActions?5:4,className:'empty-st'},'Chưa có lịch sử cấp đồng phục.')))
+        )):h('tr',null,h('td',{colSpan:hasActions?6:5,className:'empty-st'},'Chưa có lịch sử cấp đồng phục.'))),
+        h('tfoot',null,h('tr',{style:{background:'var(--bg2)',fontWeight:700}},
+          h('td',{colSpan:3,style:{textAlign:'right'}},'Tổng chi'),
+          h('td',{style:{whiteSpace:'nowrap',color:'var(--pri3)'}},money(totalAmount)),
+          h('td',{colSpan:hasActions?2:1},'')
+        ))
       )),
       modal&&h(EmployeeUniformForm,{record:edit,employees,currentUser,onSave:save,onClose:()=>{setModal(false);setEdit(null);}})
     )

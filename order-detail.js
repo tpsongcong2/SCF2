@@ -64,25 +64,34 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const tripById=new Map(),tripByOrder=new Map();
   (trips||[]).forEach(t=>{
     tripById.set(String(t.id),t);
-    (t.orderIds||[]).forEach(orderId=>{if(!tripByOrder.has(String(orderId)))tripByOrder.set(String(orderId),t);});
+    (t.orderIds||[]).forEach(orderId=>{const key=String(orderId);tripByOrder.set(key,[...(tripByOrder.get(key)||[]),t]);});
   });
-  const tripForOrder=o=>tripById.get(String(o.tripId||''))||tripByOrder.get(String(o.id||''))||null;
+  const sameTripDate=(trip,o)=>{
+    const tripDate=toISO(trip?.deliveryDate),orderTripDate=toISO(getOrderTripDate(o,prodShifts||[])||o?.deliveryDate);
+    return !tripDate||!orderTripDate||tripDate===orderTripDate;
+  };
+  const tripForOrder=o=>{
+    const stored=tripById.get(String(o.tripId||''));if(stored)return stored;
+    return (tripByOrder.get(String(o.id||''))||[]).find(linked=>sameTripDate(linked,o))||null;
+  };
+  const tripIsDispatched=t=>!!t?.driverDispatchedAt||['active','completion_pending','completed'].includes(t?.status);
+  const dispatchedDriverName=t=>tripIsDispatched(t)?String(t?.driverName||'').trim():'';
 
-  const isDriver=currentUser?.role==='driver';
+  const isDriver=currentUser?.role==='driver'||employeeHasDepartment(currentUser,'Lái xe');
   const deptKey=String(currentUser?.dept||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const isAccounting=deptKey.includes('ke toan');
   const cleanName=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
   const isOwnTrip=t=>!isDriver||String(t?.driverId||'')===String(currentUser?.id||'')||cleanName(t?.driverName)===cleanName(currentUser?.name);
-  const scopedTrips=isDriver?(trips||[]).filter(t=>isOwnTrip(t)&&t.status!=='cancelled'):(trips||[]);
+  const scopedTrips=isDriver?(trips||[]).filter(t=>isOwnTrip(t)&&tripIsDispatched(t)&&t.status!=='cancelled'):(trips||[]);
   const scopedTripIds=new Set(scopedTrips.map(t=>String(t.id)));
   const scopedTripById=new Map(scopedTrips.map(t=>[String(t.id),t]));
   const scopedTripByOrder=new Map();
-  scopedTrips.forEach(t=>(t.orderIds||[]).forEach(orderId=>{if(!scopedTripByOrder.has(String(orderId)))scopedTripByOrder.set(String(orderId),t);}));
+  scopedTrips.forEach(t=>(t.orderIds||[]).forEach(orderId=>{const key=String(orderId);scopedTripByOrder.set(key,[...(scopedTripByOrder.get(key)||[]),t]);}));
   const visibleTripForOrder=o=>{
     if(!isDriver)return tripForOrder(o);
     const storedTripId=String(o?.tripId||'').trim();
     if(storedTripId)return scopedTripById.get(storedTripId)||null;
-    return scopedTripByOrder.get(String(o?.id||''))||null;
+    return (scopedTripByOrder.get(String(o?.id||''))||[]).find(linked=>sameTripDate(linked,o))||null;
   };
   const scopedOrders=isDriver?(orders||[]).filter(o=>scopedTripIds.has(String(visibleTripForOrder(o)?.id||''))):(orders||[]);
 
@@ -98,7 +107,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     .replace(/^CH[a-z0-9_-]+$/i,'')
     .trim();
   const deliveryTripShiftName=t=>cleanDeliveryShiftName(deliveryShiftById.get(String(t?.shiftId||''))?.name||t?.shiftName)||'Chưa đặt ca giao';
-  const deliveryTripLabel=t=>[deliveryTripShiftName(t),t?.deliveryDate,t?.driverName].filter(Boolean).join(' · ');
+  const deliveryTripLabel=t=>[deliveryTripShiftName(t),t?.deliveryDate,dispatchedDriverName(t)].filter(Boolean).join(' · ');
   const deliveryShiftMetaCache=new WeakMap();
   const deliveryShiftForOrder=o=>{
     const cached=deliveryShiftMetaCache.get(o);if(cached)return cached;
@@ -128,7 +137,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   (shifts||[]).forEach(shift=>addTripOption(shift.id,shift.name));
   scopedTrips.forEach(trip=>{const date=toISO(trip.deliveryDate);if(periodRange.from&&date&&date<periodRange.from)return;if(periodRange.to&&date&&date>periodRange.to)return;addTripOption(trip.shiftId,trip.shiftName);});
   const tripOptions=[...tripOptionMap.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi'));
-  const driverOptions=[...new Set(scopedTrips.map(t=>t.driverName).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const driverOptions=[...new Set(scopedTrips.map(dispatchedDriverName).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
   const shiftOrder=name=>{
     const n=String(name||'').toLowerCase();
     if(n.includes('sáng')||n.includes('sang'))return 1;
@@ -149,7 +158,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
       return {key:trip?'trip:'+String(trip.id):'trip:~',label,sortKey:trip?(toISO(trip.deliveryDate)+'|'+deliveryTripShiftName(trip)+'|'+String(trip.id||'')):'9999-99-99|~'};
     }
     if(groupMode==='driver'){
-      const driver=String(trip?.driverName||'').trim();
+      const driver=dispatchedDriverName(trip);
       return {key:'driver:'+(driver||'~'),label:driver||'Chưa có lái xe',sortKey:driver||'~'};
     }
     const area=resolveArea(o)||'Chưa phân khu vực';
@@ -168,7 +177,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     if(areaF!=='all'&&resolveArea(o)!==areaF)return false;
     const trip=visibleTripForOrder(o);
     if(tripF!=='all'&&deliveryShiftForOrder(o).key!==tripF)return false;
-    if(driverF!=='all'&&String(trip?.driverName||'')!==driverF)return false;
+    if(driverF!=='all'&&dispatchedDriverName(trip)!==driverF)return false;
     if(shiftF!=='all'){
       const plans=prodShiftPlansForOrder(o,prodShifts||[]);
       const plan=prodShiftPlan(o,prodShifts||[]);
@@ -218,7 +227,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
         qtyDelivered:l.qtyDelivered,shift:l.shift||(lineShiftName.toLowerCase().includes('đêm')||lineShiftName.toLowerCase().includes('dem')?'night':'day'),
         shiftName:lineShiftName,time:o.deliveryTime||'',prodDate:linePlan?.prodDate||'',labelDate:linePlan?.labelDate||'',
         note:l.note||o.note||'',status:o.status,prodColor:(products.find(p=>p.id===l.productId)||{}).color||'',area,
-        groupKey:group.key,groupLabel:group.label,groupSortKey:group.sortKey,tripId:trip?.id||'',driverName:trip?.driverName||''
+        groupKey:group.key,groupLabel:group.label,groupSortKey:group.sortKey,tripId:trip?.id||'',driverName:dispatchedDriverName(trip)
       });
     });
   });
@@ -241,7 +250,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
       curGroup=r.groupKey;groupLabel=r.groupLabel;areaSX=0;areaHD=0;areaDG=0;
       tableRows.push({_hdr:true,label:r.groupLabel});
     }
-    areaSX+=Number(r.qtyProd||0);areaHD+=Number(r.qtyInvoice||0);areaDG+=Number(r.qtyDelivered||0);
+    areaSX+=Number(r.qtyProd||0);areaHD+=Number(r.qtyInvoice||0);areaDG+=r.qtyDelivered!==undefined&&r.qtyDelivered!==null&&r.qtyDelivered!==''?Number(r.qtyDelivered)||0:Number(r.qtyProd)||0;
     tableRows.push(r);
     if(i===sorted.length-1)tableRows.push({_sub:true,label:groupLabel,sx:areaSX,hd:areaHD,dg:areaDG});
   });
@@ -252,11 +261,15 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     return Math.max(0,Math.floor((new Date(todayISO+'T12:00:00')-new Date(iso+'T12:00:00'))/86400000));
   };
   const canEditDeliveredForOrder=order=>{
+    if(['admin','administrator'].includes(String(currentUser?.role||'').trim().toLowerCase()))return true;
+    if(!canTripAction(currentUser,'orderActualQty'))return false;
     const trip=visibleTripForOrder(order);
     if(!trip)return false;
-    if(currentUser?.role==='admin'||isAccounting)return true;
-    if(currentUser?.role==='manager')return trip.status!=='completion_pending'&&trip.status!=='completed'&&tripAgeDays(trip)<2;
-    if(isDriver)return isOwnTrip(trip)&&trip.status==='active'&&!trip.driverConfirmedAt&&tripAgeDays(trip)<2;
+    const limitDays=tripActualQtyLimitDays(currentUser);
+    const withinLimit=limitDays===0||tripAgeDays(trip)<limitDays;
+    if(currentUser?.role==='admin'||isAccounting)return withinLimit;
+    if(currentUser?.role==='manager')return trip.status!=='completion_pending'&&trip.status!=='completed'&&withinLimit;
+    if(isDriver)return isOwnTrip(trip)&&trip.status==='active'&&!trip.driverConfirmedAt&&withinLimit;
     return false;
   };
   const syncTripReceivables=(trip,nextOrders)=>{
@@ -272,8 +285,13 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const updateDeliveredQty=(orderId,lineId,value)=>{
     const order=(orders||[]).find(o=>String(o.id)===String(orderId));
     if(!order||!canEditDeliveredForOrder(order))return;
+    const line=(order.lines||[]).find(l=>String(l.id)===String(lineId));
+    if(!line)return;
     const qty=numFmt(value);
-    const nextOrders=(orders||[]).map(o=>o.id===orderId?{...o,lines:(o.lines||[]).map(l=>l.id===lineId?{...l,qtyDelivered:qty,deliveredAt:fmtDT(),deliveredBy:currentUser?.name||''}:l)}:o);
+    const oldQty=line.qtyDelivered!==undefined&&line.qtyDelivered!==null&&line.qtyDelivered!==''?numFmt(line.qtyDelivered):numFmt(line.qtyProd??line.qty??line.quantity??line.qtyInvoice??0);
+    if(line.qtyDelivered!==undefined&&numFmt(line.qtyDelivered)===qty&&line.deliveredBy)return;
+    const stamp=fmtDT(),actor=currentUser?.name||'Người dùng';
+    const nextOrders=(orders||[]).map(o=>o.id===orderId?{...o,lines:(o.lines||[]).map(l=>l.id===lineId?{...l,qtyDelivered:qty,deliveredAt:stamp,deliveredBy:actor}:l),updatedAt:stamp,updatedBy:actor,orderHistory:[...(o.orderHistory||[]),{id:'LS'+uid(),action:oldQty===qty?'Xác nhận số lượng đã giao':'Sửa số lượng đã giao',changes:[(line.productName||'Sản phẩm')+': '+oldQty+' → '+qty+(line.unit?' '+line.unit:'')],at:stamp,atIso:new Date().toISOString(),by:actor,byId:currentUser?.id||''}]}:o);
     setOrders&&setOrders(nextOrders);
     syncTripReceivables(visibleTripForOrder(order),nextOrders);
   };
@@ -281,7 +299,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   const lastOrder=Math.min(safePage*pageSize,totalOrders);
   const totalProd=rows.reduce((s,r)=>s+Number(r.qtyProd||0),0);
   const totalInvoice=rows.reduce((s,r)=>s+Number(r.qtyInvoice||0),0);
-  const totalDelivered=rows.reduce((s,r)=>s+Number(r.qtyDelivered||0),0);
+  const totalDelivered=rows.reduce((s,r)=>s+(r.qtyDelivered!==undefined&&r.qtyDelivered!==null&&r.qtyDelivered!==''?Number(r.qtyDelivered)||0:Number(r.qtyProd)||0),0);
   const diff=totalProd-totalInvoice;
 
   return h('div',null,
@@ -340,11 +358,12 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
           if(r._sub)return h('tr',{key:'s'+i},h('td',{colSpan:4,style:{background:'#e8f5e9',fontWeight:600,fontSize:12,padding:'4px 12px',color:'#2d6a4f',textAlign:'right'}},'Tổng '+r.label+':'),h('td',{style:{background:'#e8f5e9',fontWeight:700,color:'var(--pri)',fontSize:14,padding:'4px 8px'}},r.sx.toLocaleString()),h('td',{style:{background:'#e8f5e9',fontWeight:700,fontSize:14,padding:'4px 8px'}},r.hd.toLocaleString()),h('td',{style:{background:'#e8f5e9',fontWeight:700,color:'#8A5A00',fontSize:14,padding:'4px 8px'}},r.dg.toLocaleString()),h('td',{colSpan:2,style:{background:'#e8f5e9'}}));
           const sourceOrder=(orders||[]).find(o=>String(o.id)===String(r.orderId));
           const canInput=canEditDeliveredForOrder(sourceOrder)&&(r.status==='delivering'||r.status==='done'||r.status==='completed');
+          const sourceLine=(sourceOrder?.lines||[]).find(l=>String(l.id)===String(r.lineId));
           return h('tr',{key:r.orderId+'-'+r.lineId,style:{background:r.prodColor||(r.shift==='night'?'rgba(83,52,131,.04)':'')}},
             h('td',null,h('span',{style:{fontSize:12,fontWeight:r.driverName?600:400,color:r.driverName?'var(--pri3)':'var(--tx2)',whiteSpace:'nowrap'}},r.driverName||'—')),
             h('td',null,h('span',{style:{fontWeight:500}},r.date)),h('td',null,h('div',{style:{fontWeight:600}},r.point||'—')),h('td',null,h('div',{style:{fontWeight:500}},r.product)),
             h('td',null,h('span',{style:{fontWeight:600,color:'var(--pri)',fontSize:15}},r.qtyProd.toLocaleString())),h('td',null,h('span',{style:{fontWeight:600,fontSize:15}},r.qtyInvoice.toLocaleString())),
-            h('td',null,canInput?h('input',{type:'number',min:0,step:'0.01',value:r.qtyDelivered??'',placeholder:String(r.qtyInvoice||0),onChange:e=>updateDeliveredQty(r.orderId,r.lineId,e.target.value),style:{fontSize:13,padding:'4px 6px',width:86,borderColor:(r.qtyDelivered!==undefined&&numFmt(r.qtyDelivered)!==numFmt(r.qtyInvoice))?'#E0A800':'var(--bd)'}}):h('span',{style:{fontWeight:600,color:r.qtyDelivered!==undefined?'#8A5A00':'var(--tx2)',fontSize:15}},r.qtyDelivered!==undefined?numFmt(r.qtyDelivered).toLocaleString():'—')),
+            h('td',null,canInput&&sourceLine?h(TripDeliveredQtyConfirm,{line:sourceLine,onCommit:value=>updateDeliveredQty(r.orderId,r.lineId,value),style:{fontSize:13,padding:'4px 6px',width:76,borderColor:(r.qtyDelivered!==undefined&&numFmt(r.qtyDelivered)!==numFmt(r.qtyProd))?'#E0A800':'var(--bd)'}}):h('span',{style:{fontWeight:600,color:'var(--tx2)',fontSize:15}},sourceLine?tripDeliveredQty(sourceLine):numFmt(r.qtyProd))),
             h('td',null,r.time||'—'),h('td',null,h('span',{style:{fontSize:12,color:'var(--tx2)'}},r.note||'—'))
           );
         }):h('tr',null,h('td',{colSpan:9,className:'empty-st'},'Không có dữ liệu phù hợp.')))
