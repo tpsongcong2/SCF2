@@ -2626,9 +2626,10 @@ function DeliveryInlineCopyRows({draft:initial,customers,products=[],prodCats=[]
   ));
 }
 
-function DeliveryViewControls({menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction}){
+function DeliveryViewControls({menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction,menuOnly=false,utility}){
   return h('div',{className:'delivery-view-controls'},
-    h('button',{type:'button','data-scf-action':'view',onClick:()=>{const hide=!(menuHidden&&toolsHidden);setMenuHidden(hide);setToolsHidden(hide);},'aria-expanded':!(menuHidden&&toolsHidden),'aria-controls':'delivery-filter-tools',title:'Ẩn hoặc hiện menu, bộ lọc và tiện ích; giữ nguyên điều kiện lọc'},h('i',{className:'ti '+(menuHidden&&toolsHidden?'ti-layout-navbar-expand':'ti-layout-navbar-collapse'),'aria-hidden':true}),menuHidden&&toolsHidden?'Hiện menu & tiện ích':'Ẩn menu & tiện ích'),
+    h('button',{type:'button','data-scf-action':'view',onClick:()=>{if(menuOnly){setMenuHidden(v=>!v);return;}const hide=!(menuHidden&&toolsHidden);setMenuHidden(hide);setToolsHidden(hide);},'aria-expanded':menuOnly?!menuHidden:!(menuHidden&&toolsHidden),'aria-controls':'delivery-filter-tools',title:menuOnly?'Ẩn hoặc hiện menu web; giữ thanh thao tác và bộ lọc cột':'Ẩn hoặc hiện menu, bộ lọc và tiện ích; giữ nguyên điều kiện lọc'},h('i',{className:'ti '+(menuHidden&&toolsHidden?'ti-layout-navbar-expand':'ti-layout-navbar-collapse'),'aria-hidden':true}),menuOnly?(menuHidden?'Hiện menu':'Ẩn menu'):(menuHidden&&toolsHidden?'Hiện menu & tiện ích':'Ẩn menu & tiện ích')),
+    utility,
     onViewOrderSummary&&h('button',{type:'button','data-scf-action':'view',onClick:onViewOrderSummary,title:'Mở màn hình xem nhanh đơn tổng'},h('i',{className:'ti ti-photo-search','aria-hidden':true}),'Đơn Tổng'),
     onViewProduction&&h('button',{type:'button','data-scf-action':'view',onClick:onViewProduction,title:'Mở tổng hợp khối lượng sản xuất theo ca và xưởng'},h('i',{className:'ti ti-clipboard-list','aria-hidden':true}),'KL SX')
   );
@@ -3860,6 +3861,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const [value,setValue,options]=columnFilterConfigs[key];
     return h(DeliveryColumnFilter,{key,label,active:!!value||(key==='point'&&!!fArea)},key==='point'&&h('label',null,'Khu vực',h('select',{'aria-label':'Lọc khu vực',value:fArea,onChange:e=>sfArea(e.target.value)},h('option',{value:''},'Không giới hạn'),areaFilterValues.map(v=>h('option',{key:v,value:v},v)))),options?h('select',{'aria-label':'Giá trị lọc '+label,value,onChange:e=>setValue(e.target.value)},h('option',{value:''},'Không giới hạn'),options.map(([v,l])=>h('option',{key:v,value:v},l))):h('input',{type:key==='date'?'date':'search','aria-label':'Giá trị lọc '+label,value,onChange:e=>setValue(e.target.value),placeholder:key==='note'?'Nhập nội dung chú ý...':undefined}),h('button',{type:'button',onClick:()=>{setValue('');if(key==='point')sfArea('');}},'Xóa lọc'));
   };
+  const renderDeliveryUtilities=()=>h('select',{'aria-label':'Tiện ích đơn hàng',className:'delivery-utility-menu',value:'',onChange:e=>{const action=e.target.value;if(action==='import')document.getElementById('import-from-customer-hidden')?.click();else if(action)sm(action);}},
+          h('option',{value:''},'Tiện ích'),h('option',{value:'import'},'Import từ KH'),h('option',{value:'imageImport'},'Lấy đơn từ ảnh'),h('option',{value:'print'},'In phiếu KH'),h('option',{value:'printlabels'},'In tem nhiều đơn'));
   const renderDeliveryOrderActions=()=>h(React.Fragment,null,
         isAdmin&&h('button',{
           type:'button',
@@ -3901,7 +3904,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           'aria-label':detailColumnsHidden?'Hiện các cột chi tiết':'Ẩn các cột chi tiết',
           style:{width:38,height:34,padding:0,justifyContent:'center',border:'1px solid '+(detailColumnsHidden?'#D8A000':'var(--pri)'),borderRadius:'var(--r)',background:detailColumnsHidden?'#FFF3CD':'#E8F5E9',color:detailColumnsHidden?'#8A5A00':'var(--pri)',flex:'0 0 auto'}
         },h('i',{className:'ti '+(detailColumnsHidden?'ti-eye':'ti-eye-off'),style:{fontSize:19}})),
-          h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction}),
+          h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction,menuOnly:true,utility:renderDeliveryUtilities()}),
           renderPagination('toolbar')
         )
   );
@@ -3953,13 +3956,11 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         h('i',{className:'ti ti-adjustments-horizontal'}),' Bộ lọc',([hasDateFilter,fPoint,fProduct,fTime,fArea,fTripGroup].filter(Boolean).length?' ('+[hasDateFilter,fPoint,fProduct,fTime,fArea,fTripGroup].filter(Boolean).length+')':'')
       )
     ),
-    h('div',{id:'delivery-filter-tools',className:'delivery-filter-panel'+(mobileFiltersOpen?' mobile-open':''),style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
+    h('div',{id:'delivery-filter-tools',className:'delivery-filter-panel'+(!isMobile?' delivery-retired-tools':'')+(mobileFiltersOpen?' mobile-open':''),style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h('div',{className:'delivery-filter-controls',style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',flex:'1 1 760px'}},
-        h('div',{className:'delivery-filter-search-inline'},h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn hàng...',style:{flex:'1 1 160px',minWidth:130}})),
+
         isMobile&&renderDeliveryDateFields(),
-        !isMobile&&h('select',{'aria-label':'Tiện ích đơn hàng',className:'delivery-utility-menu',value:'',onChange:e=>{const action=e.target.value;if(action==='import')document.getElementById('import-from-customer-hidden')?.click();else if(action)sm(action);}},
-          h('option',{value:''},'Tiện ích'),h('option',{value:'import'},'Import từ KH'),h('option',{value:'imageImport'},'Lấy đơn từ ảnh'),h('option',{value:'print'},'In phiếu KH'),h('option',{value:'printlabels'},'In tem nhiều đơn')),
-        !isMobile&&h(AddBtn,{onClick:()=>{se(null);setCopyDraft(null);sm('f')},label:'Tạo đơn'}),
+
         isMobile&&h('div',{id:'delivery-advanced-filters',className:'delivery-advanced-filters'},
         isMobile&&h(React.Fragment,null,
         h('select',{value:fPoint,onChange:e=>sfPoint(e.target.value),title:'Lọc theo địa điểm có trong các đơn đang hiển thị',

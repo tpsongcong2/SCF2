@@ -139,6 +139,8 @@ button:hover{background:var(--bg2)}
 .delivery-view-controls button{font-size:12px;white-space:nowrap}
 .delivery-view-actions{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
 .delivery-view-actions .delivery-view-controls{display:inline-flex;flex-wrap:nowrap;margin:0;justify-content:flex-start}
+.delivery-retired-tools{display:none!important}
+.delivery-view-controls .delivery-utility-menu{width:150px;min-height:34px;padding:5px 8px;font-size:12px}
 .delivery-column-filter{display:inline-flex;align-items:center;gap:4px;border:0;background:transparent;padding:2px 0;font:inherit;color:inherit;white-space:nowrap;max-width:100%}
 .delivery-column-filter i{font-size:12px;opacity:.55}
 .delivery-column-filter.active{color:var(--pri);font-weight:800}
