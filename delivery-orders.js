@@ -3798,6 +3798,49 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     currentGroupHeader.cnt++;
     orderTableRows.push(o);
   });
+  const renderDeliveryOrderActions=()=>h(React.Fragment,null,
+        isAdmin&&h('button',{
+          type:'button',
+          disabled:!filteredOrderKeys.length,
+          onClick:toggleFilteredSelection,
+          title:allFilteredSelected?'Bỏ chọn toàn bộ kết quả đang lọc':'Chọn toàn bộ kết quả đang lọc',
+          style:{padding:'5px 9px',fontSize:12,borderRadius:'var(--r)',border:'1px solid #2d6a4f',background:allFilteredSelected?'#e8f5e9':'#fff',color:'#1f5c45',cursor:filteredOrderKeys.length?'pointer':'not-allowed',fontWeight:600,whiteSpace:'nowrap'}
+        },h('i',{className:allFilteredSelected?'ti ti-checkbox':'ti ti-square',style:{fontSize:14}}),' ',allFilteredSelected?'Bỏ chọn tất cả':'Chọn tất cả ('+filteredOrderKeys.length+')'),
+        isAdmin&&h('button',{
+          type:'button',
+          disabled:!selectedOrderKeys.length,
+          onClick:deleteSelectedOrders,
+          title:'Xóa vĩnh viễn các đơn hàng đã chọn',
+          style:{padding:'5px 9px',fontSize:12,borderRadius:'var(--r)',border:'1px solid #A32D2D',background:selectedOrderKeys.length?'#A32D2D':'#f4e6e6',color:selectedOrderKeys.length?'#fff':'#9f7777',cursor:selectedOrderKeys.length?'pointer':'not-allowed',fontWeight:700,whiteSpace:'nowrap'}
+        },h('i',{className:'ti ti-trash',style:{fontSize:14}}),' Xóa đã chọn ('+selectedOrderKeys.length+')'),
+        h('div',{style:{display:'flex',alignItems:'center',gap:4,padding:3,border:'1px solid var(--bd)',borderRadius:999,background:'var(--bg2)'}},
+          h('span',{style:{fontSize:11,color:'var(--tx2)',padding:'0 6px',whiteSpace:'nowrap'}},'Sắp xếp'),
+          h('button',{
+            type:'button',
+            onClick:()=>setSortMode('area'),
+            style:{padding:'5px 10px',fontSize:12,border:'none',borderRadius:999,cursor:'pointer',background:sortMode==='area'?'var(--pri)':'transparent',color:sortMode==='area'?'#fff':'var(--tx2)',fontWeight:600,whiteSpace:'nowrap'}
+          },'Theo khu vực'),
+          h('button',{
+            type:'button',
+            onClick:()=>setSortMode('trip'),
+            style:{padding:'5px 10px',fontSize:12,border:'none',borderRadius:999,cursor:'pointer',background:sortMode==='trip'?'var(--pri)':'transparent',color:sortMode==='trip'?'#fff':'var(--tx2)',fontWeight:600,whiteSpace:'nowrap'}
+          },'Theo chuyến')
+        ),
+        h('select',{className:'delivery-trip-group-filter','aria-label':'Lọc nhóm chuyến',value:fTripGroup,onChange:e=>sfTripGroup(e.target.value),style:{width:'auto',minWidth:168,fontSize:12,padding:'6px 10px'}},
+          h('option',{value:''},'Tất cả nhóm chuyến'),h('option',{value:'samsung'},'Samsung'),h('option',{value:'dt'},'Điềm Thụy')),
+        h(ExportBtn,{onClick:()=>sm('excel')}),
+        !isMobile&&h('div',{className:'delivery-view-actions'},
+        h('button',{
+          type:'button',
+          className:'desktop-only delivery-detail-columns-toggle',
+          onClick:()=>setDetailColumnsHidden(value=>!value),
+          title:detailColumnsHidden?'Hiện Ca SX và chuyến giao hàng':'Ẩn cột chi tiết, hiện Chú ý và giữ các nút tiện ích',
+          'aria-label':detailColumnsHidden?'Hiện các cột chi tiết':'Ẩn các cột chi tiết',
+          style:{width:38,height:34,padding:0,justifyContent:'center',border:'1px solid '+(detailColumnsHidden?'#D8A000':'var(--pri)'),borderRadius:'var(--r)',background:detailColumnsHidden?'#FFF3CD':'#E8F5E9',color:detailColumnsHidden?'#8A5A00':'var(--pri)',flex:'0 0 auto'}
+        },h('i',{className:'ti '+(detailColumnsHidden?'ti-eye':'ti-eye-off'),style:{fontSize:19}})),
+          h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden})
+        )
+  );
   const renderPagination=position=>h('div',{key:'pagination_'+position,className:'delivery-pagination'},
     h('span',{className:'delivery-pagination-label'},'Mỗi trang'),
     h('select',{value:pageSize,onChange:e=>setPageSize(Number(e.target.value)||100),title:'Số đơn hiển thị mỗi trang'},
@@ -3811,7 +3854,6 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   );
   return h('div',{ref:deliveryPageRef,className:'delivery-page'+(menuHidden?' compact-menu':'')+(toolsHidden?' delivery-tools-hidden':'')},
     h('div',{className:'delivery-sticky-head'},
-      h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden}),
       h('div',{className:'delivery-title-row',style:{marginBottom:10}},
         h('div',{className:'delivery-status-row'},sts.map(([v,l])=>h('button',{key:v,className:'pill'+(filter===v?' on':''),onClick:()=>sf(v)},l+' ('+statusCount(v)+')'))),
         h('div',{className:'delivery-title-actions'},
@@ -3850,6 +3892,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           h('div',{className:'delivery-create-action'},h(AddBtn,{onClick:()=>{se(null);setCopyDraft(null);sm('f')},label:'Tạo đơn giao'}))
         )
       ),
+    isMobile&&h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden}),
     h('div',{className:'mobile-only delivery-mobile-filter-head'},
       h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn hàng...'}),
       h('button',{type:'button',onClick:()=>setMobileFiltersOpen(v=>!v),'aria-expanded':mobileFiltersOpen},
@@ -3910,44 +3953,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           list.length+' kết quả'
         ),
         list.length>0&&renderPagination('top'),
-        isAdmin&&h('button',{
-          type:'button',
-          disabled:!filteredOrderKeys.length,
-          onClick:toggleFilteredSelection,
-          title:allFilteredSelected?'Bỏ chọn toàn bộ kết quả đang lọc':'Chọn toàn bộ kết quả đang lọc',
-          style:{padding:'5px 9px',fontSize:12,borderRadius:'var(--r)',border:'1px solid #2d6a4f',background:allFilteredSelected?'#e8f5e9':'#fff',color:'#1f5c45',cursor:filteredOrderKeys.length?'pointer':'not-allowed',fontWeight:600,whiteSpace:'nowrap'}
-        },h('i',{className:allFilteredSelected?'ti ti-checkbox':'ti ti-square',style:{fontSize:14}}),' ',allFilteredSelected?'Bỏ chọn tất cả':'Chọn tất cả ('+filteredOrderKeys.length+')'),
-        isAdmin&&h('button',{
-          type:'button',
-          disabled:!selectedOrderKeys.length,
-          onClick:deleteSelectedOrders,
-          title:'Xóa vĩnh viễn các đơn hàng đã chọn',
-          style:{padding:'5px 9px',fontSize:12,borderRadius:'var(--r)',border:'1px solid #A32D2D',background:selectedOrderKeys.length?'#A32D2D':'#f4e6e6',color:selectedOrderKeys.length?'#fff':'#9f7777',cursor:selectedOrderKeys.length?'pointer':'not-allowed',fontWeight:700,whiteSpace:'nowrap'}
-        },h('i',{className:'ti ti-trash',style:{fontSize:14}}),' Xóa đã chọn ('+selectedOrderKeys.length+')'),
-        h('div',{style:{display:'flex',alignItems:'center',gap:4,padding:3,border:'1px solid var(--bd)',borderRadius:999,background:'var(--bg2)'}},
-          h('span',{style:{fontSize:11,color:'var(--tx2)',padding:'0 6px',whiteSpace:'nowrap'}},'Sắp xếp'),
-          h('button',{
-            type:'button',
-            onClick:()=>setSortMode('area'),
-            style:{padding:'5px 10px',fontSize:12,border:'none',borderRadius:999,cursor:'pointer',background:sortMode==='area'?'var(--pri)':'transparent',color:sortMode==='area'?'#fff':'var(--tx2)',fontWeight:600,whiteSpace:'nowrap'}
-          },'Theo khu vực'),
-          h('button',{
-            type:'button',
-            onClick:()=>setSortMode('trip'),
-            style:{padding:'5px 10px',fontSize:12,border:'none',borderRadius:999,cursor:'pointer',background:sortMode==='trip'?'var(--pri)':'transparent',color:sortMode==='trip'?'#fff':'var(--tx2)',fontWeight:600,whiteSpace:'nowrap'}
-          },'Theo chuyến')
-        ),
-        h('select',{className:'delivery-trip-group-filter','aria-label':'Lọc nhóm chuyến',value:fTripGroup,onChange:e=>sfTripGroup(e.target.value),style:{width:'auto',minWidth:168,fontSize:12,padding:'6px 10px'}},
-          h('option',{value:''},'Tất cả nhóm chuyến'),h('option',{value:'samsung'},'Samsung'),h('option',{value:'dt'},'Điềm Thụy')),
-        h(ExportBtn,{onClick:()=>sm('excel')}),
-        h('button',{
-          type:'button',
-          className:'desktop-only delivery-detail-columns-toggle',
-          onClick:()=>setDetailColumnsHidden(value=>!value),
-          title:detailColumnsHidden?'Hiện Ca SX và chuyến giao hàng':'Ẩn cột chi tiết, hiện Chú ý và giữ các nút tiện ích',
-          'aria-label':detailColumnsHidden?'Hiện các cột chi tiết':'Ẩn các cột chi tiết',
-          style:{width:38,height:34,padding:0,justifyContent:'center',border:'1px solid '+(detailColumnsHidden?'#D8A000':'var(--pri)'),borderRadius:'var(--r)',background:detailColumnsHidden?'#FFF3CD':'#E8F5E9',color:detailColumnsHidden?'#8A5A00':'var(--pri)',flex:'0 0 auto'}
-        },h('i',{className:'ti '+(detailColumnsHidden?'ti-eye':'ti-eye-off'),style:{fontSize:19}})),
+        isMobile&&renderDeliveryOrderActions(),
         h('button',{
           onClick:()=>sm('imageImport'),
           style:{display:'none'}
@@ -4071,7 +4077,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         },h('i',{className:'ti ti-file-import',style:{fontSize:14}}),'Import từ KH'),
         false&&h(AddBtn,{onClick:()=>{se(null);sm('f')},label:'Tạo đơn giao'})
       )),
-      null
+      !isMobile&&h('div',{className:'delivery-persistent-toolbar'},renderDeliveryOrderActions())
     ),
         modal==='print'&&h(PrintByCustomerModal,{orders,customers,products,company,initialDate:dateFilterMode==='day'?fDate:'',onClose:()=>sm(null)}),
         modal==='printlabels'&&h(PrintLabelsMultiModal,{orders,customers,initialDate:dateFilterMode==='day'?fDate:'',onClose:()=>sm(null),onPrint:printLabelsForOrders}),
