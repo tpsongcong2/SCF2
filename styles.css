@@ -146,6 +146,8 @@ button:hover{background:var(--bg2)}
 .delivery-column-filter-backdrop{position:fixed;inset:0;z-index:1500;background:transparent}
 .delivery-column-filter-popup{position:fixed;width:280px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);overflow:auto;display:flex;flex-direction:column;gap:10px;padding:14px;background:var(--card);color:var(--tx);border:1px solid var(--bd2);border-radius:8px;box-shadow:0 8px 28px #123c2d30;font-size:13px}
 .delivery-column-filter-popup input,.delivery-column-filter-popup select{width:100%;min-height:36px}
+.delivery-column-filter-popup .delivery-date-range{display:grid!important;grid-template-columns:auto minmax(0,1fr);width:100%}
+.delivery-column-filter-popup .delivery-date-range input{width:100%!important;min-width:0}
 .delivery-column-filter-popup button{padding:6px 10px}
 .delivery-extra-header-filters{display:flex;gap:10px;justify-content:flex-end}
 .delivery-extra-header-filters .delivery-column-filter{font-size:10px}
