@@ -140,7 +140,7 @@ button:hover{background:var(--bg2)}
 .delivery-view-actions{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
 .delivery-view-actions .delivery-view-controls{display:inline-flex;flex-wrap:nowrap;margin:0;justify-content:flex-start}
 .delivery-persistent-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-bottom:8px}
-.delivery-tools-hidden .delivery-title-actions,.delivery-tools-hidden .delivery-mobile-filter-head,.delivery-tools-hidden .delivery-filter-panel{display:none!important}
+.delivery-tools-hidden .delivery-title-row,.delivery-tools-hidden .delivery-mobile-filter-head,.delivery-tools-hidden .delivery-filter-panel{display:none!important}
 .delivery-tools-hidden .delivery-title-row{margin-bottom:0!important}
 .delivery-collapsed-filter-summary{font-size:12px;color:var(--tx2);padding:0 3px 8px;overflow-wrap:anywhere}
 @media(min-width:769px){

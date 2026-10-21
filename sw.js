@@ -1,4 +1,4 @@
-const CACHE = 'scf-v600';
+const CACHE = 'scf-v601';
 const ASSETS = [
   './',
   './index.html',
@@ -7,7 +7,7 @@ const ASSETS = [
   './vendor/supabase.min.js?v=358',
   './vendor/react.production.min.js?v=358',
   './vendor/react-dom.production.min.js?v=358',
-  './styles.css?v=599',
+  './styles.css?v=601',
   './runtime.js?v=457',
   './storage.js?v=585',
   './print-agent.js',
@@ -46,8 +46,8 @@ const ASSETS = [
   './production-assignments.js?v=537',
   './permissions.js?v=594',
   './permission-settings.js?v=592',
-  './app.js?v=600',
-  './bootstrap.js?v=600',
+  './app.js?v=601',
+  './bootstrap.js?v=601',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -59,7 +59,7 @@ const ASSETS = [
 // thật sự cần tới; tránh tải lặp toàn bộ ứng dụng và ba bản font ngay lần mở đầu.
 const PRECACHE_ASSETS = [
   './index.html',
-  './styles.css?v=599',
+  './styles.css?v=601',
   './vendor/tabler-icons.min.css?v=394'
 ];
 
