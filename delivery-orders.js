@@ -2630,8 +2630,8 @@ function DeliveryViewControls({menuHidden,setMenuHidden,toolsHidden,setToolsHidd
   return h('div',{className:'delivery-view-controls'},
     h('button',{type:'button','data-scf-action':'view',onClick:()=>setMenuHidden(value=>!value),'aria-expanded':!menuHidden,title:(menuHidden?'Hiện lại header + menu web':'Ẩn header + menu web')+' (Ctrl + Shift + A)'},h('i',{className:'ti '+(menuHidden?'ti-layout-navbar-expand':'ti-layout-navbar-collapse'),'aria-hidden':true}),menuHidden?'Hiện menu':'Ẩn menu'),
     h('button',{type:'button','data-scf-action':'view',onClick:()=>setToolsHidden(value=>!value),'aria-expanded':!toolsHidden,'aria-controls':'delivery-filter-tools',title:'Thu gọn hoặc hiện lại bộ lọc và tiện ích; giữ nguyên điều kiện lọc'},h('i',{className:'ti '+(toolsHidden?'ti-adjustments-horizontal':'ti-chevron-up'),'aria-hidden':true}),toolsHidden?'Hiện lọc & tiện ích':'Ẩn lọc & tiện ích'),
-    onViewOrderSummary&&h('button',{type:'button','data-scf-action':'view',onClick:onViewOrderSummary,title:'Mở màn hình xem nhanh đơn tổng'},h('i',{className:'ti ti-photo-search','aria-hidden':true}),'XEM ĐƠN TỔNG'),
-    onViewProduction&&h('button',{type:'button','data-scf-action':'view',onClick:onViewProduction,title:'Mở tổng hợp khối lượng sản xuất theo ca và xưởng'},h('i',{className:'ti ti-clipboard-list','aria-hidden':true}),'XEM KL SX')
+    onViewOrderSummary&&h('button',{type:'button','data-scf-action':'view',onClick:onViewOrderSummary,title:'Mở màn hình xem nhanh đơn tổng'},h('i',{className:'ti ti-photo-search','aria-hidden':true}),'Đơn Tổng'),
+    onViewProduction&&h('button',{type:'button','data-scf-action':'view',onClick:onViewProduction,title:'Mở tổng hợp khối lượng sản xuất theo ca và xưởng'},h('i',{className:'ti ti-clipboard-list','aria-hidden':true}),'KL SX')
   );
 }
 function useDeliveryOrdersViewport(pageRef,enabled,menuHidden){

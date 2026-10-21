@@ -1,4 +1,27 @@
 /* ─── Tổng hợp sản xuất ─── */
+function ProductionSummaryPreviewModal({loadData,onClose,currentUser,...summaryProps}){
+  const[status,setStatus]=useState('loading'),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
+  const loadRef=useRef(loadData),closeRef=useRef(onClose);loadRef.current=loadData;closeRef.current=onClose;
+  const accessKey=JSON.stringify([currentUser?.id,currentUser?.role,currentUser?.permissions,currentUser?.dept,currentUser?.departments,currentUser?.permLevels]);
+  useEffect(()=>{
+    let active=true;setStatus('loading');setError('');
+    Promise.resolve().then(()=>loadRef.current()).then(()=>{if(active)setStatus('ready');}).catch(e=>{if(active){setError(e.message||'Chưa tải được khối lượng sản xuất.');setStatus('error');}});
+    return()=>{active=false;};
+  },[accessKey,attempt]);
+  useEffect(()=>{
+    const opener=document.activeElement;
+    document.querySelector('.production-summary-preview-modal .mclose')?.focus();
+    const escape=event=>{if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();closeRef.current();}};
+    document.addEventListener('keydown',escape,true);
+    return()=>{document.removeEventListener('keydown',escape,true);if(opener?.isConnected)opener.focus();};
+  },[]);
+  return h(Modal,{title:'Khối lượng sản xuất',lg:'xl',className:'production-summary-preview-modal',onClose},
+    status==='loading'&&h('p',{role:'status'},'Đang tải dữ liệu sản xuất…'),
+    status==='error'&&h('div',null,h('p',{role:'alert'},error),h('button',{type:'button',onClick:()=>setAttempt(n=>n+1)},'Thử tải lại')),
+    status==='ready'&&h(ProductionSummaryTab,{...summaryProps,currentUser}),
+    h('div',{className:'production-preview-close-row'},h('button',{type:'button','data-scf-action':'view',onClick:onClose},'Đóng cửa sổ'))
+  );
+}
 function canViewProductionShiftWeight(user){
   return ['admin','administrator'].includes(String(user?.role||'').trim().toLowerCase())||user?.productionShiftWeight===true;
 }
