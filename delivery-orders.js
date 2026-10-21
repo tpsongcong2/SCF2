@@ -2361,14 +2361,22 @@ function scfDeliveryLineFill(trip,order,line,product,prodCats){
   return fill==='#ffff00'?'#ffeca6':fill==='#f4af86'?'#f8cfaf':'#ffffff';
 }
 
+const scfDeliveryHoverRows=new WeakMap();
 function scfMarkDeliveryOrder(event,active){
   const row=event.currentTarget,key=row.dataset.deliveryOrderKey;
   if(!active&&event.relatedTarget?.closest?.('[data-delivery-order-key]')?.dataset.deliveryOrderKey===key)return;
   const body=row.closest('tbody');
   if(!body)return;
-  body.querySelectorAll('[data-delivery-order-key]').forEach(item=>{
-    item.classList.toggle('delivery-order-hover',active&&item.dataset.deliveryOrderKey===key);
-  });
+  const previous=scfDeliveryHoverRows.get(body)||[];
+  if(!active&&previous.length&&previous[0].dataset.deliveryOrderKey!==key)return;
+  previous.forEach(item=>item.classList.toggle('delivery-order-hover',false));
+  const marked=[];
+  if(active){
+    let first=row;
+    while(first.previousElementSibling?.dataset.deliveryOrderKey===key)first=first.previousElementSibling;
+    for(let item=first;item&&item.dataset.deliveryOrderKey===key;item=item.nextElementSibling){item.classList.toggle('delivery-order-hover',true);marked.push(item);}
+  }
+  scfDeliveryHoverRows.set(body,marked);
 }
 function DeliveryMobileEditableField({label,value,type='time',disabled,onConfirm}){
   const [editing,setEditing]=useState(false),[draft,setDraft]=useState(''),[saving,setSaving]=useState(false),[error,setError]=useState(''),[commit,setCommit]=useState(null);
@@ -2644,7 +2652,7 @@ function useDeliveryOrdersViewport(pageRef,enabled,menuHidden){
     return()=>{observer?.disconnect();window.removeEventListener('resize',schedule);window.removeEventListener('scroll',schedule);window.visualViewport?.removeEventListener('resize',schedule);if(frame!==null)window.cancelAnimationFrame(frame);page.style.removeProperty('--delivery-viewport-height');};
   },[enabled,pageRef,menuHidden]);
 }
-function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify,onViewOrderSummary,onViewProduction}){
+function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify,onViewOrderSummary,onViewProduction,highlightOrderOnHover=true}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[copyDraft,setCopyDraft]=useState(null);const[print,spr]=useState(null);const[invoiceView,setInvoiceView]=useState(null);const[historyView,setHistoryView]=useState(null);const[q,sq]=useState('');const[filter,sf]=useState('all');const[sortMode,setSortMode]=useState('trip');const _td0=fmtDate();const _ti0=_td0.split('/').reverse().join('-');
   const[dateFilterMode,setDateFilterMode]=useState('day');
   const[dateBasis,setDateBasis]=useState('trip');
@@ -2675,6 +2683,11 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const isAccounting=currentDeptKey.includes('ke toan');
   const canWithdrawStartedOrder=isAdmin||isAccounting;
   const deliveryTableScroll=useRef(null);
+  useEffect(()=>{
+    if(highlightOrderOnHover)return;
+    const body=deliveryTableScroll.current?.querySelector('tbody');if(!body)return;
+    (scfDeliveryHoverRows.get(body)||[]).forEach(row=>row.classList.toggle('delivery-order-hover',false));scfDeliveryHoverRows.delete(body);
+  },[highlightOrderOnHover]);
   const normArea=v=>String(v||'').trim().replace(/\s+/g,' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/Đ/g,'D').replace(/đ/g,'d').toUpperCase();
   const areaKey=v=>normArea(v).replace(/[^A-Z0-9]/g,'');
   const sameArea=(a,b)=>{
@@ -4182,7 +4195,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           const orderRows=displayRows.map((row,pi)=>{
             const lineFill=scfDeliveryLineFill(autoTrip||{shiftName:preferredTripShiftName},ctx,{...row.line,productName:row.productName},products.find(product=>String(product.id)===String(row.line?.productId)),prodCats);
             const coloredCell={background:lineFill};
-            return h('tr',{key:o._rowKey+'_'+row.key,className:'delivery-order-row'+(pi===0?' delivery-order-start':'')+(pi===displayRows.length-1?' delivery-order-end':''),'data-delivery-order-key':String(o._rowKey||o.id),onMouseEnter:e=>scfMarkDeliveryOrder(e,true),onMouseLeave:e=>scfMarkDeliveryOrder(e,false),onFocus:e=>scfMarkDeliveryOrder(e,true),onBlur:e=>scfMarkDeliveryOrder(e,false)},
+            return h('tr',{key:o._rowKey+'_'+row.key,className:'delivery-order-row'+(pi===0?' delivery-order-start':'')+(pi===displayRows.length-1?' delivery-order-end':''),'data-delivery-order-key':String(o._rowKey||o.id),onMouseEnter:highlightOrderOnHover?e=>scfMarkDeliveryOrder(e,true):undefined,onMouseLeave:highlightOrderOnHover?e=>scfMarkDeliveryOrder(e,false):undefined,onFocus:highlightOrderOnHover?e=>scfMarkDeliveryOrder(e,true):undefined,onBlur:highlightOrderOnHover?e=>scfMarkDeliveryOrder(e,false):undefined},
             h('td',{style:coloredCell},
               h('div',{className:'delivery-order-date'},
                 isAdmin&&(pi===0?h('input',{

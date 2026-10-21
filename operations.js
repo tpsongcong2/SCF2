@@ -588,6 +588,11 @@ function AppearanceSettingsTab({uiSettings,setUiSettings}){
       )
     ),
     h('div',{className:'card',style:{marginBottom:'1rem'}},
+      h('div',{style:{fontWeight:600,color:'var(--pri3)',marginBottom:10}},'Tô màu đơn hàng khi di chuột'),
+      h(F,{label:'Tô màu khi di chuột vào đơn hàng'},h('select',{'aria-label':'Tô màu khi di chuột vào đơn hàng',value:f.deliveryOrderHover===false?'no':'yes',onChange:e=>sf(prev=>({...prev,deliveryOrderHover:e.target.value==='yes'}))},h('option',{value:'yes'},'Có'),h('option',{value:'no'},'Không'))),
+      h('p',{style:{fontSize:12,color:'var(--tx2)'}},'Áp dụng cho danh sách đơn giao hàng trên máy tính. Chọn Không để tắt hiệu ứng di chuột; ô chọn đơn và màu sản phẩm vẫn giữ nguyên.')
+    ),
+    h('div',{className:'card',style:{marginBottom:'1rem'}},
       h('div',{style:{fontWeight:600,color:'var(--pri3)',marginBottom:10}},'Hiệu ứng chúc mừng sinh nhật'),
       h('div',{className:'g2',style:{alignItems:'end'}},
         h(F,{label:'Hình thức hoạt náo'},

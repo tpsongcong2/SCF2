@@ -734,6 +734,7 @@ function normalizeUiSettings(raw){
   const next={
     fontFamily:src.fontFamily||DEF_UI_SETTINGS.fontFamily,
     birthdayEffect:birthdayEffects.includes(src.birthdayEffect)?src.birthdayEffect:(DEF_UI_SETTINGS.birthdayEffect||'fireworks'),
+    deliveryOrderHover:src.deliveryOrderHover!==false,
     scopes:{}
   };
   if(!UI_FONT_FAMILY_OPTIONS.some(x=>x.value===next.fontFamily)) next.fontFamily=DEF_UI_SETTINGS.fontFamily;

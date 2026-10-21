@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V601';
+const SCF_BUILD_VERSION='V602';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_process:'Tài liệu ATTP · Quy trình',
@@ -926,7 +926,7 @@ function App(){
         canAccess(cu.role,'maint_machine',cu.permissions)&&page==='maint_machine'&&h(MaintenanceTab,{title:'Bảo dưỡng máy',icon:'ti-settings',assets,employees}),
         canAccess(cu.role,'shifts',cu.permissions)&&page==='shifts'&&h(ShiftsTab,{shifts,setShifts,employees,trips,setTrips,currentUser:cu}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
-        canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify:addNotification,onViewOrderSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(true);}:undefined,onViewProduction:canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments)&&(!window.matchMedia?.('(max-width:768px)')?.matches||canMobileFeature(cu,'prodsummary'))?()=>setPage('prodsummary'):undefined}),
+        canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{highlightOrderOnHover:uiSettings.deliveryOrderHover!==false,orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify:addNotification,onViewOrderSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(true);}:undefined,onViewProduction:canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments)&&(!window.matchMedia?.('(max-width:768px)')?.matches||canMobileFeature(cu,'prodsummary'))?()=>setPage('prodsummary'):undefined}),
         canAccess(cu.role,'intem',cu.permissions)&&page==='intem'&&h(IntemTab,{products,company}),
         canAccess(cu.role,'trips',cu.permissions,cuAccessDepartments)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,prodCats,quotes,financeDebts,setFinanceDebts,company,currentUser:cu,notify:addNotification,onBackToDriverReport:()=>setPage('workreport_lx')}),
         canAccess(cu.role,'workreport_lx',cu.permissions,cuAccessDepartments)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,orders,products,customers,employees,currentUser:cu,onOpenTrips:()=>setPage('trips')}),
