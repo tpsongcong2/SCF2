@@ -40,6 +40,40 @@ function scfClosingCalculate(lines,adjustments={}){
   const totals=rows.reduce((a,row)=>{for(const key of ['ordered','confirmed','missing','pending','unknown','extra','loss','good','total'])a[key]+=row[key];return a;},{ordered:0,confirmed:0,missing:0,pending:0,unknown:0,extra:0,loss:0,good:0,total:0});
   return{rows,totals,invalid};
 }
+function scfClosingTeamText(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toLowerCase().trim();}
+function scfClosingTeamWorkshops(employee){
+  const departments=[employee?.dept,...(Array.isArray(employee?.departments)?employee.departments:[])].map(scfClosingTeamText);
+  const shops=new Set();for(const dept of departments){
+    if(/(xuong|san xuat|sx).*\b(bot|gao)\b/.test(dept))shops.add('bot');
+    else if(/(xuong|san xuat|sx).*\bbun\b/.test(dept))shops.add('bun');
+    else if(/(xuong|san xuat|sx).*\b(banh|pho|cuon)\b/.test(dept))shops.add('banh');
+  }return [...shops];
+}
+function scfClosingTeamEligible(employee){
+  const role=scfClosingTeamText(employee?.role),depts=[employee?.dept,...(Array.isArray(employee?.departments)?employee.departments:[])].map(scfClosingTeamText);
+  return employee?.active!==false&&!['admin','administrator','accountant','accounting'].includes(role)&&!depts.some(d=>d.includes('ke toan'))&&(scfClosingTeamWorkshops(employee).length>0||depts.some(d=>d.includes('san xuat')));
+}
+function scfClosingScopeTimes(scope){
+  const end=scfClosingDeadline(scope),start=end-(scope.shift==='night'?13:6)*3600000;
+  const local=ms=>new Date(ms+7*3600000).toISOString().slice(0,16);
+  return{start:local(start),end:local(end),startMs:start,endMs:end};
+}
+function scfClosingParticipation(scope,value){
+  const bounds=scfClosingScopeTimes(scope),parse=v=>/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(v||''))?Date.parse(v+':00+07:00'):NaN;
+  const start=parse(value?.start),end=parse(value?.end);
+  if(!Number.isFinite(start)||!Number.isFinite(end)||start<bounds.startMs||end>bounds.endMs||start>=end)return null;
+  return{start:value.start,end:value.end,minutes:Math.round((end-start)/60000)};
+}
+function scfClosingTeam(employees,attendance,scope,now=new Date()){
+  const bounds=scfClosingScopeTimes(scope),end=Math.min(bounds.endMs,now.getTime()),seen=new Set();
+  return(employees||[]).filter(e=>{const id=String(e.id||'');if(!id||seen.has(id)||!scfClosingTeamEligible(e))return false;seen.add(id);return true;}).map(e=>{
+    const punches=(attendance||[]).filter(r=>String(r.empId)===String(e.id)&&r.status==='valid'&&['in','out'].includes(r.type)).map(r=>({...r,at:Date.parse(scfClosingIso(r.date)+'T'+String(r.time||'')+'+07:00')})).filter(r=>Number.isFinite(r.at)&&r.at<=end&&r.at>=bounds.startMs-18*3600000).sort((a,b)=>a.at-b.at);
+    let entered=null,minutes=0,first=null,last=null;
+    const add=until=>{if(entered===null)return;const a=Math.max(entered,bounds.startMs),b=Math.min(until,end,entered+18*3600000);if(b>a){minutes+=(b-a)/60000;first=first===null?a:Math.min(first,a);last=last===null?b:Math.max(last,b);}};
+    for(const p of punches){if(p.type==='in'){if(entered===null)entered=p.at;}else{add(p.at);entered=null;}}add(end);
+    return{id:String(e.id),name:String(e.name||e.username||e.id),dept:String(e.dept||''),workshops:scfClosingTeamWorkshops(e),role:e.role,attendance:{present:minutes>0,minutes:Math.round(minutes)}};
+  }).sort((a,b)=>Number(b.workshops.includes(scope.workshop))-Number(a.workshops.includes(scope.workshop))||Number(b.attendance.present)-Number(a.attendance.present)||a.name.localeCompare(b.name,'vi'));
+}
 /* Dùng cùng lịch với Tổng hợp SX; xác nhận theo ngày/ca/SP/đơn. */
 function scfCollectClosingLines({orders=[],products=[],prodCats=[],prodShifts=[],prodShiftRules=[],prodActuals={},scope}){
   const out=[];

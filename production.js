@@ -43,6 +43,7 @@ function ProductionShiftFilter({value,rules,onChange}){
 }
 function scfProductionWorkshop(name){
   const value=normalizeLookupText(name);
+  if(/\b(bot|gao)\b/.test(value))return 'bot';
   if(value.includes('bun'))return 'bun';
   if(value.includes('pho')||value.includes('banh cuon')||value.includes('b cuon'))return 'banh';
   return 'other';
@@ -253,7 +254,7 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
   });
   const majorGroups=majorGroupOrder.map(name=>majorGroupMap[name]).filter(Boolean);
 
-  const workshopLabel=workshop==='bun'?'Xưởng bún':workshop==='banh'?'Xưởng bánh':'Tất cả xưởng';
+  const workshopLabel=workshop==='bun'?'Xưởng bún':workshop==='banh'?'Xưởng bánh':workshop==='bot'?'Xưởng bột gạo':'Tất cả xưởng';
   const selectedShiftLabel=scfProductionShiftChoices(rules).find(choice=>choice.value===shift)?.label||'Chưa xác định';
   const totalWeightKg=rows.reduce((sum,row)=>sum+(row.weightKg||0),0);
   const unknownWeightLines=rows.reduce((sum,row)=>sum+(row.unknownWeightLines||0),0);
@@ -275,13 +276,13 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
     popup.document.write(html);popup.document.close();popup.onload=()=>popup.print();
   };
   return h('div',null,
-    h('div',{className:'ptitle production-summary-title'},h('span',null,h('i',{className:'ti ti-clipboard-list',style:{fontSize:20}}),'Tổng hợp sản xuất'),onOpenClosing&&h('button',{type:'button',className:'bp','data-scf-action':'view',onClick:()=>onOpenClosing({workshop:workshop==='banh'?'banh':'bun'})},'Chốt cuối ca')),
+    h('div',{className:'ptitle production-summary-title'},h('span',null,h('i',{className:'ti ti-clipboard-list',style:{fontSize:20}}),'Tổng hợp sản xuất'),onOpenClosing&&h('button',{type:'button',className:'bp','data-scf-action':'view',onClick:()=>onOpenClosing({workshop:['banh','bot'].includes(workshop)?workshop:'bun'})},'Chốt cuối ca')),
     h('div',{className:'card production-summary-filters',style:{marginBottom:'1.25rem'}},
       h('div',{className:'g3'},
         h(F,{label:'Ngày – ca sản xuất'},h('div',{className:'production-date-shift','aria-label':'Lọc ngày và ca sản xuất'},
         h('input',{type:'date','aria-label':'Ngày sản xuất',value:toIsoDate(date),onChange:e=>setDate(vnDateFromISO(e.target.value)||''),placeholder:'DD/MM/YYYY'}),
         h(ProductionShiftFilter,{value:shift,rules,onChange:setShift}))),
-        h(F,{label:'Xưởng sản xuất'},h('div',{className:'production-workshop-print'},h('select',{'aria-label':'Xưởng sản xuất',value:workshop,onChange:event=>{setWorkshop(event.target.value);onClosingWorkshopChange?.(event.target.value==='banh'?'banh':'bun');}},h('option',{value:'all'},'Tất cả xưởng'),h('option',{value:'bun'},'Xưởng bún'),h('option',{value:'banh'},'Xưởng bánh · Phở, bánh cuốn')),h('button',{type:'button',className:'bp production-mobile-print','data-scf-action':'view','aria-label':'In đơn sản xuất tổng',title:'In đơn sản xuất tổng',disabled:!rows.length,onClick:printSummary},h('i',{className:'ti ti-printer'}))))
+        h(F,{label:'Xưởng sản xuất'},h('div',{className:'production-workshop-print'},h('select',{'aria-label':'Xưởng sản xuất',value:workshop,onChange:event=>{setWorkshop(event.target.value);onClosingWorkshopChange?.(['banh','bot'].includes(event.target.value)?event.target.value:'bun');}},h('option',{value:'all'},'Tất cả xưởng'),h('option',{value:'bun'},'Xưởng bún'),h('option',{value:'banh'},'Xưởng bánh · Phở, bánh cuốn'),h('option',{value:'bot'},'Xưởng bột gạo')),h('button',{type:'button',className:'bp production-mobile-print','data-scf-action':'view','aria-label':'In đơn sản xuất tổng',title:'In đơn sản xuất tổng',disabled:!rows.length,onClick:printSummary},h('i',{className:'ti ti-printer'}))))
 
       )
     ),

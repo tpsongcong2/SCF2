@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V592';
+const SCF_BUILD_VERSION='V597';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_process:'Tài liệu ATTP · Quy trình',
@@ -251,7 +251,7 @@ function scfMissingPageComponents(page){
   return names.split(' ').filter(name=>typeof globalThis[name]!=='function');
 }
 async function scfEnsurePageTools(page){
-  if(page==='kpi4p'){await scfLoadOptionalScript('KPI4PTab','./kpi-4p.js?v=551');return;}
+  if(page==='kpi4p'){await scfLoadOptionalScript('KPI4PTab','./kpi-4p.js?v=596');return;}
   const missing=scfMissingPageComponents(page);
   if(missing.length){
     console.warn('Chưa nạp được thành phần giao diện:',page,missing.join(', '));

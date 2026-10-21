@@ -2618,6 +2618,30 @@ function DeliveryInlineCopyRows({draft:initial,customers,products=[],prodCats=[]
   ));
 }
 
+function DeliveryViewControls({menuHidden,setMenuHidden,toolsHidden,setToolsHidden}){
+  return h('div',{className:'delivery-view-controls'},
+    h('button',{type:'button','data-scf-action':'view',onClick:()=>setMenuHidden(value=>!value),'aria-expanded':!menuHidden,title:(menuHidden?'Hiện lại header + menu web':'Ẩn header + menu web')+' (Ctrl + Shift + A)'},h('i',{className:'ti '+(menuHidden?'ti-layout-navbar-expand':'ti-layout-navbar-collapse'),'aria-hidden':true}),menuHidden?'Hiện menu':'Ẩn menu'),
+    h('button',{type:'button','data-scf-action':'view',onClick:()=>setToolsHidden(value=>!value),'aria-expanded':!toolsHidden,'aria-controls':'delivery-filter-tools',title:'Thu gọn hoặc hiện lại bộ lọc và tiện ích; giữ nguyên điều kiện lọc'},h('i',{className:'ti '+(toolsHidden?'ti-adjustments-horizontal':'ti-chevron-up'),'aria-hidden':true}),toolsHidden?'Hiện lọc & tiện ích':'Ẩn lọc & tiện ích')
+  );
+}
+function useDeliveryOrdersViewport(pageRef,enabled,menuHidden){
+  useEffect(()=>{
+    const page=pageRef.current;if(!enabled||!page)return;
+    let frame=null;
+    const measure=()=>{
+      frame=null;
+      const bottom=parseFloat(window.getComputedStyle(page.parentElement).paddingBottom)||0;
+      const height=Math.max(320,Math.floor((window.visualViewport?.height||window.innerHeight)-Math.max(0,page.getBoundingClientRect().top)-bottom-4))+'px';
+      if(page.style.getPropertyValue('--delivery-viewport-height')!==height)page.style.setProperty('--delivery-viewport-height',height);
+    };
+    const schedule=()=>{if(frame===null)frame=window.requestAnimationFrame(measure);};
+    measure();
+    const observer=typeof ResizeObserver==='function'?new ResizeObserver(schedule):null;
+    observer?.observe(page);const chrome=document.querySelector('.topbar');if(chrome)observer?.observe(chrome);
+    window.addEventListener('resize',schedule);window.addEventListener('scroll',schedule,{passive:true});window.visualViewport?.addEventListener('resize',schedule);
+    return()=>{observer?.disconnect();window.removeEventListener('resize',schedule);window.removeEventListener('scroll',schedule);window.visualViewport?.removeEventListener('resize',schedule);if(frame!==null)window.cancelAnimationFrame(frame);page.style.removeProperty('--delivery-viewport-height');};
+  },[enabled,pageRef,menuHidden]);
+}
 function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[copyDraft,setCopyDraft]=useState(null);const[print,spr]=useState(null);const[invoiceView,setInvoiceView]=useState(null);const[historyView,setHistoryView]=useState(null);const[q,sq]=useState('');const[filter,sf]=useState('all');const[sortMode,setSortMode]=useState('trip');const _td0=fmtDate();const _ti0=_td0.split('/').reverse().join('-');
   const[dateFilterMode,setDateFilterMode]=useState('day');
@@ -2629,10 +2653,13 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const[fTripGroup,sfTripGroup]=useState('');
   const[pageSize,setPageSize]=useState(()=>typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(max-width: 768px)').matches?20:100);const[currentPage,setCurrentPage]=useState(1);let oSeq=orders.length+1;
   const[mobileActionsOpen,setMobileActionsOpen]=useState(false);const[mobileFiltersOpen,setMobileFiltersOpen]=useState(false);
+  const[toolsHidden,setToolsHidden]=useState(false);
   const[bulkSelected,setBulkSelected]=useState(()=>new Set());
   const[detailColumnsHidden,setDetailColumnsHidden]=useLS('scf_delivery_detail_columns_hidden',false);
   const[mobileEdit,setMobileEdit]=useState(null);
   const[isMobile,setIsMobile]=useState(()=>!!window.matchMedia?.('(max-width: 768px)').matches);
+  const deliveryPageRef=useRef(null);
+  useDeliveryOrdersViewport(deliveryPageRef,!isMobile,menuHidden);
   useEffect(()=>{
     const media=window.matchMedia?.('(max-width: 768px)');if(!media)return;
     const update=()=>setIsMobile(media.matches);update();
@@ -3782,8 +3809,9 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     h('button',{type:'button',disabled:visiblePage>=totalPages,onClick:()=>setCurrentPage(p=>Math.min(totalPages,p+1)),title:'Trang sau'},'›'),
     h('button',{type:'button',disabled:visiblePage>=totalPages,onClick:()=>setCurrentPage(totalPages),title:'Trang cuối'},'»')
   );
-  return h('div',{className:'delivery-page'+(menuHidden?' compact-menu':'')},
+  return h('div',{ref:deliveryPageRef,className:'delivery-page'+(menuHidden?' compact-menu':'')+(toolsHidden?' delivery-tools-hidden':'')},
     h('div',{className:'delivery-sticky-head'},
+      h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden}),
       h('div',{className:'delivery-title-row',style:{marginBottom:10}},
         h('div',{className:'delivery-status-row'},sts.map(([v,l])=>h('button',{key:v,className:'pill'+(filter===v?' on':''),onClick:()=>sf(v)},l+' ('+statusCount(v)+')'))),
         h('div',{className:'delivery-title-actions'},
@@ -3828,7 +3856,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         h('i',{className:'ti ti-adjustments-horizontal'}),' Bộ lọc',([hasDateFilter,fPoint,fProduct,fTime,fArea,fTripGroup].filter(Boolean).length?' ('+[hasDateFilter,fPoint,fProduct,fTime,fArea,fTripGroup].filter(Boolean).length+')':'')
       )
     ),
-    h('div',{className:'delivery-filter-panel'+(mobileFiltersOpen?' mobile-open':''),style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
+    h('div',{id:'delivery-filter-tools',className:'delivery-filter-panel'+(mobileFiltersOpen?' mobile-open':''),style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h('div',{className:'delivery-filter-controls',style:{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',flex:'1 1 760px'}},
         h('div',{className:'delivery-filter-search-inline'},h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn hàng...',style:{flex:'1 1 160px',minWidth:130}})),
         sortMode==='trip'&&h('select',{value:dateBasis,onChange:e=>setDateBasis(e.target.value),'aria-label':'Lọc theo ngày',title:'Chọn ngày chuyến hoặc ngày đơn',style:{width:142,fontSize:12,padding:'5px 8px'}},
@@ -3920,19 +3948,6 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           'aria-label':detailColumnsHidden?'Hiện các cột chi tiết':'Ẩn các cột chi tiết',
           style:{width:38,height:34,padding:0,justifyContent:'center',border:'1px solid '+(detailColumnsHidden?'#D8A000':'var(--pri)'),borderRadius:'var(--r)',background:detailColumnsHidden?'#FFF3CD':'#E8F5E9',color:detailColumnsHidden?'#8A5A00':'var(--pri)',flex:'0 0 auto'}
         },h('i',{className:'ti '+(detailColumnsHidden?'ti-eye':'ti-eye-off'),style:{fontSize:19}})),
-        h('button',{
-          type:'button',
-          onClick:()=>setMenuHidden(v=>!v),
-          title:(menuHidden?'Hiện lại header + menu web':'Ẩn header + menu web')+' (Ctrl + Shift + A)',
-          style:{padding:'6px 12px',fontSize:12,border:'1px solid var(--bd)',borderRadius:'var(--r)',background:'#fff',color:'var(--tx2)',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:5}
-        },
-          h('i',{className:'ti '+(menuHidden?'ti-layout-navbar-expand':'ti-layout-navbar-collapse'),style:{fontSize:14}}),
-          menuHidden?'Hiện menu':'Ẩn menu'
-        ),
-        modal==='print'&&h(PrintByCustomerModal,{orders,customers,products,company,initialDate:dateFilterMode==='day'?fDate:'',onClose:()=>sm(null)}),
-        modal==='printlabels'&&h(PrintLabelsMultiModal,{orders,customers,initialDate:dateFilterMode==='day'?fDate:'',onClose:()=>sm(null),onPrint:printLabelsForOrders}),
-        modal==='importPreview'&&window._importData&&h(ImportPreviewModal,{data:window._importData,customers,setCustomers,orders,setOrders,products,prodCats,prodShifts,currentUser,onLocateExisting:locateExistingImportedOrder,onClose:()=>{sm(null);delete window._importData;}}),
-        modal==='imageImport'&&h(ImageOrderImportModal,{customers,products,orders,setOrders,prodShifts,currentUser,onClose:()=>sm(null)}),
         h('button',{
           onClick:()=>sm('imageImport'),
           style:{display:'none'}
@@ -4058,6 +4073,11 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       )),
       null
     ),
+        modal==='print'&&h(PrintByCustomerModal,{orders,customers,products,company,initialDate:dateFilterMode==='day'?fDate:'',onClose:()=>sm(null)}),
+        modal==='printlabels'&&h(PrintLabelsMultiModal,{orders,customers,initialDate:dateFilterMode==='day'?fDate:'',onClose:()=>sm(null),onPrint:printLabelsForOrders}),
+        modal==='importPreview'&&window._importData&&h(ImportPreviewModal,{data:window._importData,customers,setCustomers,orders,setOrders,products,prodCats,prodShifts,currentUser,onLocateExisting:locateExistingImportedOrder,onClose:()=>{sm(null);delete window._importData;}}),
+        modal==='imageImport'&&h(ImageOrderImportModal,{customers,products,orders,setOrders,prodShifts,currentUser,onClose:()=>sm(null)}),
+    toolsHidden&&h('div',{className:'delivery-collapsed-filter-summary','aria-live':'polite'},[dateFilterMode==='day'?fDate:dateFilterMode==='range'?[fDate,fDateTo].filter(Boolean).join(' → '):dateFilterMode==='week'?fWeek:fMonth,fArea,fPoint,fProduct,fTime,fTripGroup,q].filter(Boolean).join(' · ')+' · '+list.length+' kết quả (giữ nguyên bộ lọc)'),
     modal==='excel'&&h(DeliveryExcelExportModal,{orders:list.map(orderContext),trips,products,customers,prodCats,tripForOrder:deliveryTripForOrder,initialGroup:fTripGroup,onExportDetail:exportDetailedExcel,onClose:()=>sm(null)}),
     h('div',{className:'delivery-body'},
       !isMobile&&h('div',{className:'desktop-only tw delivery-table-wrap',ref:deliveryTableScroll},
