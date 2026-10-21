@@ -257,6 +257,7 @@ button{font-size:var(--ui-button-size)!important;font-weight:var(--ui-button-wei
 table,td{font-size:var(--ui-table-size)!important;font-weight:var(--ui-table-weight)!important;font-style:var(--ui-table-style)!important}
 .delivery-order-qty,.delivery-order-qty *{font-size:var(--ui-orderqty-size)!important;font-weight:var(--ui-orderqty-weight)!important;font-style:var(--ui-orderqty-style)!important}
 .delivery-invoice-qty,.delivery-invoice-qty *{font-size:var(--ui-invoiceqty-size)!important;font-weight:var(--ui-invoiceqty-weight)!important;font-style:var(--ui-invoiceqty-style)!important}
+.delivery-delivered-qty{font-family:var(--ui-table-family)!important;font-size:var(--ui-table-size)!important;font-weight:var(--ui-table-weight)!important;font-style:var(--ui-table-style)!important}
 th{font-size:var(--ui-header-size)!important;font-weight:var(--ui-header-weight)!important;font-style:var(--ui-header-style)!important}
 .fl label{font-size:var(--ui-form-size)!important;font-weight:var(--ui-form-weight)!important;font-style:var(--ui-form-style)!important}
 .badge,.detail-count-badge{font-size:var(--ui-badge-size)!important;font-weight:var(--ui-badge-weight)!important;font-style:var(--ui-badge-style)!important}

@@ -2337,7 +2337,7 @@ function DeliveryQuantityCell({order,lineIndex,field,canEdit,onSave}){
   const title=label+' '+(line?.productName||'')+' · '+(order.pointName||order.id);
   const close=()=>{setEditing(null);setError('');};
   const save=()=>{try{onSave(editing,lineIndex,field,value);close();}catch(e){setError(e.message||'Chưa lưu được số lượng.');}};
-  return h('div',{className:'delivery-quantity-cell'},
+  return h('div',{className:'delivery-quantity-cell'+(field==='qtyDelivered'?' delivery-delivered-qty':'')},
     editing?h('div',{className:'delivery-quantity-editor'},
       h('input',{autoFocus:true,type:'text',inputMode:'decimal','aria-label':title,value,onFocus:e=>e.target.select(),onChange:e=>{setValue(e.target.value);setError('');},onKeyDown:e=>{if(e.key==='Enter'){e.preventDefault();save();}if(e.key==='Escape'){e.preventDefault();close();}}}),
       h('button',{type:'button',className:'delivery-quantity-save','data-scf-action':'write',onClick:save,title:'Lưu '+label,'aria-label':'Lưu '+title},deliveryQuantityIcon('check')),
