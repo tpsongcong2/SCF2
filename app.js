@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V620';
+const SCF_BUILD_VERSION='V621';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_process:'Tài liệu ATTP · Quy trình',
@@ -48,7 +48,7 @@ const SCF_PAGE_DATA={
   workreport_lx:['trips','orders','products','customers'],
   salesreport:['orders','customers','products','prod_shifts','quotes'],
   cashflowreport:['finance_entries','finance_debts','finance_openings','customers','nccs','orders','products','quotes','purchases','goods_purchases'],
-  powdersales:['customers','trips'],prodsummary:['orders','products','customers','prodcats','prod_shifts','prod_shift_rules','prod_actuals'],prodreport:[],
+  powdersales:['customers','trips'],prodsummary:['orders','products','customers','prodcats','prod_shifts','prod_shift_rules','prod_actuals','stock'],prodreport:[],
   prodbom:['production_recipes','products','prodcats','materials'],prodorders:['prodorders','products','orders','prod_shifts','prod_shift_rules'],stock:['stock','products','prodcats'],
   syncreport:[],purchase:[],workreport_vp:[],workreport_sx:[]
 };

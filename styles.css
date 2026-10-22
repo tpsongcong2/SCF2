@@ -1602,3 +1602,10 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 
 .delivery-order-trip-modal{width:420px;max-width:calc(100vw - 24px)}
 .delivery-order-trip-modal input,.delivery-order-trip-modal select{width:100%;min-height:42px}
+
+.production-inventory-columns,.production-unified-summary .production-product-toggle.production-inventory-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(100px,150px) minmax(80px,120px) minmax(90px,130px) 16px;gap:12px;align-items:center;padding:12px 14px}
+.production-inventory-columns{font-size:12px;color:var(--tx2);padding-top:8px;padding-bottom:8px}
+.production-inventory-columns>b,.production-inventory-row>b{text-align:right;font-variant-numeric:tabular-nums}
+.production-inventory-row .production-stock-qty{color:var(--tx2)}
+.production-inventory-row .production-needed-qty{color:var(--pri);font-weight:700}
+@media(max-width:600px){.production-inventory-columns,.production-unified-summary .production-product-toggle.production-inventory-row{grid-template-columns:minmax(0,1fr) 72px 52px 62px 12px;gap:5px;padding-left:9px;padding-right:9px}.production-inventory-row>b{font-size:12px;white-space:normal!important}.production-inventory-row>span{font-size:13px}.production-inventory-columns{font-size:11px}}
