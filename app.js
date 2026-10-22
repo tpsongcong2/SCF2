@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V611';
+const SCF_BUILD_VERSION='V612';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_process:'Tài liệu ATTP · Quy trình',
