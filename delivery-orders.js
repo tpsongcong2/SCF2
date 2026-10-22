@@ -3168,6 +3168,12 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     window.showToast('Đã đổi lái xe và chuyển '+members.length+' đơn trong chuyến sang Bằng tay.','success');return true;
   };
   const changeDateFilterMode=mode=>{
+    if(['yesterday','today','tomorrow'].includes(mode)){
+      const now=isoDate(),date=new Date(now+'T12:00:00');
+      date.setDate(date.getDate()+({yesterday:-1,today:0,tomorrow:1}[mode]));
+      const value=date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+      sfDate(value);sfDateTo(value);setDateFilterMode('day');return;
+    }
     setDateFilterMode(mode);
     if(mode==='day'&&!fDate)sfDate(_ti0);
     if(mode==='range'){
@@ -3845,6 +3851,9 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const renderDeliveryDateFields=()=>h(React.Fragment,null,
         h('select',{value:dateFilterMode,onChange:e=>changeDateFilterMode(e.target.value),title:'Kiểu lọc ngày giao',
           style:{padding:'5px 8px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:12,width:112}},
+          h('option',{value:'yesterday'},'Hôm qua'),
+          h('option',{value:'today'},'Hôm nay'),
+          h('option',{value:'tomorrow'},'Ngày mai'),
           h('option',{value:'day'},'Một ngày'),
           h('option',{value:'range'},'Khoảng ngày'),
           h('option',{value:'week'},'Theo tuần'),

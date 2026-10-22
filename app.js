@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V616';
+const SCF_BUILD_VERSION='V619';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_process:'Tài liệu ATTP · Quy trình',
@@ -243,7 +243,7 @@ const SCF_PAGE_COMPONENTS={
   fuelpurchases:'FuelPurchaseTab',utilityexpenses:'UtilityExpenseTab',fuelreport:'FuelPurchaseReportTab',purchasereport:'PurchaseReportTab',
   maintreport:'MaintenanceReportTab',materialusage:'MaterialUsageReportTab',powderdebtreport:'PowderDebtReportTab',maint_vehicle:'MaintenanceTab',maint_machine:'MaintenanceTab',
   shifts:'ShiftsTab',quotes:'QuotesTab',delivery:'DeliveryOrdersTab ProductionSummaryPreviewModal',intem:'IntemTab',trips:'TripsTab',workreport_lx:'DriverTripWorkReportTab',
-  orderdetail:'OrderDetailListTab',salesreport:'SalesReportTab',marketsales:'SalesDebtReportTab',invoicereport:'InvoiceUploadReportTab',cashflowreport:'FinanceReportTab',
+  orderdetail:'OrderDetailListTab',salesreport:'SalesReportTab',marketsales:'SalesDebtReportTab',invoicereport:'InvoiceUploadReportTab TripInvoicePreview',cashflowreport:'FinanceReportTab',
   prodreport:'ProductionReportTab',prodbom:'ProductionRecipesTab',powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab ProductionClosingDialog scfClosingAutoScope scfClosingCalculate',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab'
 };
 function scfMissingPageComponents(page){
