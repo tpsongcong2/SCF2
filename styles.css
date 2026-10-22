@@ -141,6 +141,40 @@ button:hover{background:var(--bg2)}
 .delivery-view-actions .delivery-view-controls{display:inline-flex;flex-wrap:nowrap;margin:0;justify-content:flex-start}
 .delivery-retired-tools{display:none!important}
 .delivery-view-controls .delivery-utility-menu{width:150px;min-height:34px;padding:5px 8px;font-size:12px}
+.invoice-report-mobile-list,.invoice-report-mobile-filter-bar{display:none}
+.invoice-report-capture-actions{display:grid;gap:6px}
+@media(max-width:768px){
+  .invoice-report-page{min-width:0}
+  .invoice-report-page>.ptitle{flex-wrap:wrap;font-size:16px}
+  .invoice-report-page>.ptitle>div{width:100%;justify-content:flex-end}
+  .invoice-report-mobile-filter-bar{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .invoice-report-mobile-filter-bar button{min-height:44px;flex-shrink:0;padding:8px 12px}
+  .invoice-report-mobile-filter-bar span{font-size:12px;overflow-wrap:anywhere;color:var(--tx2)}
+  .invoice-report-filters:not(.is-open){display:none}
+  .invoice-report-page .invoice-upload-summary{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px}
+  .invoice-report-page .invoice-upload-summary>.sc{padding:9px 7px;min-width:0;font-size:11px;overflow-wrap:anywhere}
+  .invoice-report-page .invoice-upload-summary b{font-size:16px!important;display:block;margin:5px 0}
+  .invoice-report-desktop-table{display:none}
+  .invoice-report-page>.card:last-child{padding:10px}
+  .invoice-report-page>.card:last-child>div:first-child{flex-wrap:wrap;gap:6px!important}
+  .invoice-report-mobile-list{display:grid;gap:12px}
+  .invoice-report-order-card{border:1px solid var(--bd2);border-radius:10px;background:var(--card);padding:12px;min-width:0}
+  .invoice-report-card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .invoice-report-card-heading strong{font-size:16px;overflow-wrap:anywhere}
+  .invoice-report-photo-ready,.invoice-report-photo-missing{flex-shrink:0;border-radius:20px;padding:3px 7px;font-size:11px}
+  .invoice-report-photo-missing{color:#92400e;background:#fff3cd}
+  .invoice-report-photo-ready{color:var(--pri3);background:#e6f1eb}
+  .invoice-report-card-meta,.invoice-report-card-baskets{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin:8px 0}
+  .invoice-report-card-customer{display:block;color:var(--tx2);margin-bottom:8px}
+  .invoice-report-card-products{border-top:1px solid var(--bd);margin:8px 0}
+  .invoice-report-card-products>div{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--bd);font-size:13px}
+  .invoice-report-card-products>div>span{overflow-wrap:anywhere;min-width:0}
+  .invoice-report-card-products>div>b{flex-shrink:0;color:var(--pri3)}
+  .invoice-report-capture-actions{grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+  .invoice-report-capture-actions button{min-height:48px;padding:9px 6px;justify-content:center}
+  .invoice-report-card-photo{display:block;text-align:center}
+  .invoice-report-card-photo img{display:block;max-width:100%;max-height:260px;object-fit:contain;margin:10px auto}
+}
 .delivery-column-filter{display:inline-flex;align-items:center;gap:4px;border:0;background:transparent;padding:2px 0;font:inherit;color:inherit;white-space:nowrap;max-width:100%}
 .delivery-column-filter i{font-size:12px;opacity:.55}
 .delivery-column-filter.active{color:var(--pri);font-weight:800}
