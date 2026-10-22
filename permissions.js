@@ -15,6 +15,7 @@ const PAGE_ACCESS = {
   appearance:   ['admin','manager'],
   printtemplates:['admin','manager'],
   employees:    ['admin','manager'],
+  personnel:['admin'],
   permission_settings:['admin'],
   attendance:   ['admin','manager','staff','driver'],
   attendance_settings:['admin'],
@@ -97,6 +98,7 @@ function canAccess(role, page, perms, dept='') {
   if(!isFaceMask&&faceMaskPages.includes(page))return false;
   // Trang đầu là điểm quay lại chung, kể cả khi nhân viên dùng bộ quyền riêng.
   if(page==='welcome')return ['admin','manager','staff','driver'].includes(role);
+  if(page==='personnel'&&role==='admin')return true;
   if(page==='permission_settings')return role==='admin';
   const deptText=(Array.isArray(dept)?dept:[dept]).map(value=>String(value||'')).join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
   const isAccounting=deptText.includes('ke toan');

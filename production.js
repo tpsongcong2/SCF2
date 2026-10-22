@@ -15,7 +15,8 @@ function ProductionSummaryPreviewModal({loadData,onClose,currentUser,...summaryP
     document.addEventListener('keydown',escape,true);
     return()=>{document.removeEventListener('keydown',escape,true);if(opener?.isConnected)opener.focus();};
   },[]);
-  return h(Modal,{title:'Khối lượng sản xuất',lg:'xl',className:'production-summary-preview-modal',onClose},
+  return h(Modal,{title:'Khối lượng sản xuất',lg:'xl',className:'production-summary-preview-modal',overlayClassName:'production-summary-preview-overlay',onClose},
+    h('div',{className:'summary-orders-mobile-backbar'},h('button',{type:'button','data-scf-action':'view','aria-label':'Quay lại đơn hàng',onClick:onClose},h('i',{className:'ti ti-arrow-left','aria-hidden':true}),' Quay lại'),h('b',null,'KL SX')),
     status==='loading'&&h('p',{role:'status'},'Đang tải dữ liệu sản xuất…'),
     status==='error'&&h('div',null,h('p',{role:'alert'},error),h('button',{type:'button',onClick:()=>setAttempt(n=>n+1)},'Thử tải lại')),
     status==='ready'&&h(ProductionSummaryTab,{...summaryProps,currentUser}),

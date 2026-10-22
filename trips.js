@@ -1249,7 +1249,7 @@ function scfQuickSummaryRelativeDate(offset){
   const now=isoDate(),date=new Date(now+'T12:00:00');date.setDate(date.getDate()+offset);
   return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
 }
-function TripQuickSummaryModal({currentUser,employees=[],loadData=scfLoadQuickTripSummaryData,onClose}){
+function TripQuickSummaryModal({currentUser,employees=[],loadData=scfLoadQuickTripSummaryData,onClose,mobileFullscreen=false}){
   const[date,setDate]=useState(()=>fmtDate().split('/').reverse().join('-'));
   const[group,setGroup]=useState('all');const[busy,setBusy]=useState(false);
   const[showDriverName,setShowDriverName]=useState(true);
@@ -1288,7 +1288,8 @@ function TripQuickSummaryModal({currentUser,employees=[],loadData=scfLoadQuickTr
   };
   useEffect(()=>{if(!scfQuickSummaryFullAccess(currentUser))view();},[]);
   const showingImage=imageOpen&&result&&result.accessKey===accessKey;
-  return h(Modal,{title:showingImage?'':'Xem nhanh đơn tổng',lg:true,className:'trip-summary-quick-modal'+(showingImage?' image-screen':''),overlayClassName:'trip-summary-quick-overlay',onClose},
+  return h(Modal,{title:showingImage?'':'Xem nhanh đơn tổng',lg:true,className:'trip-summary-quick-modal'+(showingImage?' image-screen':'')+(mobileFullscreen?' from-orders-fullscreen':''),overlayClassName:'trip-summary-quick-overlay'+(mobileFullscreen?' from-orders-fullscreen-overlay':''),onClose},
+    mobileFullscreen&&h('div',{className:'summary-orders-mobile-backbar'},h('button',{type:'button','data-scf-action':'view','aria-label':'Quay lại đơn hàng',onClick:onClose},h('i',{className:'ti ti-arrow-left','aria-hidden':true}),' Quay lại'),h('b',null,'Đơn Tổng')),
     !showingImage&&!scfQuickSummaryFullAccess(currentUser)&&h('p',{className:'trip-summary-quick-scope'},'Chỉ hiện đơn thuộc các chuyến đã giao cho bạn.'),
     !showingImage&&h('div',{className:'trip-summary-quick-date-shortcuts'},...[[-1,'Hôm qua'],[0,'Hôm nay'],[1,'Ngày mai']].map(([offset,label])=>h('button',{key:offset,type:'button','data-scf-action':'view',disabled:busy,onClick:()=>{const value=scfQuickSummaryRelativeDate(offset);setDate(value);if(!scfQuickSummaryFullAccess(currentUser))view(value,group);else clear();}},label))),
     !showingImage&&h('div',{className:'trip-summary-quick-filters'},
