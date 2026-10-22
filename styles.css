@@ -1624,3 +1624,21 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 .delivery-order-trip-panel>.form-actions button{min-height:42px;white-space:nowrap}
 .delivery-order-trip-panel>[role=alert]{grid-column:1/-1;margin:0}
 @media(max-width:900px){.delivery-order-trip-panel{grid-template-columns:minmax(150px,1fr) minmax(240px,2fr)}.delivery-transfer-context{grid-column:1/-1}.delivery-order-trip-panel>.form-actions{grid-column:1/-1;justify-content:flex-end}}
+
+.production-source-shift>.production-shift-toggle.production-subshift-inventory{display:grid;grid-template-columns:minmax(0,1fr) minmax(100px,150px) minmax(80px,120px) minmax(90px,130px) 16px;gap:12px;padding:12px 10px}
+.production-subshift-inventory>b{text-align:right;font-variant-numeric:tabular-nums}
+.production-subshift-stock{color:var(--tx2)}
+.production-subshift-needed{color:var(--pri)}
+@media(max-width:600px){.production-inventory-columns>b{white-space:normal;line-height:1.25}.production-source-shift>.production-shift-toggle.production-subshift-inventory{grid-template-columns:minmax(0,1fr) 72px 52px 62px 12px;gap:5px;padding:10px 4px}.production-subshift-inventory>b{font-size:12px;white-space:normal}.production-subshift-inventory>span{font-size:13px}}
+
+.trip-summary-quick-date-shortcuts{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.trip-summary-quick-date-shortcuts button{min-height:42px;flex:1;white-space:nowrap}
+.trip-summary-filter-overlay{position:fixed;inset:0;z-index:10006;background:#0005;display:flex;align-items:center;justify-content:center;padding:16px 12px 80px}
+.trip-summary-filter-dialog{width:440px;max-width:100%;max-height:80dvh;overflow:auto;background:#fff;border:1px solid var(--bd);border-radius:12px;padding:16px;box-shadow:0 12px 48px #0004;color:var(--tx)}
+.trip-summary-filter-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.trip-summary-filter-heading button{font-size:22px;min-width:40px;min-height:40px}
+.trip-summary-quick-modal .trip-summary-filter-dialog .trip-summary-quick-filters input,.trip-summary-quick-modal .trip-summary-filter-dialog .trip-summary-quick-filters select{min-height:44px;font-size:16px!important;padding:8px}
+.trip-summary-filter-dialog .trip-summary-quick-filters label{font-size:14px;gap:6px}
+.trip-summary-filter-dialog .trip-summary-quick-filters{grid-template-columns:1fr;gap:12px}
+.trip-summary-filter-driver{display:flex;gap:8px;align-items:center;margin:12px 0}
+.trip-summary-filter-driver input{width:20px;height:20px}
