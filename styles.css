@@ -1599,3 +1599,6 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 @media(max-width:768px){.invoice-report-mobile-filter-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.invoice-report-mobile-filter-bar .invoice-report-filter-button{padding:8px 10px;background:#fff;border:1px solid var(--bd);border-radius:8px;min-height:44px}.invoice-report-filters{top:8vh;max-height:84vh}}
 
 .invoice-report-filter-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;font-size:12px;color:var(--tx2)}
+
+.delivery-order-trip-modal{width:420px;max-width:calc(100vw - 24px)}
+.delivery-order-trip-modal input,.delivery-order-trip-modal select{width:100%;min-height:42px}
