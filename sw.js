@@ -1,4 +1,4 @@
-const CACHE = 'scf-v612';
+const CACHE = 'scf-v614';
 const ASSETS = [
   './',
   './index.html',
@@ -9,7 +9,7 @@ const ASSETS = [
   './vendor/react-dom.production.min.js?v=358',
   './styles.css?v=611',
   './runtime.js?v=457',
-  './storage.js?v=585',
+  './storage.js?v=613',
   './print-agent.js',
   './helpers.js?v=473',
   './defaults.js?v=602',
@@ -27,7 +27,7 @@ const ASSETS = [
   './user-guide.js?v=424',
   './attp-documents.js?v=547',
   './operations.js?v=602',
-  './navigation-reports.js?v=612',
+  './navigation-reports.js?v=614',
   './order-detail.js?v=576',
   './delivery-shifts.js?v=455',
   './auth-workforce.js?v=551',
@@ -44,10 +44,10 @@ const ASSETS = [
   './production.js?v=607',
   './production-recipes.js?v=590',
   './production-assignments.js?v=537',
-  './permissions.js?v=594',
+  './permissions.js?v=613',
   './permission-settings.js?v=592',
-  './app.js?v=612',
-  './bootstrap.js?v=612',
+  './app.js?v=614',
+  './bootstrap.js?v=614',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',

@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V612';
+const SCF_BUILD_VERSION='V614';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_process:'Tài liệu ATTP · Quy trình',
@@ -835,7 +835,7 @@ function App(){
   const isAccounting=employeeDepartmentIncludes(cu,'Kế toán');
   const activeLevel=getLvl(cu.role,page,cu.permLevels);
   const readOnly=activeLevel==='r';
-  window.__SCF_ACCESS_CONTEXT={employeeId:String(cu.id||''),role:cu.role,page,level:activeLevel,readOnly};
+  window.__SCF_ACCESS_CONTEXT={employeeId:String(cu.id||''),role:cu.role,page,level:activeLevel,readOnly,reportInvoiceUpload:page==='invoicereport'&&isAccounting&&canAccess(cu.role,'invoicereport',cu.permissions)};
   const wips=['purchase','workreport_vp','workreport_sx'];
   const logout=async()=>{await serverLogout();window.scfClearSensitiveLocalData&&window.scfClearSensitiveLocalData();setSession(null);if(SCF_SERVER_AUTH_ENABLED)location.reload();};
   const saveAttendanceZones=async zones=>{
@@ -944,7 +944,7 @@ function App(){
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,trips,currentUser:cu,prodShifts,quotes,financeDebts,setFinanceDebts,menuHidden,setMenuHidden}),
         canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),
         canAccess(cu.role,'marketsales',cu.permissions)&&page==='marketsales'&&h(SalesDebtReportTab,{orders,setOrders,customers,products,quotes,trips,currentUser:cu}),
-        canAccess(cu.role,'invoicereport',cu.permissions)&&page==='invoicereport'&&h(InvoiceUploadReportTab,{orders,customers,products,trips,setPage}),
+        canAccess(cu.role,'invoicereport',cu.permissions)&&page==='invoicereport'&&h(InvoiceUploadReportTab,{orders,setOrders,currentUser:cu,customers,products,trips,setPage}),
 canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(FinanceReportTab,{entries:financeEntries,setEntries:setFinanceEntries,debts:financeDebts,setDebts:setFinanceDebts,openings:financeOpenings,setOpenings:setFinanceOpenings,customers,nccs,currentUser:cu,orders,products,quotes,purchases,goodsPurchases}),
         canAccess(cu.role,'powdersales',cu.permissions)&&page==='powdersales'&&h(PowderSalesTab,{customers,trips,employees,setPage}),
         canAccess(cu.role,'prodsummary',cu.permissions)&&page==='prodsummary'&&h(ProductionSummaryTab,{orders,products,prodCats,prodShifts,prodShiftRules,prodActuals,setProdActuals,stock,currentUser:cu,onClosingWorkshopChange:setProductionClosingWorkshop,onOpenClosing:scope=>setProductionClosingScope({...scfClosingAutoScope(),...scope})}),

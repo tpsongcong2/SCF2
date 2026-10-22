@@ -296,3 +296,15 @@ function scfMergePeriodView(previous,next,user){
  const hiddenIds=new Set(hidden.map(item=>String(item.id)));
  return [...hidden,...(next||[]).filter(item=>!hiddenIds.has(String(item.id))&&scfOrderInViewPeriod(item,user))];
 }
+
+function scfOnlyMissingInvoiceChanges(before,after){
+  if(!Array.isArray(before)||!Array.isArray(after)||before.length!==after.length)return false;
+  const prior=new Map(before.map(item=>[String(item?.id||''),item]));
+  if(prior.size!==before.length||prior.has(''))return false;
+  const ids=new Set(),allowed=new Set(['invoiceImage','invoiceImageName','invoiceUploadedAt','invoiceUploadedBy']);let changed=false;
+  for(const next of after){const id=String(next?.id||''),old=prior.get(id);if(!old||ids.has(id))return false;ids.add(id);
+    const keys=new Set([...Object.keys(old),...Object.keys(next)]);const diff=[...keys].filter(key=>JSON.stringify(old[key])!==JSON.stringify(next[key]));if(!diff.length)continue;
+    if(String(old.invoiceImage||'').trim()||!/^https:\/\//i.test(String(next.invoiceImage||''))||diff.some(key=>!allowed.has(key)))return false;
+    if([...allowed].some(key=>next[key]!==undefined&&typeof next[key]!=='string'))return false;changed=true;
+  }return changed;
+}

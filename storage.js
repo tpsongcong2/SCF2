@@ -905,12 +905,13 @@ setSyncState(navigator.onLine?'idle':'offline');
 if(navigator.onLine&&Object.keys(readSyncQueue()).length)setTimeout(()=>flushPendingWrites(),1500);
 function mkSet(key,setter){return valOrFn=>{
   const access=window.__SCF_ACCESS_CONTEXT;
-  if(access?.readOnly){
+  if(access?.readOnly&&!(key==='scf_orders'&&access.reportInvoiceUpload)){
     return;
   }
   setter(prev=>{
     const nextRaw=typeof valOrFn==='function'?valOrFn(prev):valOrFn;
     if(nextRaw===prev)return prev;
+    if(access?.readOnly&&!scfOnlyMissingInvoiceChanges(prev,nextRaw))return prev;
     const next=key==='scf_orders'?normalizeOrdersForStorage(nextRaw):nextRaw;
     const patches=key==='scf_orders'?collectionRecordPatches(prev,next):null;
     // An empty diff means no edit, not a request to rewrite the collection.
