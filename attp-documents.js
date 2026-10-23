@@ -69,7 +69,7 @@ function ATTPDocumentsTab({page,title,icon,currentUser}){
     h('div',{className:'ptitle'},h('i',{className:'ti '+icon}),title),
     h('div',{className:'card',style:{padding:16,marginBottom:14}},h('strong',null,title),h('p',{style:{margin:'6px 0 0'}},isClaim?'Ghi nhận claim theo ngày, địa điểm; tải tệp giải trình và theo dõi người xử lý.':isDaily?'Ghi nhận kiểm tra theo ngày, ca; theo dõi kết quả, sai lệch và khắc phục. Mặc định hiển thị tháng hiện tại.':'Quản lý tài liệu theo mã, phiên bản, người phụ trách và thời hạn. Mở tài liệu để xem nội dung, hình ảnh.')),
     h('div',{className:'attp-toolbar'},
-      h(SearchBar,{value:query,onChange:value=>{setQuery(value);setPageNumber(1);},placeholder:'Tìm mã, tiêu đề, nội dung, người phụ trách...'}),
+      h(SearchBar,{value:query,onChange:value=>{setQuery(value);setPageNumber(1);},placeholder:isClaim?'Tìm địa điểm, claim, xưởng, người chịu trách nhiệm...':'Tìm mã, tiêu đề, nội dung, người phụ trách...'}),
       h('label',null,'Từ ngày',h('input',{type:'date',value:range.from,onChange:e=>changeRange('from',e.target.value)})),
       h('label',null,'Đến ngày',h('input',{type:'date',value:range.to,onChange:e=>changeRange('to',e.target.value)})),
       isDaily&&h('button',{type:'button',onClick:()=>{setRange(scfATTPMonthRange());setPageNumber(1);}},'Tháng hiện tại'),
@@ -90,7 +90,7 @@ function ATTPDocumentsTab({page,title,icon,currentUser}){
     detailBusy&&h('div',{role:'status'},'Đang mở tài liệu…'),
     selected&&editing&&h(isClaim?QualityClaimEditor:ATTPRecordEditor,{key:selected.id||'new',page,record:selected,isDaily,currentUser,onClose:()=>{setSelected(null);setEditing(false);},onSaved:()=>{setSelected(null);setEditing(false);setReload(x=>x+1);}}),
     selected&&!editing&&h(Modal,{title:selected.title,lg:true,onClose:()=>{if(!deleting)setSelected(null);}},
-      h('div',{className:'attp-meta'},[['Mã',selected.documentCode],['Phiên bản',selected.revision],['Ngày',selected.publishDate&&scfATTPDate(selected.publishDate)],['Địa điểm',selected.location],[isClaim?'Người xử lý':'Phụ trách',selected.responsible],['Ca',selected.shift],['Hiệu lực',selected.effectiveDate&&scfATTPDate(selected.effectiveDate)],['Hết hạn / rà soát',selected.expiryDate&&scfATTPDate(selected.expiryDate)],['Người đăng',selected.authorName]].filter(([,v])=>v).map(([label,value])=>h('div',{key:label},label+': '+value))),
+      h('div',{className:'attp-meta'},[['Mã',selected.documentCode],['Phiên bản',selected.revision],['Ngày',selected.publishDate&&scfATTPDate(selected.publishDate)],['Địa điểm',selected.location],['Xưởng',selected.workshop],['Người chịu trách nhiệm',selected.accountable],[isClaim?'Người xử lý':'Phụ trách',selected.responsible],['Ca',selected.shift],['Hiệu lực',selected.effectiveDate&&scfATTPDate(selected.effectiveDate)],['Hết hạn / rà soát',selected.expiryDate&&scfATTPDate(selected.expiryDate)],['Người đăng',selected.authorName]].filter(([,v])=>v).map(([label,value])=>h('div',{key:label},label+': '+value))),
       h('div',{className:'delivery-rule-content',style:{whiteSpace:'pre-wrap',overflowWrap:'anywhere',marginTop:16}},selected.content),
       isClaim&&h('div',null,h('b',null,'Tệp giải trình'),...(selected.attachments||[]).map((file,i)=>h('p',{key:i},file.url?h('a',{href:file.url,target:'_blank',rel:'noopener noreferrer',download:file.name},'Tải '+file.name):file.name+' · Chưa mở được tệp; thử mở lại claim.'))),
       !!selected.images?.length&&h('div',{className:'attp-detail-images'},selected.images.map((src,index)=>h('a',{key:index,href:src,target:'_blank',rel:'noopener noreferrer'},h('img',{src,loading:'lazy',decoding:'async',alt:'Ảnh tài liệu '+(index+1)})))),
@@ -100,27 +100,32 @@ function ATTPDocumentsTab({page,title,icon,currentUser}){
 }
 function QualityClaimList({items,canEdit,busy,onOpen}){
  if(!items.length)return h('p',null,'Chưa có claim trong khoảng ngày đang chọn.');
- return h('div',{className:'tw'},h('table',{className:'quality-claim-table'},h('thead',null,h('tr',null,['Ngày','Địa điểm','Thông tin claim','Giải trình','Người xử lý',''].map(t=>h('th',{key:t},t)))),h('tbody',null,items.map(item=>h('tr',{key:item.id},
+ return h('div',{className:'tw'},h('table',{className:'quality-claim-table'},h('thead',null,h('tr',null,['Ngày','Địa điểm','Thông tin claim','Giải trình','Xưởng','Người chịu trách nhiệm','Người xử lý',''].map(t=>h('th',{key:t},t)))),h('tbody',null,items.map(item=>h('tr',{key:item.id},
   h('td',{'data-label':'Ngày'},scfATTPDate(item.publishDate)),h('td',{'data-label':'Địa điểm'},item.location),h('td',{'data-label':'Thông tin claim'},h('div',{style:{whiteSpace:'pre-wrap'}},item.excerpt)),
   h('td',{'data-label':'Giải trình'},h('button',{disabled:busy,onClick:()=>onOpen(item)},item.attachmentCount?'Xem / tải '+item.attachmentCount+' tệp':'Chưa có giải trình')),
-  h('td',{'data-label':'Người xử lý'},item.responsible),h('td',null,canEdit&&h('button',{disabled:busy,'data-scf-action':'write',onClick:()=>onOpen(item,true)},'Sửa'))
+  h('td',{'data-label':'Xưởng'},item.workshop||'—'),h('td',{'data-label':'Người chịu trách nhiệm'},item.accountable||'—'),h('td',{'data-label':'Người xử lý'},item.responsible),h('td',null,canEdit&&h('button',{disabled:busy,'data-scf-action':'write',onClick:()=>onOpen(item,true)},'Sửa'))
  )))));
 }
 function QualityClaimEditor({page,record,currentUser,onClose,onSaved}){
  const[form,setForm]=useState(()=>({...record,id:record.id||'CLAIM'+uid(),responsible:record.responsible||currentUser?.name||'',attachments:[...(record.attachments||[])]}));
  const[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const[dragging,setDragging]=useState(false);
+ const dragDepth=React.useRef(0),uploadLock=React.useRef(false);
  const alive=React.useRef(true);useEffect(()=>()=>{alive.current=false;},[]);
  const field=(key,label,type='text')=>h(F,{label},h('input',{'aria-label':label,type,value:form[key]||'',disabled:busy,onChange:e=>setForm(f=>({...f,[key]:e.target.value}))}));
  const upload=async files=>{
-  const picked=Array.from(files||[]);if(!picked.length||busy)return;
+  const picked=Array.from(files||[]);if(!picked.length||busy||uploadLock.current)return;
   if(form.attachments.length+picked.length>10){setError('Tối đa 10 tệp giải trình.');return;}
+  if(picked.some(file=>! /\.(pdf|docx|xlsx|jpg|jpeg|png|webp)$/i.test(file.name))){setError('Chọn ảnh JPG/PNG/WebP hoặc tài liệu PDF, DOCX, XLSX.');return;}
+  if(picked.some(file=>file.size>5*1024*1024)){setError('Mỗi tệp tối đa 5 MB.');return;}
+  uploadLock.current=true;
   setBusy(true);setError('');
   try{for(const file of picked){
    if(file.size>5*1024*1024)throw Error('Mỗi tệp tối đa 5 MB.');
    const base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('Không đọc được tệp.'));reader.readAsDataURL(file);});
    const result=await scfATTPRequest(page,'upload',{id:form.id,file:{name:file.name,base64}});
    if(alive.current)setForm(f=>({...f,attachments:[...f.attachments,result.file]}));
-  }}catch(e){if(alive.current)setError(e.message);}finally{if(alive.current)setBusy(false);}
+  }}catch(e){if(alive.current)setError(e.message);}finally{uploadLock.current=false;if(alive.current)setBusy(false);}
  };
  const save=async()=>{
   if(busy)return;
@@ -130,9 +135,17 @@ function QualityClaimEditor({page,record,currentUser,onClose,onSaved}){
   catch(e){if(alive.current)setError(e.message);}finally{if(alive.current)setBusy(false);}
  };
  return h(Modal,{title:record.id?'Sửa claim chất lượng':'Ghi claim chất lượng',lg:true,onClose:()=>{if(!busy)onClose();}},
-  h('div',{className:'g2'},field('publishDate','Ngày *','date'),field('location','Địa điểm *'),field('responsible','Người xử lý *')),
+  h('div',{className:'g2'},field('publishDate','Ngày *','date'),field('location','Địa điểm *'),field('responsible','Người xử lý *'),field('workshop','Xưởng'),field('accountable','Người phụ trách chịu trách nhiệm')),
   h(F,{label:'Thông tin claim *'},h('textarea',{'aria-label':'Thông tin claim *',value:form.content||'',rows:6,disabled:busy,onChange:e=>setForm(f=>({...f,content:e.target.value}))})),
-  h(F,{label:'Tải giải trình (PDF, DOCX, XLSX, ảnh; tối đa 5 MB/tệp)'},h('input',{'aria-label':'Tải giải trình',type:'file',accept:'.pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp',multiple:true,disabled:busy,onChange:e=>{upload(e.target.files);e.target.value='';}})),
+  h('div',{className:'claim-file-dropzone'+(dragging?' is-dragging':''),role:'group','aria-label':'Kéo thả ảnh claim và tài liệu giải trình','aria-busy':busy,
+   onDragEnter:e=>{e.preventDefault();e.stopPropagation();if(!busy&&Array.from(e.dataTransfer?.types||[]).includes('Files')){dragDepth.current++;setDragging(true);}},
+   onDragOver:e=>{e.preventDefault();e.stopPropagation();if(e.dataTransfer)e.dataTransfer.dropEffect=busy?'none':'copy';},
+   onDragLeave:e=>{e.preventDefault();e.stopPropagation();dragDepth.current=Math.max(0,dragDepth.current-1);if(!dragDepth.current)setDragging(false);},
+   onDrop:e=>{e.preventDefault();e.stopPropagation();dragDepth.current=0;setDragging(false);upload(e.dataTransfer?.files);}
+  },h('strong',null,dragging?'Thả tệp để tải lên':'Kéo thả ảnh claim và tài liệu giải trình vào đây'),
+   h('p',null,'Có thể thả nhiều tệp cùng lúc hoặc bấm Chọn tệp. Tối đa 10 tệp, 5 MB/tệp.'),
+   h(F,{label:'Ảnh JPG/PNG/WebP · Tài liệu PDF, DOCX, XLSX'},h('input',{'aria-label':'Tải giải trình',type:'file',accept:'.pdf,.docx,.xlsx,.jpg,.jpeg,.png,.webp',multiple:true,disabled:busy,onChange:e=>{upload(e.target.files);e.target.value='';}}))
+  ),
   form.attachments.map((file,i)=>h('div',{key:file.path,style:{display:'flex',gap:10,alignItems:'center',marginBottom:8}},h('span',null,file.name),h('button',{disabled:busy,onClick:()=>setForm(f=>({...f,attachments:f.attachments.filter((_,index)=>index!==i)}))},'Bỏ tệp'))),
   error&&h('p',{role:'alert',className:'goods-inventory-error'},error),busy&&h('p',{role:'status'},'Đang lưu / tải tệp…'),
   h(Row,null,h('button',{disabled:busy,onClick:onClose},'Đóng'),h('button',{className:'bp','data-scf-action':'write',disabled:busy,onClick:save},'Lưu claim'))

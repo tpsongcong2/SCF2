@@ -4,15 +4,42 @@ async function scfGoodsInventoryRequest(operation,data){
  if(error||!result?.ok)throw Error(result?.error||await serverFunctionErrorMessage(error,result,'Chưa kết nối được kho hàng hóa. Cần cập nhật scf-auth.'));
  return result;
 }
-function GoodsInventoryTab({currentUser}){
+function GoodsInventoryTracking({currentUser,onBack}){
+ const[loaded,setLoaded]=useState(null),[selected,setSelected]=useState([]),[query,setQuery]=useState(''),[quantities,setQuantities]=useState({}),[busy,setBusy]=useState(true),[error,setError]=useState(''),[reload,setReload]=useState(0);
+ const date=new Date(Date.now()+7*3600000).toISOString().slice(0,10);
+ useEffect(()=>{let active=true;setBusy(true);setError('');scfGoodsInventoryRequest('load',{date}).then(r=>{if(active){setLoaded(r);setSelected(r.trackedProductIds||[]);setQuantities({});}}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setBusy(false);});return()=>{active=false;};},[reload]);
+ const writable=loaded?.canWrite&&!busy,original=loaded?.trackedProductIds||[];
+ const allItems=[...(loaded?.catalog||[]),...(loaded?.trackedProductIds||[]).filter(id=>!(loaded?.catalog||[]).some(p=>p.id===id)).map(id=>({id,name:'Mã không còn trong danh mục: '+id,code:id,unit:'',group:''}))];
+ const rows=allItems.filter(p=>!query||[p.name,p.code,p.group].join(' ').toLowerCase().includes(query.toLowerCase()));
+ const save=async()=>{
+  if(!writable)return;setBusy(true);setError('');
+  try{await scfGoodsInventoryRequest('tracking',{date,version:loaded.version,requestId:crypto.randomUUID(),productIds:selected,quantities});window.showToast('Đã lưu danh sách hàng hóa theo dõi.','success');setReload(n=>n+1);}
+  catch(e){setError(e.message);setBusy(false);}
+ };
+ return h('div',{className:'goods-tracking'},h('div',{className:'ptitle'},'DS HH theo dõi Nhập – Xuất – Tồn'),
+  h('p',{className:'goods-inventory-help'},'Tích hàng hóa cần theo dõi, sau đó bấm Lưu danh sách. Bảng nhập – xuất – tồn chỉ hiển thị hàng trong danh sách này. Bỏ theo dõi không xóa lịch sử kiểm kê.'),
+  h('div',{className:'goods-inventory-toolbar'},h('input',{'aria-label':'Tìm hàng hóa theo dõi',placeholder:'Tìm mã, tên, nhóm hàng…',value:query,onChange:e=>setQuery(e.target.value)}),h('b',null,'Đã chọn '+selected.length+' hàng hóa'),h('button',{disabled:busy,onClick:()=>setReload(n=>n+1)},'Tải lại danh sách'),h('button',{className:'bp',disabled:!writable,onClick:save},'Lưu danh sách'),onBack&&h('button',{disabled:busy,onClick:onBack},'Về Nhập – xuất – tồn')),
+  error&&h('p',{role:'alert',className:'goods-inventory-error'},error),busy&&h('p',{role:'status'},'Đang tải / lưu danh sách…'),
+  loaded?.report.initialized&&h('p',{className:'goods-inventory-help'},'Hàng thêm mới cần số tồn tại 9h hôm trước kỳ '+loaded.nextTrackingDate+'. Kỳ đã chốt giữ nguyên số liệu; hàng mới áp dụng từ kỳ chưa chốt tiếp theo.'),
+  h('div',{style:{maxHeight:'65vh',overflow:'auto'}},rows.map(p=>{const added=selected.includes(p.id)&&!original.includes(p.id);return h('div',{key:p.id,className:'goods-tracking-row',style:{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',padding:12,borderBottom:'1px solid var(--bd)'}},
+   h('label',{style:{display:'flex',gap:10,alignItems:'center',flex:'1 1 250px'}},h('input',{type:'checkbox','aria-label':'Theo dõi '+p.name,checked:selected.includes(p.id),disabled:!writable,style:{width:'auto'},onChange:e=>setSelected(ids=>e.target.checked?[...ids,p.id]:ids.filter(id=>id!==p.id))}),h('span',null,p.name+' · '+p.unit,h('small',{style:{display:'block',color:'var(--tx2)'}},[p.code,p.group].filter(Boolean).join(' · ')))),
+   added&&loaded.report.initialized&&h(F,{label:'Tồn đầu '+p.name},h('input',{'aria-label':'Tồn đầu '+p.name,inputMode:'decimal',value:quantities[p.id]??'',disabled:!writable,onChange:e=>{const value=e.target.value;setQuantities(q=>({...q,[p.id]:value}));}}))
+  );})),loaded&&!rows.length&&h('p',null,'Không có hàng hóa phù hợp.')
+ );
+}
+function GoodsInventoryTab({currentUser,onTracking}){
  const today=()=>new Date(Date.now()+7*3600000).toISOString().slice(0,10);
  const[date,setDate]=useState(today),[loaded,setLoaded]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[reload,setReload]=useState(0);
  const[counts,setCounts]=useState({}),[query,setQuery]=useState(''),[onlyDiff,setOnlyDiff]=useState(false),[modal,setModal]=useState(''),[form,setForm]=useState({}),[details,setDetails]=useState(null);
+ const[showQuality,setShowQuality]=useState(()=>{try{return localStorage.getItem('scf_stock_quality_visible')!=='0';}catch{return true;}});
+ const toggleQuality=()=>setShowQuality(value=>{const next=!value;try{localStorage.setItem('scf_stock_quality_visible',next?'1':'0');}catch{}return next;});
+ const[selectedProduct,setSelectedProduct]=useState(''),[tracking,setTracking]=useState(false);
  useEffect(()=>{
   let active=true;setBusy(true);setLoaded(null);setError('');setCounts({});setModal('');setDetails(null);
   scfGoodsInventoryRequest('load',{date}).then(r=>{if(active){setLoaded(r);setCounts(Object.fromEntries(r.report.rows.filter(x=>x.actual!==null).map(x=>[x.productId,{actual:String(x.actual),reason:x.reason,quality:x.quality}])));}}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setBusy(false);});
   return()=>{active=false;};
  },[date,reload]);
+ useEffect(()=>{if(loaded&&selectedProduct&&!loaded.report.rows.some(p=>p.id===selectedProduct))setSelectedProduct('');},[loaded,selectedProduct]);
  const report=loaded?.report,editable=loaded?.canWrite&&!busy,closed=!!report?.closed;
  const localNow=()=>new Date(Date.now()+7*3600000).toISOString().slice(0,16);
  const change=(key,value)=>setForm(f=>({...f,[key]:value}));
@@ -21,11 +48,11 @@ function GoodsInventoryTab({currentUser}){
   try{await scfGoodsInventoryRequest(operation,{date,version:loaded.version,requestId:crypto.randomUUID(),...data});setReload(n=>n+1);}
   catch(e){setError(e.message);setBusy(false);}
  };
- const start=kind=>{setForm({at:date===today()?localNow():date+'T08:00',quantities:{},productIds:[],reason:'',productId:report?.rows[0]?.productId||'',qty:'',purchaseId:''});setModal(kind);};
+ const start=kind=>{setForm({at:date===today()?localNow():date+'T08:00',quantities:{},productIds:kind==='opening'?(report?.rows||[]).map(p=>p.id):[],reason:'',productId:report?.rows[0]?.productId||'',qty:'',purchaseId:''});setModal(kind);};
  const number=n=>Number(n).toLocaleString('vi-VN',{maximumFractionDigits:6});
  const actual=r=>counts[r.productId]?.actual??'';
  const difference=r=>String(actual(r)).trim()===''?null:Number(String(actual(r)).replace(',','.'))-r.expected;
- const rows=(report?.rows||[]).filter(r=>(!query||[r.name,r.code,r.group].join(' ').toLowerCase().includes(query.toLowerCase()))&&(!onlyDiff||(difference(r)!==null&&Math.abs(difference(r))>1e-6)));
+ const rows=(report?.rows||[]).filter(r=>(!selectedProduct||r.id===selectedProduct)&&(!query||[r.name,r.code,r.group].join(' ').toLowerCase().includes(query.toLowerCase()))&&(!onlyDiff||(difference(r)!==null&&Math.abs(difference(r))>1e-6)));
  const field=(label,value,onChange,props={})=>h(F,{label},h('input',{'aria-label':label,value,onChange:e=>onChange(e.target.value),...props}));
  const tableDetails=r=>setDetails(r);
  const editCount=(r,key,value)=>setCounts(c=>({...c,[r.productId]:{...c[r.productId],[key]:value}}));
@@ -36,32 +63,37 @@ function GoodsInventoryTab({currentUser}){
  const eventRows=(loaded?.events||[]).filter(e=>e.at>report?.start&&(e.at<=report?.end||(date===today()&&e.at<=localNow())));
  const selectedPurchase=loaded?.purchases.find(p=>String(p.id)===form.purchaseId);
  const tabsSummary=h('p',{className:'goods-inventory-help'},'Kỳ kiểm kê: sau 9h hôm trước → hết 9h ngày chọn (giờ Việt Nam). Xuất theo SL đặt; bỏ đơn hủy, giao lỗi. Tồn thực tế sau chốt chuyển sang kỳ sau.');
+ if(tracking)return h(GoodsInventoryTracking,{currentUser,onBack:()=>{setTracking(false);setReload(n=>n+1);}});
  return h('div',{className:'goods-inventory'},
   h('div',{className:'ptitle'},'Nhập – xuất – tồn hàng hóa · Kiểm kê 9h'),
   h('div',{className:'goods-inventory-toolbar'},field('Ngày kiểm kê',date,v=>setDate(v),{type:'date',disabled:busy,max:today()}),
    h('button',{disabled:busy,onClick:()=>setReload(n=>n+1)},'Tải lại'),
+   h('button',{type:'button','aria-pressed':showQuality,onClick:toggleQuality},showQuality?'Ẩn chất lượng':'Hiện chất lượng'),
+   !onTracking&&h('button',{onClick:()=>setTracking(true)},'DS HH theo dõi Nhập – Xuất – Tồn'),
+   h(F,{label:'Hàng hóa theo dõi'},h('select',{'aria-label':'Lọc hàng hóa theo dõi',value:selectedProduct,onChange:e=>{setSelectedProduct(e.target.value);setQuery('');setOnlyDiff(false);}},h('option',{value:''},'Tất cả hàng hóa đang theo dõi'),(report?.rows||[]).map(p=>h('option',{key:p.id,value:p.id},p.name+' ('+p.unit+')')))),
    h('input',{'aria-label':'Tìm hàng hóa',placeholder:'Tìm mã, tên, nhóm hàng…',value:query,onChange:e=>setQuery(e.target.value)}),
    h('label',null,h('input',{type:'checkbox',checked:onlyDiff,onChange:e=>setOnlyDiff(e.target.checked)}),' Chỉ hiện hàng lệch'),
    loaded&&h(ExportBtn,{onClick:()=>xlsxExport(rows.map(r=>({...r,actual:actual(r),quality:counts[r.productId]?.quality||'',difference:difference(r)})),[['name','Hàng hóa'],['unit','Đơn vị'],['opening','Tồn đầu 9h hôm trước'],['incoming','Nhập'],['ordered','Xuất theo đơn'],['extra','Xuất ngoài'],['expected','Tồn tính toán'],['actual','Kiểm kê 9h'],['quality','Chất lượng'],['difference','Lệch'],['reason','Lý do']],'Nhap_xuat_ton_'+date)})
   ),tabsSummary,
   error&&h('p',{role:'alert',className:'goods-inventory-error'},error),busy&&h('p',{role:'status'},'Đang xác nhận dữ liệu kho…'),
   report&&h(React.Fragment,null,
+   !report.rows.length&&h('p',{className:'goods-inventory-help'},'Chưa có hàng hóa theo dõi trong kỳ này. Vào DS HH theo dõi Nhập – Xuất – Tồn để chọn hàng hóa cần quản lý.'),
    !report.initialized&&h('p',{className:'goods-inventory-error'},'Chưa khởi tạo tồn đầu. Chọn ngày kiểm kê đầu tiên, nhập số tồn tại 9h hôm trước. Số tồn hàng hóa cũ chưa tự chuyển sang bảng này.'),
    report.staleDate&&h('p',{role:'alert',className:'goods-inventory-error'},'Nguồn nhập/xuất kỳ '+report.staleDate+' đã thay đổi sau khi chốt. Cần mở lại các kỳ từ gần nhất về kỳ này và chốt lại theo thứ tự.'),
    report.warnings.map((w,i)=>h('p',{key:i,role:'alert',className:'goods-inventory-error'},w)),
    h('div',{className:'goods-inventory-toolbar'},
     h('button',{disabled:!editable||!report.initialized,onClick:()=>start('extra')},'+ Xuất ngoài'),
     h('button',{disabled:!editable||!report.initialized,onClick:()=>start('receive')},'+ Nhận hàng mua'),
-    !report.initialized&&h('button',{className:'bp',disabled:!editable,onClick:()=>start('opening')},'Khởi tạo tồn đầu'),
+    !report.initialized&&h('button',{className:'bp',disabled:!editable||!report.rows.length,onClick:()=>start('opening')},'Khởi tạo tồn đầu'),
     !closed&&report.initialized&&h('button',{className:'bp',disabled:!editable||!report.canClose||!!report.warnings.length,onClick:()=>{setForm({});setModal('close');}},'Chốt kiểm kê 9h'),
     closed&&h('b',null,'Đã chốt · '+report.closed.actor+' · '+new Date(report.closed.at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'})),
     closed&&h('button',{disabled:!editable,onClick:()=>start('reopen')},'Mở lại kiểm kê')
    ),
    h('p',{className:'goods-inventory-help'},'Đang xem '+rows.length+' mặt hàng · Thiếu: '+rows.filter(r=>difference(r)<-1e-6).length+' mặt hàng · Thừa: '+rows.filter(r=>difference(r)>1e-6).length+' mặt hàng. Bấm mặt hàng để đối chiếu chi tiết. Không cộng tổng các đơn vị khác nhau.'),
    h('div',{className:'tw goods-inventory-desktop'},h('table',null,
-    h('thead',null,h('tr',null,['Hàng hóa','ĐVT','Tồn đầu','Nhập về','Xuất theo đơn','Xuất ngoài','Tồn tính toán','Kiểm kê 9h','Chất lượng','Lệch','Lý do lệch'].map(t=>h('th',{key:t},t)))),
-    h('tbody',null,rows.map(r=>h('tr',{key:r.id},h('td',null,h('button',{className:'goods-inventory-link',onClick:()=>tableDetails(r)},r.name)),h('td',null,r.unit),...['opening','incoming','ordered','extra','expected'].map(key=>h('td',{key},number(r[key]))),h('td',null,countInput(r)),h('td',null,qualityInput(r)),h('td',null,diffLabel(r)),h('td',null,reasonInput(r))))))),
-   h('div',{className:'goods-inventory-mobile'},rows.map(r=>h('article',{key:r.id,className:'card'},h('button',{className:'goods-inventory-link',onClick:()=>tableDetails(r)},r.name+' · '+r.unit),h('div',{className:'goods-inventory-metrics'},...['Tồn đầu','Nhập về','Xuất theo đơn','Xuất ngoài','Tồn tính toán'].map((label,i)=>h('div',{key:label},h('small',null,label),h('b',null,number(r[['opening','incoming','ordered','extra','expected'][i]]))))),h(F,{label:'Kiểm kê 9h'},countInput(r)),h(F,{label:'Chất lượng'},qualityInput(r)),h('p',null,'Lệch: ',diffLabel(r)),reasonInput(r)))),
+    h('thead',null,h('tr',null,['Hàng hóa','ĐVT','Tồn đầu','Nhập về','Xuất theo đơn','Xuất ngoài','Tồn tính toán','Kiểm kê 9h',...(showQuality?['Chất lượng']:[]),'Lệch','Lý do lệch'].map(t=>h('th',{key:t},t)))),
+    h('tbody',null,rows.map(r=>h('tr',{key:r.id},h('td',null,h('button',{className:'goods-inventory-link',onClick:()=>tableDetails(r)},r.name)),h('td',null,r.unit),...['opening','incoming','ordered','extra','expected'].map(key=>h('td',{key},number(r[key]))),h('td',null,countInput(r)),showQuality&&h('td',null,qualityInput(r)),h('td',null,diffLabel(r)),h('td',null,reasonInput(r))))))),
+   h('div',{className:'goods-inventory-mobile'},rows.map(r=>h('article',{key:r.id,className:'card'},h('button',{className:'goods-inventory-link',onClick:()=>tableDetails(r)},r.name+' · '+r.unit),h('div',{className:'goods-inventory-metrics'},...['Tồn đầu','Nhập về','Xuất theo đơn','Xuất ngoài','Tồn tính toán'].map((label,i)=>h('div',{key:label},h('small',null,label),h('b',null,number(r[['opening','incoming','ordered','extra','expected'][i]]))))),h(F,{label:'Kiểm kê 9h'},countInput(r)),showQuality&&h(F,{label:'Chất lượng'},qualityInput(r)),h('p',null,'Lệch: ',diffLabel(r)),reasonInput(r)))),
    h('details',null,h('summary',null,'Nhật ký nhận hàng / xuất ngoài (gồm phát sinh sau 9h hôm nay · '+eventRows.length+')'),h('div',{className:'tw'},h('table',null,h('thead',null,h('tr',null,['Thời gian','Loại / Hàng hóa','Số lượng','Lý do / Nội dung xuất','Người ghi',''].map(t=>h('th',{key:t},t)))),h('tbody',null,eventRows.map(e=>h('tr',{key:e.id},h('td',null,e.at.replace('T',' '),e.at>report.end&&h('small',{style:{display:'block',color:'var(--pri)'}},'Tính vào kỳ 9h tiếp theo')),h('td',null,e.kind==='in'?'Nhận '+e.purchaseId:report.rows.find(r=>r.id===e.productId)?.name||e.productId),h('td',null,e.kind==='in'?e.lines.map(l=>l.qty+' '+l.unit).join('; '):e.qty),h('td',null,e.reason||e.note||'—'),h('td',null,e.actor),h('td',null,e.voided?'Đã hủy':h('button',{disabled:!editable,onClick:()=>{setForm({eventId:e.id,reason:''});setModal('void');}},'Hủy phát sinh')))))))),
    h('details',null,h('summary',null,'Lịch sử mở lại kiểm kê'),(loaded.history||[]).map((r,i)=>h('p',{key:i},r.date+' · '+r.actor+' · '+r.reason)))
   ),

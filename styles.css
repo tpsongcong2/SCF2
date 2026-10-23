@@ -1687,3 +1687,7 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 .goods-inventory-mobile{display:none}.goods-inventory-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
 .goods-inventory-metrics small,.goods-inventory-metrics b{display:block}.goods-inventory details{margin:18px 0;padding:12px;background:var(--bg2);border-radius:10px}
 @media(max-width:767px){.goods-inventory-desktop{display:none}.goods-inventory-mobile{display:grid;gap:12px}.goods-inventory-mobile .card{margin:0;padding:16px}.goods-inventory-mobile input{min-height:44px}.goods-inventory-toolbar>input{max-width:none}.goods-inventory-toolbar label{flex-wrap:wrap}.goods-inventory-toolbar button{min-height:42px}}
+.claim-file-dropzone{padding:20px;margin:14px 0;border:2px dashed #8eb5a6;border-radius:12px;background:var(--bg2);transition:background .15s,border-color .15s}
+.claim-file-dropzone.is-dragging{border-color:var(--pri);background:#dcefe5;box-shadow:0 0 0 3px #dcefe5}
+.claim-file-dropzone[aria-busy=true]{opacity:.7}.claim-file-dropzone p{margin:8px 0 12px;color:var(--tx2);font-size:13px}
+.claim-file-dropzone input[type=file]{width:100%;max-width:100%}

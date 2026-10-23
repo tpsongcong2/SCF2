@@ -412,9 +412,10 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,pro
     rowCount:(o.lines||[]).length||1,
     source:o
   })));
-  if(isGoods&&goodsInventoryView)return h('div',null,h('div',{className:'goods-inventory-toolbar'},h('button',{onClick:()=>setGoodsInventoryView(false)},'Đơn mua hàng'),h('button',{className:'bp'},'Nhập – xuất – tồn')),h(GoodsInventoryTab,{currentUser:cu}));
+  const goodsTabs=()=>h('div',{className:'goods-inventory-toolbar'},h('button',{className:!goodsInventoryView?'bp':'',onClick:()=>setGoodsInventoryView(false)},'Đơn mua hàng'),h('button',{className:goodsInventoryView===true?'bp':'',onClick:()=>setGoodsInventoryView(true)},'Nhập – xuất – tồn'),h('button',{className:goodsInventoryView==='tracking'?'bp':'',onClick:()=>setGoodsInventoryView('tracking')},'DS HH theo dõi Nhập – Xuất – Tồn'));
+  if(isGoods&&goodsInventoryView)return h('div',null,goodsTabs(),goodsInventoryView==='tracking'?h(GoodsInventoryTracking,{currentUser:cu,onBack:()=>setGoodsInventoryView(true)}):h(GoodsInventoryTab,{currentUser:cu,onTracking:()=>setGoodsInventoryView('tracking')}));
   return h('div',null,
-    isGoods&&h('div',{className:'goods-inventory-toolbar'},h('button',{className:'bp'},'Đơn mua hàng'),h('button',{onClick:()=>setGoodsInventoryView(true)},'Nhập – xuất – tồn')),
+    isGoods&&goodsTabs(),
     h('div',{className:'ptitle'},h('i',{className:'ti '+(isGoods?'ti-packages':'ti-shopping-cart'),style:{fontSize:20}}),orderTitle),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Hiển thị đơn mới lên trên, có thể xem nhanh trên điện thoại theo từng thẻ.'),
