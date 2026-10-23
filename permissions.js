@@ -8,6 +8,7 @@ const PAGE_ACCESS = {
   payroll4p_approve:['admin'],
   attp_process:['admin','manager','staff'],
   attp_standards:['admin','manager','staff'],
+  attp_claims:['admin','manager','staff'],
   attp_daily:['admin','manager','staff'],
   attp_legal:['admin','manager','staff'],
   welcome:      ['admin','manager','staff','driver'],

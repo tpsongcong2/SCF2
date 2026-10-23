@@ -1,7 +1,8 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V630';
+const SCF_BUILD_VERSION='V631';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
+  attp_claims:'Nhật ký claim chất lượng',
   attp_process:'Tài liệu ATTP · Quy trình',
   attp_standards:'Tài liệu ATTP · Tiêu chuẩn',
   attp_daily:'Tài liệu ATTP · Nhật ký hàng ngày',
@@ -232,7 +233,7 @@ function scfLoadOptionalScript(name,url){
 // Kiểm tra thành phần trước khi render: một tệp tải lỗi không được làm trắng trang.
 const SCF_PAGE_COMPONENTS={
   kpi4p:'KPI4PTab',
-  attp_process:'ATTPDocumentsTab',attp_standards:'ATTPDocumentsTab',attp_daily:'ATTPDocumentsTab',attp_legal:'ATTPDocumentsTab',
+  attp_claims:'ATTPDocumentsTab',attp_process:'ATTPDocumentsTab',attp_standards:'ATTPDocumentsTab',attp_daily:'ATTPDocumentsTab',attp_legal:'ATTPDocumentsTab',
   welcome:'WelcomePage',company:'CompanySettings',appearance:'AppearanceSettingsTab',printtemplates:'PrintTemplateSettingsTab',
   personnel:'PersonnelInformationTab PersonnelProfileForm',employees:'EmployeeTab EmpForm CpwModal',permission_settings:'PermissionSettingsTab',
   attendance:'AttendanceTab',attendance_settings:'AttendanceTab',attendance_report:'AttendanceTab',workreport_total:'AttendanceTab',
@@ -268,7 +269,7 @@ async function scfEnsurePageTools(page){
 
 const PICONS = {
   kpi4p:'ti-chart-bar',
-  attp_process:'ti-list-check',
+  attp_claims:'ti-message-report',attp_process:'ti-list-check',
   attp_standards:'ti-certificate',
   attp_daily:'ti-notebook',
   attp_legal:'ti-file-certificate',

@@ -1677,3 +1677,13 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 .personnel-error{color:#a32d2d;padding:10px;border:1px solid #efb8b8;border-radius:6px;background:#fff4f4}
 .personnel-profile-intro{color:var(--tx2);font-size:12px;margin-bottom:14px}
 @media(max-width:600px){.personnel-filters{padding:12px;gap:10px}.personnel-filters label{min-width:calc(50% - 10px)}.personnel-filters label:first-child{flex-basis:100%}.personnel-person{flex-wrap:wrap;gap:10px;padding:12px}.personnel-person>div:first-child{flex-basis:100%}.personnel-form-grid,.personnel-document-grid{grid-template-columns:1fr}.personnel-profile-modal{padding:16px;max-height:94dvh}.personnel-profile-modal>.mh{position:sticky;top:-16px;background:#fff;z-index:2;margin:-16px -16px 16px;padding:12px 16px;border-bottom:1px solid var(--bd)}}
+.goods-inventory-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
+.quality-claim-table td{overflow-wrap:anywhere}.quality-claim-table td:nth-child(3){min-width:220px;max-width:500px}
+@media(max-width:767px){.quality-claim-table,.quality-claim-table tbody,.quality-claim-table tr,.quality-claim-table td{display:block;width:100%;max-width:none!important;min-width:0!important}.quality-claim-table thead{display:none}.quality-claim-table tr{padding:12px;margin-bottom:12px;border:1px solid var(--bd);border-radius:10px}.quality-claim-table td:before{content:attr(data-label);display:block;font-weight:600;color:var(--tx2);margin-bottom:4px}}
+.goods-inventory-toolbar input[type=checkbox]{width:auto}.goods-inventory-toolbar>input{max-width:260px}
+.goods-inventory-help{font-size:13px;color:var(--tx2);line-height:1.6;margin:10px 0}
+.goods-inventory-error{padding:12px;background:#fff1db;color:#8a3c00;border-radius:10px;line-height:1.5}
+.goods-inventory-link{border:0;background:transparent;color:var(--pri);text-align:left;padding:4px;font-weight:600}
+.goods-inventory-mobile{display:none}.goods-inventory-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+.goods-inventory-metrics small,.goods-inventory-metrics b{display:block}.goods-inventory details{margin:18px 0;padding:12px;background:var(--bg2);border-radius:10px}
+@media(max-width:767px){.goods-inventory-desktop{display:none}.goods-inventory-mobile{display:grid;gap:12px}.goods-inventory-mobile .card{margin:0;padding:16px}.goods-inventory-mobile input{min-height:44px}.goods-inventory-toolbar>input{max-width:none}.goods-inventory-toolbar label{flex-wrap:wrap}.goods-inventory-toolbar button{min-height:42px}}

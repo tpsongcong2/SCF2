@@ -199,6 +199,7 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,pro
   const [paymentForm,setPaymentForm]=useState({date:isoDate(),amount:'',method:'bank',reference:'',note:''});
   const [filterDay,setFilterDay]=useState(''); const [filterMonth,setFilterMonth]=useState(''); const [filterNcc,setFilterNcc]=useState('');
   const isGoods=mode==='goods';
+  const [goodsInventoryView,setGoodsInventoryView]=useState(false);
   const itemLabel=isGoods?'Hàng hóa':'Nguyên vật liệu';
   const itemLabelLower=isGoods?'hàng hóa':'nguyên vật liệu';
   const orderTitle=isGoods?'Đơn mua hàng hàng hóa':'Đơn mua hàng NVL';
@@ -353,6 +354,7 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,pro
       return {...clean,vatAmount:lineVatAmount(clean),amountAfterTax:lineAmountAfterVat(clean)};
     }).filter(l=>l.itemId&&l.name&&l.qty>0);
     if(!cleanLines.length){window.showToast('Nhập ít nhất 1 dòng '+itemLabelLower+' hợp lệ.','warn');return;}
+    if(isGoods&&form.status==='received'&&(!toIsoDate(form.receivedDate)||!/^\d{2}:\d{2}$/.test(form.receivedTime||''))){window.showToast('Đơn đã nhận cần ngày và giờ thực nhận để tính kho 9h.','warn');return;}
     const data={...form,orderDate:toIsoDate(form.orderDate)||isoDate(),lines:cleanLines,updatedBy:cu.name,updatedAt:fmtDT()};
     if(isGoods&&edit){
       const paid=goodsPurchasePaymentSummary(edit).paid;
@@ -410,7 +412,9 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,pro
     rowCount:(o.lines||[]).length||1,
     source:o
   })));
+  if(isGoods&&goodsInventoryView)return h('div',null,h('div',{className:'goods-inventory-toolbar'},h('button',{onClick:()=>setGoodsInventoryView(false)},'Đơn mua hàng'),h('button',{className:'bp'},'Nhập – xuất – tồn')),h(GoodsInventoryTab,{currentUser:cu}));
   return h('div',null,
+    isGoods&&h('div',{className:'goods-inventory-toolbar'},h('button',{className:'bp'},'Đơn mua hàng'),h('button',{onClick:()=>setGoodsInventoryView(true)},'Nhập – xuất – tồn')),
     h('div',{className:'ptitle'},h('i',{className:'ti '+(isGoods?'ti-packages':'ti-shopping-cart'),style:{fontSize:20}}),orderTitle),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
       h('div',{style:{fontSize:12,color:'var(--tx2)'}},'Hiển thị đơn mới lên trên, có thể xem nhanh trên điện thoại theo từng thẻ.'),
@@ -495,6 +499,7 @@ function PurchaseTab({purchases,setPurchases,nccs,setNCCs,materials,products,pro
       isGoods&&h('div',{className:'g2',style:{marginTop:10}},
         h(F,{label:'Trạng thái nhận hàng'},h('select',{value:form.status||'draft',onChange:e=>s2('status',e.target.value)},h('option',{value:'draft'},'Nháp'),h('option',{value:'ordered'},'Đã đặt'),h('option',{value:'received'},'Đã nhận'),h('option',{value:'cancelled'},'Đã hủy'))),
         h(F,{label:'Ngày nhận hàng'},h('input',{type:'date',value:toIsoDate(form.receivedDate)||'',onChange:e=>s2('receivedDate',e.target.value)})),
+        isGoods&&h(F,{label:'Giờ nhận hàng'},h('input',{type:'time',value:form.receivedTime||'',onChange:e=>s2('receivedTime',e.target.value)})),
         h(F,{label:'Số hóa đơn'},h('input',{value:form.invoiceNo||'',onChange:e=>s2('invoiceNo',e.target.value),placeholder:'Nếu đã có hóa đơn'}))
       ),
       h('hr',{className:'divider'}),
