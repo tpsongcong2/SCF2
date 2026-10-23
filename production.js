@@ -1,11 +1,16 @@
 /* ─── Tổng hợp sản xuất ─── */
 function ProductionSummaryPreviewModal({loadData,onClose,currentUser,...summaryProps}){
   const[status,setStatus]=useState('loading'),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
+  const[prepared,setPrepared]=useState(null);
   const loadRef=useRef(loadData),closeRef=useRef(onClose);loadRef.current=loadData;closeRef.current=onClose;
   const accessKey=JSON.stringify([currentUser?.id,currentUser?.role,currentUser?.permissions,currentUser?.dept,currentUser?.departments,currentUser?.permLevels]);
   useEffect(()=>{
-    let active=true;setStatus('loading');setError('');
-    Promise.resolve().then(()=>loadRef.current()).then(()=>{if(active)setStatus('ready');}).catch(e=>{if(active){setError(e.message||'Chưa tải được khối lượng sản xuất.');setStatus('error');}});
+    let active=true;setStatus('loading');setPrepared(null);setError('');
+    Promise.resolve().then(()=>loadRef.current()).then(async result=>{
+      if(!active)return;
+      if(result?.prepared){setPrepared(result.prepared);setStatus('cached');try{await result.liveReady;}catch(e){if(active)setError('Đang xem bản lưu. Chưa xác nhận được dữ liệu mới: '+(e.message||''));return;}}
+      if(active){setPrepared(null);setStatus('ready');}
+    }).catch(e=>{if(active){setError(e.message||'Chưa tải được khối lượng sản xuất.');setStatus('error');}});
     return()=>{active=false;};
   },[accessKey,attempt]);
   useEffect(()=>{
@@ -19,6 +24,11 @@ function ProductionSummaryPreviewModal({loadData,onClose,currentUser,...summaryP
     h('div',{className:'summary-orders-mobile-backbar'},h('button',{type:'button','data-scf-action':'view','aria-label':'Quay lại đơn hàng',onClick:onClose},h('i',{className:'ti ti-arrow-left','aria-hidden':true}),' Quay lại'),h('b',null,'KL SX')),
     status==='loading'&&h('p',{role:'status'},'Đang tải dữ liệu sản xuất…'),
     status==='error'&&h('div',null,h('p',{role:'alert'},error),h('button',{type:'button',onClick:()=>setAttempt(n=>n+1)},'Thử tải lại')),
+    status==='cached'&&prepared&&h('div',null,
+      h('p',{className:'summary-cache-updated',role:'status'},'Bản đã lưu · Cập nhật lúc '+scfSummaryUpdatedLabel(prepared.updatedAt)+' · Đang đối chiếu dữ liệu mới…'),
+      error&&h('p',{role:'alert'},error),
+      h(ProductionSummaryTab,{...prepared.payload.data,currentUser,preparedRows:prepared.payload.rows,preparedDate:prepared.payload.date,snapshotReadOnly:true})
+    ),
     status==='ready'&&h(ProductionSummaryTab,{...summaryProps,currentUser}),
     h('div',{className:'production-preview-close-row'},h('button',{type:'button','data-scf-action':'view',onClick:onClose},'Đóng cửa sổ'))
   );
@@ -163,11 +173,52 @@ function scfProductionSummaryPrintHtml(groups,date,scope,readQty,readBad){
   const body=groups.map(({rule,rows})=>'<h3>'+escape(scfProductionShortShiftName(rule.name))+' · '+escape(rule.start||'')+'–'+escape(rule.end||'')+'</h3><table><thead><tr><th>Sản phẩm</th><th>ĐVT</th><th>SL đặt thực tế</th><th>Tồn sử dụng</th><th>SL cần SX</th><th>Mã chẵn</th><th>Mã lẻ</th><th>SL đạt</th><th>Hàng lỗi</th></tr></thead><tbody>'+rows.map(row=>'<tr><td>'+escape(row.productName)+'</td><td>'+escape(row.unit)+'</td><td>'+fmt(row.qtyProd)+'</td><td>'+(row.stockMetrics?.stock==null?'—':fmt(row.stockMetrics.stock))+'</td><td>'+(row.stockMetrics?.needed==null?'—':fmt(row.stockMetrics.needed))+'</td><td>'+(row.pack?row.fullCodes+' × '+row.pack+' kg':'Chưa có quy cách')+(row.unknownCodes?' · Có dòng chưa có quy cách':'')+'</td><td>'+escape(scfProductionOddText(row))+'</td><td>'+escape(readQty(row.prodDate,row.shift,row.productId))+'</td><td>'+escape(readBad(row.prodDate,row.shift,row.productId))+'</td></tr>').join('')+'</tbody></table><p>Tổng mã chẵn: '+rows.reduce((sum,row)=>sum+row.fullCodes,0)+' · Tổng mã lẻ: '+rows.reduce((sum,row)=>sum+Object.values(row.oddCodes||{}).reduce((a,b)=>a+b,0),0)+'</p>').join('');
   return '<!doctype html><html><head><meta charset="utf-8"><title>Đơn sản xuất tổng</title><style>body{font:13px Arial;margin:16px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #555;padding:7px;text-align:left}th{background:#edf4ed}tr{break-inside:avoid}h3{break-after:avoid}@page{size:A4 landscape;margin:10mm}</style></head><body><h2>SCFOOD — ĐƠN SẢN XUẤT TỔNG</h2><p>Ngày SX: '+escape(date)+' · '+escape(scope)+'</p>'+body+'<p>Mã lẻ tính theo từng dòng đơn. Tồn sử dụng được phân bổ cho Sớm trước, Muộn chỉ dùng phần còn lại. SL cần SX tối thiểu là 0.</p><p>Người sản xuất: ____________________　 Người kiểm tra: ____________________</p></body></html>';
 }
-function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftRules,prodActuals,setProdActuals,stock,currentUser,onOpenClosing,onClosingWorkshopChange}){
+function scfBuildProductionRows({orders=[],products=[],prodCats=[],prodShifts=[],prodShiftRules=[],stock=[],date}){
+  const rules=prodShiftRules.length?prodShiftRules:DEF_PROD_SHIFT_RULES;
+  const stockByProductId=new Map(stock.map(item=>[String(item.productId),item]));
+  // Aggregate from delivery orders
+  const dayOrders=orders.filter(o=>o.status!=='cancelled');
+  const aggMap={};
+  dayOrders.forEach(o=>{
+    const plans=prodShiftPlansForOrder(o,prodShifts||[]);
+    (o.lines||[]).forEach((l,idx)=>{
+      if(!l.productId)return;
+      const product=products.find(product=>String(product.id)===String(l.productId))||{};
+      const goods=isGoodsProduct(product.id?product:{...l,code:l.productCode||l.code||''},prodCats);
+      const plan=plans[idx]||prodShiftPlan(o,prodShifts||[]);
+      const prodTime=l.shiftOverride?(l.prodTime||plan?.prodTime||''):(plan?.prodTime||'');
+      const prodDate=l.shiftOverride?(l.prodDate||plan?.prodDate||o.deliveryDate):(plan?.prodDate||o.deliveryDate);
+      if(prodDate!==date)return;
+      const rule=getProdWorkShiftRule(prodTime,rules)||{id:'unknown',name:'Chưa xác định',group:'Chưa xác định',color:'#F1EFE8',textColor:'#5F5E5A'};
+      const key=l.productId+'_'+rule.id;
+      if(!aggMap[key])aggMap[key]={productId:l.productId,productName:l.productName||products.find(product=>String(product.id)===String(l.productId))?.name||'Chưa xác định',unit:l.unit||products.find(product=>String(product.id)===String(l.productId))?.unit||'',shift:rule.id,shiftName:rule.name,shiftGroup:rule.group,rule,goods,qtyProd:0,orders:[],prodDate:date,fullCodes:0,oddCodes:{},pack:0,unknownCodes:0};
+      const codes=scfProductionLineCodes(l,product);
+      // Hàng hóa vẫn hiện trong danh sách, nhưng không tính vào tổng kg sản xuất.
+      const rawWeightKg=scfProductionLineWeightKg(l,product);
+      aggMap[key].displayWeightKg=(aggMap[key].displayWeightKg||0)+(rawWeightKg??0);
+      aggMap[key].displayUnknownWeightLines=(aggMap[key].displayUnknownWeightLines||0)+(rawWeightKg===null?1:0);
+      const weightKg=goods?0:rawWeightKg;
+      aggMap[key].weightKg=(aggMap[key].weightKg||0)+(weightKg===null?0:weightKg);
+      aggMap[key].unknownWeightLines=(aggMap[key].unknownWeightLines||0)+(weightKg===null?1:0);
+      aggMap[key].fullCodes+=codes.full;aggMap[key].pack=codes.pack;
+      if(codes.remainder>0)aggMap[key].oddCodes[codes.remainder]=(aggMap[key].oddCodes[codes.remainder]||0)+1;
+      if(codes.unknown)aggMap[key].unknownCodes++;
+      aggMap[key].sourceQty=aggMap[key].sourceQty||{};
+      aggMap[key].sourceQty[String(o.id)]=(aggMap[key].sourceQty[String(o.id)]||0)+numFmt(l.qtyProd);
+      aggMap[key].qtyProd+=numFmt(l.qtyProd);
+      aggMap[key].orders.push(o.id);
+    });
+  });
+  // Nhóm thành phẩm cùng loại (gồm PAC), hàng hóa cuối; giữ thứ tự danh mục trong nhóm.
+  const allocatedStock=scfProductionAllocateStock(Object.values(aggMap),stockByProductId,rules);
+  Object.values(aggMap).forEach(row=>{row.stockMetrics=allocatedStock.get(row);row.display=scfProductionProductDisplay({...row,rows:[row]});});
+  return Object.values(aggMap);
+}
+function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftRules,prodActuals,setProdActuals,stock,currentUser,onOpenClosing,onClosingWorkshopChange,preparedRows=null,preparedDate='',snapshotReadOnly=false}){
   const[date,setDate]=useState(fmtDate());
   const[shift,setShift]=useState('all');
   const[workshop,setWorkshop]=useState('all');
-  const canEditActual=canWrite(currentUser?.role,'prodsummary',currentUser?.permLevels);
+  const canEditActual=!snapshotReadOnly&&canWrite(currentUser?.role,'prodsummary',currentUser?.permLevels);
   const showShiftWeight=canViewProductionShiftWeight(currentUser);
   const canCheckSource=canEditActual&&['admin','administrator','manager'].includes(String(currentUser?.role||'').toLowerCase());
   const[openOrderRows,setOpenOrderRows]=useState(()=>new Set());
@@ -242,49 +293,10 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
     );
   };
 
-  // Aggregate from delivery orders
-  const dayOrders=orders.filter(o=>o.status!=='cancelled');
-  const aggMap={};
-  dayOrders.forEach(o=>{
-    const plans=prodShiftPlansForOrder(o,prodShifts||[]);
-    (o.lines||[]).forEach((l,idx)=>{
-      if(!l.productId)return;
-      const product=products.find(product=>String(product.id)===String(l.productId))||{};
-      const goods=isGoodsProduct(product.id?product:{...l,code:l.productCode||l.code||''},prodCats);
-      const plan=plans[idx]||prodShiftPlan(o,prodShifts||[]);
-      const prodTime=l.shiftOverride?(l.prodTime||plan?.prodTime||''):(plan?.prodTime||'');
-      const prodDate=l.shiftOverride?(l.prodDate||plan?.prodDate||o.deliveryDate):(plan?.prodDate||o.deliveryDate);
-      if(prodDate!==date)return;
-      const rule=getProdWorkShiftRule(prodTime,rules)||{id:'unknown',name:'Chưa xác định',group:'Chưa xác định',color:'#F1EFE8',textColor:'#5F5E5A'};
-      const key=l.productId+'_'+rule.id;
-      if(!aggMap[key])aggMap[key]={productId:l.productId,productName:l.productName||products.find(product=>String(product.id)===String(l.productId))?.name||'Chưa xác định',unit:l.unit||products.find(product=>String(product.id)===String(l.productId))?.unit||'',shift:rule.id,shiftName:rule.name,shiftGroup:rule.group,rule,goods,qtyProd:0,orders:[],prodDate:date,fullCodes:0,oddCodes:{},pack:0,unknownCodes:0};
-      const codes=scfProductionLineCodes(l,product);
-      // Hàng hóa vẫn hiện trong danh sách, nhưng không tính vào tổng kg sản xuất.
-      const rawWeightKg=scfProductionLineWeightKg(l,product);
-      aggMap[key].displayWeightKg=(aggMap[key].displayWeightKg||0)+(rawWeightKg??0);
-      aggMap[key].displayUnknownWeightLines=(aggMap[key].displayUnknownWeightLines||0)+(rawWeightKg===null?1:0);
-      const weightKg=goods?0:rawWeightKg;
-      aggMap[key].weightKg=(aggMap[key].weightKg||0)+(weightKg===null?0:weightKg);
-      aggMap[key].unknownWeightLines=(aggMap[key].unknownWeightLines||0)+(weightKg===null?1:0);
-      aggMap[key].fullCodes+=codes.full;aggMap[key].pack=codes.pack;
-      if(codes.remainder>0)aggMap[key].oddCodes[codes.remainder]=(aggMap[key].oddCodes[codes.remainder]||0)+1;
-      if(codes.unknown)aggMap[key].unknownCodes++;
-      aggMap[key].sourceQty=aggMap[key].sourceQty||{};
-      aggMap[key].sourceQty[String(o.id)]=(aggMap[key].sourceQty[String(o.id)]||0)+numFmt(l.qtyProd);
-      aggMap[key].qtyProd+=numFmt(l.qtyProd);
-      aggMap[key].orders.push(o.id);
-    });
-  });
-  // Nhóm thành phẩm cùng loại (gồm PAC), hàng hóa cuối; giữ thứ tự danh mục trong nhóm.
+  const builtRows=React.useMemo(()=>preparedRows&&preparedDate===date?preparedRows:scfBuildProductionRows({orders,products,prodCats,prodShifts,prodShiftRules,stock,date}),[orders,products,prodCats,prodShifts,prodShiftRules,stock,date,preparedRows,preparedDate]);
   const prodOrder=Object.fromEntries(products.map((p,i)=>[p.id,i]));
-  const sortByProdOrder=(a,b)=>{
-    const ai=prodOrder[a.productId]??9999;
-    const bi=prodOrder[b.productId]??9999;
-    return scfProductionProductGroupRank(a)-scfProductionProductGroupRank(b)||ai-bi;
-  };
-  const allocatedStock=scfProductionAllocateStock(Object.values(aggMap),stockByProductId,rules);
-  Object.values(aggMap).forEach(row=>{row.stockMetrics=allocatedStock.get(row);row.display=scfProductionProductDisplay({...row,rows:[row]});});
-  const rows=Object.values(aggMap).filter(r=>scfProductionShiftMatches(r,shift)&&(workshop==='all'||scfProductionWorkshop(r.productName)===workshop));
+  const sortByProdOrder=(a,b)=>scfProductionProductGroupRank(a)-scfProductionProductGroupRank(b)||(prodOrder[a.productId]??9999)-(prodOrder[b.productId]??9999);
+  const rows=builtRows.filter(r=>scfProductionShiftMatches(r,shift)&&(workshop==='all'||scfProductionWorkshop(r.productName)===workshop));
   const unknownRule={id:'unknown',name:'Chưa xác định',group:'Chưa xác định',start:'',end:'',color:'#F1EFE8',textColor:'#5F5E5A'};
   const shiftGroups=[...rules,unknownRule].map(rule=>({rule,rows:rows.filter(r=>r.shift===rule.id).sort(sortByProdOrder)})).filter(g=>g.rows.length);
   const sumActualRows=list=>list.reduce((sum,r)=>sum+numFmt(readActualQty(r.prodDate,r.shift,r.productId)),0);
@@ -353,12 +365,11 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
     popup.document.write(html);popup.document.close();popup.onload=()=>popup.print();
   };
   return h('div',null,
-    h(ProductionOrderAlerts,{orders,scopeOrderIds:[...new Set(rows.flatMap(r=>r.orders).map(String))],scopeKey:JSON.stringify([currentUser?.id,date,shift,workshop]),currentUser}),
     h('div',{className:'ptitle production-summary-title'},h('span',null,h('i',{className:'ti ti-clipboard-list',style:{fontSize:20}}),'Tổng hợp sản xuất'),onOpenClosing&&h('button',{type:'button',className:'bp','data-scf-action':'view',onClick:()=>onOpenClosing({workshop:['banh','bot'].includes(workshop)?workshop:'bun'})},'Chốt cuối ca')),
     h('div',{className:'card production-summary-filters',style:{marginBottom:'1.25rem'}},
       h('div',{className:'g3'},
         h(F,{label:'Ngày – ca sản xuất'},h('div',{className:'production-date-shift','aria-label':'Lọc ngày và ca sản xuất'},
-        h('input',{type:'date','aria-label':'Ngày sản xuất',value:toIsoDate(date),onChange:e=>setDate(vnDateFromISO(e.target.value)||''),placeholder:'DD/MM/YYYY'}),
+        h('input',{type:'date','aria-label':'Ngày sản xuất',disabled:snapshotReadOnly,value:toIsoDate(date),onChange:e=>setDate(vnDateFromISO(e.target.value)||''),placeholder:'DD/MM/YYYY'}),
         h(ProductionShiftFilter,{value:shift,rules,onChange:setShift}))),
         h(F,{label:'Xưởng sản xuất'},h('div',{className:'production-workshop-print'},h('select',{'aria-label':'Xưởng sản xuất',value:workshop,onChange:event=>{setWorkshop(event.target.value);onClosingWorkshopChange?.(['banh','bot'].includes(event.target.value)?event.target.value:'bun');}},h('option',{value:'all'},'Tất cả xưởng'),h('option',{value:'bun'},'Xưởng bún'),h('option',{value:'banh'},'Xưởng bánh · Phở, bánh cuốn'),h('option',{value:'bot'},'Xưởng bột gạo')),h('button',{type:'button',className:'bp production-mobile-print','data-scf-action':'view','aria-label':'In đơn sản xuất tổng',title:'In đơn sản xuất tổng',disabled:!rows.length,onClick:printSummary},h('i',{className:'ti ti-printer'}))))
 

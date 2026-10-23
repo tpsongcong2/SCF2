@@ -1705,3 +1705,6 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 .production-alert-controls button{min-height:40px}
 @media(max-width:768px){.production-order-alerts{padding:8px;margin:0 0 10px}.production-alert-bell{flex-basis:100%;justify-content:center}.production-alert-controls{gap:6px}.production-alert-controls button{font-size:12px;padding:7px 9px}.production-alert-banner{font-size:13px}.production-alert-history{max-height:180px}}
 @media print{.production-order-alerts{display:none!important}}
+
+.summary-cache-updated{font-size:12px;color:var(--tx2);padding:8px 12px;background:#e8f1ec;border-radius:8px;margin:8px 0}
+.production-push-prompt{position:fixed;inset:0;z-index:10050;background:#0006;display:flex;align-items:center;justify-content:center;padding:16px}.production-push-prompt>section{max-width:440px;width:100%;padding:22px;border-radius:16px;background:white;box-shadow:0 12px 40px #0003}.production-push-prompt h3{margin:0 0 12px}.production-push-prompt p{line-height:1.55}.production-push-prompt button{min-height:44px}

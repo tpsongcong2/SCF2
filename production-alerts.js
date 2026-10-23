@@ -41,7 +41,7 @@ function useProductionPushIdentity(user,onOpen){
  useEffect(()=>{
   if(!('serviceWorker' in navigator))return;
   let active=true,registration;const epoch=++scfProductionPushIdentityEpoch;
-  const restore=async()=>{try{registration=await navigator.serviceWorker.getRegistration();if(!registration||!active||epoch!==scfProductionPushIdentityEpoch)return;scfProductionPushBind(registration,'');if(!allowed)return;const sub=await registration.pushManager?.getSubscription();if(!sub)return;const status=await scfProductionPushRequest('status',{endpoint:sub.endpoint});if(active&&epoch===scfProductionPushIdentityEpoch&&status.enabled)scfProductionPushBind(registration,user.id);}catch{}};
+  const restore=async()=>{try{registration=await navigator.serviceWorker.getRegistration();if(!registration||!active||epoch!==scfProductionPushIdentityEpoch)return;scfProductionPushBind(registration,'');if(!allowed)return;try{if(localStorage.getItem('scf_production_push_disabled_'+user.id)==='1')return;}catch{}const sub=await registration.pushManager?.getSubscription();if(!sub)return;const status=await scfProductionPushRequest('status',{endpoint:sub.endpoint});if(active&&epoch===scfProductionPushIdentityEpoch&&status.enabled)scfProductionPushBind(registration,user.id);}catch{}};
   restore();
   const receive=event=>{if(event.data?.type==='scf-production-push-open'&&allowed)openRef.current?.();};
   navigator.serviceWorker.addEventListener('message',receive);
@@ -49,46 +49,53 @@ function useProductionPushIdentity(user,onOpen){
   return()=>{active=false;scfProductionPushBind(registration,'');navigator.serviceWorker.removeEventListener('message',receive);};
  },[user?.id,allowed]);
 }
-function ProductionPushIdentity({currentUser,onOpen}){useProductionPushIdentity(currentUser,onOpen);return null;}
+function ProductionPushIdentity({currentUser,onOpen}){
+ useProductionPushIdentity(currentUser,onOpen);
+ const[prompt,setPrompt]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const identity=useRef(currentUser);identity.current=currentUser;
+ const allowed=!!currentUser&&canAccess(currentUser.role,'prodsummary',currentUser.permissions,employeeDepartments(currentUser));
+ useEffect(()=>{
+  let active=true;setPrompt(false);setBusy(false);setError('');
+  const id=String(currentUser?.id||''),key='scf_production_push_disabled_'+id;
+  const run=async()=>{
+   if(!allowed||!window.matchMedia?.('(max-width:768px)')?.matches)return;
+   try{if(localStorage.getItem(key)==='1')return;}catch{}
+   if(!('Notification' in window)||!('PushManager' in window)||!('serviceWorker' in navigator)){if(active)setPrompt(true);return;}
+   try{
+    const reg=await navigator.serviceWorker.getRegistration(),sub=await reg?.pushManager?.getSubscription();
+    if(sub){const status=await scfProductionPushRequest('status',{endpoint:sub.endpoint});if(status.enabled)return;}
+    if(Notification.permission==='granted'){
+     if(active&&String(identity.current?.id)===id){await scfEnableProductionPush(currentUser);return;}
+    }
+   }catch{}
+   try{if(sessionStorage.getItem('scf_push_prompt_'+id)==='later')return;}catch{}
+   if(active)setPrompt(true);
+  };run();return()=>{active=false;};
+ },[currentUser?.id,allowed]);
+ if(!prompt||!allowed)return null;
+ return h('div',{className:'production-push-prompt',role:'dialog','aria-modal':true,'aria-label':'Nhận thông báo thay đổi đơn hàng'},
+  h('section',null,h('h3',null,'Nhận thông báo khi đơn hàng thay đổi'),h('p',null,'SCFOOD tự theo dõi đơn hàng và gửi thông báo lên điện thoại. Không phát chuông trong app.'),
+   error&&h('p',{role:'alert'},error),
+   h('div',{className:'form-actions'},h('button',{type:'button',disabled:busy,'data-scf-action':'view',onClick:()=>{try{sessionStorage.setItem('scf_push_prompt_'+currentUser.id,'later');}catch{}setPrompt(false);}},'Để sau'),
+    h('button',{type:'button',className:'bp',disabled:busy,'data-scf-action':'view',onClick:async()=>{const id=String(currentUser.id);setBusy(true);setError('');try{await scfEnableProductionPush(currentUser);if(String(identity.current?.id)===id)setPrompt(false);}catch(e){if(String(identity.current?.id)===id)setError(e.message);}finally{setBusy(false);}}},busy?'Đang bật…':'Cho phép thông báo'))));
+}
 async function scfEnableProductionPush(user){
  const epoch=scfProductionPushIdentityEpoch,stillCurrent=()=>{if(epoch!==scfProductionPushIdentityEpoch)throw Error('Tài khoản vừa thay đổi. Hãy bật thông báo lại.');};
  if(!window.isSecureContext||!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window))throw Error('Thiết bị chưa hỗ trợ thông báo đẩy. Trên iPhone, thêm SCFOOD vào Màn hình chính và mở từ biểu tượng đó.');
  // Request directly from the user's click, before the server round trip (required on iOS).
- const permission=await Notification.requestPermission();if(permission!=='granted')throw Error('Chưa được cấp quyền thông báo. Hãy cho phép thông báo SCFOOD trong cài đặt trình duyệt/điện thoại.');
+ const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();if(permission!=='granted')throw Error('Chưa được cấp quyền thông báo. Hãy cho phép thông báo SCFOOD trong cài đặt trình duyệt/điện thoại.');
  stillCurrent();const registration=await scfProductionPushRegistration();stillCurrent();
  const config=await scfProductionPushRequest('config');if(!config.configured)throw Error('Máy chủ chưa bật Web Push. Quản trị cần hoàn tất hướng dẫn cấu hình thông báo điện thoại.');
  stillCurrent();
  const raw=atob(config.publicKey.replace(/-/g,'+').replace(/_/g,'/')),key=Uint8Array.from(raw,c=>c.charCodeAt(0));
  const subscription=await registration.pushManager.getSubscription()||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
- stillCurrent();await scfProductionPushRequest('subscribe',{subscription:subscription.toJSON()});stillCurrent();scfProductionPushBind(registration,user.id);
+ stillCurrent();await scfProductionPushRequest('subscribe',{subscription:subscription.toJSON()});stillCurrent();scfProductionPushBind(registration,user.id);try{localStorage.removeItem('scf_production_push_disabled_'+user.id);}catch{}
  return subscription;
 }
 async function scfDisableProductionPush(){
+ try{localStorage.setItem('scf_production_push_disabled_'+window.__SCF_ACCESS_CONTEXT?.employeeId,'1');}catch{}
  const registration=await scfProductionPushRegistration(),subscription=await registration.pushManager.getSubscription();
  scfProductionPushBind(registration,'');
- if(subscription){await scfProductionPushRequest('unsubscribe',{endpoint:subscription.endpoint});await subscription.unsubscribe();}
+ if(subscription){try{await scfProductionPushRequest('unsubscribe',{endpoint:subscription.endpoint});}finally{await subscription.unsubscribe();}}
 }
-function ProductionOrderAlerts({orders,scopeOrderIds,scopeKey,currentUser}){
- const[unread,setUnread]=useState(0),[messages,setMessages]=useState([]),[expanded,setExpanded]=useState(false),[sound,setSound]=useState(false),[error,setError]=useState(''),[pushBusy,setPushBusy]=useState(false);
- const previous=useRef(null),audio=useRef(null),soundRef=useRef(false);
- const ring=()=>{try{const ctx=audio.current;if(!ctx||ctx.state!=='running')return;[0,.25,.5].forEach((delay,index)=>{const oscillator=ctx.createOscillator(),gain=ctx.createGain(),at=ctx.currentTime+delay;oscillator.type='sine';oscillator.frequency.value=index===1?880:660;gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.18,at+.02);gain.gain.exponentialRampToValueAtTime(.001,at+.2);oscillator.connect(gain);gain.connect(ctx.destination);oscillator.start(at);oscillator.stop(at+.22);});}catch{}};
- useEffect(()=>{
-  const next=scfProductionOrderSnapshot(orders),ids=new Set(scopeOrderIds||[]),old=previous.current;
-  previous.current={snapshot:next,ids,scopeKey};
-  if(!old||old.scopeKey!==scopeKey){setUnread(0);setMessages([]);return;}
-  const changes=scfProductionOrderChanges(old.snapshot,next,new Set([...old.ids,...ids]));if(!changes.length)return;
-  setMessages(items=>[{at:new Date().toLocaleTimeString('vi-VN'),changes},...items].slice(0,20));setUnread(n=>n+changes.length);
-  if(soundRef.current)ring();
- },[orders,scopeKey,JSON.stringify(scopeOrderIds)]);
- useEffect(()=>()=>{audio.current?.close().catch(()=>{});},[]);
- const enableSound=async()=>{setError('');if(soundRef.current){soundRef.current=false;setSound(false);return;}try{const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)throw Error('Thiết bị chưa hỗ trợ chuông trong app.');audio.current=audio.current||new Audio();await audio.current.resume();if(audio.current.state!=='running')throw Error('Chưa bật được âm thanh. Kiểm tra chế độ im lặng và thử lại.');soundRef.current=true;setSound(true);ring();}catch(e){setError(e.message);}};
- const enablePush=async()=>{if(pushBusy)return;setPushBusy(true);setError('');try{await scfEnableProductionPush(currentUser);window.showToast('Đã đăng ký thông báo điện thoại. Có thể khóa màn hình để nhận thông báo khi có đơn đổi.','success');}catch(e){setError(e.message);}finally{setPushBusy(false);}};
- const latest=messages[0];
- return h('section',{className:'production-order-alerts'+(unread?' has-changes':''),'aria-label':'Thông báo thay đổi đơn hàng sản xuất'},
-  h('div',{className:'production-alert-controls'},h('button',{type:'button',className:'production-alert-bell','aria-label':'Chuông thay đổi đơn hàng','aria-expanded':expanded,onClick:()=>setExpanded(v=>!v)},h('span',{className:'production-alert-symbol','aria-hidden':true},'🔔'),unread?h('b',null,unread+' thay đổi chưa xem'):h('span',null,'Theo dõi đơn hàng')),
-   h('button',{type:'button','aria-pressed':sound,onClick:enableSound},sound?'Tắt chuông':'Bật chuông'),h('button',{type:'button',disabled:pushBusy,onClick:enablePush},pushBusy?'Đang bật…':'Bật thông báo điện thoại'),h('button',{type:'button',disabled:pushBusy,onClick:async()=>{setPushBusy(true);try{await scfDisableProductionPush();setError('Đã tắt thông báo sản xuất trên điện thoại này.');}catch(e){setError(e.message);}finally{setPushBusy(false);}}},'Tắt thông báo điện thoại')),
-  latest&&h('div',{role:'status','aria-live':'polite',className:'production-alert-banner'},h('b',null,'ĐƠN HÀNG THAY ĐỔI · '+latest.at),h('div',null,latest.changes.slice(0,3).map(c=>c.text).join(' | ')),h('small',null,'Số liệu KL sản xuất đã tính lại theo dữ liệu vừa nhận. Kiểm tra chi tiết trước khi tiếp tục.')),
-  error&&h('p',{role:'alert'},error),
-  expanded&&h('div',{className:'production-alert-history'},messages.length?messages.map((m,i)=>h('div',{key:i},h('b',null,m.at),m.changes.map(c=>h('div',{key:c.id},h('strong',null,c.text),c.before&&h('div',null,'Trước: '+c.before),c.after&&h('div',null,'Sau: '+c.after))))):h('p',null,'Chưa phát hiện thay đổi đơn hàng trong phạm vi đang xem kể từ khi mở màn hình.'),h('button',{onClick:()=>{setUnread(0);setExpanded(false);}},'Đã xem'))
- );
-}
+// Tracking and notifications run on the server; no bell controls or audio in the production screen.

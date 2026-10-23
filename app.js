@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V635';
+const SCF_BUILD_VERSION='V639';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -245,7 +245,7 @@ const SCF_PAGE_COMPONENTS={
   maintreport:'MaintenanceReportTab',materialusage:'MaterialUsageReportTab',powderdebtreport:'PowderDebtReportTab',maint_vehicle:'MaintenanceTab',maint_machine:'MaintenanceTab',
   shifts:'ShiftsTab',quotes:'QuotesTab',delivery:'DeliveryOrdersTab ProductionSummaryPreviewModal',intem:'IntemTab',trips:'TripsTab',workreport_lx:'DriverTripWorkReportTab',
   orderdetail:'OrderDetailListTab',salesreport:'SalesReportTab',marketsales:'SalesDebtReportTab',invoicereport:'InvoiceUploadReportTab TripInvoicePreview',cashflowreport:'FinanceReportTab',
-  prodreport:'ProductionReportTab',prodbom:'ProductionRecipesTab',powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab ProductionOrderAlerts ProductionClosingDialog scfClosingAutoScope scfClosingCalculate',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab'
+  prodreport:'ProductionReportTab',prodbom:'ProductionRecipesTab',powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab ProductionClosingDialog scfClosingAutoScope scfClosingCalculate',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab'
 };
 function scfMissingPageComponents(page){
   const names=SCF_PAGE_COMPONENTS[page]||(PROCESS_POST_KEYS[page]?'ProcessPostsTab':'PlaceholderTab');
@@ -350,6 +350,7 @@ function App(){
   const[productionPreviewOpen,setProductionPreviewOpen]=useState(false);
   const[productionClosingScope,setProductionClosingScope]=useState(null);
   const[productionClosingWorkshop,setProductionClosingWorkshop]=useState('bun');
+  const[preparedProductionPage,setPreparedProductionPage]=useState(null);
   useEffect(()=>{
     const changed=event=>setDaySummaryOpen(!!event.detail?.open);
     window.addEventListener('scf-day-summary-open',changed);
@@ -526,8 +527,14 @@ function App(){
     const allowed=user=>!!user&&canAccess(user.role,'prodsummary',user.permissions,employeeDepartments(user));
     if(!loader||!allowed(owner))throw Error('Tài khoản chưa được cấp quyền xem tổng hợp sản xuất.');
     const ownerKey=scfQuickSummaryAccessKey(owner);
-    await Promise.all([...SCF_PAGE_DATA.prodsummary.map(key=>loader.load(key,key==='prod_actuals')),scfEnsurePageTools('prodsummary')]);
+    const finishLive=async(refresh=false)=>{
+    await Promise.all([...SCF_PAGE_DATA.prodsummary.map(key=>loader.load(key,refresh||key==='prod_actuals')),scfEnsurePageTools('prodsummary')]);
     if(loader!==dataLoaderRef.current||!allowed(quickSummaryUserRef.current)||scfQuickSummaryAccessKey(quickSummaryUserRef.current)!==ownerKey)throw Error('Phiên đăng nhập hoặc quyền xem đã thay đổi. Hãy mở lại cửa sổ.');
+    };
+    const prepared=typeof scfReadPreparedSummary==='function'?await scfReadPreparedSummary('production',isoDate()):null;
+    if(loader!==dataLoaderRef.current||!allowed(quickSummaryUserRef.current)||scfQuickSummaryAccessKey(quickSummaryUserRef.current)!==ownerKey)throw Error('Quyền xem đã thay đổi.');
+    if(prepared?.ready&&prepared.payload?.rows){const liveReady=finishLive(true);liveReady.catch(()=>{});return {prepared,liveReady};}
+    await finishLive();
   };
   useEffect(()=>setProductionPreviewOpen(false),[cu?.id,page]);
   useEffect(()=>{if(!cu||!canAccess(cu.role,'prodsummary',cu.permissions,employeeDepartments(cu)))setProductionPreviewOpen(false);},[cu?.role,cu?.permissions,employeeDepartmentLabel(cu)]);
@@ -657,6 +664,13 @@ function App(){
     let cancelled=false;
     setReadyPage(null);setPageError('');
     const loader=dataLoaderRef.current;
+    setPreparedProductionPage(null);
+    if(page==='prodsummary'&&typeof scfReadPreparedSummary==='function'){
+      const ownerKey=scfQuickSummaryAccessKey(cu);
+      scfReadPreparedSummary('production',isoDate()).then(prepared=>{
+        if(!cancelled&&prepared?.ready&&prepared.payload?.rows&&ownerKey===scfQuickSummaryAccessKey(quickSummaryUserRef.current))setPreparedProductionPage({...prepared,ownerKey});
+      }).catch(()=>{});
+    }
     Promise.all([...requiredKeys.map(key=>loader.load(key)),scfEnsurePageTools(page)])
       .then(()=>{if(!cancelled){setAutoSyncReady(true);setReadyPage(page);}})
       .catch(error=>{if(!cancelled)setPageError(error.message||'Không tải được dữ liệu màn hình.');});
@@ -891,7 +905,7 @@ function App(){
         className:'content'+(menuHidden?' compact-top':'')+(page!=='welcome'?' mobile-subpage-content':'')+(readOnly?' scf-readonly':'')+(activeLevel!=='rwd'?' scf-no-delete':''),
         onClickCapture:e=>guardPermissionAction(e,cu.role,page,cu.permLevels)
       },
-        !pageReady?h('div',{className:'card',role:pageError?'alert':'status',style:{padding:24}},
+        !pageReady&&page==='prodsummary'&&canOpenCurrentPage(cu)&&preparedProductionPage?.ownerKey===scfQuickSummaryAccessKey(cu)?h('div',null,h('p',{className:'summary-cache-updated',role:'status'},'Bản đã lưu · Cập nhật lúc '+scfSummaryUpdatedLabel(preparedProductionPage.updatedAt)+' · Đang đối chiếu dữ liệu mới…'),pageError&&h('p',{role:'alert'},pageError),h(ProductionSummaryTab,{...preparedProductionPage.payload.data,currentUser:cu,preparedRows:preparedProductionPage.payload.rows,preparedDate:preparedProductionPage.payload.date,snapshotReadOnly:true})):!pageReady?h('div',{className:'card',role:pageError?'alert':'status',style:{padding:24}},
           h('p',null,pageError||'Đang tải dữ liệu '+(PTITLES[page]||'màn hình')+'…'),
           pageError&&h('button',{className:'bp',onClick:()=>{if(scfMissingPageComponents(page).length)location.reload();else setPageAttempt(v=>v+1);}},'Thử tải lại')
         ):h(React.Fragment,null,
