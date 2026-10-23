@@ -143,6 +143,7 @@ async function getServerAuthSession(){
 }
 
 async function serverLogout(){
+  if(typeof scfDetachProductionPush==='function')await scfDetachProductionPush();
   if(!SCF_SERVER_AUTH_ENABLED||!sb)return;
   try{await invokeScfAuth({body:{action:'release_session'}},10000);}catch{console.warn('Không xác nhận được việc thoát phiên trên máy chủ.');}
   // A failed release must not prevent signing out the local auth session.

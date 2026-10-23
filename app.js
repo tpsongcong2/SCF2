@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V634';
+const SCF_BUILD_VERSION='V635';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -245,7 +245,7 @@ const SCF_PAGE_COMPONENTS={
   maintreport:'MaintenanceReportTab',materialusage:'MaterialUsageReportTab',powderdebtreport:'PowderDebtReportTab',maint_vehicle:'MaintenanceTab',maint_machine:'MaintenanceTab',
   shifts:'ShiftsTab',quotes:'QuotesTab',delivery:'DeliveryOrdersTab ProductionSummaryPreviewModal',intem:'IntemTab',trips:'TripsTab',workreport_lx:'DriverTripWorkReportTab',
   orderdetail:'OrderDetailListTab',salesreport:'SalesReportTab',marketsales:'SalesDebtReportTab',invoicereport:'InvoiceUploadReportTab TripInvoicePreview',cashflowreport:'FinanceReportTab',
-  prodreport:'ProductionReportTab',prodbom:'ProductionRecipesTab',powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab ProductionClosingDialog scfClosingAutoScope scfClosingCalculate',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab'
+  prodreport:'ProductionReportTab',prodbom:'ProductionRecipesTab',powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab ProductionOrderAlerts ProductionClosingDialog scfClosingAutoScope scfClosingCalculate',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab'
 };
 function scfMissingPageComponents(page){
   const names=SCF_PAGE_COMPONENTS[page]||(PROCESS_POST_KEYS[page]?'ProcessPostsTab':'PlaceholderTab');
@@ -686,6 +686,7 @@ function App(){
       busy=true;
       try{
         const watchedKeys=[...keys];
+        if((productionPreviewOpen||page==='prodsummary')&&canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments))for(const key of SCF_PAGE_DATA.prodsummary)if(dataLoaderRef.current?.loaded.has(key)&&!watchedKeys.includes(key))watchedKeys.push(key);
         if(!isFaceMask&&canAccess(cu.role,'assets',cu.permissions,cuAccessDepartments)&&dataLoaderRef.current?.loaded.has('assets')&&!watchedKeys.includes('assets'))watchedKeys.push('assets');
         const changed=await dbGetChangedKeys(watchedKeys.map(key=>'scf_'+key));
         const changedKeys=changed.map(key=>key.replace(/^scf_/,''));
@@ -703,7 +704,7 @@ function App(){
     document.addEventListener('visibilitychange',refresh);
     window.scfSyncNow=refresh;
     return()=>{stopped=true;clearInterval(tm);document.removeEventListener('visibilitychange',refresh);if(window.scfSyncNow===refresh)delete window.scfSyncNow;};
-  },[loading,bootError,cu?.id,page,pageReady]);
+  },[loading,bootError,cu?.id,page,pageReady,productionPreviewOpen]);
 
   /* ── TẠO CHUYẾN TRƯỚC 3 NGÀY VÀ TỰ XẾP ĐƠN PHÙ HỢP ── */
   useEffect(()=>{
@@ -852,6 +853,7 @@ function App(){
     return latest?.attendanceZones;
   };
   return h('div',{className:'layout'},
+    h(ProductionPushIdentity,{currentUser:cu,onOpen:()=>{setProductionPreviewOpen(false);setPage('prodsummary');window.scfSyncNow?.();}}),
     h('div',{className:'main'},
       !menuHidden&&h('div',{className:'topbar'+(page!=='welcome'?' mobile-subpage-topbar':'')},
         h('div',{className:'topbar-main'},

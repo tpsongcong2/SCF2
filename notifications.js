@@ -15,6 +15,9 @@ function NotificationsTab({notifications,setNotifications,currentUser,setPage}){
     if(n.targetPage)setPage(n.targetPage);
   };
   const enableDevice=async()=>{
+    if(canAccess(currentUser?.role,'prodsummary',currentUser?.permissions,employeeDepartments(currentUser))){
+      try{await scfEnableProductionPush(currentUser);window.showToast('Đã bật thông báo thay đổi đơn hàng sản xuất trên thiết bị này.','success');}catch(e){window.showToast(e.message,'warn');}return;
+    }
     if(!('Notification' in window)){window.showToast('Trình duyệt này không hỗ trợ thông báo trên thiết bị.','warn');return;}
     const result=await Notification.requestPermission();
     window.showToast(result==='granted'?'Đã bật thông báo trên thiết bị.':'Chưa được cấp quyền thông báo.',result==='granted'?'success':'warn');
@@ -24,6 +27,7 @@ function NotificationsTab({notifications,setNotifications,currentUser,setPage}){
       h('div',null,h('div',{className:'ptitle'},h('i',{className:'ti ti-bell'}),'Thông báo'),h('div',{className:'notifications-sub'},unread.length+' thông báo chưa đọc')),
       h('div',{className:'notifications-actions'},
         h('button',{onClick:enableDevice},h('i',{className:'ti ti-bell-ringing'}),' Bật thông báo trên thiết bị'),
+        canAccess(currentUser?.role,'prodsummary',currentUser?.permissions,employeeDepartments(currentUser))&&h('button',{onClick:async()=>{try{await scfDisableProductionPush();window.showToast('Đã tắt thông báo sản xuất trên thiết bị này.','success');}catch(e){window.showToast(e.message,'warn');}}},'Tắt thông báo sản xuất'),
         h('button',{onClick:markAll,disabled:!unread.length},h('i',{className:'ti ti-checks'}),' Đánh dấu đã đọc')
       )
     ),

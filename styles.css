@@ -1691,3 +1691,17 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 .claim-file-dropzone.is-dragging{border-color:var(--pri);background:#dcefe5;box-shadow:0 0 0 3px #dcefe5}
 .claim-file-dropzone[aria-busy=true]{opacity:.7}.claim-file-dropzone p{margin:8px 0 12px;color:var(--tx2);font-size:13px}
 .claim-file-dropzone input[type=file]{width:100%;max-width:100%}
+
+/* Production order alerts stay visible inside the production scroll surface. */
+.production-order-alerts{position:sticky;top:0;z-index:9;background:var(--bg,#eef4f0);padding:8px 10px;margin-bottom:12px;border:1px solid #cbded4;border-radius:12px}
+.production-alert-controls{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:8px}
+.production-alert-bell{display:flex;align-items:center;gap:8px;color:#245e48}
+.production-alert-bell .production-alert-symbol{font-size:25px;line-height:1}
+.production-order-alerts.has-changes{border-color:#d88c17;background:#fff7da}
+.production-alert-banner{padding:10px;margin-top:8px;border-radius:8px;background:#fff0b7;color:#4e3300;line-height:1.6}
+.production-alert-banner small{display:block}
+.production-alert-history{max-height:260px;overflow:auto;padding:10px;border-top:1px solid #d3decf;margin-top:8px}
+.production-alert-history>div{padding:8px;border-bottom:1px solid #d3decf}
+.production-alert-controls button{min-height:40px}
+@media(max-width:768px){.production-order-alerts{padding:8px;margin:0 0 10px}.production-alert-bell{flex-basis:100%;justify-content:center}.production-alert-controls{gap:6px}.production-alert-controls button{font-size:12px;padding:7px 9px}.production-alert-banner{font-size:13px}.production-alert-history{max-height:180px}}
+@media print{.production-order-alerts{display:none!important}}

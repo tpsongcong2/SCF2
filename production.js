@@ -353,6 +353,7 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
     popup.document.write(html);popup.document.close();popup.onload=()=>popup.print();
   };
   return h('div',null,
+    h(ProductionOrderAlerts,{orders,scopeOrderIds:[...new Set(rows.flatMap(r=>r.orders).map(String))],scopeKey:JSON.stringify([currentUser?.id,date,shift,workshop]),currentUser}),
     h('div',{className:'ptitle production-summary-title'},h('span',null,h('i',{className:'ti ti-clipboard-list',style:{fontSize:20}}),'Tổng hợp sản xuất'),onOpenClosing&&h('button',{type:'button',className:'bp','data-scf-action':'view',onClick:()=>onOpenClosing({workshop:['banh','bot'].includes(workshop)?workshop:'bun'})},'Chốt cuối ca')),
     h('div',{className:'card production-summary-filters',style:{marginBottom:'1.25rem'}},
       h('div',{className:'g3'},
