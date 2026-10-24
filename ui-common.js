@@ -1,6 +1,22 @@
 /* ─── UI base ─── */
 function F({label,children}){return h('div',{className:'fl'},h('label',null,label),children)}
 function Row({children}){return h('div',{className:'form-actions'},children)}
+function ScfHeaderFilter({label,active,children}){
+  const [anchor,setAnchor]=useState(null),button=React.useRef(null),panel=React.useRef(null);
+  const close=()=>{setAnchor(null);button.current?.focus();};
+  useEffect(()=>{
+    if(!anchor)return;
+    panel.current?.focus();
+    const key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}};
+    const scroll=e=>{if(!panel.current?.contains(e.target))setAnchor(null);};
+    document.addEventListener('keydown',key,true);window.addEventListener('resize',close);window.addEventListener('scroll',scroll,true);
+    return()=>{document.removeEventListener('keydown',key,true);window.removeEventListener('resize',close);window.removeEventListener('scroll',scroll,true);};
+  },[anchor]);
+  return h(React.Fragment,null,
+    h('button',{ref:button,type:'button',className:'delivery-column-filter'+(active?' active':''),'aria-label':'Lọc '+label,'aria-expanded':!!anchor,title:'Lọc '+label,onClick:e=>{const r=e.currentTarget.getBoundingClientRect(),top=Math.max(8,Math.min(r.bottom+4,window.innerHeight-320));setAnchor({left:Math.max(8,Math.min(r.left,window.innerWidth-296)),top,maxHeight:window.innerHeight-top-8});}},h('span',null,label),h('i',{className:'ti ti-filter','aria-hidden':true})),
+    anchor&&ReactDOM.createPortal(h('div',{className:'delivery-column-filter-backdrop',onClick:close},h('div',{ref:panel,className:'delivery-column-filter-popup',tabIndex:-1,role:'dialog','aria-label':'Lọc '+label,style:anchor,onClick:e=>e.stopPropagation()},h('strong',null,'Lọc '+label),children,h('button',{type:'button',onClick:close},'Xong'))),document.body)
+  );
+}
 function Modal({title,lg,className='',overlayClassName='',onClose,children}){
   return h('div',{className:'overlay'+(overlayClassName?' '+overlayClassName:''),onClick:e=>{if(e.target===e.currentTarget)onClose()}},
     h('div',{className:'modal'+(lg==='xl'?' xl':lg?' wide':'')+(className?' '+className:''),style:{},onClick:e=>e.stopPropagation()},

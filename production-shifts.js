@@ -633,6 +633,7 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
   const[sortMode,setSortMode]=useState('area');
   const[areaFilter,setAreaFilter]=useState('all');
   const[locationSearch,setLocationSearch]=useState('');
+  const[nameFilter,setNameFilter]=useState(''),[timeFilter,setTimeFilter]=useState(''),[dayFilter,setDayFilter]=useState(''),[tripFilter,setTripFilter]=useState(''),[statusFilter,setStatusFilter]=useState('');
   const pointOptions=[...new Set((customers||[]).flatMap(c=>(c.points||[]).flatMap(pt=>[pt.name,pt.area]).filter(Boolean)))].sort((a,b)=>a.localeCompare(b));
   const dateOffsetLabel=v=>{
     const n=Number(v||0);
@@ -684,7 +685,11 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
     return group==='Chưa phân khu vực'?9999:0;
   };
   const locationSearchKey=normalizeLookupText(locationSearch);
-  const groupedShifts=[...prodShifts].map(normalize).filter(r=>(areaFilter==='all'||areaOfLocation(r.location)===areaFilter)&&(!locationSearchKey||normalizeLookupText(r.location).includes(locationSearchKey))).sort((a,b)=>{
+  const normalizedShifts=[...prodShifts].map(normalize);
+  const displayName=r=>shiftRuleFromProdTime(r.actualProdTime)?.name||r.name||'';
+  const nameOptions=[...new Set(normalizedShifts.map(displayName).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const tripOptions=[...new Set(normalizedShifts.map(r=>r.tripShiftName).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  const groupedShifts=normalizedShifts.filter(r=>(areaFilter==='all'||areaOfLocation(r.location)===areaFilter)&&(!locationSearchKey||normalizeLookupText(r.location).includes(locationSearchKey))&&(!nameFilter||displayName(r)===nameFilter)&&(!timeFilter||normalizeLookupText(orderTimeText(r)).includes(normalizeLookupText(timeFilter)))&&(dayFilter===''||Number(r.tripDateOffset||0)===Number(dayFilter))&&(!tripFilter||r.tripShiftName===tripFilter)&&(!statusFilter||(r.active!==false)===(statusFilter==='active'))).sort((a,b)=>{
     const ga=groupLabelForShift(a),gb=groupLabelForShift(b);
     const gp=sortPriorityForGroup(ga)-sortPriorityForGroup(gb);
     if(gp)return gp;
@@ -703,6 +708,20 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
   const open=(sh)=>{sf(sh?normalize(sh):{...empty});setProductSearch('');se(sh||null);sm('f');};
   const updateProductRule=(id,patch)=>sf(p=>({...p,productTripRules:(p.productTripRules||[]).map(r=>r.id===id?{...r,...patch}:r)}));
   const routingLabel=r=>(r.tripShiftName||'—')+((r.productTripRules||[]).some(x=>x.active!==false)?' · '+r.productTripRules.filter(x=>x.active!==false).length+' ngoại lệ sản phẩm':'');
+  const hasFilters=!!(locationSearch||areaFilter!=='all'||nameFilter||timeFilter||dayFilter!==''||tripFilter||statusFilter);
+  const clearFilters=()=>{setLocationSearch('');setAreaFilter('all');setNameFilter('');setTimeFilter('');setDayFilter('');setTripFilter('');setStatusFilter('');};
+  const filterColumns=[['name','Tên ca'],['location','Địa điểm / khu vực'],['time','Giờ ĐH'],['day','Ngày chuyến'],['trip','Ca giao hàng'],['status','Trạng thái'],['sort','Sắp xếp']];
+  const renderHeaderFilter=(key,label)=>{
+    const values={name:nameFilter,time:timeFilter,day:dayFilter,trip:tripFilter,status:statusFilter};
+    const setters={name:setNameFilter,time:setTimeFilter,day:setDayFilter,trip:setTripFilter,status:setStatusFilter};
+    if(key==='location')return h(ScfHeaderFilter,{label,active:!!locationSearch||areaFilter!=='all'},
+      h('input',{'aria-label':'Tìm địa điểm',value:locationSearch,onChange:e=>setLocationSearch(e.target.value),placeholder:'Tìm địa điểm...',type:'search'}),
+      h('label',null,'Khu vực',h('select',{'aria-label':'Lọc khu vực quy tắc',value:areaFilter,onChange:e=>setAreaFilter(e.target.value)},h('option',{value:'all'},'Tất cả khu vực ('+prodShifts.length+')'),areaFilterOptions.map(area=>h('option',{key:area,value:area},area)))),
+      h('button',{type:'button',onClick:()=>{setLocationSearch('');setAreaFilter('all');}},'Xóa lọc'));
+    if(key==='sort')return h(ScfHeaderFilter,{label,active:sortMode!=='area'},h('label',null,'Nhóm / sắp xếp theo',h('select',{'aria-label':'Sắp xếp quy tắc',value:sortMode,onChange:e=>setSortMode(e.target.value)},h('option',{value:'area'},'Khu vực'),h('option',{value:'prod'},'Ca sản xuất'),h('option',{value:'trip'},'Ca giao hàng'))),h('button',{type:'button',onClick:()=>setSortMode('area')},'Mặc định'));
+    const options=key==='name'?nameOptions.map(v=>[v,v]):key==='trip'?tripOptions.map(v=>[v,v]):key==='day'?[-1,0,1].map(v=>[String(v),dateOffsetLabel(v)]):key==='status'?[['active','Đang hoạt động'],['inactive','Tạm tắt']]:null;
+    return h(ScfHeaderFilter,{label,active:values[key]!==''},options?h('select',{'aria-label':'Giá trị lọc '+label,value:values[key],onChange:e=>setters[key](e.target.value)},h('option',{value:''},'Tất cả'),options.map(([value,text])=>h('option',{key:value,value},text))):h('input',{'aria-label':'Giá trị lọc '+label,type:'search',placeholder:'Tìm giờ đơn hàng...',value:values[key],onChange:e=>setters[key](e.target.value)}),h('button',{type:'button',onClick:()=>setters[key]('')},'Xóa lọc'));
+  };
   const presetForTime=t=>{
     const exact=shiftNamePresets.find(x=>x.orderTime===t);
     if(exact)return exact;
@@ -797,20 +816,6 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
     ),
     h('div',{id:'prod-settings-panel-routing',role:'tabpanel','aria-labelledby':'prod-settings-tab-routing',hidden:section!=='routing',style:{display:section==='routing'?'block':'none'}},
     h('h3',null,'1. Từ đơn hàng → tự động chọn chuyến'),
-    h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:'1rem',gap:8,flexWrap:'wrap',alignItems:'center'}},
-      h('input',{value:locationSearch,onChange:e=>setLocationSearch(e.target.value),placeholder:'Tìm địa điểm...',type:'search',style:{padding:'7px 10px',border:'1px solid var(--bd)',borderRadius:'var(--r)',fontSize:13,minWidth:240}}),
-      h('span',{style:{fontSize:12,color:'var(--tx2)',fontWeight:600}},'Lọc khu vực'),
-      h('select',{value:areaFilter,onChange:e=>setAreaFilter(e.target.value),style:{padding:'7px 10px',border:'1px solid var(--bd)',borderRadius:'var(--r)',fontSize:13,minWidth:180}},
-        h('option',{value:'all'},'Tất cả khu vực ('+(prodShifts||[]).length+')'),
-        areaFilterOptions.map(area=>h('option',{key:area,value:area},area+' ('+(prodShifts||[]).filter(sh=>areaOfLocation(normalize(sh).location)===area).length+')'))
-      ),
-      h('span',{style:{fontSize:12,color:'var(--tx2)',fontWeight:600}},'Sắp xếp theo'),
-      h('select',{value:sortMode,onChange:e=>setSortMode(e.target.value),style:{padding:'7px 10px',border:'1px solid var(--bd)',borderRadius:'var(--r)',fontSize:13}},
-        h('option',{value:'area'},'Khu vực'),
-        h('option',{value:'prod'},'Ca sản xuất'),
-        h('option',{value:'trip'},'Ca giao hàng')
-      )
-    ),
     h('div',{style:{marginBottom:'1rem',padding:'12px 16px',background:'#f0f7f0',borderRadius:'var(--r)',border:'1px solid #c8e6c9',fontSize:13}},
       h('b',null,'Cách hoạt động: '),
       'Bảng 1 chọn ngày chuyến và ca giao hàng theo địa điểm/khu vực, giờ đơn hàng. Bảng 2 quyết định lịch SX và in tem theo chuyến. Cấu hình cũ khác nhau trong cùng ca giao hàng cần được cài đặt lại tại bảng 2.',
@@ -818,13 +823,16 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
       h('span',{style:{color:'var(--tx2)',fontSize:12}},'Ngày -1 là làm/in trước ngày đơn hàng 1 ngày; ngày 0 là cùng ngày với ngày đơn hàng.')
     ),
     h('div',{style:{display:'flex',justifyContent:'flex-end',gap:8,marginBottom:'1rem',flexWrap:'wrap'}},
+      h('span',{style:{marginRight:'auto',alignSelf:'center',fontSize:12}},groupedShifts.length+' / '+prodShifts.length+' dòng'),
+      hasFilters&&h('button',{onClick:clearFilters},'Xóa bộ lọc'),
       h('button',{onClick:autoUpdateFromOrders},h('i',{className:'ti ti-refresh',style:{fontSize:14}}),'Cập nhật từ đơn hàng'),
       h(AddBtn,{onClick:()=>open(null),label:'Thêm dòng'})
     ),
+    h('div',{className:'mobile-only',style:{marginBottom:12}},h('div',{style:{display:'flex',flexWrap:'wrap',gap:12,padding:10,background:'var(--bg2)',border:'1px solid var(--bd)',borderRadius:'var(--r)'}},filterColumns.map(([key,label])=>h('span',{key},renderHeaderFilter(key,label))))),
     h('div',{className:'desktop-only',style:{overflowX:'auto',background:'#fff',border:'1px solid var(--bd)',borderRadius:'var(--r)',marginBottom:'1.5rem'}},
         h('table',{style:{width:'100%',borderCollapse:'collapse',minWidth:980}},
         h('thead',null,h('tr',null,
-          ['Tên ca','Địa điểm / khu vực','Giờ ĐH','Ngày chuyến','Ca giao hàng','Trạng thái',''].map((x,i)=>h('th',{key:x,style:{textAlign:'left',padding:'10px 12px',borderBottom:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)',background:'var(--bg2)',whiteSpace:'nowrap',width:i===0?130:(i===2?96:undefined)}},x))
+          filterColumns.map(([key,label],i)=>h('th',{key,style:{textAlign:'left',padding:'10px 12px',borderBottom:'1px solid var(--bd)',fontSize:12,color:'var(--tx2)',background:'var(--bg2)',whiteSpace:'nowrap',width:i===0?130:(i===2?96:undefined)}},renderHeaderFilter(key,label)))
         )),
         h('tbody',null,
           (()=>{let lastGroup=null;const rows=[];groupedShiftRows.forEach(item=>{
@@ -856,12 +864,12 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
                 h('button',{className:'bi',onClick:()=>del(r),title:'Xóa',style:{color:'#A32D2D',marginLeft:4}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
               )
             ));
-          });if(!rows.length)rows.push(h('tr',{key:'empty-area-filter'},h('td',{colSpan:7,className:'empty-st'},'Không có dòng cài đặt thuộc khu vực đã chọn.')));return rows;})()
+          });if(!rows.length)rows.push(h('tr',{key:'empty-area-filter'},h('td',{colSpan:7,className:'empty-st'},'Không có dòng cài đặt phù hợp bộ lọc.')));return rows;})()
         )
       )
     ),
     h('div',{className:'mobile-card-list',style:{marginBottom:'1.5rem'}},
-      groupedShiftRows.length===0&&h('div',{className:'empty-st',style:{padding:'1rem'}},'Không có dòng cài đặt thuộc khu vực đã chọn.'),
+      groupedShiftRows.length===0&&h('div',{className:'empty-st',style:{padding:'1rem'}},'Không có dòng cài đặt phù hợp bộ lọc.'),
       groupedShiftRows.map(item=>{
         if(item.type==='group'){
           return h('div',{key:item.key,style:{padding:'8px 12px',background:'#E6F1FB',color:'#185FA5',fontWeight:700,borderRadius:10,marginBottom:8}},
