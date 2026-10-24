@@ -253,8 +253,11 @@ window.scfClearSensitiveLocalData=function(){
   setSyncState(navigator.onLine?'idle':'offline');
 };
 window.scfGetSyncState=function(){return window.__SCF_SYNC_STATE||{status:navigator.onLine?'idle':'offline',pending:0};};
+window.scfProductionConfigurationPending=function(){
+  const queue=readSyncQueue();return ['scf_shifts','scf_prod_shifts','scf_prod_shift_rules','scf_customers'].some(key=>!!queue[key]);
+};
 window.scfOrderAutomationPending=function(){
-  const queue=readSyncQueue();return !!(queue.scf_orders||queue.scf_trips);
+  const queue=readSyncQueue();return !!(queue.scf_orders||queue.scf_trips)||window.scfProductionConfigurationPending();
 };
 window.scfGetSyncReport=function(){
   const queue=readSyncQueue();

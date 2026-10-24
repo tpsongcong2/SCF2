@@ -20,10 +20,10 @@ function scfBuildWorkshopPlan(orders,products,prodShifts,prodShiftRules,date,wor
     (order.lines||[]).forEach((line,index)=>{
       const product=productById.get(String(line.productId||''));
       if(!product||scfWorkshopForProduct(product)!==workshop)return;
-      const plan=plans[index]||prodShiftPlan(order,prodShifts||[],prodShiftRules||[]);
+      const plan=plans.find(p=>p.line===line||p.index===index)||prodShiftPlan({...order,lines:[line]},prodShifts||[],prodShiftRules||[]);
       const prodDate=line.shiftOverride?(line.prodDate||plan?.prodDate||order.deliveryDate):(plan?.prodDate||order.deliveryDate);
       const prodTime=line.shiftOverride?(line.prodTime||plan?.prodTime||''):(plan?.prodTime||'');
-      const rule=getProdWorkShiftRule(prodTime,prodShiftRules||[]);
+      const rule=(!line.shiftOverride&&plan?.prodWorkShiftId?(prodShiftRules||[]).find(r=>String(r.id)===String(plan.prodWorkShiftId)):null)||getProdWorkShiftRule(prodTime,prodShiftRules||[]);
       if(prodDate!==date||rule?.group!==shiftGroup)return;
       const qty=numFmt(line.qtyProd);
       if(qty<=0)return;

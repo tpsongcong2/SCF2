@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V641';
+const SCF_BUILD_VERSION='V645';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -33,7 +33,7 @@ const SCF_PAGE_DATA={
   materials:['materials','purchases'],assets:['assets'],garages:['garages'],
   products:['products','prodcats'],depts:['depts','workcats'],workcats:['workcats','depts'],
   customers:['customers','shifts','orders','areas'],areas:['areas','customers','orders'],
-  prodshifts:['prod_shifts','prod_shift_rules','orders','customers','shifts'],deliveryrules:['delivery_rules'],deliverysequence:['customers','areas','shifts'],
+  prodshifts:['prod_shifts','prod_shift_rules','orders','customers','shifts','trips'],deliveryrules:['delivery_rules'],deliverysequence:['customers','areas','shifts'],
   tasks:['tasks','workcats'],notifications:[],userguide:[],
   nccs:['nccs','purchases'],nccgoods:['ncc_goods','goods_purchases'],
   purchaseorders:['purchases','nccs','materials','products','prodcats'],
@@ -47,10 +47,10 @@ const SCF_PAGE_DATA={
   trips:['trips','orders','shifts','prod_shifts','customers','products','prodcats','quotes','finance_debts'],
   orderdetail:['orders','products','customers','shifts','trips','prod_shifts','quotes','finance_debts'],
   workreport_lx:['trips','orders','products','customers'],
-  salesreport:['orders','customers','products','prod_shifts','quotes'],
+  salesreport:['orders','customers','products','prod_shifts','quotes','shifts','trips'],
   cashflowreport:['finance_entries','finance_debts','finance_openings','customers','nccs','orders','products','quotes','purchases','goods_purchases'],
-  powdersales:['customers','trips'],prodsummary:['orders','products','customers','prodcats','prod_shifts','prod_shift_rules','prod_actuals','stock'],prodreport:[],
-  prodbom:['production_recipes','products','prodcats','materials'],prodorders:['prodorders','products','orders','prod_shifts','prod_shift_rules'],stock:['stock','products','prodcats'],
+  powdersales:['customers','trips'],prodsummary:['orders','products','customers','prodcats','prod_shifts','prod_shift_rules','prod_actuals','stock','shifts','trips'],prodreport:[],
+  prodbom:['production_recipes','products','prodcats','materials'],prodorders:['prodorders','products','orders','prod_shifts','prod_shift_rules','shifts','trips'],stock:['stock','products','prodcats'],
   syncreport:[],purchase:[],workreport_vp:[],workreport_sx:[]
 };
 function scfPageDataKeys(page,allKeys){
@@ -155,10 +155,8 @@ function scfPlanAutomaticOrders(orders,trips,prodShifts,customers,actorName,limi
     if(changed>=limit||!order||!['','pending','assigned'].includes(String(order.status||'')))return order;
     const linked=tripById.get(String(order.tripId||''));
     if(linked&&(linked.driverDispatchedAt||['active','completion_pending','completed','cancelled'].includes(String(linked.status||''))))return order;
-    const plannedShift=order.prodShiftAssignMode==='manual'
-      ?(prodShifts||[]).find(shift=>String(shift.id||'')===String(order.prodShiftId||''))
-      :getProdShiftForOrder(order,prodShifts||[],customers||[]);
-    let next=scfApplyAutomaticProduction(order,plannedShift);
+    const plannedShift=getProdShiftForOrder(order,prodShifts||[],customers||[]);
+    let next=order;
     if(order.tripAssignMode!=='manual'){
       let trip=null;
       const tripDate=plannedShift?addDaysVN(order.deliveryDate,Number(plannedShift.tripDateOffset??0)):'';
@@ -187,6 +185,7 @@ function scfPlanAutomaticOrders(orders,trips,prodShifts,customers,actorName,limi
       const tripId=trip?.id||null,status=trip?'assigned':'pending';
       if(String(next.tripId||'')!==String(tripId||'')||next.status!==status||next.tripAssignMode!=='auto')next={...next,tripId,tripAssignMode:'auto',status};
     }
+    next=scfApplyAutomaticProduction(next,plannedShift,workingTrips);
     if(next===order)return order;
     changed++;
     return {...next,updatedAt:fmtDT(),updatedBy:actorName||'Hệ thống'};
@@ -404,7 +403,9 @@ function App(){
   const[processPosts,_spp]=useState({});
   window.__SCF_CUSTOMERS=customers||[];
   window.__SCF_PROD_SHIFTS=prodShifts||[];
+  window.__SCF_PROD_SHIFT_RULES=prodShiftRules||[];
   window.__SCF_SHIFTS=shifts||[];
+  window.__SCF_TRIPS=allTrips||[];
   const setEmployees=mkSet(employeeStorageKey,_se);
   const setCompany=mkSet('scf_company',_sc);
   const setMaterials=mkSet('scf_materials',_sm);
@@ -429,7 +430,22 @@ function App(){
   const setShifts=mkSet('scf_shifts',_ssh);
   const setQuotes=mkSet('scf_quotes',_sq);
   const saveAllOrders=mkSet('scf_orders',_so);
-  const setOrders=value=>saveAllOrders(previous=>scfMergePeriodView(previous,typeof value==='function'?value(previous.filter(item=>scfOrderInViewPeriod(item,cu))):value,cu));
+  const setOrders=value=>saveAllOrders(previous=>{
+    const visible=previous.filter(item=>scfOrderInViewPeriod(item,cu));
+    const updated=typeof value==='function'?value(visible):value;
+    const before=new Map(previous.map(o=>[String(o.id),o]));
+    const planned=updated.map(order=>{
+      const old=before.get(String(order.id));
+      if(old===order)return order;
+      const changed=old&&String(old.tripId||'')!==String(order.tripId||'');
+      if(!changed&&!['pending','assigned',''].includes(String(order.status||'')))return order;
+      const rule=getProdShiftForOrder(order,prodShifts||[],customers||[]);
+      const canApply=!!scfTripProductionPlan(order,rule);
+      const next=changed&&canApply?{...order,prodShiftAssignMode:'auto',lines:(order.lines||[]).map(line=>({...line,shiftOverride:false}))}:order;
+      return scfApplyAutomaticProduction(next,rule);
+    });
+    return scfMergePeriodView(previous,planned,cu);
+  });
   const saveAllTrips=mkSet('scf_trips',_st);
   const setTrips=value=>saveAllTrips(previous=>scfMergePeriodView(previous,typeof value==='function'?value(previous.filter(item=>scfOrderInViewPeriod(item,cu))):value,cu));
   const setAutoTrips=valOrFn=>_st(prev=>{
@@ -497,6 +513,10 @@ function App(){
       if(key==='scf_trips')_st(value);
       if(key==='scf_orders')_so(normalizeOrdersForStorage(value));
       if(key==='scf_production_recipes')_srecipes(value);
+      if(key==='scf_shifts')_ssh(value);
+      if(key==='scf_prod_shifts')_sps(value);
+      if(key==='scf_prod_shift_rules')_spr(value);
+      if(key==='scf_customers')_scu(value);
     };
     window.addEventListener('scf-collection-reconciled',receive);
     return()=>window.removeEventListener('scf-collection-reconciled',receive);
@@ -724,7 +744,7 @@ function App(){
   useEffect(()=>{
     const automationUser=cu;
     const tripInputsReady=['orders','trips','shifts','prod_shifts','customers'].every(key=>dataLoaderRef.current?.loaded.has(key));
-    if(loading||!pageReady||!autoSyncReady||!tripInputsReady||!['delivery','trips','orderdetail'].includes(page)||isFaceMask||!automationUser||!canAccess(automationUser.role,'delivery',automationUser.permissions,automationUser.dept)||!canWrite(automationUser.role,'delivery',automationUser.permLevels)||!shifts?.length||!prodShifts?.length)return;
+    if(loading||!pageReady||!autoSyncReady||!tripInputsReady||!['delivery','trips','orderdetail','prodshifts'].includes(page)||isFaceMask||!automationUser||!canAccess(automationUser.role,'delivery',automationUser.permissions,automationUser.dept)||!canWrite(automationUser.role,'delivery',automationUser.permLevels)||!shifts?.length)return;
     // Chờ lần lưu đơn/chuyến trước được xác nhận rồi mới sửa tối đa 25 đơn.
     // Như vậy các đợt không bị gộp thành một lần ghi toàn bộ danh sách lớn.
     if(!navigator.onLine||window.scfOrderAutomationPending?.())return;
@@ -933,7 +953,7 @@ function App(){
         canAccess(cu.role,'products',cu.permissions)&&page==='products'&&h(ProductsTab,{products,setProducts,prodCats,setProdCats}),
         canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers,shifts,orders,areas,cu}),
         canAccess(cu.role,'areas',cu.permissions)&&page==='areas'&&h(AreasTab,{areas,setAreas,customers,setCustomers,orders}),
-        canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts,currentUser:cu}),
+        canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts,setShifts,currentUser:cu}),
         canAccess(cu.role,'deliveryrules',cu.permissions)&&page==='deliveryrules'&&h(DeliveryRulesTab,{items:deliveryRules,setItems:setDeliveryRules,currentUser:cu}),
         canAccess(cu.role,'deliverysequence',cu.permissions,cuAccessDepartments)&&page==='deliverysequence'&&h(DeliverySequenceSettingsTab,{customers,setCustomers,currentUser:cu,shifts}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats,depts}),

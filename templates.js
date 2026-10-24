@@ -636,7 +636,7 @@ function buildTemplateValueBag({company,order,line,lineIndex,plan,products,custo
     'order.totalWeight':calcOrderWeightForTemplate(order,products),
     'plan.shiftName':plan?.shift?.name||'',
     'plan.prodDate':plan?.prodDate||'',
-    'plan.prodTime':plan?.prodTime||'',
+    'plan.prodTime':plan?.prodWorkShiftId?'':plan?.prodTime||'',
     'plan.tripDate':tripDate||'',
     'plan.tripShiftName':tripShiftName||'',
     'plan.labelDate':plan?.labelDate||'',

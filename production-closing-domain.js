@@ -86,10 +86,10 @@ function scfCollectClosingLines({orders=[],products=[],prodCats=[],prodShifts=[]
       if(isGoodsProduct(product.id?product:{...line,code:line.productCode||line.code||''},prodCats))return;
       const name=product.name||line.productName||'',shop=scfProductionWorkshop(name);
       if(shop!==scope.workshop)return;
-      const plan=plans[index]||prodShiftPlan(order,prodShifts,prodShiftRules);
+      const plan=plans.find(p=>p.line===line||p.index===index)||prodShiftPlan({...order,lines:[line]},prodShifts,prodShiftRules);
       const time=line.shiftOverride?(line.prodTime||plan?.prodTime||''):(plan?.prodTime||'');
       const date=line.shiftOverride?(line.prodDate||plan?.prodDate||order.deliveryDate):(plan?.prodDate||order.deliveryDate);
-      const rule=getProdWorkShiftRule(time,prodShiftRules),group=scfClosingGroup(rule?.group);
+      const rule=(!line.shiftOverride&&plan?.prodWorkShiftId?(prodShiftRules||[]).find(r=>String(r.id)===String(plan.prodWorkShiftId)):null)||getProdWorkShiftRule(time,prodShiftRules),group=scfClosingGroup(rule?.group);
       if(group!==scope.shift||scfClosingLineDate(date,time,group)!==scope.date)return;
       const qty=Number(String(line.qtyProd??0).replace(',','.'));if(!Number.isFinite(qty)||qty<=0)return;
       const key=[date,rule.id,line.productId].join('|'),orderId=String(order.id),productId=String(line.productId);

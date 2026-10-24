@@ -183,7 +183,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
       const plan=prodShiftPlan(o,prodShifts||[]);
       const matched=(o.lines||[]).some(line=>{
         if(!line.productId)return false;
-        const linePlan=plans.find(p=>p.line===line||p.line?.id===line.id)||plan;
+        const linePlan=plans.find(p=>p.line===line||(line.id!=null&&p.line?.id===line.id))||prodShiftPlan({...o,lines:[line]},prodShifts||[]);
         return cleanShiftName(linePlan?.shift?.name||'')===shiftF;
       });
       if(!matched)return false;
@@ -218,7 +218,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
     const trip=visibleTripForOrder(o);
     (o.lines||[]).forEach(l=>{
       if(!l.productId)return;
-      const linePlan=linePlans.find(p=>p.line===l||p.line?.id===l.id)||plan;
+      const linePlan=linePlans.find(p=>p.line===l||(l.id!=null&&p.line?.id===l.id))||prodShiftPlan({...o,lines:[l]},prodShifts||[]);
       const lineShiftName=cleanShiftName(linePlan?.shift?.name||'');
       if(shiftF!=='all'&&lineShiftName!==shiftF)return;
       rows.push({

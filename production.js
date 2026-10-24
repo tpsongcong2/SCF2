@@ -193,11 +193,11 @@ function scfBuildProductionRows({orders=[],products=[],prodCats=[],prodShifts=[]
       if(!l.productId)return;
       const product=products.find(product=>String(product.id)===String(l.productId))||{};
       const goods=isGoodsProduct(product.id?product:{...l,code:l.productCode||l.code||''},prodCats);
-      const plan=plans[idx]||prodShiftPlan(o,prodShifts||[]);
+      const plan=plans.find(p=>p.line===l||p.index===idx)||prodShiftPlan({...o,lines:[l]},prodShifts||[]);
       const prodTime=l.shiftOverride?(l.prodTime||plan?.prodTime||''):(plan?.prodTime||'');
       const prodDate=l.shiftOverride?(l.prodDate||plan?.prodDate||o.deliveryDate):(plan?.prodDate||o.deliveryDate);
       if(prodDate!==date)return;
-      const rule=getProdWorkShiftRule(prodTime,rules)||{id:'unknown',name:'Chưa xác định',group:'Chưa xác định',color:'#F1EFE8',textColor:'#5F5E5A'};
+      const rule=(!l.shiftOverride&&plan?.prodWorkShiftId?rules.find(r=>String(r.id)===String(plan.prodWorkShiftId)):null)||getProdWorkShiftRule(prodTime,rules)||{id:'unknown',name:'Chưa xác định',group:'Chưa xác định',color:'#F1EFE8',textColor:'#5F5E5A'};
       const key=l.productId+'_'+rule.id;
       if(!aggMap[key])aggMap[key]={productId:l.productId,productName:l.productName||products.find(product=>String(product.id)===String(l.productId))?.name||'Chưa xác định',unit:l.unit||products.find(product=>String(product.id)===String(l.productId))?.unit||'',shift:rule.id,shiftName:rule.name,shiftGroup:rule.group,rule,goods,qtyProd:0,orders:[],prodDate:date,fullCodes:0,oddCodes:{},pack:0,unknownCodes:0};
       const codes=scfProductionLineCodes(l,product);
@@ -307,7 +307,7 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
     );
   };
 
-  const builtRows=React.useMemo(()=>preparedRows&&preparedDate===date?preparedRows:scfBuildProductionRows({orders,products,prodCats,prodShifts,prodShiftRules,stock,date}),[orders,products,prodCats,prodShifts,prodShiftRules,stock,date,preparedRows,preparedDate]);
+  const builtRows=React.useMemo(()=>preparedRows&&preparedDate===date?preparedRows:scfBuildProductionRows({orders,products,prodCats,prodShifts,prodShiftRules,stock,date}),[orders,products,prodCats,prodShifts,prodShiftRules,stock,date,preparedRows,preparedDate,globalThis.window?.__SCF_TRIPS,globalThis.window?.__SCF_SHIFTS]);
   const prodOrder=Object.fromEntries(products.map((p,i)=>[p.id,i]));
   const sortByProdOrder=(a,b)=>scfProductionProductGroupRank(a)-scfProductionProductGroupRank(b)||(prodOrder[a.productId]??9999)-(prodOrder[b.productId]??9999);
   const timedRows=React.useMemo(()=>{const allocated=scfProductionAllocateStock(builtRows,stockByProductId,rules,stockClock);return builtRows.map(row=>{const item={...row,stockMetrics:allocated.get(row)};return {...item,display:scfProductionProductDisplay({...item,rows:[item]})};});},[builtRows,stock,rules,stockClock]);
