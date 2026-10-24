@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V652';
+const SCF_BUILD_VERSION='V654';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -437,7 +437,12 @@ function App(){
     const before=new Map(previous.map(o=>[String(o.id),o]));
     const planned=updated.map(incomingOrder=>{
       const previousOrder=before.get(String(incomingOrder.id));
-      const order=previousOrder?scfPreserveExistingProductionOrder(previousOrder,incomingOrder):scfMarkNewProductionOrder(incomingOrder);
+      let order;
+      if(previousOrder)order=scfPreserveExistingProductionOrder(previousOrder,incomingOrder);
+      else{
+        const {kpiAudit,...fresh}=incomingOrder;
+        order={...scfMarkNewProductionOrder(fresh),createdAtIso:new Date().toISOString(),createdById:String(cu?.id||''),createdBy:cu?.name||incomingOrder.createdBy||''};
+      }
       const old=before.get(String(order.id));
       if(old===order)return order;
       const changed=old&&String(old.tripId||'')!==String(order.tripId||'');
