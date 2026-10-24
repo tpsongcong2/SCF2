@@ -248,9 +248,21 @@ function scfDeliveryProductionSchedule(shift,prodShifts=window.__SCF_PROD_SHIFTS
 function scfProductionScheduleKey(schedule){
   return JSON.stringify([schedule?.prodWorkShiftId?'shift:'+schedule.prodWorkShiftId:schedule?.actualProdTime||'',Number(schedule?.prodDateOffset||0),schedule?.labelPrintTime||'',Number(schedule?.labelPrintDateOffset||0)]);
 }
+function scfProductionRuleTimeMatches(rule,time){
+  const from=rule.deliveryTimeFrom||'',to=rule.deliveryTimeTo||from;
+  if(!from&&!to)return true;
+  if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(time||''))return false;
+  return timeInRange(time,from,to);
+}
+function scfProductionRuleTimesOverlap(a,b){
+  const af=a.deliveryTimeFrom||'',at=a.deliveryTimeTo||af,bf=b.deliveryTimeFrom||'',bt=b.deliveryTimeTo||bf;
+  if(!af&&!at||!bf&&!bt)return true;
+  return timeInRange(af,bf,bt)||timeInRange(at,bf,bt)||timeInRange(bf,af,at)||timeInRange(bt,af,at);
+}
 function scfProductionRuleRank(rule,order,trip){
   if(rule?.active===false)return 0;
   if(rule.tripId&&String(rule.tripId)!==String(trip?.id||''))return 0;
+  if(!scfProductionRuleTimeMatches(rule,order?.deliveryTime))return 0;
   const scoped=rule.tripId?1:0;
   const resolved=findOrderPointMatch(order,window.__SCF_CUSTOMERS||[]);
   const point=resolved?.point||{},customerId=String(order?.customerId||order?.custId||resolved?.customer?.id||'');
@@ -262,13 +274,14 @@ function scfProductionRuleRank(rule,order,trip){
       if(p.pointId)return String(p.pointId)===pointId||(point.mergedPointIds||[]).some(id=>String(id)===String(p.pointId));
       return !!p.customerId&&normalizeLookupText(p.pointName)===normalizeLookupText(order?.pointName||point.name);
     });
-    return matched?300+scoped:0;
+    return matched?300+scoped*10+(rule.deliveryTimeFrom?2:0):0;
   }
   if(rule.scope==='areas')return (rule.areas||[]).some(area=>normalizeLookupText(area)===normalizeLookupText(order?.area||point.area))?200+scoped:0;
   return rule.scope==='default'?100+scoped:0;
 }
 function scfProductionRulesOverlap(a,b){
   if(a.active===false||b.active===false||a.scope!==b.scope||String(a.tripId||'')!==String(b.tripId||''))return false;
+  if(a.scope==='points'&&!!a.deliveryTimeFrom!==!!b.deliveryTimeFrom||!scfProductionRuleTimesOverlap(a,b))return false;
   if(a.scope==='default')return true;
   if(a.scope==='orders')return (a.orderIds||[]).some(id=>(b.orderIds||[]).some(other=>String(id)===String(other)));
   if(a.scope==='areas')return (a.areas||[]).some(area=>(b.areas||[]).some(other=>normalizeLookupText(area)===normalizeLookupText(other)));
@@ -835,93 +848,111 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
 }
 
 function TripProductionSettings({shifts,setShifts,prodShifts,prodShiftRules,currentUser,orders=[],customers=[]}){
-  const [editing,setEditing]=useState(null),[draft,setDraft]=useState({}),[search,setSearch]=useState(''),[error,setError]=useState('');
-  const empty={id:'',name:'',scope:'default',tripId:'',orderIds:[],points:[],areas:[],prodDateOffset:0,prodWorkShiftId:'',labelPrintDateOffset:0,labelPrintTime:'',active:true};
+  const [editing,setEditing]=useState(null),[config,setConfig]=useState(null),[mode,setMode]=useState('shift'),[tripId,setTripId]=useState(''),[day,setDay]=useState(''),[error,setError]=useState('');
   const workRules=prodShiftRules?.length?prodShiftRules:(window.__SCF_PROD_SHIFT_RULES?.length?window.__SCF_PROD_SHIFT_RULES:DEF_PROD_SHIFT_RULES);
-  const workRule=value=>value?.prodWorkShiftId?workRules.find(r=>String(r.id)===String(value.prodWorkShiftId)):getProdWorkShiftRule(value?.actualProdTime||value?.prodTime,workRules);
-  const shiftName=value=>workRule(value)?.name||'Chưa chọn ca';
-  const toDraft=value=>({...empty,...value,prodWorkShiftId:workRule(value)?.id||''});
-  const dateText=n=>Number(n)===0?'Cùng ngày chuyến':(Number(n)<0?'Trước ngày chuyến ':'Sau ngày chuyến ')+Math.abs(Number(n))+' ngày';
-  const current=(shifts||[]).find(s=>s.id===editing?.id)||editing;
-  const trips=(window.__SCF_TRIPS||[]).filter(t=>String(t.shiftId)===String(current?.id)||(!t.shiftId&&normalizeLookupText(t.shiftName)===normalizeLookupText(current?.name)));
-  const selectedTrip=trips.find(t=>String(t.id)===String(draft.tripId||''));
+  const workRule=p=>p?.prodWorkShiftId?workRules.find(r=>String(r.id)===String(p.prodWorkShiftId)):getProdWorkShiftRule(p?.actualProdTime||p?.prodTime,workRules);
+  const shiftName=p=>workRule(p)?.name||'Chưa chọn ca';
+  const empty={prodDateOffset:0,prodWorkShiftId:'',labelPrintDateOffset:0,labelPrintTime:''};
+  const normalize=p=>({...empty,...p,prodWorkShiftId:workRule(p)?.id||''});
+  const clean=p=>{const {actualProdTime,...rest}=p;return rest;};
+  const current=(shifts||[]).find(s=>String(s.id)===String(editing?.id));
   const locked=t=>!!t&&(t.driverDispatchedAt||['active','completion_pending','completed','cancelled'].includes(t.status));
-  const tripById=new Map(trips.map(t=>[String(t.id),t]));
-  const members=orders.filter(o=>o.status!=='cancelled'&&tripById.has(String(o.tripId||''))&&(!draft.tripId||String(o.tripId)===String(draft.tripId)));
+  const trips=(window.__SCF_TRIPS||[]).filter(t=>String(t.shiftId)===String(current?.id)||(!t.shiftId&&normalizeLookupText(t.shiftName)===normalizeLookupText(current?.name)));
+  const contextId=mode==='trip'?tripId:'';
+  const selectedTrip=trips.find(t=>String(t.id)===String(contextId));
+  const blocked=mode==='trip'&&(!selectedTrip||locked(selectedTrip));
   const pointKey=p=>JSON.stringify([String(p.customerId||''),String(p.pointId||''),p.pointId?'':normalizeLookupText(p.pointName)]);
   const allPoints=[...new Map(customers.flatMap(c=>(c.points||[]).map(p=>({customerId:String(c.id||''),customerName:c.name||'',pointId:String(p.id||''),pointName:p.name||'',area:p.area||''}))).filter(p=>p.customerId&&(p.pointId||p.pointName)).map(p=>[pointKey(p),p])).values()];
-  const selectablePoints=selectedTrip?allPoints.filter(p=>members.some(o=>scfProductionRuleRank({scope:'points',points:[p]},o,selectedTrip)>0)):allPoints;
-  const memberAreas=members.map(o=>o.area||findOrderPointMatch(o,customers)?.point?.area||'');
-  const areaOptions=[...new Map([...(selectedTrip?[]:allPoints.map(p=>p.area)),...memberAreas].filter(Boolean).map(area=>[normalizeLookupText(area),area])).values()];
-  const field=(key,value)=>{setDraft(p=>({...p,[key]:value}));setError('');};
-  const changeScope=scope=>{setDraft(p=>({...empty,...p,id:'',scope,orderIds:[],points:[],areas:[]}));setSearch('');setError('');};
-  const open=s=>{setEditing(s);setDraft(toDraft(scfDeliveryProductionSchedule(s,prodShifts)||{}));setSearch('');setError('');};
-  const editRule=rule=>{setDraft(toDraft(rule));setSearch('');setError('');};
-  const proposedRules=current?[(current.productionScheduleRules||[]).filter(r=>r.id!==draft.id),draft.scope==='default'&&!draft.tripId?[]:[draft]].flat():[];
-  const proposed=current?{...current,productionSchedule:draft.scope==='default'&&!draft.tripId?{...draft}:current.productionSchedule,productionScheduleRules:proposedRules}:null;
-  const preview=members.map(order=>({order,trip:tripById.get(String(order.tripId)),resolved:scfResolveTripProductionSchedule(proposed,order,tripById.get(String(order.tripId)),prodShifts)}));
-  const overlap=(current?.productionScheduleRules||[]).find(rule=>rule.id!==draft.id&&scfProductionRulesOverlap(rule,draft)&&scfProductionScheduleKey(rule)!==scfProductionScheduleKey(draft));
-  const save=()=>{
-    if(!workRules.some(r=>String(r.id)===String(draft.prodWorkShiftId)&&r.active!==false)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(draft.labelPrintTime||'')){setError('Chọn ca sản xuất và nhập giờ in tem hợp lệ.');return;}
-    if(draft.tripId&&!selectedTrip){setError('Chuyến đã thay đổi hoặc không còn thuộc ca này. Hãy chọn lại chuyến.');return;}
-    if(locked(selectedTrip)){setError('Chuyến đã giao lái xe hoặc đã đóng; giữ lịch đã lưu của các đơn.');return;}
-    if(draft.scope==='orders'&&(!selectedTrip||!(draft.orderIds||[]).length)){setError('Chọn chuyến cụ thể và ít nhất một đơn trong chuyến.');return;}
-    if(draft.scope==='orders'&&draft.orderIds.some(id=>!members.some(o=>String(o.id)===String(id)))){setError('Có đơn đã chuyển khỏi chuyến. Hãy kiểm tra và chọn lại.');return;}
-    if(draft.scope==='points'&&!(draft.points||[]).length||draft.scope==='areas'&&!(draft.areas||[]).length){setError('Chọn ít nhất một bếp hoặc khu vực.');return;}
-    if(selectedTrip&&draft.scope==='points'&&draft.points.some(p=>!selectablePoints.some(q=>pointKey(p)===pointKey(q)))){setError('Có bếp không còn đơn trong chuyến đã chọn. Hãy kiểm tra lại phạm vi.');return;}
-    if(selectedTrip&&draft.scope==='areas'&&draft.areas.some(area=>!areaOptions.some(x=>normalizeLookupText(x)===normalizeLookupText(area)))){setError('Có khu vực không còn đơn trong chuyến đã chọn. Hãy kiểm tra lại phạm vi.');return;}
-    if(overlap){setError('Trùng phạm vi với “'+(overlap.name||overlap.id)+'” nhưng khác lịch. Sửa quy tắc đang có hoặc thu hẹp lựa chọn.');return;}
-    if(preview.some(row=>row.resolved.conflict)){setError('Có đơn khớp nhiều lịch khác nhau cùng mức ưu tiên. Hãy xử lý dòng báo xung đột trước khi lưu.');return;}
-    const {actualProdTime,...cleanDraft}=draft;
-    const data={...cleanDraft,id:draft.id||'PSR'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),name:draft.name||({default:'Lịch mặc định',orders:'Lịch theo đơn',points:'Lịch theo bếp',areas:'Lịch theo khu vực'}[draft.scope])};
-    setShifts(previous=>previous.map(s=>{
-      if(s.id!==current.id)return s;
-      const collision=(s.productionScheduleRules||[]).find(rule=>rule.id!==data.id&&scfProductionRulesOverlap(rule,data)&&scfProductionScheduleKey(rule)!==scfProductionScheduleKey(data));
-      if(collision){window.showToast('Quy tắc đã thay đổi và đang chồng chéo. Hãy tải lại để kiểm tra.','warn');return s;}
-      const isDefault=data.scope==='default'&&!data.tripId;
-      const nextRules=[...(s.productionScheduleRules||[]).filter(rule=>rule.id!==data.id),...(isDefault?[]:[data])];
-      return {...s,...(isDefault?{productionSchedule:{prodWorkShiftId:data.prodWorkShiftId,prodDateOffset:data.prodDateOffset,labelPrintTime:data.labelPrintTime,labelPrintDateOffset:data.labelPrintDateOffset}}:{}),productionScheduleRules:nextRules,updatedAt:new Date().toISOString(),updatedBy:currentUser?.name||'',productionScheduleHistory:[...(s.productionScheduleHistory||[]),{at:new Date().toISOString(),by:currentUser?.name||'',action:isDefault?'Sửa lịch mặc định':'Lưu lịch riêng',before:isDefault?s.productionSchedule:(s.productionScheduleRules||[]).find(r=>r.id===data.id)||null,after:{...data}}]};
-    }));
-    setEditing(null);
+  const contextRules=(config?.rules||[]).filter(r=>String(r.tripId||'')===String(contextId));
+  const general=mode==='shift'?config?.base:contextRules.find(r=>r.scope==='default');
+  const exceptions=contextRules.filter(r=>r.scope!=='default');
+  const members=orders.filter(o=>o.status!=='cancelled'&&trips.some(t=>String(t.id)===String(o.tripId))&&(!contextId||String(o.tripId)===String(contextId)));
+  const setRule=(id,patch)=>{setConfig(c=>({...c,rules:c.rules.map(r=>r.id===id?{...r,...patch}:r)}));setError('');};
+  const setGeneral=(key,value)=>{
+    setError('');setConfig(c=>{
+      if(mode==='shift')return {...c,baseTouched:true,base:{...normalize(c.base),[key]:value}};
+      const prior=c.rules.find(r=>r.scope==='default'&&String(r.tripId||'')===String(contextId));
+      return {...c,rules:prior?c.rules.map(r=>r===prior?{...r,[key]:value}:r):[...c.rules,{...empty,id:uid(),scope:'default',tripId:contextId,name:'Quy tắc chung của chuyến',active:true,[key]:value}]};
+    });
   };
-  const toggle=(key,value,identity=x=>String(x))=>field(key,(draft[key]||[]).some(x=>identity(x)===identity(value))?(draft[key]||[]).filter(x=>identity(x)!==identity(value)):[...(draft[key]||[]),value]);
-  const matchesSearch=text=>!search||normalizeLookupText(text).includes(normalizeLookupText(search));
-  const scopeName={default:'Mặc định',orders:'Đơn cụ thể',points:'Bếp / điểm giao',areas:'Khu vực'};
-  const choiceStyle={display:'flex',alignItems:'center',gap:8,padding:'7px 5px',cursor:'pointer'};
-  const checkboxStyle={width:18,minWidth:18,height:18,minHeight:18,padding:0,margin:0,flexShrink:0};
+  const open=s=>{
+    setEditing(s);setConfig({base:s.productionSchedule?normalize(s.productionSchedule):null,rules:(s.productionScheduleRules||[]).map(r=>({...r,...normalize(r)}))});
+    setMode('shift');setTripId('');setDay(new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Ho_Chi_Minh'}));setError('');
+  };
+  const addException=()=>{setConfig(c=>({...c,rules:[...c.rules,{...empty,...general,id:uid(),name:'Ngoại lệ địa điểm và giờ giao',scope:'points',tripId:contextId,points:[],orderIds:[],areas:[],deliveryTimeFrom:'',deliveryTimeTo:'',active:true}]}));setError('');};
+  const proposed=current&&config?{...current,productionSchedule:config.base,productionScheduleRules:config.rules}:null;
+  const preview=members.map(order=>{const trip=trips.find(t=>String(t.id)===String(order.tripId));return {order,trip,result:scfResolveTripProductionSchedule(proposed,order,trip,prodShifts)};});
+  const offsetText=n=>Number(n)===0?'Cùng ngày ca giao (0)':Number(n)<0?'Trước ngày ca giao 1 ngày (-1)':'Sau ngày ca giao 1 ngày (+1)';
+  const scheduleFields=(plan,update,key)=>h('tr',{key},
+    h('td',{'data-label':'Ngày SX'},h('select',{'aria-label':'Ngày SX '+key,value:plan?.prodDateOffset??0,onChange:e=>update('prodDateOffset',Number(e.target.value))},[-1,0,1].map(n=>h('option',{key:n,value:n},offsetText(n))),![undefined,-1,0,1].includes(plan?.prodDateOffset)&&h('option',{value:plan.prodDateOffset},'Giữ ngày cũ ('+plan.prodDateOffset+')'))),
+    h('td',{'data-label':'Ca SX'},h('select',{'aria-label':'Ca SX '+key,value:plan?.prodWorkShiftId||'',onChange:e=>update('prodWorkShiftId',e.target.value)},h('option',{value:''},'— Chọn ca SX —'),workRules.filter(r=>r.active!==false).map(r=>h('option',{key:r.id,value:r.id},r.name)))),
+    h('td',{'data-label':'Ngày in tem'},h('select',{'aria-label':'Ngày in tem '+key,value:plan?.labelPrintDateOffset??0,onChange:e=>update('labelPrintDateOffset',Number(e.target.value))},[-1,0,1].map(n=>h('option',{key:n,value:n},offsetText(n))),![undefined,-1,0,1].includes(plan?.labelPrintDateOffset)&&h('option',{value:plan.labelPrintDateOffset},'Giữ ngày cũ ('+plan.labelPrintDateOffset+')'))),
+    h('td',{'data-label':'Giờ in tem'},h('input',{'aria-label':'Giờ in tem '+key,type:'time',value:plan?.labelPrintTime||'',onChange:e=>update('labelPrintTime',e.target.value)})));
+  const validPlan=p=>p&&workRules.some(r=>String(r.id)===String(p.prodWorkShiftId)&&r.active!==false)&&/^([01]\d|2[0-3]):[0-5]\d$/.test(p.labelPrintTime||'');
+  const save=()=>{
+    if(blocked){setError('Chọn chuyến chưa giao lái xe và chưa khóa để cài đặt.');return;}
+    if(JSON.stringify(current.productionSchedule)!==JSON.stringify(editing.productionSchedule)||JSON.stringify(current.productionScheduleRules)!==JSON.stringify(editing.productionScheduleRules)){setError('Cài đặt vừa thay đổi. Đóng và mở lại bảng để kiểm tra trước khi lưu.');return;}
+    if(!validPlan(general)){setError('Điền đủ ca SX và giờ in tem cho quy tắc chung.');return;}
+    const changedRules=config.rules.filter(r=>JSON.stringify(r)!==JSON.stringify((editing.productionScheduleRules||[]).map(x=>({...x,...normalize(x)})).find(x=>x.id===r.id)));
+    if((editing.productionScheduleRules||[]).some(r=>r.tripId&&!config.rules.some(x=>x.id===r.id)&&locked(trips.find(t=>String(t.id)===String(r.tripId))))){setError('Không thể xóa quy tắc của chuyến đã khóa.');return;}
+    for(const rule of changedRules){
+      if(rule.active===false)continue;
+      if(!validPlan(rule)){setError('Điền đủ lịch SX và tem cho các dòng ngoại lệ.');return;}
+      if(rule.scope==='points'&&!(rule.points||[]).length){setError('Chọn địa điểm cho từng dòng ngoại lệ.');return;}
+      if(rule.scope==='points'&&((!rule.deliveryTimeFrom)!==(!rule.deliveryTimeTo))){setError('Nhập đủ giờ giao từ và đến cho ngoại lệ, hoặc để trống cả hai để áp dụng mọi giờ.');return;}
+      if(rule.tripId&&locked(trips.find(t=>String(t.id)===String(rule.tripId)))){setError('Không thể thay quy tắc của chuyến đã khóa.');return;}
+    }
+    for(let i=0;i<config.rules.length;i++)for(let j=i+1;j<config.rules.length;j++){
+      const a=config.rules[i],b=config.rules[j];
+      if(scfProductionRulesOverlap(a,b)&&scfProductionScheduleKey(a)!==scfProductionScheduleKey(b)){setError('Ngoại lệ chồng chéo: cùng địa điểm và giờ giao nhưng khác lịch SX/tem. Sửa hoặc xóa dòng trùng trước khi lưu.');return;}
+    }
+    if(preview.some(row=>row.result.conflict)){setError('Có đơn khớp nhiều lịch khác nhau. Kiểm tra ngoại lệ trước khi lưu.');return;}
+    setShifts(previous=>previous.map(s=>{
+      if(String(s.id)!==String(current.id))return s;
+      if(JSON.stringify(s.productionSchedule)!==JSON.stringify(editing.productionSchedule)||JSON.stringify(s.productionScheduleRules)!==JSON.stringify(editing.productionScheduleRules)){window.showToast('Cài đặt vừa thay đổi. Mở lại bảng để kiểm tra trước khi lưu.','warn');return s;}
+      const originalRules=editing.productionScheduleRules||[];
+      const rules=config.rules.map(r=>{const original=originalRules.find(x=>x.id===r.id);return original&&JSON.stringify({...original,...normalize(original)})===JSON.stringify(r)?original:clean(r);});
+      const originalBase=editing.productionSchedule;
+      const base=!config.baseTouched&&JSON.stringify(config.base)===JSON.stringify(originalBase?normalize(originalBase):null)?originalBase:clean(config.base);
+      return {...s,productionSchedule:base,productionScheduleRules:rules,updatedAt:new Date().toISOString(),updatedBy:currentUser?.name||'',productionScheduleHistory:[...(s.productionScheduleHistory||[]),{at:new Date().toISOString(),by:currentUser?.name||'',action:'Lưu quy tắc chung và ngoại lệ',before:{productionSchedule:s.productionSchedule,productionScheduleRules:s.productionScheduleRules},after:{productionSchedule:base,productionScheduleRules:rules}}]};
+    }));setEditing(null);
+  };
   return h('section',{style:{marginBottom:24}},
-    h('h3',null,'2. Từ chuyến → lịch sản xuất và in tem theo đơn / bếp / khu vực'),
-    h('p',null,'Trong cùng chuyến có thể có nhiều lịch. Ưu tiên: đơn cụ thể → bếp → khu vực → mặc định. Cùng phạm vi, lịch của chuyến cụ thể được ưu tiên hơn lịch dùng cho mọi chuyến. Ngày SX và tem tính theo ngày chuyến.'),
-    h('div',{style:{overflowX:'auto'}},h('table',{className:'tbl',style:{width:'100%'}},
-      h('thead',null,h('tr',null,['Ca giao hàng','Lịch mặc định SX / tem','Lịch riêng',''].map(x=>h('th',{key:x},x)))),
-      h('tbody',null,(shifts||[]).map(s=>{const plan=scfDeliveryProductionSchedule(s,prodShifts);return h('tr',{key:s.id},
-        h('td',null,s.name),h('td',null,plan?[shiftName(plan)+' ('+dateText(plan.prodDateOffset)+')',' / Tem ',plan.labelPrintTime+' ('+dateText(plan.labelPrintDateOffset)+')']:'Theo lịch từng bếp/đơn; chưa có lịch chung'),
-        h('td',null,(s.productionScheduleRules||[]).filter(r=>r.active!==false).length+' quy tắc'),h('td',null,h('button',{onClick:()=>open(s)},'Cài đặt'))
-      );})))),
-    editing&&h(Modal,{title:'Lịch SX và in tem — '+current.name,lg:'xl',onClose:()=>setEditing(null)},
-      h('div',{style:{background:'#EAF4EF',padding:10,marginBottom:10}},'Mỗi đơn chỉ nhận một lịch theo thứ tự ưu tiên. Bảng xem trước không cộng hoặc nhân bản số lượng đơn.'),
-      h(F,{label:'Chọn chuyến áp dụng'},h('select',{value:draft.tripId||'',onChange:e=>{setDraft(p=>({...p,tripId:e.target.value,orderIds:[],points:[],areas:[]}));setError('');}},h('option',{value:''},'Mọi chuyến thuộc ca này (bếp / khu vực / mặc định)'),trips.map(t=>h('option',{key:t.id,value:String(t.id)},t.deliveryDate+' · '+(t.shiftName||t.id)+' · '+t.id+(locked(t)?' · Đã khóa':''))))),
-      h('div',{className:'g2'},h(F,{label:'Áp dụng cho'},h('select',{value:draft.scope||'default',onChange:e=>changeScope(e.target.value)},Object.entries(scopeName).map(([key,label])=>h('option',{key,value:key},label)))),h(F,{label:'Tên quy tắc'},h('input',{value:draft.name||'',onChange:e=>field('name',e.target.value),placeholder:'Ví dụ: Bếp A SX sớm'}))),
-      draft.scope!=='default'&&h('div',null,
-        h('input',{type:'search',placeholder:'Tìm đơn, bếp hoặc khu vực...',value:search,onChange:e=>setSearch(e.target.value)}),
-        h('div',{style:{maxHeight:190,overflowY:'auto',border:'1px solid var(--bd)',padding:8,margin:'8px 0'}},
-          draft.scope==='orders'&&(!selectedTrip?h('p',null,'Chọn chuyến cụ thể trước khi chọn đơn.'):members.filter(o=>matchesSearch([o.id,o.pointName,o.customer,o.area,o.deliveryTime].join(' '))).map(o=>h('label',{key:o.id,style:choiceStyle},h('input',{type:'checkbox',style:checkboxStyle,checked:(draft.orderIds||[]).some(id=>String(id)===String(o.id)),onChange:()=>toggle('orderIds',String(o.id))}),' '+o.id+' · '+(o.customer||'')+' · '+(o.pointName||'')+' · '+(o.area||'')+' · '+(o.deliveryTime||'')))),
-          draft.scope==='points'&&selectablePoints.filter(p=>matchesSearch([p.customerName,p.pointName,p.area].join(' '))).map(p=>h('label',{key:pointKey(p),style:choiceStyle},h('input',{type:'checkbox',style:checkboxStyle,checked:(draft.points||[]).some(x=>pointKey(x)===pointKey(p)),onChange:()=>toggle('points',p,pointKey)}),' '+p.customerName+' · '+p.pointName+' · '+p.area)),
-          draft.scope==='areas'&&areaOptions.filter(matchesSearch).map(area=>h('label',{key:area,style:choiceStyle},h('input',{type:'checkbox',style:checkboxStyle,checked:(draft.areas||[]).some(x=>normalizeLookupText(x)===normalizeLookupText(area)),onChange:()=>toggle('areas',area,normalizeLookupText)}),' '+area))
-        )
-      ),
-      draft.id&&h('label',{style:choiceStyle},h('input',{type:'checkbox',style:checkboxStyle,checked:draft.active!==false,onChange:e=>field('active',e.target.checked)}),'Quy tắc đang hoạt động'),
-      ['prod','label'].map(prefix=>{const dateKey=prefix==='prod'?'prodDateOffset':'labelPrintDateOffset',timeKey=prefix==='prod'?'actualProdTime':'labelPrintTime';return h('div',{key:prefix,className:'g2'},
-        h(F,{label:prefix==='prod'?'Ngày SX theo ngày chuyến':'Ngày in tem theo ngày chuyến'},h('select',{value:draft[dateKey],onChange:e=>field(dateKey,Number(e.target.value))},[-2,-1,0,1,2].map(n=>h('option',{key:n,value:n},dateText(n))))),
-        prefix==='prod'?h(F,{label:'Ca sản xuất *'},h('select',{value:draft.prodWorkShiftId||'',onChange:e=>field('prodWorkShiftId',e.target.value)},h('option',{value:''},'— Chọn ca sản xuất —'),workRules.filter(r=>r.active!==false).map(r=>h('option',{key:r.id,value:String(r.id)},r.name)))):h(F,{label:'Giờ in tem *'},h('input',{type:'time',value:draft[timeKey]||'',onChange:e=>field(timeKey,e.target.value)})));}),
-      h('h4',null,'Quy tắc đã lưu'),
-      h('button',{onClick:()=>editRule({...empty,...(current.productionSchedule||{})})},'Sửa lịch mặc định'),
-      h('button',{onClick:()=>editRule({...empty,scope:'areas'})},'Thêm lịch riêng'),
-      (current.productionScheduleRules||[]).map(rule=>h('div',{key:rule.id,style:{display:'flex',gap:8,alignItems:'center',margin:'8px 0'}},h('span',null,(rule.name||rule.id)+' · '+scopeName[rule.scope]+' · '+shiftName(rule)+' / Tem '+rule.labelPrintTime+(rule.active===false?' · Tạm tắt':'')),h('button',{onClick:()=>editRule(rule)},'Sửa'),h('button',{onClick:()=>editRule({...rule,active:rule.active===false})},rule.active===false?'Bật lại':'Tạm tắt'))),
+    h('h3',null,'2. Từ ca giao hàng / chuyến → lịch SX và in tem'),
+    h('p',null,'Đặt quy tắc chung, sau đó thêm ngoại lệ theo địa điểm và giờ giao. Đơn không khớp ngoại lệ sẽ theo lịch chung. Ngày SX và ngày tem tính theo ngày của ca giao hàng / chuyến.'),
+    h('div',{style:{overflowX:'auto'}},h('table',{className:'tbl',style:{width:'100%'}},h('thead',null,h('tr',null,['Ca giao hàng','Quy tắc chung','Ngoại lệ',''].map(x=>h('th',{key:x},x)))),h('tbody',null,(shifts||[]).map(s=>h('tr',{key:s.id},h('td',null,s.name),h('td',null,s.productionSchedule?shiftName(s.productionSchedule)+' / Tem '+s.productionSchedule.labelPrintTime:'Chưa cài quy tắc chung'),h('td',null,(s.productionScheduleRules||[]).filter(r=>r.scope!=='default'&&r.active!==false).length+' dòng'),h('td',null,h('button',{onClick:()=>open(s)},'Cài đặt'))))))),
+    editing&&h(Modal,{title:'Lịch SX và in tem — '+current.name,className:'production-schedule-modal',lg:'xl',onClose:()=>setEditing(null)},
+      h('div',{style:{display:'flex',gap:20,flexWrap:'wrap',marginBottom:12}},[['shift','Theo ca giao hàng'],['trip','Theo chuyến giao hàng']].map(([value,label])=>h('label',{key:value,style:{display:'flex',alignItems:'center',gap:6}},h('input',{type:'radio',name:'production-context',value,checked:mode===value,onChange:()=>{setMode(value);setError('');},style:{width:18,height:18,margin:0}}),label))),
+      mode==='trip'&&h('div',{className:'g2'},h(F,{label:'Ngày của chuyến'},h('input',{type:'date',value:day,onChange:e=>{setDay(e.target.value);setTripId('');setError('');}})),h(F,{label:'Chuyến giao hàng'},h('select',{value:tripId,onChange:e=>{setTripId(e.target.value);setError('');}},h('option',{value:''},'— Chọn chuyến —'),trips.filter(t=>toIsoDate(t.deliveryDate)===day||String(t.id)===String(tripId)).map(t=>h('option',{key:t.id,value:String(t.id)},t.deliveryDate+' · '+(t.shiftName||current.name)+' · '+t.id+(locked(t)?' · Đã khóa':'')))))),
+      h('p',null,mode==='shift'?'Quy tắc dùng cho các chuyến thuộc ca này.':'Quy tắc chỉ dùng cho chuyến đã chọn. Ngày SX và tem lấy mốc ngày của chuyến.'),
+      blocked&&h('p',{role:'status'},selectedTrip?'Chuyến đã khóa: chỉ xem lịch, giữ lịch đã lưu của đơn.':'Chọn ngày và chuyến để cài đặt.'),
+      h('fieldset',{disabled:blocked,style:{border:0,padding:0,minWidth:0}},
+        h('h4',null,'Quy tắc chung'),
+        h('p',null,'Áp dụng cho tất cả đơn chưa khớp ngoại lệ bên dưới.'),
+        h('div',{style:{overflowX:'auto'}},h('table',{className:'tbl schedule-edit-table',style:{width:'100%',minWidth:650}},h('thead',null,h('tr',null,['Ngày SX','Ca SX','Ngày in tem','Giờ in tem'].map(x=>h('th',{key:x},x)))),h('tbody',null,scheduleFields(general,setGeneral,'chung')))),
+        mode==='trip'&&!general&&h('p',null,'Chưa có lịch chung riêng cho chuyến. Đang kế thừa quy tắc của ca; điền bảng trên để đặt lịch riêng.'),
+        h('h4',null,'Đơn ngoại lệ theo địa điểm và giờ giao'),
+        h('p',null,'Có thể thêm nhiều dòng. Giờ giao trống nghĩa là mọi giờ; khoảng giờ qua nửa đêm được hỗ trợ. Dòng có giờ cụ thể được ưu tiên hơn dòng mọi giờ của cùng địa điểm.'),
+        h('div',{style:{overflowX:'auto'}},h('table',{className:'tbl schedule-edit-table schedule-exceptions-table',style:{minWidth:1100,width:'100%'}},
+          h('thead',null,h('tr',null,['Địa điểm / phạm vi','Giờ giao từ','Đến giờ','Ngày SX','Ca SX','Ngày in tem','Giờ in tem',''].map((x,i)=>h('th',{key:i},x)))),
+          h('tbody',null,exceptions.map((r,index)=>{
+            const fields=scheduleFields(r,(key,value)=>setRule(r.id,{[key]:value}),r.id).props.children;
+            const pointValue=(r.points||[]).length===1?pointKey(r.points[0]):'legacy';
+            return h('tr',{key:r.id,style:r.active===false?{opacity:.55}:{}},
+              h('td',{'data-label':'Địa điểm / phạm vi'},r.scope==='points'?h('select',{'aria-label':'Địa điểm ngoại lệ '+(index+1),value:pointValue,onChange:e=>setRule(r.id,{points:[allPoints.find(p=>pointKey(p)===e.target.value)].filter(Boolean)})},h('option',{value:'legacy'},r.points?.length?r.points.map(p=>p.pointName||p.pointId).join(', '):'— Chọn địa điểm —'),allPoints.map(p=>h('option',{key:pointKey(p),value:pointKey(p)},p.customerName+' · '+p.pointName)),r.points?.length===1&&!allPoints.some(p=>pointKey(p)===pointValue)&&h('option',{value:pointValue},r.points[0].pointName||r.points[0].pointId)):h('span',null,r.name||r.id,' · ',r.scope==='orders'?'Đơn: '+(r.orderIds||[]).join(', '):'Khu vực: '+(r.areas||[]).join(', '))),
+              h('td',{'data-label':'Giờ giao từ'},h('input',{'aria-label':'Giờ giao từ ngoại lệ '+(index+1),type:'time',value:r.deliveryTimeFrom||'',onChange:e=>setRule(r.id,{deliveryTimeFrom:e.target.value})})),
+              h('td',{'data-label':'Đến giờ'},h('input',{'aria-label':'Đến giờ ngoại lệ '+(index+1),type:'time',value:r.deliveryTimeTo||'',onChange:e=>setRule(r.id,{deliveryTimeTo:e.target.value})})),
+              ...fields,
+              h('td',null,h('button',{onClick:()=>setRule(r.id,{active:r.active===false})},r.active===false?'Bật':'Tắt'),h('button',{'aria-label':'Xóa ngoại lệ '+(index+1),onClick:()=>{setConfig(c=>({...c,rules:c.rules.filter(x=>x.id!==r.id)}));setError('');}},'Xóa')));
+          }),!exceptions.length&&h('tr',null,h('td',{colSpan:8},'Chưa có ngoại lệ. Các đơn dùng quy tắc chung.'))))),
+        h('button',{onClick:addException,style:{marginTop:10}},'+ Thêm trường hợp ngoại lệ'),
+        mode==='trip'&&h('details',{style:{marginTop:10}},h('summary',null,'Quy tắc kế thừa từ ca giao hàng'),h('p',null,config.base?shiftName(config.base)+' / Tem '+config.base.labelPrintTime:'Ca chưa có lịch chung.'),(config.rules||[]).filter(r=>!r.tripId&&r.scope!=='default').map(r=>h('p',{key:r.id},r.name||r.id,' · ',(r.points||[]).map(p=>p.pointName||p.pointId).join(', ')||r.areas?.join(', '),' · ',shiftName(r),' / Tem ',r.labelPrintTime)))),
       h('h4',null,'Xem trước lịch từng đơn ('+preview.length+' đơn)'),
-      h('div',{style:{maxHeight:240,overflow:'auto'}},h('table',{className:'tbl',style:{width:'100%'}},h('thead',null,h('tr',null,['Đơn / bếp','Chuyến','Ngày / ca SX','Ngày / giờ tem','Áp dụng'].map(x=>h('th',{key:x},x)))),h('tbody',null,preview.map(({order,trip,resolved})=>h('tr',{key:order.id,style:resolved.conflict?{background:'#FFF0F0'}:{}},h('td',null,order.id+' · '+(order.pointName||order.customer||'')),h('td',null,trip.deliveryDate),h('td',null,locked(trip)||['done','delivering','failed'].includes(order.status)?(order.prodDate||'—')+' · '+shiftName(order):resolved.schedule?addDaysVN(trip.deliveryDate,resolved.schedule.prodDateOffset)+' · '+shiftName(resolved.schedule):'—'),h('td',null,locked(trip)||['done','delivering','failed'].includes(order.status)?(order.labelDate||'—')+' '+(order.labelTime||'—'):resolved.schedule?addDaysVN(trip.deliveryDate,resolved.schedule.labelPrintDateOffset)+' '+resolved.schedule.labelPrintTime:'—'),h('td',null,locked(trip)||['done','delivering','failed'].includes(order.status)?'Đã khóa — giữ lịch đã lưu':resolved.issue||resolved.source)))))),
-      !preview.length&&h('p',null,'Chưa có đơn trong phạm vi chuyến đã chọn. Quy tắc bếp/khu vực sẽ áp dụng khi có đơn phù hợp.'),
+      h('div',{style:{maxHeight:230,overflow:'auto'}},h('table',{className:'tbl',style:{minWidth:700,width:'100%'}},h('thead',null,h('tr',null,['Đơn / địa điểm','Giờ giao','Ngày / ca SX','Ngày / giờ tem','Áp dụng'].map(x=>h('th',{key:x},x)))),h('tbody',null,preview.map(({order,trip,result})=>{
+        const frozen=locked(trip)||['done','delivering','failed'].includes(order.status),p=result.schedule;
+        return h('tr',{key:order.id,style:result.conflict?{background:'#FFF0F0'}:{}},h('td',null,order.id+' · '+(order.pointName||order.customer||'')),h('td',null,order.deliveryTime||'—'),h('td',null,frozen?(order.prodDate||'—')+' · '+shiftName(order):p?addDaysVN(trip.deliveryDate,p.prodDateOffset)+' · '+shiftName(p):'—'),h('td',null,frozen?(order.labelDate||'—')+' '+(order.labelTime||'—'):p?addDaysVN(trip.deliveryDate,p.labelPrintDateOffset)+' '+p.labelPrintTime:'—'),h('td',null,frozen?'Đã khóa — giữ lịch đã lưu':result.issue||result.source));
+      })))),
       error&&h('div',{role:'alert',style:{color:'#A32D2D',padding:10}},error),
-      h(Row,null,h('button',{onClick:()=>setEditing(null)},'Hủy'),h('button',{className:'bp',onClick:save},'Lưu lịch chuyến')))
+      h(Row,null,h('button',{onClick:()=>setEditing(null)},'Hủy'),h('button',{className:'bp',disabled:blocked,onClick:save},'Lưu quy tắc')))
   );
 }

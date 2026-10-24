@@ -364,6 +364,23 @@ th{font-family:var(--ui-header-family)!important}
 .scene{background:#fff;border:.5px solid var(--bd);border-radius:var(--rl);overflow:hidden}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:1rem}
 .modal{background:#fff;border-radius:var(--rl);border:.5px solid var(--bd);width:580px;max-width:100%;max-height:92vh;overflow-y:auto;padding:1.5rem}.modal.wide{width:900px;max-width:98vw}.modal.xl{width:1100px;max-width:98vw}
+.modal.xl.production-schedule-modal{width:1440px;max-width:96vw}
+.production-schedule-modal h4{margin-top:18px;margin-bottom:6px}
+.production-schedule-modal .schedule-exceptions-table select{min-width:165px}
+.production-schedule-modal .schedule-exceptions-table td:first-child select{min-width:230px}
+.production-schedule-modal .schedule-exceptions-table input[type=time]{min-width:125px}
+@media(max-width:700px){
+ .modal.xl.production-schedule-modal{max-width:100%}
+ .production-schedule-modal .schedule-edit-table{display:block;min-width:0!important;width:100%!important}
+ .production-schedule-modal .schedule-edit-table thead{display:none}
+ .production-schedule-modal .schedule-edit-table tbody{display:block}
+ .production-schedule-modal .schedule-edit-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border:1px solid var(--bd);border-radius:8px;margin-bottom:12px;padding:6px}
+ .production-schedule-modal .schedule-edit-table td{display:flex;flex-direction:column;align-items:stretch;min-width:0;padding:6px!important;border:0}
+ .production-schedule-modal .schedule-edit-table td:before{content:attr(data-label);font-size:12px;font-weight:600;margin-bottom:5px;color:var(--tx2)}
+ .production-schedule-modal .schedule-edit-table select,.production-schedule-modal .schedule-edit-table input[type=time]{min-width:0!important;width:100%}
+ .production-schedule-modal .schedule-exceptions-table td:first-child,.production-schedule-modal .schedule-exceptions-table td:last-child{grid-column:1/-1}
+ .production-schedule-modal .schedule-exceptions-table td:last-child{flex-direction:row;gap:8px}
+}
 .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem}
 .mh h2{font-size:17px;font-weight:500}
 .mclose{background:none;border:none;font-size:20px;color:var(--tx2);padding:4px;line-height:1}
