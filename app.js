@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V646';
+const SCF_BUILD_VERSION='V647';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -434,15 +434,15 @@ function App(){
     const visible=previous.filter(item=>scfOrderInViewPeriod(item,cu));
     const updated=typeof value==='function'?value(visible):value;
     const before=new Map(previous.map(o=>[String(o.id),o]));
-    const planned=updated.map(order=>{
+    const planned=updated.map(incomingOrder=>{
+      const previousOrder=before.get(String(incomingOrder.id));
+      const order=previousOrder?scfPreserveExistingProductionOrder(previousOrder,incomingOrder):scfMarkNewProductionOrder(incomingOrder);
       const old=before.get(String(order.id));
       if(old===order)return order;
       const changed=old&&String(old.tripId||'')!==String(order.tripId||'');
       if(!changed&&!['pending','assigned',''].includes(String(order.status||'')))return order;
       const rule=getProdShiftForOrder(order,prodShifts||[],customers||[]);
-      const canApply=!!scfTripProductionPlan(order,rule);
-      const next=changed&&canApply?{...order,prodShiftAssignMode:'auto',lines:(order.lines||[]).map(line=>({...line,shiftOverride:false}))}:order;
-      return scfApplyAutomaticProduction(next,rule);
+      return scfApplyAutomaticProduction(order,rule);
     });
     return scfMergePeriodView(previous,planned,cu);
   });
