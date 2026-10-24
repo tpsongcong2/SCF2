@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V647';
+const SCF_BUILD_VERSION='V649';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -33,7 +33,7 @@ const SCF_PAGE_DATA={
   materials:['materials','purchases'],assets:['assets'],garages:['garages'],
   products:['products','prodcats'],depts:['depts','workcats'],workcats:['workcats','depts'],
   customers:['customers','shifts','orders','areas'],areas:['areas','customers','orders'],
-  prodshifts:['prod_shifts','prod_shift_rules','orders','customers','shifts','trips'],deliveryrules:['delivery_rules'],deliverysequence:['customers','areas','shifts'],
+  prodshifts:['prod_shifts','prod_shift_rules','orders','customers','products','shifts','trips'],deliveryrules:['delivery_rules'],deliverysequence:['customers','areas','shifts'],
   tasks:['tasks','workcats'],notifications:[],userguide:[],
   nccs:['nccs','purchases'],nccgoods:['ncc_goods','goods_purchases'],
   purchaseorders:['purchases','nccs','materials','products','prodcats'],
@@ -156,6 +156,7 @@ function scfPlanAutomaticOrders(orders,trips,prodShifts,customers,actorName,limi
     const linked=tripById.get(String(order.tripId||''));
     if(linked&&(linked.driverDispatchedAt||['active','completion_pending','completed','cancelled'].includes(String(linked.status||''))))return order;
     const plannedShift=getProdShiftForOrder(order,prodShifts||[],customers||[]);
+    if(plannedShift?.routingConflict||plannedShift?.productRoutingRuleId&&!resolveCurrentDeliveryShift(order,plannedShift))return order;
     let next=order;
     if(order.tripAssignMode!=='manual'){
       let trip=null;
@@ -953,7 +954,7 @@ function App(){
         canAccess(cu.role,'products',cu.permissions)&&page==='products'&&h(ProductsTab,{products,setProducts,prodCats,setProdCats}),
         canAccess(cu.role,'customers',cu.permissions)&&page==='customers'&&h(CustomersTab,{customers,setCustomers,shifts,orders,areas,cu}),
         canAccess(cu.role,'areas',cu.permissions)&&page==='areas'&&h(AreasTab,{areas,setAreas,customers,setCustomers,orders}),
-        canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts,setShifts,currentUser:cu}),
+        canAccess(cu.role,'prodshifts',cu.permissions)&&page==='prodshifts'&&h(ProdShiftsTab,{prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,products,shifts,setShifts,currentUser:cu}),
         canAccess(cu.role,'deliveryrules',cu.permissions)&&page==='deliveryrules'&&h(DeliveryRulesTab,{items:deliveryRules,setItems:setDeliveryRules,currentUser:cu}),
         canAccess(cu.role,'deliverysequence',cu.permissions,cuAccessDepartments)&&page==='deliverysequence'&&h(DeliverySequenceSettingsTab,{customers,setCustomers,currentUser:cu,shifts}),
         canAccess(cu.role,'workcats',cu.permissions)&&page==='workcats'&&h(WorkCatsTab,{workcats,setWorkcats,depts}),

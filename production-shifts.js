@@ -166,6 +166,41 @@ function resolveOrderPointAliases(order,customers){
 }
 const PROD_ORDER_SHIFT_CACHE=new WeakMap();
 const PROD_ORDER_EMPTY_CUSTOMERS=[];
+function scfOrderRoutingProductIds(order){
+  return [...new Set((order?.lines||[]).filter(line=>{
+    const quantities=['qtyProd','qtyInvoice','qtyDelivered'].filter(key=>line[key]!==undefined&&line[key]!==null&&line[key]!=='');
+    return !quantities.length||quantities.some(key=>Number(String(line[key]).replace(',','.'))>0);
+  }).map(line=>String(line.productId||'')).filter(Boolean))].sort();
+}
+function scfProductTripRulesIssue(rule){
+  const rules=rule?.productTripRules??[];
+  if(!Array.isArray(rules)||rules.length>50)return 'Danh sách ngoại lệ sản phẩm không hợp lệ hoặc vượt quá 50 dòng.';
+  const ids=new Set();
+  for(const item of rules){
+    if(!item?.id||ids.has(String(item.id)))return 'Ngoại lệ sản phẩm có mã trùng hoặc bị thiếu.';
+    ids.add(String(item.id));
+    if(!Array.isArray(item.productIds)||!item.productIds.length||item.productIds.length>500||!item.productIds.every(id=>typeof id==='string'&&id.trim())||typeof item.tripShiftId!=='string'||!item.tripShiftId.trim())return 'Chọn ít nhất một sản phẩm và ca giao hàng cho mỗi ngoại lệ.';
+    if(item.tripDateOffset!==undefined&&(!Number.isInteger(item.tripDateOffset)||Math.abs(item.tripDateOffset)>1))return 'Ngày chuyến của ngoại lệ phải là -1, 0 hoặc +1.';
+  }
+  const key=item=>JSON.stringify([item.tripShiftId,Number(item.tripDateOffset??rule.tripDateOffset??0)]);
+  for(let i=0;i<rules.length;i++)for(let j=i+1;j<rules.length;j++){
+    const a=rules[i],b=rules[j];
+    if(a.active!==false&&b.active!==false&&key(a)!==key(b)&&a.productIds.some(id=>b.productIds.includes(id)))return 'Một sản phẩm đang chọn nhiều ca/ngày chuyến khác nhau. Hãy sửa ngoại lệ bị trùng.';
+  }
+  return '';
+}
+function scfResolveProductTripRule(order,rule){
+  if(!rule||!scfUsesTripProductionSchedule(order)||order.tripAssignMode==='manual')return rule;
+  const invalid=scfProductTripRulesIssue(rule);
+  if(invalid)return {...rule,routingConflict:true,routingIssue:invalid};
+  const products=new Set(scfOrderRoutingProductIds(order));
+  const matches=(rule.productTripRules||[]).filter(item=>item.active!==false&&item.productIds.some(id=>products.has(id)));
+  if(!matches.length)return rule;
+  const targets=new Set(matches.map(item=>JSON.stringify([item.tripShiftId,Number(item.tripDateOffset??rule.tripDateOffset??0)])));
+  if(targets.size>1)return {...rule,routingConflict:true,routingIssue:'Đơn có sản phẩm khớp nhiều ca/ngày chuyến khác nhau. Giữ chuyến hiện tại; cần sửa ngoại lệ hoặc chọn chuyến bằng tay.'};
+  const selected=matches[0];
+  return {...rule,tripShiftId:selected.tripShiftId,tripShiftName:selected.tripShiftName||'',tripDateOffset:Number(selected.tripDateOffset??rule.tripDateOffset??0),productRoutingRuleId:selected.id};
+}
 function getProdShiftForOrder(order,prodShifts,customers){
   if(!order||!Array.isArray(prodShifts))return null;
   const points=Array.isArray(customers)?customers:PROD_ORDER_EMPTY_CUSTOMERS;
@@ -174,9 +209,9 @@ function getProdShiftForOrder(order,prodShifts,customers){
   let matches=byCustomers.get(points);
   if(!matches){matches=new Map();byCustomers.set(points,matches);}
   // Ngày giao ảnh hưởng quyền sở hữu địa điểm; chỉ dùng lại kết quả trong cùng ngày.
-  const key=JSON.stringify([order.deliveryDate,normalizeTimeInput(order.deliveryTime),order.pointId,order.ptId,order.pointName,order.address,order.customerId,order.custId,order.customer,order.area]);
+  const key=JSON.stringify([order.deliveryDate,normalizeTimeInput(order.deliveryTime),order.pointId,order.ptId,order.pointName,order.address,order.customerId,order.custId,order.customer,order.area,scfUsesTripProductionSchedule(order),order.tripAssignMode==='manual',scfOrderRoutingProductIds(order)]);
   if(matches.has(key))return matches.get(key);
-  const shift=scfMatchProdShiftForOrder(order,prodShifts,points);
+  const shift=scfResolveProductTripRule(order,scfMatchProdShiftForOrder(order,prodShifts,points));
   if(matches.size>=4096)matches.clear();
   matches.set(key,shift);return shift;
 }
@@ -354,6 +389,7 @@ function scfStoredProductionPlan(order,prodShiftRules,line){
 }
 function scfOrderProductionResolution(order,plannedShift,trips=window.__SCF_TRIPS||[]){
   if(!scfUsesTripProductionSchedule(order))return {schedule:null,legacy:true,source:'Đơn cũ — giữ lịch SX và tem đã lưu'};
+  if(plannedShift?.routingConflict&&order.tripAssignMode!=='manual')return {schedule:null,conflict:true,issue:plannedShift.routingIssue};
   const trip=(trips||[]).find(t=>String(t.id)===String(order?.tripId||''));
   const shifts=window.__SCF_SHIFTS||[];
   const deliveryShift=trip
@@ -432,7 +468,7 @@ function addDaysVN(dateStr,offset){
 function getOrderTripDateOffset(order,prodShifts){
   const autoShift=getProdShiftForOrder(order,prodShifts||[],window.__SCF_CUSTOMERS||[]);
   const shift=autoShift;
-  return shift==null?null:Number(shift.tripDateOffset??0);
+  return shift==null||shift.routingConflict?null:Number(shift.tripDateOffset??0);
 }
 function getOrderTripDate(order,prodShifts){
   if(!order?.deliveryDate)return '';
@@ -441,9 +477,11 @@ function getOrderTripDate(order,prodShifts){
   return addDaysVN(order.deliveryDate,offset);
 }
 function resolveCurrentDeliveryShift(order,plannedShift){
+  if(plannedShift?.routingConflict)return null;
   const shifts=window.__SCF_SHIFTS||[];
   const plannedId=String(plannedShift?.tripShiftId||'');
   const byId=plannedId?shifts.find(s=>String(s?.id||'')===plannedId):null;
+  if(plannedShift?.productRoutingRuleId)return byId?.active!==false?byId:null;
   const plannedName=normalizeLookupText(plannedShift?.tripShiftName||'');
   const byName=plannedName?shifts.find(s=>normalizeLookupText(s?.name||'')===plannedName):null;
   if(byName)return byName;
@@ -458,13 +496,13 @@ function resolveCurrentDeliveryShift(order,plannedShift){
 function getOrderTripShiftId(order,prodShifts){
   const autoShift=getProdShiftForOrder(order,prodShifts||[],window.__SCF_CUSTOMERS||[]);
   const plannedShift=autoShift;
-  if(!plannedShift)return '';
+  if(!plannedShift||plannedShift.routingConflict)return '';
   return String(resolveCurrentDeliveryShift(order,plannedShift)?.id||plannedShift?.tripShiftId||'');
 }
 function getOrderTripShiftName(order,prodShifts){
   const autoShift=getProdShiftForOrder(order,prodShifts||[],window.__SCF_CUSTOMERS||[]);
   const plannedShift=autoShift;
-  if(!plannedShift)return '';
+  if(!plannedShift||plannedShift.routingConflict)return '';
   const currentShift=resolveCurrentDeliveryShift(order,plannedShift);
   const resolved=findOrderPointMatch(order,window.__SCF_CUSTOMERS||[]);
   const area=String(order?.area||resolved?.point?.area||'');
@@ -552,18 +590,21 @@ const PROD_SHIFT_AUDIT_FIELDS=[
   ['name','Tên ca'],['actualProdTime','Giờ SX'],['prodDateOffset','Ngày sản xuất'],
   ['tripDateOffset','Ngày chuyến'],['tripShiftName','Ca giao hàng'],
   ['labelPrintDateOffset','Ngày in tem'],['labelPrintTime','Giờ in tem'],
+  ['productTripRules','Ngoại lệ sản phẩm'],
   ['active','Trạng thái'],['color','Màu nền'],['textColor','Màu chữ']
 ];
 function prodShiftAuditChanges(before,after){
-  const display=(key,value)=>key==='active'?(value?'Đang hoạt động':'Tạm tắt'):String(value??'—');
-  return PROD_SHIFT_AUDIT_FIELDS.filter(([key])=>String(before?.[key]??'')!==String(after?.[key]??''))
+  const display=(key,value)=>key==='productTripRules'?(value||[]).map(r=>(r.productNames||r.productIds||[]).join(', ')+' → '+(r.tripShiftName||r.tripShiftId)+' ('+(r.tripDateOffset??0)+')'+(r.active===false?' [Tắt]':'')).join('; ')||'Không có':key==='active'?(value?'Đang hoạt động':'Tạm tắt'):String(value??'—');
+  return PROD_SHIFT_AUDIT_FIELDS.filter(([key])=>key==='productTripRules'?JSON.stringify(before?.[key]||[])!==JSON.stringify(after?.[key]||[]):String(before?.[key]??'')!==String(after?.[key]??''))
     .map(([key,label])=>label+': '+display(key,before?.[key])+' → '+display(key,after?.[key]));
 }
-function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,shifts,setShifts,currentUser}){
+function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRules,orders,customers,products=[],shifts,setShifts,currentUser}){
   const[modal,sm]=useState(null);
   const[edit,se]=useState(null);
   const[auditShiftId,setAuditShiftId]=useState(null);
-  const empty={name:'',location:'',orderTime:'',startTime:'',endTime:'',actualProdTime:'',prodDateOffset:0,tripDateOffset:0,tripShiftId:'',tripShiftName:'',labelPrintTime:'',labelPrintDateOffset:0,color:'#FFF8E1',textColor:'#333',active:true};
+  const[section,setSection]=useState('routing');
+  const[productSearch,setProductSearch]=useState('');
+  const empty={name:'',location:'',orderTime:'',startTime:'',endTime:'',actualProdTime:'',prodDateOffset:0,tripDateOffset:0,tripShiftId:'',tripShiftName:'',productTripRules:[],labelPrintTime:'',labelPrintDateOffset:0,color:'#FFF8E1',textColor:'#333',active:true};
   const shiftNamePresets=[
     {name:'Ca sáng',orderTime:'03:00',startTime:'03:00',endTime:'12:00',actualProdTime:'03:00',prodDateOffset:0,tripDateOffset:0,tripShiftId:'',tripShiftName:'',labelPrintTime:'04:00',labelPrintDateOffset:0,color:'#FFF8E1',textColor:'#E65100'},
     {name:'Ca chiều',orderTime:'20:00',startTime:'12:00',endTime:'22:00',actualProdTime:'20:00',prodDateOffset:0,tripDateOffset:0,tripShiftId:'',tripShiftName:'',labelPrintTime:'21:00',labelPrintDateOffset:0,color:'#FEF3C7',textColor:'#92400E'},
@@ -659,7 +700,9 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
     }
     groupedShiftRows.push({type:'row',key:r.id,row:r});
   });
-  const open=(sh)=>{sf(sh?normalize(sh):{...empty});se(sh||null);sm('f');};
+  const open=(sh)=>{sf(sh?normalize(sh):{...empty});setProductSearch('');se(sh||null);sm('f');};
+  const updateProductRule=(id,patch)=>sf(p=>({...p,productTripRules:(p.productTripRules||[]).map(r=>r.id===id?{...r,...patch}:r)}));
+  const routingLabel=r=>(r.tripShiftName||'—')+((r.productTripRules||[]).some(x=>x.active!==false)?' · '+r.productTripRules.filter(x=>x.active!==false).length+' ngoại lệ sản phẩm':'');
   const presetForTime=t=>{
     const exact=shiftNamePresets.find(x=>x.orderTime===t);
     if(exact)return exact;
@@ -717,11 +760,14 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
   };
   const save=()=>{
     if(!(form.startTime||form.orderTime)||!(form.endTime||form.orderTime)||!form.tripShiftId){window.showToast('Nhập đủ khoảng giờ đơn hàng và chọn ca giao hàng!','warn');return;}
+    const productIssue=scfProductTripRulesIssue(form);
+    if(productIssue){window.showToast(productIssue,'warn');return;}
+    if((form.productTripRules||[]).some(r=>r.active!==false&&!(shifts||[]).some(s=>String(s.id)===r.tripShiftId&&s.active!==false))){window.showToast('Ca giao hàng của ngoại lệ không còn hoạt động. Hãy chọn lại.','warn');return;}
     const autoRule=shiftRuleFromProdTime(form.actualProdTime);
     const autoName=autoRule?.name||'';
     const {_missingCount,_missingReason,_missingOrderIds,_missingSummary,...cleanForm}=form;
     const chosenTripShift=(shifts||[]).find(x=>x.id===form.tripShiftId);
-    const data={...cleanForm,name:autoName||form.tripShiftName||'Chọn chuyến',color:autoRule?.color||form.color,textColor:autoRule?.textColor||form.textColor,orderTime:form.startTime||form.orderTime,startTime:form.startTime||form.orderTime,endTime:form.endTime||form.orderTime,prodDateOffset:Number(form.prodDateOffset||0),tripDateOffset:Number(form.tripDateOffset||0),tripShiftId:String(form.tripShiftId||''),tripShiftName:chosenTripShift?.name||form.tripShiftName||'',labelPrintDateOffset:Number(form.labelPrintDateOffset||0)};
+    const data={...cleanForm,name:autoName||form.tripShiftName||'Chọn chuyến',color:autoRule?.color||form.color,textColor:autoRule?.textColor||form.textColor,orderTime:form.startTime||form.orderTime,startTime:form.startTime||form.orderTime,endTime:form.endTime||form.orderTime,prodDateOffset:Number(form.prodDateOffset||0),tripDateOffset:Number(form.tripDateOffset||0),tripShiftId:String(form.tripShiftId||''),tripShiftName:chosenTripShift?.name||form.tripShiftName||'',labelPrintDateOffset:Number(form.labelPrintDateOffset||0),productTripRules:(form.productTripRules||[]).map(r=>({...r,productIds:[...new Set(r.productIds)],productNames:r.productIds.map((id,index)=>products.find(p=>String(p.id)===id)?.name||r.productNames?.[index]||id),tripShiftName:shifts.find(s=>String(s.id)===r.tripShiftId)?.name||r.tripShiftName||''}))};
     const stamp=fmtDT(),atIso=new Date().toISOString(),actor=currentUser?.name||'Người dùng',actorId=currentUser?.id||'';
     if(edit) setProdShifts(p=>p.map(s=>{
       if(s.id!==edit.id)return s;
@@ -738,6 +784,18 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
   const del=sh=>window.scfConfirm('Bạn có chắc muốn xóa ca "'+sh.name+'"?','Xóa ca sản xuất',true).then(ok=>ok&&setProdShifts(p=>p.filter(s=>s.id!==sh.id)));
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-clock-play',style:{fontSize:20}}),'Cài đặt ca SX + ca GH tự động'),
+    h('div',{className:'finance-tabs',role:'tablist','aria-label':'Cài đặt chuyến và lịch sản xuất',style:{marginBottom:16}},
+      [['routing','1. Đơn hàng → Chọn chuyến'],['production','2. Lịch SX và in tem']].map(([id,label])=>h('button',{
+        key:id,id:'prod-settings-tab-'+id,type:'button',role:'tab',className:section===id?'on':'','aria-selected':section===id,'aria-controls':'prod-settings-panel-'+id,tabIndex:section===id?0:-1,
+        style:{flex:'1 1 0',minWidth:0,maxWidth:360,minHeight:44,whiteSpace:'normal'},
+        onClick:()=>setSection(id),onKeyDown:e=>{
+          if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+          e.preventDefault();const next=e.key==='Home'?'routing':e.key==='End'?'production':section==='routing'?'production':'routing';
+          setSection(next);e.currentTarget.parentElement.querySelector('#prod-settings-tab-'+next)?.focus();
+        }
+      },label))
+    ),
+    h('div',{id:'prod-settings-panel-routing',role:'tabpanel','aria-labelledby':'prod-settings-tab-routing',hidden:section!=='routing',style:{display:section==='routing'?'block':'none'}},
     h('h3',null,'1. Từ đơn hàng → tự động chọn chuyến'),
     h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:'1rem',gap:8,flexWrap:'wrap',alignItems:'center'}},
       h('input',{value:locationSearch,onChange:e=>setLocationSearch(e.target.value),placeholder:'Tìm địa điểm...',type:'search',style:{padding:'7px 10px',border:'1px solid var(--bd)',borderRadius:'var(--r)',fontSize:13,minWidth:240}}),
@@ -790,7 +848,7 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
               h('td',{style:{padding:'10px 12px'}},r.location||'—'),
               h('td',{style:{padding:'10px 12px',fontWeight:600,whiteSpace:'nowrap',width:96}},orderTimeText(r)),
               h('td',{style:{padding:'10px 12px'}},dateOffsetLabel(r.tripDateOffset)),
-              h('td',{style:{padding:'10px 12px'}},r.tripShiftName||'—'),
+              h('td',{style:{padding:'10px 12px'}},routingLabel(r)),
               h('td',{style:{padding:'10px 12px'}},h('span',{className:'badge',style:{background:r.active?'#E8F5E9':'#F1EFE8',color:r.active?'#1B5E20':'#777'}},r.active?'Đang hoạt động':'Tạm tắt')),
               h('td',{style:{padding:'8px 12px',textAlign:'right',whiteSpace:'nowrap'}},
                 h('button',{className:'bi',onClick:()=>setAuditShiftId(r.id),title:'Xem người tạo và lịch sử sửa'},h('i',{className:'ti ti-history',style:{fontSize:15}})),
@@ -825,7 +883,7 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
           h('div',{className:'prodshift-mobile-grid'},
             h('div',{className:'prodshift-mobile-item'},h('b',null,'Giờ ĐH'),h('span',null,orderTimeText(r))),
             h('div',{className:'prodshift-mobile-item'},h('b',null,'Ngày chuyến'),h('span',null,dateOffsetLabel(r.tripDateOffset))),
-            h('div',{className:'prodshift-mobile-item'},h('b',null,'Ca giao hàng'),h('span',null,r.tripShiftName||'—')),
+            h('div',{className:'prodshift-mobile-item'},h('b',null,'Ca giao hàng'),h('span',null,routingLabel(r))),
           ),
           h('div',{className:'mobile-data-actions'},
             h('button',{className:'bi',onClick:()=>setAuditShiftId(r.id),title:'Xem người tạo và lịch sử sửa'},h('i',{className:'ti ti-history',style:{fontSize:15}})),
@@ -835,7 +893,10 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
         );
       })
     ),
-    h(TripProductionSettings,{shifts,setShifts,prodShifts,prodShiftRules:rules,currentUser,orders,customers}),
+    ),
+    h('div',{id:'prod-settings-panel-production',role:'tabpanel','aria-labelledby':'prod-settings-tab-production',hidden:section!=='production',style:{display:section==='production'?'block':'none'}},
+      h(TripProductionSettings,{shifts,setShifts,prodShifts,prodShiftRules:rules,currentUser,orders,customers})
+    ),
     auditShift&&h(Modal,{title:'Lịch sử cài đặt ca — '+(auditShift.location||auditShift.name||auditShift.id),onClose:()=>setAuditShiftId(null)},
       h('div',{style:{display:'grid',gap:8,fontSize:13}},
         h('div',null,h('b',null,'Người tạo: '),auditShift.createdBy||'Chưa ghi nhận (dữ liệu cũ)',auditShift.createdAt?' · '+auditShift.createdAt:''),
@@ -873,7 +934,7 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
           h('option',{value:'0'},'Cùng ngày ĐH (0)'),
           h('option',{value:'1'},'Sau ngày ĐH 1 ngày (+1)')
         )),
-        h(F,{label:'Ca giao hàng'},h('select',{value:form.tripShiftId||'',onChange:e=>{
+        h(F,{label:'Ca giao hàng mặc định'},h('select',{'aria-label':'Ca giao hàng mặc định',value:form.tripShiftId||'',onChange:e=>{
           const sh=(shifts||[]).find(x=>x.id===e.target.value);
           sf(p=>({...p,tripShiftId:e.target.value,tripShiftName:sh?.name||''}));
         }},
@@ -881,6 +942,19 @@ function ProdShiftsTab({prodShifts,setProdShifts,prodShiftRules,setProdShiftRule
           (shifts||[]).map(sh=>h('option',{key:sh.id,value:sh.id},sh.name||sh.id))
         ))
       ),
+      h('h4',{style:{marginTop:16}},'Ngoại lệ theo sản phẩm'),
+      h('p',{style:{fontSize:12,margin:'6px 0'}},'Nếu đơn có ít nhất một sản phẩm đã chọn, toàn bộ đơn sẽ theo ca giao hàng của ngoại lệ. Đơn không khớp ngoại lệ theo ca mặc định. Không tách hoặc nhân bản đơn.'),
+      (form.productTripRules||[]).length>0&&h('input',{'aria-label':'Tìm sản phẩm ngoại lệ',type:'search',placeholder:'Tìm sản phẩm...',value:productSearch,onChange:e=>setProductSearch(e.target.value)}),
+      (form.productTripRules||[]).map((r,index)=>h('div',{key:r.id,style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,margin:'10px 0'}},
+        h('b',null,'Ngoại lệ '+(index+1)),
+        h('div',{style:{maxHeight:150,overflowY:'auto',margin:'8px 0'}},products.filter(p=>p.active!==false&&(!productSearch||normalizeLookupText(p.name).includes(normalizeLookupText(productSearch)))).map(p=>h('label',{key:p.id,style:{display:'flex',alignItems:'center',gap:8,padding:'5px 0'}},h('input',{type:'checkbox','aria-label':'Ngoại lệ '+(index+1)+' — '+p.name,checked:(r.productIds||[]).includes(String(p.id)),onChange:()=>updateProductRule(r.id,{productIds:(r.productIds||[]).includes(String(p.id))?r.productIds.filter(id=>id!==String(p.id)):[...(r.productIds||[]),String(p.id)]}),style:{width:18,height:18,margin:0}}),p.name))),
+        h('div',{style:{fontSize:12,marginBottom:8}},'Đã chọn: ',(r.productIds||[]).map((id,i)=>products.find(p=>String(p.id)===id)?.name||r.productNames?.[i]||id).join(', ')||'Chưa chọn sản phẩm'),
+        h('div',{className:'g2'},
+          h(F,{label:'Ngày chuyến ngoại lệ'},h('select',{'aria-label':'Ngày chuyến ngoại lệ '+(index+1),value:r.tripDateOffset??form.tripDateOffset??0,onChange:e=>updateProductRule(r.id,{tripDateOffset:Number(e.target.value)})},[-1,0,1].map(n=>h('option',{key:n,value:n},n===0?'Cùng ngày ĐH (0)':n<0?'Trước ngày ĐH 1 ngày (-1)':'Sau ngày ĐH 1 ngày (+1)')))),
+          h(F,{label:'Ca giao hàng ngoại lệ'},h('select',{'aria-label':'Ca giao hàng ngoại lệ '+(index+1),value:r.tripShiftId||'',onChange:e=>updateProductRule(r.id,{tripShiftId:e.target.value})},h('option',{value:''},'— Chọn ca giao hàng —'),(shifts||[]).filter(s=>s.active!==false).map(s=>h('option',{key:s.id,value:String(s.id)},s.name||s.id))))),
+        h('div',{style:{display:'flex',gap:8}},h('button',{onClick:()=>updateProductRule(r.id,{active:r.active===false})},r.active===false?'Bật ngoại lệ':'Tắt ngoại lệ'),h('button',{onClick:()=>sf(p=>({...p,productTripRules:p.productTripRules.filter(x=>x.id!==r.id)}))},'Xóa ngoại lệ'))
+      )),
+      h('button',{onClick:()=>sf(p=>({...p,productTripRules:[...(p.productTripRules||[]),{id:'PTR'+uid(),productIds:[],tripShiftId:'',tripDateOffset:Number(p.tripDateOffset||0),active:true}]}))},'+ Thêm ngoại lệ sản phẩm'),
       h('div',{className:'g2'},
         h(F,{label:'Màu nền'},h('input',{type:'color',value:form.color||'#FFF8E1',onChange:e=>sf(p=>({...p,color:e.target.value})),style:{height:36,cursor:'pointer'}})),
         h(F,{label:'Màu chữ'},h('input',{type:'color',value:form.textColor||'#333333',onChange:e=>sf(p=>({...p,textColor:e.target.value})),style:{height:36,cursor:'pointer'}}))
