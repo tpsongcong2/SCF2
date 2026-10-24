@@ -352,18 +352,26 @@ function scfUsesTripProductionSchedule(order){
 function scfMarkNewProductionOrder(order){
   return {...order,productionScheduleVersion:2,productionScheduleStartedAt:new Date().toISOString()};
 }
+function scfRequestTripProduction(order,trips=[]){
+  if(typeof window!=='undefined'&&window.scfProductionConfigurationPending?.())return order;
+  const trip=trips.find(t=>String(t.id)===String(order?.tripId||''));
+  if(!order||order.id&&!trip||!['','pending','assigned'].includes(String(order.status||''))||trip&&(trip.driverDispatchedAt||['active','completion_pending','completed','cancelled'].includes(trip.status)))return order;
+  const stamp=new Date().toISOString();
+  return {...order,prodShiftAssignMode:'auto',productionScheduleVersion:2,productionScheduleStartedAt:order.productionScheduleStartedAt||stamp,productionScheduleResetAt:stamp,productionScheduleResetTripId:String(order.tripId||'')};
+}
 function scfPreserveExistingProductionOrder(previous,incoming){
   if(previous===incoming)return incoming;
   const copyFields=(target,source,keys)=>{
     if(keys.every(key=>target[key]===source[key]&&Object.hasOwn(target,key)===Object.hasOwn(source,key)))return target;
     const result={...target};keys.forEach(key=>{if(Object.hasOwn(source,key))result[key]=source[key];else delete result[key];});return result;
   };
-  let next=copyFields(incoming,previous,['productionScheduleVersion','productionScheduleStartedAt']);
   const reset=!!incoming.productionScheduleResetAt&&incoming.productionScheduleResetAt!==previous.productionScheduleResetAt;
+  const adopt=reset&&Number.isFinite(Date.parse(incoming.productionScheduleResetAt))&&incoming.productionScheduleVersion===2&&incoming.prodShiftAssignMode==='auto'&&incoming.productionScheduleResetTripId===String(incoming.tripId||'')&&['','pending','assigned'].includes(String(incoming.status||''));
+  let next=adopt?incoming:copyFields(incoming,previous,['productionScheduleVersion','productionScheduleStartedAt']);
   const manualLocked=previous.prodShiftAssignMode==='manual'&&incoming.prodShiftAssignMode!=='manual'&&!reset;
   const fields=['prodDate','prodTime','prodWorkShiftId','labelDate','labelTime','prodShiftId'];
   if(manualLocked)next=copyFields(next,previous,[...fields,'prodShiftAssignMode']);
-  else if(!scfUsesTripProductionSchedule(previous)&&incoming.prodShiftAssignMode!=='manual')next=copyFields(next,previous,fields);
+  else if(!scfUsesTripProductionSchedule(previous)&&!adopt&&incoming.prodShiftAssignMode!=='manual')next=copyFields(next,previous,fields);
   let changed=false;
   const lines=(next.lines||[]).map((line,index)=>{
     const old=line.id?(previous.lines||[]).find(item=>String(item.id)===String(line.id)):(previous.lines||[])[index];
@@ -371,7 +379,7 @@ function scfPreserveExistingProductionOrder(previous,incoming){
     const lineReset=!!line.productionScheduleResetAt&&line.productionScheduleResetAt!==matching?.productionScheduleResetAt;
     if(lineReset)return line;
     if(line.shiftOverride)return line;
-    if(!manualLocked&&!matching?.shiftOverride&&(scfUsesTripProductionSchedule(previous)||incoming.prodShiftAssignMode==='manual'))return line;
+    if(!manualLocked&&!matching?.shiftOverride&&(adopt||scfUsesTripProductionSchedule(previous)||incoming.prodShiftAssignMode==='manual'))return line;
     const saved=matching||previous;
     let result=copyFields(line,saved,fields.slice(0,5));
     if(matching?.shiftOverride)result={...result,shiftOverride:true};

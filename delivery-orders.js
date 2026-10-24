@@ -532,7 +532,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
       h('div',{className:'order-form-shift-grid',style:{display:'grid',gridTemplateColumns:'150px minmax(180px,260px) 1fr',gap:8,alignItems:'end'}},
         h(F,{label:'Cách chọn Ca SX'},h('select',{value:prodShiftMode,onChange:e=>{
           const mode=e.target.value;
-          sf(prev=>({...prev,prodShiftAssignMode:mode,prodShiftId:mode==='manual'?(prev.prodShiftId||autoShift?.id||''):(autoShift?.id||''),...(mode==='auto'?{prodTime:'',prodDate:'',labelTime:'',labelDate:'',productionScheduleResetAt:new Date().toISOString()}:{})}));
+          sf(prev=>mode==='auto'?scfRequestTripProduction({...prev,prodShiftAssignMode:'auto'},window.__SCF_TRIPS||[]):({...prev,prodShiftAssignMode:'manual',prodShiftId:prev.prodShiftId||autoShift?.id||''}));
         }},
           h('option',{value:'auto'},'Tự động theo chuyến'),
           h('option',{value:'manual'},'Chọn tay')
@@ -542,7 +542,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
             h('option',{value:''},'— Chọn Ca SX —'),
             (prodShifts||[]).map(shift=>h('option',{key:shift.id,value:shift.id},shift.name||shift.id))
           ))
-          :h(F,{label:'Ca SX theo chuyến'},h('input',{value:(window.__SCF_PROD_SHIFT_RULES||[]).find(r=>String(r.id)===String(effectiveTiming.prodWorkShiftId||''))?.name||getProdWorkShiftRule(effectiveTiming.prodTime)?.name||'Chưa có lịch SX cho chuyến',readOnly:true,style:{background:'#fff'}})),
+          :h(F,{label:'Ca SX theo chuyến'},h('input',{value:(window.__SCF_PROD_SHIFT_RULES||[]).find(r=>String(r.id)===String(effectiveTiming.prodWorkShiftId||''))?.name||getProdWorkShiftRule(effectiveTiming.prodTime)?.name||'Chưa có lịch SX cho chuyến',readOnly:true,style:{background:'#fff'}}),h('button',{type:'button',onClick:()=>sf(prev=>scfRequestTripProduction(prev,window.__SCF_TRIPS||[])),style:{marginTop:5,fontSize:12}},'Cập nhật theo chuyến')),
         effectiveShift?h('div',{style:{alignSelf:'center',display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',color:prodShiftMode==='manual'?'#8A5A00':'#185FA5'}},
           h('span',{className:'badge',style:{background:prodShiftMode==='manual'?'#FFF3CD':'#E8F5E9',color:prodShiftMode==='manual'?'#8A5A00':'#1B5E20'}},prodShiftMode==='manual'?'Đ.Tay':'T.Đ'),
           h('span',null,'Ngày SX: '+(effectiveTiming.prodDate||'—')),
@@ -3026,9 +3026,11 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         if(closedTrip(trip)||['done','cancelled'].includes(live.status))throw new Error('Đơn đã đóng, không thể đổi thông tin SX.');
         if((dispatchedTrip(trip)||live.status==='delivering')&&!canWithdrawStartedOrder)throw new Error('Đơn đang giao, cần Admin hoặc kế toán cập nhật.');
         const livePlans=productionDisplayForOrder(live).plans||[];
-        const autoPlan=prodShiftPlansForOrder({...live,prodShiftAssignMode:'auto',prodShiftId:'',prodDate:'',prodTime:'',labelDate:'',labelTime:'',lines:(live.lines||[]).map(line=>({...line,shiftOverride:false}))},prodShifts||[],prodShiftRules||[])[0]||{};
+        const requested=field==='mode'&&value==='auto'?scfRequestTripProduction({...live,prodShiftAssignMode:'auto'},trips):live;
+        const autoPlan=prodShiftPlansForOrder({...requested,prodShiftAssignMode:'auto',prodShiftId:'',prodDate:'',prodTime:'',labelDate:'',labelTime:'',lines:(live.lines||[]).map(line=>({...line,shiftOverride:false}))},prodShifts||[],prodShiftRules||[])[0]||{};
         const automatic=Object.fromEntries(['prodDate','prodTime','labelDate','labelTime'].map(key=>[key,autoPlan[key]||'']));
-        const updated=scfMergeMobileProduction(live,base,index,plan,field,value,livePlans,automatic);
+        const merged=scfMergeMobileProduction(live,base,index,plan,field,value,livePlans,automatic);
+        const updated=merged!==live&&field==='mode'&&value==='auto'?scfRequestTripProduction(merged,trips):merged;
         if(updated===live)return previous;
         saved={...updated,updatedAt:fmtDT(),updatedBy:currentUser?.name||'',orderHistory:[...(live.orderHistory||[]),historyEntry('Sửa thông tin SX trên điện thoại',[(base.lines?.[index]?.productName||'Sản phẩm')+' · '+field+': '+value])]};
         return previous.map(order=>String(order.id)===String(live.id)?saved:order);
@@ -3121,7 +3123,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       const changes=['Chuyến: '+(oldTripId||'Chưa xếp')+' → '+(newTripId||'Chưa xếp'),'Trạng thái: '+(x.status||'—')+' → '+nextStatus];
       if(reason)changes.push('Lý do: '+reason);
       const transfer={id:'DC'+uid(),fromTripId:oldTripId||'',toTripId:newTripId||'',reason,fromTripStatus:oldTrip?.status||'',toTripStatus:targetTrip?.status||'',at:stamp,by:currentUser?.name||'',byId:currentUser?.id||''};
-      return {...x,tripAssignMode:'manual',tripId:newTripId||null,status:nextStatus,tripTransferHistory:[...(x.tripTransferHistory||[]),transfer],orderHistory:[...(x.orderHistory||[]),historyEntry(action,changes)],updatedAt:stamp,updatedBy:currentUser?.name||''};
+      const moved={...x,tripAssignMode:'manual',tripId:newTripId||null,status:nextStatus,tripTransferHistory:[...(x.tripTransferHistory||[]),transfer],orderHistory:[...(x.orderHistory||[]),historyEntry(action,changes)],updatedAt:stamp,updatedBy:currentUser?.name||''};
+      return newTripId&&x.prodShiftAssignMode!=='manual'?scfRequestTripProduction(moved,trips):moved;
     }));
     const confirmed=await confirmManualTripSave(order.id,newTripId);
     if(confirmed){
