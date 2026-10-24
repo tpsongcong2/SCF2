@@ -1,4 +1,4 @@
-const CACHE = 'scf-v639';
+const CACHE = 'scf-v640';
 const ASSETS = [
   './',
   './index.html',
@@ -38,7 +38,7 @@ const ASSETS = [
   './delivery-orders.js?v=638',
   './qrcode.min.js?v=357',
   './import-tools.js?v=638',
-  './trips.js?v=638',
+  './trips.js?v=640',
   './delivery-excel.js?v=557',
   './vendor/exceljs-4.4.0.min.js',
   './production-closing-domain.js?v=593',
@@ -50,8 +50,8 @@ const ASSETS = [
   './production-assignments.js?v=537',
   './permissions.js?v=638',
   './permission-settings.js?v=638',
-  './app.js?v=639',
-  './bootstrap.js?v=639',
+  './app.js?v=640',
+  './bootstrap.js?v=640',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
