@@ -547,6 +547,10 @@ function prodShiftPlan(order,prodShifts,prodShiftRules){
       manual:true
     };
   }
+  if(order.id&&order.automaticPlanningPending!==true){
+    const saved=scfStoredProductionPlan(order,prodShiftRules);
+    if(saved)return {...saved,frozen:true};
+  }
   const manualOrder=order?.prodShiftAssignMode==='manual'&&order?.prodShiftId;
   const sh=manualOrder?(prodShifts||[]).find(s=>s.id===order.prodShiftId):getProdShiftForOrder(order,prodShifts||[],window.__SCF_CUSTOMERS||[]);
   if(!manualOrder){

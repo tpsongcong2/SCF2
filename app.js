@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V685';
+const SCF_BUILD_VERSION='V686';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -144,7 +144,7 @@ function scfCreateAutomaticTripLookup(trips){
   (trips||[]).forEach(add);
   return {add,find:(date,shiftId,shiftName)=>shiftId?byShiftId.get(key(date,shiftId)):(shiftName?byShiftName.get(key(date,normalizeLookupText(shiftName))):undefined)};
 }
-function scfPlanAutomaticOrders(orders,trips,prodShifts,customers,actorName,limit=25){
+function scfPlanAutomaticOrders(orders,trips,prodShifts,customers,actorName,limit=25,{pendingOnly=false}={}){
   const workingTrips=[...(trips||[])],tripById=new Map(workingTrips.map(trip=>[String(trip.id||''),trip]));
   const lookup=scfCreateAutomaticTripLookup(workingTrips);
   const occupiedKey=(date,shift)=>JSON.stringify([String(date||'').trim(),String(shift||'').trim()]);
@@ -152,6 +152,7 @@ function scfPlanAutomaticOrders(orders,trips,prodShifts,customers,actorName,limi
   const occupiedNames=new Set(workingTrips.map(trip=>occupiedKey(trip.deliveryDate,normalizeLookupText(trip.shiftName))));
   let changed=0,tripsChanged=false;
   const nextOrders=(orders||[]).map(order=>{
+    if(pendingOnly&&order?.automaticPlanningPending!==true)return order;
     if(changed>=limit||!order||!['','pending','assigned'].includes(String(order.status||'')))return order;
     const linked=tripById.get(String(order.tripId||''));
     if(linked&&(linked.driverDispatchedAt||['active','completion_pending','completed','cancelled'].includes(String(linked.status||''))))return order;
@@ -187,6 +188,7 @@ function scfPlanAutomaticOrders(orders,trips,prodShifts,customers,actorName,limi
       if(String(next.tripId||'')!==String(tripId||'')||next.status!==status||next.tripAssignMode!=='auto')next={...next,tripId,tripAssignMode:'auto',status};
     }
     next=scfApplyAutomaticProduction(next,plannedShift,workingTrips);
+    if(pendingOnly&&next.automaticPlanningPending===true)next={...next,automaticPlanningPending:false};
     if(next===order)return order;
     changed++;
     return {...next,updatedAt:fmtDT(),updatedBy:actorName||'Hệ thống'};
@@ -462,11 +464,14 @@ function App(){
       if(previousOrder)order=scfPreserveExistingProductionOrder(previousOrder,incomingOrder);
       else{
         const {kpiAudit,...fresh}=incomingOrder;
-        order={...scfMarkNewProductionOrder(fresh),createdAtIso:new Date().toISOString(),createdById:String(cu?.id||''),createdBy:cu?.name||incomingOrder.createdBy||''};
+        order={...scfMarkNewProductionOrder(fresh),automaticPlanningPending:true,createdAtIso:new Date().toISOString(),createdById:String(cu?.id||''),createdBy:cu?.name||incomingOrder.createdBy||''};
       }
       const old=before.get(String(order.id));
       if(old===order)return order;
       const changed=old&&String(old.tripId||'')!==String(order.tripId||'');
+      const requested=old&&order.productionScheduleResetAt&&order.productionScheduleResetAt!==old.productionScheduleResetAt;
+      // Existing orders keep their stored schedule on unrelated edits.
+      if(old&&!changed&&!requested)return order;
       if(!changed&&!['pending','assigned',''].includes(String(order.status||'')))return order;
       const rule=getProdShiftForOrder(order,prodShifts||[],customers||[]);
       return scfApplyAutomaticProduction(order,rule,planningTrips);
@@ -787,7 +792,7 @@ function App(){
     // Chuyến được lập trước theo lịch phải được giữ lại dù chưa có đơn.
     const keptTrips=(trips||[]).filter(t=>!(t?.autoCreated&&!t?.autoPlanned&&usableTrip(t)&&!(t.orderIds||[]).length&&!linkedTripIds.has(String(t.id||''))));
     const advance=scfCreateAdvanceTripWindow(keptTrips,shifts||[],fmtDate(),3,automationUser.name||'Hệ thống');
-    const planned=scfPlanAutomaticOrders(orders,advance.trips,prodShifts,customers,automationUser.name,25);
+    const planned=scfPlanAutomaticOrders(orders,advance.trips,prodShifts,customers,automationUser.name,25,{pendingOnly:true});
     const workingTrips=planned.trips,nextOrders=planned.orders;
     let tripsChanged=keptTrips.length!==(trips||[]).length||advance.changed||planned.tripsChanged;
     // Repair only fields accepted by the automatic endpoint, so applying its
