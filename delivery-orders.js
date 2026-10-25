@@ -2662,6 +2662,7 @@ function DeliveryOrderTripModal({order,trips,trip,defaultDate,disabled,onConfirm
   const [tripId,setTripId]=useState(String(trip?.id||''));
   const [saving,setSaving]=useState(false),[error,setError]=useState('');
   const [productionChoice,setProductionChoice]=useState('keep');
+  const [productionEditMode,setProductionEditMode]=useState(order.prodShiftAssignMode==='manual'?'manual':'auto');
   const [productionDate,setProductionDate]=useState(toIsoDate(productionPlan.prodDate||order.prodDate||order.deliveryDate));
   const [labelDate,setLabelDate]=useState(toIsoDate(productionPlan.labelDate||order.labelDate||order.lines?.[0]?.labelDate||order.deliveryDate));
   const [labelTime,setLabelTime]=useState(productionPlan.labelTime||order.labelTime||order.lines?.[0]?.labelTime||'');
@@ -2670,7 +2671,17 @@ function DeliveryOrderTripModal({order,trips,trip,defaultDate,disabled,onConfirm
   const manualTiming=()=>{if(productionChoice==='keep'||productionChoice==='auto')setProductionChoice(currentRule?.id||'');};
   const productionLocked=!!trip&&(!!trip.driverDispatchedAt||['active','completion_pending','completed'].includes(trip.status));
   const autoDraft={...order,tripId,prodShiftAssignMode:'auto',productionScheduleVersion:2};
-  const autoPlan=productionChoice==='auto'?scfTripProductionPlan(autoDraft,getProdShiftForOrder(autoDraft,prodShifts,customers),trips,rules):null;
+  const autoPlan=productionEditMode==='auto'?scfTripProductionPlan(autoDraft,getProdShiftForOrder(autoDraft,prodShifts,customers),trips,rules):null;
+  const displayPlan=productionEditMode==='auto'&&(productionChoice==='auto'||tripId!==String(trip?.id||''))?autoPlan:productionPlan;
+  const displayedRule=rules.find(rule=>String(rule.id)===String(displayPlan?.prodWorkShiftId||''))||rules.find(rule=>rule.start===displayPlan?.prodTime)||currentRule;
+  const timingDisabled=disabled||saving||productionLocked||productionEditMode!=='manual';
+  const toggleProductionMode=()=>{
+    if(productionEditMode==='auto'){
+      setProductionDate(toIsoDate(displayPlan?.prodDate||productionDate));setLabelDate(toIsoDate(displayPlan?.labelDate||labelDate));setLabelTime(displayPlan?.labelTime||labelTime);
+      setProductionChoice(displayedRule?.id||'');setProductionEditMode('manual');
+    }else{setProductionChoice('auto');setProductionEditMode('auto');}
+    setError('');
+  };
   const savingRef=React.useRef(false);
   const options=React.useMemo(()=>filterManualTripOptions(trips,date,''),[trips,date]);
   const panelRef=React.useRef(null);
@@ -2693,13 +2704,15 @@ function DeliveryOrderTripModal({order,trips,trip,defaultDate,disabled,onConfirm
     h(F,{label:'Ngày chuyến'},h('input',{type:'date','aria-label':'Ngày chuyến mới',value:date,disabled:disabled||saving,onChange:e=>{setDate(e.target.value);setTripId('');setError('');}})),
     h(F,{label:'Ca giao – Người giao'},h('select',{'aria-label':'Chuyến mới',value:options.some(t=>String(t.id)===tripId)?tripId:'',disabled:disabled||saving,onChange:e=>{setTripId(e.target.value);setError('');}},h('option',{value:''},options.length?'Chọn chuyến trong ngày':'Không có chuyến trong ngày'),options.map(t=>h('option',{key:t.id,value:String(t.id)},manualTripText(t))))),
     h('div',{className:'delivery-transfer-production'},
-      h(F,{label:'Ngày SX'},h('input',{type:'date','aria-label':'Ngày SX khi chuyển chuyến',value:productionChoice==='auto'?toIsoDate(autoPlan?.prodDate||''):productionDate,disabled:disabled||saving||productionLocked||productionChoice==='auto',onChange:e=>{manualTiming();setProductionDate(e.target.value);}})),
-      h(F,{label:'Ca SX'},h('select',{'aria-label':'Ca SX khi chuyển chuyến',value:productionChoice,disabled:disabled||saving||productionLocked,onChange:e=>{setProductionChoice(e.target.value);setError('');}},
-        h('option',{value:'keep'},'Giữ: '+(currentRule?.name||productionPlan.shift?.name||'Ca SX hiện tại')),
-        h('option',{value:'auto'},'Tự động theo chuyến mới'),h('option',{value:'',disabled:true},'Chọn ca SX'),
-        rules.filter(rule=>rule.active!==false).map(rule=>h('option',{key:rule.id,value:rule.id},rule.name)))),
-      h(F,{label:'Ngày in tem'},h('input',{type:'date','aria-label':'Ngày in tem khi chuyển chuyến',value:productionChoice==='auto'?toIsoDate(autoPlan?.labelDate||''):labelDate,disabled:disabled||saving||productionLocked||productionChoice==='auto',onChange:e=>{manualTiming();setLabelDate(e.target.value);}})),
-      h(F,{label:'Giờ in tem'},h('input',{type:'time','aria-label':'Giờ in tem khi chuyển chuyến',value:productionChoice==='auto'?(autoPlan?.labelTime||''):labelTime,disabled:disabled||saving||productionLocked||productionChoice==='auto',onChange:e=>{manualTiming();setLabelTime(e.target.value);}}))),
+      h(F,{label:'Ngày SX'},h('input',{type:'date','aria-label':'Ngày SX khi chuyển chuyến',value:productionEditMode==='auto'?toIsoDate(displayPlan?.prodDate||''):productionDate,disabled:timingDisabled,onChange:e=>{manualTiming();setProductionDate(e.target.value);}})),
+      h(F,{label:'Ca SX'},h('div',{style:{display:'flex',alignItems:'center',gap:6}},
+        h('button',{type:'button',className:'delivery-trip-mode-switch','data-mode':productionEditMode,role:'switch','aria-label':'Xếp ca SX tự động','aria-checked':productionEditMode==='auto',title:productionEditMode==='auto'?'Tự động theo chuyến giao · Bấm chuyển BT để sửa':'Bằng tay · Bấm chuyển TĐ theo chuyến giao',disabled:disabled||saving||productionLocked,onClick:toggleProductionMode},productionEditMode==='auto'?'TĐ':'BT'),
+        h('select',{'aria-label':'Ca SX khi chuyển chuyến',value:productionChoice,disabled:timingDisabled,onChange:e=>{setProductionChoice(e.target.value);if(e.target.value==='auto')setProductionEditMode('auto');setError('');}},
+          h('option',{value:'keep'},displayedRule?.name||productionPlan.shift?.name||'Ca SX hiện tại'),
+          h('option',{value:'auto'},'Theo chuyến giao'+(displayedRule?.name?' · '+displayedRule.name:'')),h('option',{value:'',disabled:true},'Chọn ca SX'),
+          rules.filter(rule=>rule.active!==false).map(rule=>h('option',{key:rule.id,value:rule.id},rule.name))))),
+      h(F,{label:'Ngày in tem'},h('input',{type:'date','aria-label':'Ngày in tem khi chuyển chuyến',value:productionEditMode==='auto'?toIsoDate(displayPlan?.labelDate||''):labelDate,disabled:timingDisabled,onChange:e=>{manualTiming();setLabelDate(e.target.value);}})),
+      h(F,{label:'Giờ in tem'},h('input',{type:'time','aria-label':'Giờ in tem khi chuyển chuyến',value:productionEditMode==='auto'?(displayPlan?.labelTime||''):labelTime,disabled:timingDisabled,onChange:e=>{manualTiming();setLabelTime(e.target.value);}}))),
     productionLocked&&h('p',{role:'alert'},'Ca SX và lịch in tem đã khóa vì chuyến đã giao lái xe.'),
     disabled&&h('p',{role:'alert'},'Đơn hoặc chuyến đã khóa, hoặc bạn không có quyền chuyển chuyến.'),
     error&&h('p',{role:'alert',className:'delivery-editor-error'},error),
