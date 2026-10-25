@@ -392,7 +392,7 @@ function PrintModal({order,company,onClose}){
   );
 }
 function OrderForm({order,copyMode=false,customers,products,quotes,employees,currentUser,prodShifts,prodCats,trips=[],onSave,onClose,lockStatus=false,lockedTripLabel='',saving=false}){
-  const[f,sf]=useState(order?{...order,prodShiftAssignMode:order.prodShiftAssignMode==='manual'?'manual':'auto'}:{orderId:'',customerId:'',customer:'',pointId:'',pointName:'',address:'',deliveryDate:fmtDate(),deliveryTime:'08:00',prodShiftAssignMode:'auto',note:'',status:'pending',invoiceNo:'',workOut:'',workReturn:'',lines:[]});
+  const[f,sf]=useState(order?{...order,prodShiftAssignMode:order.prodShiftAssignMode==='manual'?'manual':'auto'}:{orderId:'',customerId:'',customer:'',pointId:'',pointName:'',address:'',deliveryDate:fmtDate(),deliveryTime:'08:00',tripAssignMode:'auto',tripId:null,prodShiftAssignMode:'auto',note:'',status:'pending',invoiceNo:'',workOut:'',workReturn:'',lines:[]});
   const s=(k,v)=>sf(p=>({...p,[k]:v}));
   const [tripDate,setTripDate]=useState(()=>manualTripDateToISO(trips.find(t=>String(t.id)===String(order?.tripId))?.deliveryDate||order?.deliveryDate||fmtDate()));
   const formTripOptions=React.useMemo(()=>filterManualTripOptions(trips.filter(t=>!['completion_pending','completed','cancelled'].includes(t.status)),tripDate,''),[trips,tripDate]);
@@ -539,13 +539,13 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
       }},h('option',{value:''},'Tự động xếp chuyến'),formTripOptions.map(t=>h('option',{key:t.id,value:String(t.id)},manualTripText(t))))),
       !formTripOptions.length&&h('small',{style:{gridColumn:'1/-1',color:'var(--tx2)'}},'Chưa có chuyến khả dụng trong ngày này.')
     ),
-    !hasLineOverrides?h('div',{style:{padding:'9px 10px',background:prodShiftMode==='manual'?'#FFF8E1':'#E6F1FB',borderRadius:'var(--r)',marginBottom:8}},
-      h('div',{className:'order-form-shift-grid',style:{display:'grid',gridTemplateColumns:'150px minmax(180px,260px) 1fr',gap:8,alignItems:'end'}},
-        h(F,{label:'Cách chọn Ca SX'},h('select',{value:prodShiftMode,onChange:e=>{
+    !hasLineOverrides?h('div',{className:'order-form-production-compact',style:{padding:'6px 10px',background:prodShiftMode==='manual'?'#FFF8E1':'#E6F1FB',borderRadius:'var(--r)',marginBottom:8}},
+      h('div',{className:'order-form-shift-grid',style:{display:'grid',gridTemplateColumns:'170px minmax(180px,250px) 1fr',gap:8,alignItems:'center'}},
+        h(F,{label:'Cách xếp Ca SX'},h('select',{value:prodShiftMode,onChange:e=>{
           const mode=e.target.value;
           sf(prev=>mode==='auto'?scfRequestTripProduction({...prev,prodShiftAssignMode:'auto'},window.__SCF_TRIPS||[]):({...prev,prodShiftAssignMode:'manual',prodShiftId:prev.prodShiftId||autoShift?.id||''}));
         }},
-          h('option',{value:'auto'},'Tự động theo chuyến'),
+          h('option',{value:'auto'},'Tự động'),
           h('option',{value:'manual'},'Chọn tay')
         )),
         prodShiftMode==='manual'
@@ -553,7 +553,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
             h('option',{value:''},'— Chọn Ca SX —'),
             (prodShifts||[]).map(shift=>h('option',{key:shift.id,value:shift.id},shift.name||shift.id))
           ))
-          :h(F,{label:'Ca SX theo chuyến'},h('input',{value:(window.__SCF_PROD_SHIFT_RULES||[]).find(r=>String(r.id)===String(effectiveTiming.prodWorkShiftId||''))?.name||getProdWorkShiftRule(effectiveTiming.prodTime)?.name||'Chưa có lịch SX cho chuyến',readOnly:true,style:{background:'#fff'}}),h('button',{type:'button',onClick:()=>sf(prev=>scfRequestTripProduction(prev,window.__SCF_TRIPS||[])),style:{marginTop:5,fontSize:12}},'Cập nhật theo chuyến')),
+          :h(F,{label:'Ca SX theo chuyến'},h('div',{style:{display:'flex',alignItems:'center',gap:4}},h('input',{value:(window.__SCF_PROD_SHIFT_RULES||[]).find(r=>String(r.id)===String(effectiveTiming.prodWorkShiftId||''))?.name||getProdWorkShiftRule(effectiveTiming.prodTime)?.name||'Chưa có lịch SX cho chuyến',readOnly:true,style:{background:'#fff',minWidth:0,flex:1}}),h('button',{type:'button',title:'Cập nhật Ca SX theo chuyến','aria-label':'Cập nhật Ca SX theo chuyến',onClick:()=>sf(prev=>scfRequestTripProduction(prev,trips)),style:{padding:'6px 8px',flexShrink:0}},h('i',{className:'ti ti-refresh','aria-hidden':true})))),
         effectiveShift?h('div',{style:{alignSelf:'center',display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',color:prodShiftMode==='manual'?'#8A5A00':'#185FA5'}},
           h('span',{className:'badge',style:{background:prodShiftMode==='manual'?'#FFF3CD':'#E8F5E9',color:prodShiftMode==='manual'?'#8A5A00':'#1B5E20'}},prodShiftMode==='manual'?'Đ.Tay':'T.Đ'),
           h('span',null,'Ngày SX: '+(effectiveTiming.prodDate||'—')),

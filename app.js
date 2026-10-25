@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V660';
+const SCF_BUILD_VERSION='V661';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
