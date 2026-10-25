@@ -2035,6 +2035,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
     if(!driverMatched)return false;
     if((fCustomer||fPoint)&&!tripOrderReader.orders(t).some(tripOrderMatchesFilters))return false;
     if(fOrderState==='all')return true;
+    if(fOrderState==='summary-invoice')return !!(t.summaryInvoiceImage||t.summaryInvoiceBackImage);
     const hasOrders=tripOrderReader.hasOrders(t);
     return fOrderState==='with'?hasOrders:!hasOrders;
   }).sort((a,b)=>{
@@ -2409,6 +2410,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
       canCreateTripImages&&h('select',{className:'desktop-only trip-filter-orders',value:fOrderState,onChange:e=>sfOrderState(e.target.value),style:{padding:'6px 10px',borderRadius:'var(--r)',border:'1px solid var(--bd)',fontSize:13}},
         h('option',{value:'with'},'Chuyến có đơn'),
         h('option',{value:'empty'},'Chuyến chưa có đơn'),
+        h('option',{value:'summary-invoice'},'Chuyến có hóa đơn tổng'),
         h('option',{value:'all'},'Tất cả chuyến')
       ),
       h('select',{'aria-label':'Lọc khách hàng',value:fCustomer,onChange:e=>{sfCustomer(e.target.value);sfPoint('');},style:{padding:'6px 10px',maxWidth:250}},h('option',{value:''},'Tất cả khách hàng'),tripCustomerOptions.map(([key,label])=>h('option',{key,value:key},label))),
@@ -2494,6 +2496,9 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
             )
           ),
           isOpen&&h('div',{className:'trip-card-detail',style:{borderTop:'.5px solid var(--bd)',padding:'1rem 1.25rem'}},
+            showInlineInvoices&&h('div',{className:canMobileFeature(currentUser,'tripInvoices')?'trip-summary-inline-invoices':'trip-summary-inline-invoices desktop-only',style:{display:'flex',flexWrap:'wrap',gap:12}},
+              [trip.summaryInvoiceImage,trip.summaryInvoiceBackImage].map((src,index)=>src&&h(TripInvoicePreview,{key:'summary-'+index+'-'+src,src,size:invoiceSize,landscape:true,label:'Hóa đơn tổng · '+(index===0?'Mặt trước':'Mặt sau')}))
+            ),
             // Bảng đơn hàng
             tripOrders.length?h('div',{className:'desktop-only tw'},
               h('table',{className:'trip-detail-table'+(showInlineInvoices?' trip-invoice-review-table':'')},
