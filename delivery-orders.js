@@ -2700,23 +2700,24 @@ function DeliveryOrderTripModal({order,trips,trip,defaultDate,disabled,onConfirm
     finally{savingRef.current=false;setSaving(false);}
   };
   return h('section',{ref:panelRef,className:'delivery-order-trip-panel',role:'region','aria-label':'Chuyển chuyến cho '+(order.pointName||order.id),onKeyDown:event=>{if(event.key==='Escape'){event.stopPropagation();close();}}},
-    h('div',{className:'delivery-transfer-context'},h('b',null,'Chuyển chuyến + ca SX · '+(order.pointName||order.customer||order.id)),h('small',null,[order.deliveryDate,order.deliveryTime].filter(Boolean).join(' · ')),h('small',null,'Hiện tại: '+(trip?manualTripText(trip):'Chưa xếp chuyến'))),
+    h('div',{className:'delivery-transfer-context',title:[order.deliveryDate,order.deliveryTime,'Hiện tại: '+(trip?manualTripText(trip):'Chưa xếp chuyến')].filter(Boolean).join(' · ')},h('span',null,'Chuyển chuyến + ca SX · '+(order.pointName||order.customer||order.id))),
     h(F,{label:'Ngày chuyến'},h('input',{type:'date','aria-label':'Ngày chuyến mới',value:date,disabled:disabled||saving,onChange:e=>{setDate(e.target.value);setTripId('');setError('');}})),
     h(F,{label:'Ca giao – Người giao'},h('select',{'aria-label':'Chuyến mới',value:options.some(t=>String(t.id)===tripId)?tripId:'',disabled:disabled||saving,onChange:e=>{setTripId(e.target.value);setError('');}},h('option',{value:''},options.length?'Chọn chuyến trong ngày':'Không có chuyến trong ngày'),options.map(t=>h('option',{key:t.id,value:String(t.id)},manualTripText(t))))),
     h('div',{className:'delivery-transfer-production'},
+      h('button',{type:'button',className:'delivery-trip-mode-switch','data-mode':productionEditMode,role:'switch','aria-label':'Xếp ca SX tự động','aria-checked':productionEditMode==='auto',title:productionEditMode==='auto'?'Tự động theo chuyến giao · Bấm chuyển BT để sửa':'Bằng tay · Bấm chuyển TĐ theo chuyến giao',disabled:disabled||saving||productionLocked,onClick:toggleProductionMode},productionEditMode==='auto'?'TĐ':'BT'),
+
       h(F,{label:'Ngày SX'},h('input',{type:'date','aria-label':'Ngày SX khi chuyển chuyến',value:productionEditMode==='auto'?toIsoDate(displayPlan?.prodDate||''):productionDate,disabled:timingDisabled,onChange:e=>{manualTiming();setProductionDate(e.target.value);}})),
-      h(F,{label:'Ca SX'},h('div',{style:{display:'flex',alignItems:'center',gap:6}},
-        h('button',{type:'button',className:'delivery-trip-mode-switch','data-mode':productionEditMode,role:'switch','aria-label':'Xếp ca SX tự động','aria-checked':productionEditMode==='auto',title:productionEditMode==='auto'?'Tự động theo chuyến giao · Bấm chuyển BT để sửa':'Bằng tay · Bấm chuyển TĐ theo chuyến giao',disabled:disabled||saving||productionLocked,onClick:toggleProductionMode},productionEditMode==='auto'?'TĐ':'BT'),
+      h(F,{label:'Ca SX'},
         h('select',{'aria-label':'Ca SX khi chuyển chuyến',value:productionChoice,disabled:timingDisabled,onChange:e=>{setProductionChoice(e.target.value);if(e.target.value==='auto')setProductionEditMode('auto');setError('');}},
           h('option',{value:'keep'},displayedRule?.name||productionPlan.shift?.name||'Ca SX hiện tại'),
           h('option',{value:'auto'},'Theo chuyến giao'+(displayedRule?.name?' · '+displayedRule.name:'')),h('option',{value:'',disabled:true},'Chọn ca SX'),
-          rules.filter(rule=>rule.active!==false).map(rule=>h('option',{key:rule.id,value:rule.id},rule.name))))),
-      h(F,{label:'Ngày in tem'},h('input',{type:'date','aria-label':'Ngày in tem khi chuyển chuyến',value:productionEditMode==='auto'?toIsoDate(displayPlan?.labelDate||''):labelDate,disabled:timingDisabled,onChange:e=>{manualTiming();setLabelDate(e.target.value);}})),
-      h(F,{label:'Giờ in tem'},h('input',{type:'time','aria-label':'Giờ in tem khi chuyển chuyến',value:productionEditMode==='auto'?(displayPlan?.labelTime||''):labelTime,disabled:timingDisabled,onChange:e=>{manualTiming();setLabelTime(e.target.value);}}))),
+          rules.filter(rule=>rule.active!==false).map(rule=>h('option',{key:rule.id,value:rule.id},rule.name)))),
+      h(F,{label:'Ngày tem'},h('input',{type:'date','aria-label':'Ngày in tem khi chuyển chuyến',value:productionEditMode==='auto'?toIsoDate(displayPlan?.labelDate||''):labelDate,disabled:timingDisabled,onChange:e=>{manualTiming();setLabelDate(e.target.value);}})),
+      h(F,{label:'Giờ tem'},h('input',{type:'time','aria-label':'Giờ in tem khi chuyển chuyến',value:productionEditMode==='auto'?(displayPlan?.labelTime||''):labelTime,disabled:timingDisabled,onChange:e=>{manualTiming();setLabelTime(e.target.value);}}))),
     productionLocked&&h('p',{role:'alert'},'Ca SX và lịch in tem đã khóa vì chuyến đã giao lái xe.'),
     disabled&&h('p',{role:'alert'},'Đơn hoặc chuyến đã khóa, hoặc bạn không có quyền chuyển chuyến.'),
     error&&h('p',{role:'alert',className:'delivery-editor-error'},error),
-    h('div',{className:'form-actions delivery-transfer-save'},h('button',{type:'button',disabled:saving,onClick:close,'data-scf-action':'view'},'Đóng'),h('button',{type:'button',className:'bp','data-scf-action':'write',disabled:disabled||saving||!tripId,onClick:save},saving?'Đang lưu…':'Lưu chuyến + SX + tem'))
+    h('div',{className:'form-actions delivery-transfer-save'},h('button',{type:'button',disabled:saving,onClick:close,'data-scf-action':'view'},'Đóng'),h('button',{type:'button',className:'bp','data-scf-action':'write',disabled:disabled||saving||!tripId,onClick:save},saving?'Đang lưu…':'Lưu'))
   );
 }
 function DeliveryViewControls({menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction,menuOnly=false,utility,onCreate}){
