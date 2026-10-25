@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V669';
+const SCF_BUILD_VERSION='V676';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -192,6 +192,27 @@ function scfPlanAutomaticOrders(orders,trips,prodShifts,customers,actorName,limi
     return {...next,updatedAt:fmtDT(),updatedBy:actorName||'Hệ thống'};
   });
   return {orders:nextOrders,trips:workingTrips,changed,tripsChanged};
+}
+// A background refresh often returns freshly parsed copies of unchanged rows.
+// Reuse only byte-equivalent JSON records so page caches survive without hiding server edits.
+function scfReuseUnchangedRecords(previous,incoming){
+  if(previous===incoming||!Array.isArray(previous)||!Array.isArray(incoming))return incoming;
+  const byId=new Map();
+  previous.forEach((row,index)=>{
+    const key=row?.id==null?'index:'+index:'id:'+String(row.id);
+    if(!byId.has(key))byId.set(key,[]);byId.get(key).push(row);
+  });
+  const offsets=new Map();
+  let same=previous.length===incoming.length;
+  const next=incoming.map((row,index)=>{
+    const key=row?.id==null?'index:'+index:'id:'+String(row.id),offset=offsets.get(key)||0;
+    offsets.set(key,offset+1);
+    const old=byId.get(key)?.[offset];
+    const value=old===row?row:old!==undefined&&JSON.stringify(old)===JSON.stringify(row)?old:row;
+    if(value!==previous[index])same=false;
+    return value;
+  });
+  return same?previous:next;
 }
 function createScfDataLoader(read,apply){
   const loaded=new Set(),pending=new Map();let disposed=false;
@@ -617,7 +638,11 @@ function App(){
     dataLoaderRef.current?.dispose();
     const loader=createScfDataLoader(
       key=>dbGetRequired('scf_'+key,resources[key][0]),
-      (key,value)=>{const[,setter,normalize]=resources[key];setter(normalize?normalize(value):value);}
+      (key,value)=>{
+        const[,setter,normalize]=resources[key],next=normalize?normalize(value):value;
+        if(key==='orders'||key==='trips')setter(previous=>scfReuseUnchangedRecords(previous,next));
+        else setter(next);
+      }
     );
     dataLoaderRef.current=loader;
     (async()=>{
@@ -935,7 +960,7 @@ function App(){
           h('p',null,pageError||'Đang tải dữ liệu '+(PTITLES[page]||'màn hình')+'…'),
           pageError&&h('button',{className:'bp',onClick:()=>{if(scfMissingPageComponents(page).length)location.reload();else setPageAttempt(v=>v+1);}},'Thử tải lại')
         ):h(React.Fragment,null,
-        canAccess(cu.role,page)&&page==='welcome'&&h(WelcomePage,{emp:cu,employees,company,uiSettings,news:companyNews,setNews:setCompanyNews,messages:internalMessages,setMessages:setInternalMessages,onRefresh:refreshCommunityData}),
+        canAccess(cu.role,page)&&page==='welcome'&&h(WelcomePage,{emp:cu,employees,company,uiSettings,news:companyNews,setNews:setCompanyNews,messages:internalMessages,setMessages:setInternalMessages,notifications,onRefresh:refreshCommunityData}),
         canAccess(cu.role,'company',cu.permissions,cuAccessDepartments)&&page==='company'&&h(CompanySettings,{company,setCompany,canEdit:canWrite(cu.role,'company',cu.permLevels)}),
         canAccess(cu.role,'appearance',cu.permissions)&&page==='appearance'&&h(AppearanceSettingsTab,{uiSettings,setUiSettings}),
         canAccess(cu.role,'printtemplates',cu.permissions)&&page==='printtemplates'&&h(PrintTemplateSettingsTab,{templateSettings:printTemplateSettings,setTemplateSettings:setPrintTemplateSettings,products,customers}),

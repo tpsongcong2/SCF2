@@ -1,3 +1,17 @@
+const SCF_ORDER_NOTICE_OPTIONS=[['bun','Đơn xưởng bún'],['banh','Đơn xưởng bánh'],['qtyInvoice','SL HĐ'],['qtyProd','SL đặt'],['qtyDelivered','SL giao']];
+function normalizedOrderNoticePermissions(employee){
+  const text=String([employee?.role,employee?.dept,...(employee?.departments||[])].join(' ')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const finance=['admin','administrator'].includes(employee?.role)||/ke toan|account/.test(text);
+  const defaults={bun:true,banh:true,qtyInvoice:finance,qtyProd:true,qtyDelivered:finance};
+  return Object.fromEntries(SCF_ORDER_NOTICE_OPTIONS.map(([key])=>[key,typeof employee?.orderNoticePermissions?.[key]==='boolean'?employee.orderNoticePermissions[key]:defaults[key]]));
+}
+function OrderNoticePermissionFields({employee,onChange,disabled=false}){
+  const value=normalizedOrderNoticePermissions(employee);
+  return h('fieldset',{style:{border:'1px solid var(--bd)',borderRadius:8,padding:10,margin:'10px 0'}},
+    h('legend',null,'Nhận thông báo thay đổi đơn hàng'),
+    h('div',{style:{display:'flex',gap:14,flexWrap:'wrap'}},SCF_ORDER_NOTICE_OPTIONS.map(([key,label])=>h('label',{key,style:{display:'flex',gap:6,alignItems:'center'}},h('input',{type:'checkbox',disabled,checked:value[key],onChange:e=>onChange({...value,[key]:e.target.checked})}),label))),
+    h('small',null,'Chọn xưởng được nhận và loại số lượng cần báo. Đổi địa điểm, giờ, chú ý vẫn báo trong xưởng đã chọn. Lái xe chỉ nhận đơn thuộc chuyến của mình.'));
+}
 /* --- Phân quyền menu --- */
 const PAGE_ACCESS = {
   kpi4p:['admin'],

@@ -154,7 +154,11 @@ function CalendarWidget(){
     )
   );
 }
-function CommunityPanel({emp,news=[],setNews,messages=[],setMessages,onRefresh}){
+function scfInternalOrderMessages(messages,notifications,employeeId){
+  const notices=(notifications||[]).filter(n=>n.sourceType==='order-change'&&String(n.recipientId)===String(employeeId)).map(n=>({id:'order-notice:'+n.id,authorName:'Hệ thống · Đơn hàng',content:[n.title,n.message].filter(Boolean).join('\n'),createdAt:n.createdAtIso||n.createdAt,systemOrderNotice:true}));
+  return [...(messages||[]),...notices].sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||''))).slice(-80);
+}
+function CommunityPanel({emp,news=[],setNews,messages=[],setMessages,notifications=[],onRefresh}){
   const[tab,setTab]=useState('news');
   const[text,setText]=useState('');
   const[showEmoji,setShowEmoji]=useState(false);
@@ -205,7 +209,7 @@ function CommunityPanel({emp,news=[],setNews,messages=[],setMessages,onRefresh})
     setNews(prev=>(prev||[]).filter(row=>String(row.id)!==String(item.id)));
   };
   const rows=tab==='news'?[...(news||[])].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))):
-    [...(messages||[])].sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||''))).slice(-80);
+    scfInternalOrderMessages(messages,notifications,emp?.id);
   return h('div',{className:'card',style:{padding:0,overflow:'hidden',marginTop:18}},
     h('div',{style:{display:'flex',alignItems:'center',gap:6,padding:'10px 12px',borderBottom:'1px solid var(--bd)',background:'var(--bg2)'}},
       h('button',{type:'button',className:tab==='news'?'bp':'',onClick:()=>{setTab('news');setText('');setShowEmoji(false);},style:{padding:'7px 12px'}},
@@ -224,7 +228,7 @@ function CommunityPanel({emp,news=[],setNews,messages=[],setMessages,onRefresh})
           h('strong',{style:{fontSize:12,color:'var(--pri3)'}},item.authorName||'Nhân viên'),
           h('div',{style:{display:'flex',alignItems:'center',gap:7}},
             h('span',{style:{fontSize:10,color:'var(--tx2)',whiteSpace:'nowrap'}},formatTime(item.createdAt)),
-            ((tab==='chat'&&canDeleteMessages)||(tab==='news'&&canDeleteNews))&&h('button',{
+            !item.systemOrderNotice&&((tab==='chat'&&canDeleteMessages)||(tab==='news'&&canDeleteNews))&&h('button',{
               type:'button',
               className:'bi',
               title:tab==='news'?'Xóa tin tức':'Xóa tin nhắn',
@@ -443,7 +447,7 @@ function DeliveryRulesTab({items=[],setItems,currentUser}){
   );
 }
 
-function WelcomePage({emp,employees=[],company,uiSettings,news,setNews,messages,setMessages,onRefresh}){
+function WelcomePage({emp,employees=[],company,uiSettings,news,setNews,messages,setMessages,notifications=[],onRefresh}){
   const birthdayEmployees=(employees||[]).filter(person=>person&&person.name&&isBirthday(person.birthday));
   const birthdayNames=birthdayEmployees.map(person=>person.name).join(', ');
   const hasBirthday=birthdayEmployees.length>0;
@@ -479,7 +483,7 @@ function WelcomePage({emp,employees=[],company,uiSettings,news,setNews,messages,
       h('div',null,h(WeatherWidget,null)),
       hasBirthday&&h(BirthdayVisual,{name:birthdayNames,effect:normalizeUiSettings(uiSettings).birthdayEffect})
     ),
-    h(CommunityPanel,{emp,news,setNews,messages,setMessages,onRefresh})
+    h(CommunityPanel,{emp,news,setNews,messages,setMessages,notifications,onRefresh})
   );
 }
 function CompanySettings({company,setCompany,canEdit=false}){
@@ -1229,6 +1233,7 @@ function isPrivilegedEmployeeRecord(employee){
         h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phân quyền chi tiết (có thể chỉnh riêng cho nhân viên này)'),
         h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,orderHistoryDays:60,salesDebtAllCustomers:false,driverReportMonthlyWeight:false,productionShiftWeight:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
       ),
+      h(OrderNoticePermissionFields,{employee:f,onChange:value=>s('orderNoticePermissions',value)}),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = chỉ đọc dữ liệu | Thêm + Xem + Sửa = không được xóa | Thêm + Xem + Sửa + Xóa = toàn quyền'),
       h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 2rem'}},
         SCF_PERMISSION_SECTIONS.map(section=>({sec:section.sec,pages:section.pages.map(([k,l])=>({k,l}))})).map(sec=>h('div',{key:sec.sec,style:{marginBottom:10}},

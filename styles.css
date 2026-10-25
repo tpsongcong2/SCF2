@@ -1731,3 +1731,11 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 .delivery-column-filter>button{border:0;background:transparent;padding:2px 0;font:inherit;color:inherit;white-space:nowrap}.delivery-column-filter>button:disabled{opacity:.55;cursor:default}.delivery-column-filter.active>button:last-child i{color:#d32f2f;opacity:1}
 
 .delivery-inline-copy-row .delivery-inline-copy-note input{width:100%;max-width:360px}.delivery-inline-copy-note{min-width:0}
+
+/* Transfer editor: trip row followed by one production/label row on desktop. */
+.delivery-transfer-production{grid-column:1/-1;display:grid;grid-template-columns:minmax(140px,1fr) minmax(200px,1.5fr) minmax(140px,1fr) minmax(110px,.8fr);gap:12px;border-top:1px solid var(--bd);padding-top:10px;align-items:end}.delivery-transfer-production>.fl{margin:0;min-width:0}
+@media(min-width:901px){.delivery-order-trip-panel>.delivery-transfer-save{grid-column:4;grid-row:1}.delivery-transfer-production{grid-row:2}}
+@media(max-width:900px){.delivery-transfer-production{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:540px){.delivery-transfer-production{grid-template-columns:minmax(0,1fr)}}
+
+@media(max-width:540px){.delivery-order-trip-panel{grid-template-columns:minmax(0,1fr)}.delivery-order-trip-panel>.form-actions{flex-wrap:wrap}}
