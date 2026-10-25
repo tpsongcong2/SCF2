@@ -51,33 +51,8 @@ function useProductionPushIdentity(user,onOpen){
 }
 function ProductionPushIdentity({currentUser,onOpen}){
  useProductionPushIdentity(currentUser,onOpen);
- const[prompt,setPrompt]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const identity=useRef(currentUser);identity.current=currentUser;
- const allowed=!!currentUser&&canAccess(currentUser.role,'prodsummary',currentUser.permissions,employeeDepartments(currentUser));
- useEffect(()=>{
-  let active=true;setPrompt(false);setBusy(false);setError('');
-  const id=String(currentUser?.id||''),key='scf_production_push_disabled_'+id;
-  const run=async()=>{
-   if(!allowed||!window.matchMedia?.('(max-width:768px)')?.matches)return;
-   try{if(localStorage.getItem(key)==='1')return;}catch{}
-   if(!('Notification' in window)||!('PushManager' in window)||!('serviceWorker' in navigator)){if(active)setPrompt(true);return;}
-   try{
-    const reg=await navigator.serviceWorker.getRegistration(),sub=await reg?.pushManager?.getSubscription();
-    if(sub){const status=await scfProductionPushRequest('status',{endpoint:sub.endpoint});if(status.enabled)return;}
-    if(Notification.permission==='granted'){
-     if(active&&String(identity.current?.id)===id){await scfEnableProductionPush(currentUser);return;}
-    }
-   }catch{}
-   try{if(sessionStorage.getItem('scf_push_prompt_'+id)==='later')return;}catch{}
-   if(active)setPrompt(true);
-  };run();return()=>{active=false;};
- },[currentUser?.id,allowed]);
- if(!prompt||!allowed)return null;
- return h('div',{className:'production-push-prompt',role:'dialog','aria-modal':true,'aria-label':'Nhận thông báo thay đổi đơn hàng'},
-  h('section',null,h('h3',null,'Nhận thông báo khi đơn hàng thay đổi'),h('p',null,'SCFOOD tự theo dõi đơn hàng và gửi thông báo lên điện thoại. Không phát chuông trong app.'),
-   error&&h('p',{role:'alert'},error),
-   h('div',{className:'form-actions'},h('button',{type:'button',disabled:busy,'data-scf-action':'view',onClick:()=>{try{sessionStorage.setItem('scf_push_prompt_'+currentUser.id,'later');}catch{}setPrompt(false);}},'Để sau'),
-    h('button',{type:'button',className:'bp',disabled:busy,'data-scf-action':'view',onClick:async()=>{const id=String(currentUser.id);setBusy(true);setError('');try{await scfEnableProductionPush(currentUser);if(String(identity.current?.id)===id)setPrompt(false);}catch(e){if(String(identity.current?.id)===id)setError(e.message);}finally{setBusy(false);}}},busy?'Đang bật…':'Cho phép thông báo'))));
+ // Permission is requested only from the notification settings button.
+ return null;
 }
 async function scfEnableProductionPush(user){
  const epoch=scfProductionPushIdentityEpoch,stillCurrent=()=>{if(epoch!==scfProductionPushIdentityEpoch)throw Error('Tài khoản vừa thay đổi. Hãy bật thông báo lại.');};

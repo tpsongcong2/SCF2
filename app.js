@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V661';
+const SCF_BUILD_VERSION='V662';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -819,7 +819,7 @@ function App(){
       const key='scf_notification_shown_'+n.id;
       if(sessionStorage.getItem(key))return;
       sessionStorage.setItem(key,'1');
-      try{new Notification(n.title||'SCF - Thông báo',{body:n.message||'',icon:'./icon-192.png',tag:n.id});}catch{}
+      try{new Notification(n.title||'SCF - Thông báo',{body:n.message||'',icon:'./icon-192.png',tag:n.id,silent:true});}catch{}
     });
   },[notifications,cu?.id,loading]);
   const unreadNotificationCount=cu?(notifications||[]).filter(n=>String(n.recipientId||'')===String(cu.id)&&!n.readAt).length:0;
