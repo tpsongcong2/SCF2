@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V679';
+const SCF_BUILD_VERSION='V680';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -281,7 +281,7 @@ async function scfEnsurePageTools(page){
   }
   // Chuyến giao hàng không dùng thư viện Excel/ZIP. Không chặn giao diện bằng
   // hai gói CDN lớn chỉ để mở trang này.
-  if(['personnel','welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','deliverysequence'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
+  if(['personnel','welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','deliverysequence','delivery'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
   return Promise.all([
     scfLoadOptionalScript('JSZip','https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'),
     scfLoadOptionalScript('XLSX','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js')

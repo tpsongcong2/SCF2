@@ -3672,7 +3672,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     if(pointCmp!==0)return pointCmp;
     return sortMode==='trip'?String(a.id||'').localeCompare(String(b.id||''),'vi'):(a._ctx.deliveryTime||'').localeCompare(b._ctx.deliveryTime||'');
   }),[sortableOrderMeta,sortMode,customers,trips,shifts,employees,fArea]);
-  const exportDetailedExcel=()=>{
+  const exportDetailedExcel=async()=>{
+          await scfLoadOptionalScript('XLSX','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
 // Flatten orders + lines for Excel export
           const rows=[];
           list.forEach(o=>{
@@ -4276,8 +4277,10 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           onClick:()=>{
             const inp=document.createElement('input');
             inp.type='file';inp.accept='.xlsx,.xls';
-            inp.onchange=e=>{
+            inp.onchange=async e=>{
               const file=e.target.files[0];if(!file)return;
+              try{await scfLoadOptionalScript('XLSX','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');}
+              catch(error){window.showToast(error.message||'Chưa tải được công cụ Excel. Vui lòng chọn file lại.','error');return;}
               const reader=new FileReader();
               reader.onload=ev=>{
                 const wb=XLSX.read(ev.target.result,{type:'binary'});
