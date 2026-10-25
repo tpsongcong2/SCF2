@@ -277,6 +277,16 @@ window.scfGetSyncReport=function(){
     items:Object.entries(queue).map(([key,item])=>({key,label:labels[key]||key.replace(/^scf_/,'').replaceAll('_',' '),updatedAt:item?.updatedAt||'',bytes:Number(item?.bytes)||syncPayloadBytes(item?.patches||item?.value),recordCount:Array.isArray(item?.patches)?item.patches.length:(Array.isArray(item?.value)?item.value.length:(item?.value&&typeof item.value==='object'?Object.keys(item.value).length:1)),attempts:Number(item?.attempts)||0,mode:item?.patches?'patch':(item?.mode||'full'),errorMessage:item?.lastError?.message||'',errorCode:item?.lastError?.code||''}))
   };
 };
+function scfSyncPatchSummary(patches){
+  return (Array.isArray(patches)?patches:[]).map(patch=>{
+    const before=patch.expected||{},after=patch.value||{};
+    const changed=(a,b)=>[...new Set([...Object.keys(a),...Object.keys(b)])].filter(key=>JSON.stringify(a[key])!==JSON.stringify(b[key]));
+    return {id:String(patch.id||''),fields:changed(before,after),lines:(after.lines||[]).flatMap((line,index)=>{
+      const old=(before.lines||[]).find(item=>line.id&&item.id===line.id)||(!line.id?(before.lines||[])[index]:null)||{};
+      const fields=changed(old,line);return fields.length?[{id:String(line.id||''),index,fields}]:[];
+    })};
+  });
+}
 function scfBuildSyncDiagnostics(){
   const report=window.scfGetSyncReport?.()||{},actorId=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
   const entries=(window.__SCF_AUTH_DIAGNOSTICS||[]).filter(entry=>!entry.actorId||String(entry.actorId)===actorId).map(entry=>({
@@ -285,7 +295,7 @@ function scfBuildSyncDiagnostics(){
   }));
   return {version:typeof SCF_BUILD_VERSION==='undefined'?'':SCF_BUILD_VERSION,createdAt:new Date().toISOString(),accountId:actorId,
     connection:{online:!!navigator.onLine,status:report.status,pending:report.pending},
-    queue:(report.items||[]).map(item=>({key:item.key,mode:item.mode,updatedAt:item.updatedAt,bytes:item.bytes,recordCount:item.recordCount,attempts:item.attempts})),
+    queue:(report.items||[]).map(item=>({key:item.key,mode:item.mode,updatedAt:item.updatedAt,bytes:item.bytes,recordCount:item.recordCount,attempts:item.attempts,changes:scfSyncPatchSummary(readSyncQueue()[item.key]?.patches)})),
     metrics:(report.metrics||[]).map(item=>({key:item.key,mode:item.mode,bytes:item.bytes,durationMs:item.durationMs,ok:item.ok,at:item.at,code:item.code,conflictIds:item.conflictIds})),requests:entries};
 }
 window.scfDownloadSyncDiagnostics=function(){

@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V683';
+const SCF_BUILD_VERSION='V684';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -452,7 +452,7 @@ function App(){
   const setShifts=mkSet('scf_shifts',_ssh);
   const setQuotes=mkSet('scf_quotes',_sq);
   const saveAllOrders=mkSet('scf_orders',_so);
-  const setOrders=value=>saveAllOrders(previous=>{
+  const setOrders=(value,planningTrips)=>saveAllOrders(previous=>{
     const visible=previous.filter(item=>scfOrderInViewPeriod(item,cu));
     const updated=typeof value==='function'?value(visible):value;
     const before=new Map(previous.map(o=>[String(o.id),o]));
@@ -469,7 +469,7 @@ function App(){
       const changed=old&&String(old.tripId||'')!==String(order.tripId||'');
       if(!changed&&!['pending','assigned',''].includes(String(order.status||'')))return order;
       const rule=getProdShiftForOrder(order,prodShifts||[],customers||[]);
-      return scfApplyAutomaticProduction(order,rule);
+      return scfApplyAutomaticProduction(order,rule,planningTrips);
     });
     return scfMergePeriodView(previous,planned,cu);
   });
@@ -757,6 +757,9 @@ function App(){
         const changedKeys=changed.map(key=>key.replace(/^scf_/,''));
         if(!changedKeys.length)return;
         const tripRefresh=changedKeys.some(key=>key==='orders'||key==='trips');
+        // Read both sides of the link before running any automatic repair.
+        // One version poll may observe the order write before its trip write.
+        if(tripRefresh)for(const key of ['orders','trips'])if(keys.includes(key)&&!changedKeys.includes(key))changedKeys.push(key);
         if(tripRefresh)setAutoSyncReady(false);
         const results=await Promise.allSettled(changedKeys.map(key=>dataLoaderRef.current.load(key,true)));
         if(tripRefresh&&!stopped&&results.every(result=>result.status==='fulfilled'))setAutoSyncReady(true);
@@ -792,7 +795,7 @@ function App(){
     const reconciled=scfReconcileTripOrderLinks(workingTrips,nextOrders,products||[],{automaticWrite:true});
     if(reconciled.changed)tripsChanged=true;
     if(tripsChanged)setAutoTrips(reconciled.trips);
-    if(planned.changed)setOrders(nextOrders);
+    if(planned.changed)setOrders(nextOrders,workingTrips);
   },[loading,pageReady,autoSyncReady,page,isFaceMask,session,employees,orders,trips,shifts,prodShifts,customers,products,automaticPlanRevision]);
 
   const addNotification=React.useCallback(data=>{
