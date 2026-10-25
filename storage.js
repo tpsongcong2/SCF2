@@ -279,7 +279,7 @@ window.scfGetSyncReport=function(){
 };
 function scfSyncPatchSummary(patches){
   return (Array.isArray(patches)?patches:[]).map(patch=>{
-    const before=patch.expected||{},after=patch.value||{};
+    const before=patch.base||patch.expected||{},after=patch.value||{};
     const changed=(a,b)=>[...new Set([...Object.keys(a),...Object.keys(b)])].filter(key=>JSON.stringify(a[key])!==JSON.stringify(b[key]));
     return {id:String(patch.id||''),fields:changed(before,after),lines:(after.lines||[]).flatMap((line,index)=>{
       const old=(before.lines||[]).find(item=>line.id&&item.id===line.id)||(!line.id?(before.lines||[])[index]:null)||{};
