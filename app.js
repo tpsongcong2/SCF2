@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V662';
+const SCF_BUILD_VERSION='V664';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -893,7 +893,7 @@ function App(){
     return latest?.attendanceZones;
   };
   return h('div',{className:'layout'},
-    h(ProductionPushIdentity,{currentUser:cu,onOpen:()=>{setProductionPreviewOpen(false);setPage('prodsummary');window.scfSyncNow?.();}}),
+    h(ProductionPushIdentity,{currentUser:cu,onOpen:()=>{setProductionPreviewOpen(false);setPage('notifications');window.scfSyncNow?.();}}),
     h('div',{className:'main'},
       !menuHidden&&h('div',{className:'topbar'+(page!=='welcome'?' mobile-subpage-topbar':'')},
         h('div',{className:'topbar-main'},

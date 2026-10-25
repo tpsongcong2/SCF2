@@ -37,7 +37,7 @@ async function scfDetachProductionPush(){
 }
 function useProductionPushIdentity(user,onOpen){
  const openRef=useRef(onOpen);openRef.current=onOpen;
- const allowed=!!user&&canAccess(user.role,'prodsummary',user.permissions,employeeDepartments(user));
+ const allowed=!!user&&user.active!==false&&user.disabled!==true;
  useEffect(()=>{
   if(!('serviceWorker' in navigator))return;
   let active=true,registration;const epoch=++scfProductionPushIdentityEpoch;
