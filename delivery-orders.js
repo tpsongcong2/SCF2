@@ -2602,12 +2602,25 @@ function DeliveryInlineCopyRows({draft:initial,customers,products=[],prodCats=[]
   ));
 }
 
+// Keep every order in a trip on the same page, including pending trip groups.
+function deliveryOrderPageUnits(rows,byTrip,groupForOrder){
+  if(!byTrip)return rows.map(order=>[order]);
+  const groups=new Map();
+  rows.forEach(order=>{
+    const key=groupForOrder(order).key;
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(order);
+  });
+  return [...groups.values()];
+}
 function DeliveryOrderTripModal({order,trips,trip,defaultDate,disabled,onConfirm,onClose}){
   const [date,setDate]=useState(manualTripDateToISO(trip?.deliveryDate||defaultDate));
   const [tripId,setTripId]=useState(String(trip?.id||''));
   const [saving,setSaving]=useState(false),[error,setError]=useState('');
   const savingRef=React.useRef(false);
-  const options=filterManualTripOptions(trips,date,'');
+  const options=React.useMemo(()=>filterManualTripOptions(trips,date,''),[trips,date]);
+  const panelRef=React.useRef(null);
+  useEffect(()=>{panelRef.current?.scrollIntoView({block:'nearest',behavior:'instant'});},[]);
   const close=()=>{if(!savingRef.current)onClose();};
   const save=async()=>{
     if(disabled||savingRef.current)return;
@@ -2617,7 +2630,7 @@ function DeliveryOrderTripModal({order,trips,trip,defaultDate,disabled,onConfirm
     catch(error){setError(error.message||'Chưa chuyển được chuyến.');}
     finally{savingRef.current=false;setSaving(false);}
   };
-  return h('section',{className:'delivery-order-trip-panel',role:'region','aria-label':'Chuyển chuyến cho '+(order.pointName||order.id),onKeyDown:event=>{if(event.key==='Escape'){event.stopPropagation();close();}}},
+  return h('section',{ref:panelRef,className:'delivery-order-trip-panel',role:'region','aria-label':'Chuyển chuyến cho '+(order.pointName||order.id),onKeyDown:event=>{if(event.key==='Escape'){event.stopPropagation();close();}}},
     h('div',{className:'delivery-transfer-context'},h('b',null,'Chuyển chuyến · '+(order.pointName||order.customer||order.id)),h('small',null,[order.deliveryDate,order.deliveryTime].filter(Boolean).join(' · ')),h('small',null,'Hiện tại: '+(trip?manualTripText(trip):'Chưa xếp chuyến'))),
     h(F,{label:'Ngày chuyến'},h('input',{type:'date','aria-label':'Ngày chuyến mới',value:date,disabled:disabled||saving,onChange:e=>{setDate(e.target.value);setTripId('');setError('');}})),
     h(F,{label:'Ca giao – Người giao'},h('select',{'aria-label':'Chuyến mới',value:options.some(t=>String(t.id)===tripId)?tripId:'',disabled:disabled||saving,onChange:e=>{setTripId(e.target.value);setError('');}},h('option',{value:''},options.length?'Chọn chuyến trong ngày':'Không có chuyến trong ngày'),options.map(t=>h('option',{key:t.id,value:String(t.id)},manualTripText(t))))),
@@ -3145,7 +3158,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const confirmManualTripSave=async(orderId,newTripId)=>{
     // Chờ React ghi thay đổi vào hàng đồng bộ trước khi kiểm tra kết quả.
     await new Promise(resolve=>setTimeout(resolve,0));
-    const confirmed=await(window.scfWaitForCollectionSync?.('scf_orders',50000)??Promise.resolve(false));
+    window.scfSendCollectionsNow?.(['scf_orders','scf_trips']).catch(error=>console.warn('Transfer sync:',error?.message||error));
+    const confirmed=await(window.scfWaitForCollectionSync?.('scf_orders',50000)??Promise.resolve(!serverAuthEnabled()));
     const saved=window.__SCF_CONFIRMED_ORDER_TRIPS?.[String(orderId)];
     const exact=!serverAuthEnabled()||String(saved?.tripId||'')===String(newTripId||'')&&saved?.tripAssignMode==='manual';
     if(confirmed&&exact){window.showToast(newTripId?'Máy chủ đã xác nhận chuyển chuyến.':'Máy chủ đã xác nhận rút đơn khỏi chuyến.','success');return true;}
@@ -3159,7 +3173,6 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const sameTrip=String(oldTripId)===String(newTripId||'');
     const sameTripStatus=newTripId?(oldTrip?.status==='active'?'delivering':'assigned'):'pending';
     if(sameTrip&&String(order.tripId||'')===String(newTripId||'')&&order.status===sameTripStatus&&order.tripAssignMode==='manual'){
-      await window.scfFlushPendingWrites?.();
       return confirmManualTripSave(order.id,newTripId);
     }
     if(closedTrip(oldTrip)){window.showToast('Chuyến đã chờ duyệt hoặc hoàn thành nên không thể rút đơn.','warn');return false;}
@@ -3537,14 +3550,18 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           XLSX.utils.book_append_sheet(wb,ws,'Don giao hang');
           XLSX.writeFile(wb,'Don_giao_hang_'+fmtDate().split('/').join('-')+'.xlsx');
           };
-  const totalPages=Math.max(1,Math.ceil(sortedList.length/pageSize));
+  const paginateByTrip=sortMode==='trip';
+  const pageUnitLabel=paginateByTrip?'chuyến':'đơn';
+  const pageUnits=React.useMemo(()=>deliveryOrderPageUnits(sortedList,paginateByTrip,groupInfoForOrder),[sortedList,paginateByTrip,groupInfoCache]);
+  const totalPageUnits=pageUnits.length;
+  const totalPages=Math.max(1,Math.ceil(totalPageUnits/pageSize));
   const visiblePage=Math.min(Math.max(1,currentPage),totalPages);
   const pageStart=(visiblePage-1)*pageSize;
-  const pageEnd=Math.min(pageStart+pageSize,sortedList.length);
-  const pagedList=React.useMemo(()=>sortedList.slice(pageStart,pageEnd).map(o=>{
+  const pageEnd=Math.min(pageStart+pageSize,totalPageUnits);
+  const pagedList=React.useMemo(()=>pageUnits.slice(pageStart,pageEnd).flat().map(o=>{
     const enriched=Object.prototype.hasOwnProperty.call(o,'_autoTrip')?o:enrichOrderTripMeta(o);
     return {...enriched,_totalW:calcOrderWeight(enriched._ctx)};
-  }),[sortedList,pageStart,pageEnd,trips,prodShifts,customers,shifts,products]);
+  }),[pageUnits,pageStart,pageEnd,trips,prodShifts,customers,shifts,products]);
   const visibleProductLabels=React.useMemo(()=>pagedList.flatMap(order=>{
     const lines=(order._ctx||orderContext(order)).lines||[];
     return lines.map((line,index)=>({
@@ -4012,12 +4029,12 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   );
   const renderPagination=position=>h('div',{key:'pagination_'+position,className:'delivery-pagination'},
     h('span',{className:'delivery-pagination-label'},'Mỗi trang'),
-    h('select',{value:pageSize,onChange:e=>setPageSize(Number(e.target.value)||100),title:'Số đơn hiển thị mỗi trang'},
-      [20,50,100,200].map(size=>h('option',{key:size,value:size},size+' đơn'))
+    h('select',{value:pageSize,onChange:e=>setPageSize(Number(e.target.value)||100),title:'Số '+pageUnitLabel+' hiển thị mỗi trang'},
+      [20,50,100,200].map(size=>h('option',{key:size,value:size},size+' '+pageUnitLabel))
     ),
     h('button',{type:'button',disabled:visiblePage<=1,onClick:()=>setCurrentPage(1),title:'Trang đầu'},'«'),
     h('button',{type:'button',disabled:visiblePage<=1,onClick:()=>setCurrentPage(p=>Math.max(1,p-1)),title:'Trang trước'},'‹'),
-    h('span',{className:'delivery-pagination-info'},(sortedList.length?pageStart+1:0)+'–'+pageEnd+' / '+sortedList.length+' · Trang '+visiblePage+'/'+totalPages),
+    h('span',{className:'delivery-pagination-info'},(totalPageUnits?pageStart+1:0)+'–'+pageEnd+' / '+totalPageUnits+' '+pageUnitLabel+' · Trang '+visiblePage+'/'+totalPages),
     h('button',{type:'button',disabled:visiblePage>=totalPages,onClick:()=>setCurrentPage(p=>Math.min(totalPages,p+1)),title:'Trang sau'},'›'),
     h('button',{type:'button',disabled:visiblePage>=totalPages,onClick:()=>setCurrentPage(totalPages),title:'Trang cuối'},'»')
   );
@@ -4373,7 +4390,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
               h('td',{key:'trip',rowSpan:displayRows.length,className:'delivery-trip-cell'},tripSelect)
             ],
             pi===0&&h('td',{key:'actions',className:'delivery-order-actions',rowSpan:displayRows.length},h('div',{style:{display:'flex',gap:2,justifyContent:'center',alignItems:'center'}},
-                h('button',{type:'button',className:'bi','data-scf-action':'write','aria-label':'Chuyển chuyến '+(ctx.pointName||ctx.id),title:assignmentLocked?assignmentTitle:'Chuyển chuyến',disabled:!canEditMobileOrder||window.__SCF_ACCESS_CONTEXT?.readOnly||assignmentLocked||['done','cancelled'].includes(ctx.status),onClick:event=>{event.currentTarget.closest('tr')?.scrollIntoView({block:'center',behavior:'smooth'});setTripTransferOrderId(previous=>previous===String(o.id)?'':String(o.id));}},h('i',{className:'ti ti-switch-horizontal',style:{fontSize:15}})),
+                h('button',{type:'button',className:'bi','data-scf-action':'write','aria-label':'Chuyển chuyến '+(ctx.pointName||ctx.id),title:assignmentLocked?assignmentTitle:'Chuyển chuyến',disabled:!canEditMobileOrder||window.__SCF_ACCESS_CONTEXT?.readOnly||assignmentLocked||['done','cancelled'].includes(ctx.status),onClick:event=>{setTripTransferOrderId(previous=>previous===String(o.id)?'':String(o.id));}},h('i',{className:'ti ti-switch-horizontal',style:{fontSize:15}})),
                 h('button',{className:'bi',onClick:()=>spr(o),title:'In hóa đơn'},h('i',{className:'ti ti-printer',style:{fontSize:14}})),
                 h('button',{className:'bi',onClick:()=>printLabels(o),title:'In tem'},h('i',{className:'ti ti-tag',style:{fontSize:14}})),
                 h('button',{className:'bi',onClick:()=>setHistoryView(o),title:'Lịch sử đơn hàng'},h('i',{className:'ti ti-history',style:{fontSize:15}})),
