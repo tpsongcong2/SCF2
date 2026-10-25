@@ -637,6 +637,15 @@ function allocateImportedDeliveryOrderIds(existingOrders,importedOrders,currentU
     return {...order,id,...(oldId&&oldId!==id?{legacyOrderId:oldId}:{})};
   });
 }
+function customerImportLineNote(row,rawRows,columnOffset){
+  const columns=new Set();
+  for(const header of (rawRows||[]).slice(0,30)){
+    (header||[]).forEach((cell,index)=>{if(/^(chu y|ghi chu|note)(\s|$)/.test(normalizeLookupText(cell)))columns.add(index);});
+    if(columns.size)break;
+  }
+  if(!columns.size)columns.add(columnOffset+6);
+  return [...columns].map(index=>String(row?.[index]??'').trim()).filter(Boolean).join(' · ');
+}
 function customerImportColumnOffset(rawRows){
   const rows=(rawRows||[]).slice(0,100);
   const maxColumns=Math.min(12,Math.max(0,...rows.map(row=>(row||[]).length)));
@@ -2307,14 +2316,16 @@ function mergeDeliveryLineNote(live,base,lineIndex,raw){
   return {order,changes:[(lineIndex===null?'Đơn hàng':line.productName||'Sản phẩm')+' · Chú ý: '+(before||'—')+' → '+(note||'—')]};
 }
 function DeliveryLineNoteCell({order,lineIndex,canEdit,onSave}){
-  const[editing,setEditing]=useState(null),[value,setValue]=useState(''),[error,setError]=useState('');
+  const[editing,setEditing]=useState(null),[error,setError]=useState('');
+  const inputRef=useRef(null),draftRef=useRef('');
   const line=lineIndex===null?order:order.lines?.[lineIndex],current=String(line?.note||'');
-  const begin=()=>{if(!canEdit||!line||editing)return;setEditing({...order,lines:(order.lines||[]).map(item=>({...item}))});setValue(current);setError('');};
-  const close=()=>{setEditing(null);setError('');};
-  const save=()=>{try{onSave(editing,lineIndex,value);close();}catch(e){setError(e.message||'Chưa lưu được chú ý.');}};
+  useEffect(()=>{if(!editing&&inputRef.current)inputRef.current.value=current;},[current,editing]);
+  const begin=()=>{if(!canEdit||!line||editing)return;setEditing({...order,lines:(order.lines||[]).map(item=>({...item}))});draftRef.current=current;setError('');};
+  const close=()=>{if(inputRef.current)inputRef.current.value=current;setEditing(null);setError('');};
+  const save=()=>{try{onSave(editing,lineIndex,inputRef.current?.value??draftRef.current);setEditing(null);setError('');}catch(e){setError(e.message||'Chưa lưu được chú ý.');}};
   return h('div',{className:'delivery-line-note-editor'},
-    h('input',{type:'text',value:editing?value:current,readOnly:!editing,placeholder:'—',title:canEdit?'Bấm để sửa chú ý, nhấn Enter để lưu và khóa ô':'Chú ý','aria-label':'Chú ý '+(line?.productName||'đơn hàng'),'aria-invalid':!!error,
-      'data-scf-action':canEdit?'write':'view',onClick:begin,onChange:event=>setValue(event.target.value),onBlur:close,
+    h('input',{ref:inputRef,type:'text',defaultValue:current,readOnly:!editing,placeholder:'—',title:canEdit?'Bấm để sửa chú ý, nhấn Enter để lưu và khóa ô':'Chú ý','aria-label':'Chú ý '+(line?.productName||'đơn hàng'),'aria-invalid':!!error,
+      'data-scf-action':canEdit?'write':'view',onClick:begin,onChange:event=>{draftRef.current=event.target.value;},onBlur:close,
       onKeyDown:event=>{if(event.isComposing||event.nativeEvent?.isComposing)return;if(event.key==='Enter'){event.preventDefault();if(editing)save();else begin();}if(event.key==='Escape'){event.preventDefault();close();}}}),
     error&&h('small',{role:'alert',style:{color:'#A32D2D'}},error));
 }
@@ -2613,7 +2624,8 @@ function DeliveryInlineCopyRows({draft:initial,customers,products=[],prodCats=[]
       ...['qtyInvoice','qtyProd'].map(field=>h('div',{key:field,className:'delivery-product-qty-value'},h('input',{value:line[field]??'',disabled,inputMode:'decimal','aria-label':(field==='qtyInvoice'?'SL HĐ':'SL đặt')+' đơn mới '+(index+1),onChange:e=>{const value=e.target.value;setDraft(previous=>({...previous,lines:previous.lines.map((item,i)=>i===index?{...item,[field]:value}:item)}));}}))),
       h('div',{className:'delivery-product-qty-value',title:'SL giao mặc định bằng SL đặt'},line.qtyProd||'—'))),
     index===0&&h('td',{rowSpan:Math.max(1,draft.lines.length)},h('input',{type:'time',value:mobileDeliveryTime(draft.deliveryTime),disabled:disabled||!!initial._appendToId,'aria-label':'Giờ giao đơn mới',onChange:e=>set('deliveryTime',e.target.value)})),
-    index===0&&h('td',{colSpan:detailColumnsHidden?2:5,rowSpan:Math.max(1,draft.lines.length)},h('div',{className:'delivery-inline-copy-actions'},h('b',null,initial._appendToId?'Thêm vào đơn hiện có':'Đơn nháp'),h('button',{type:'button',disabled,onClick:()=>setDraft(previous=>({...previous,lines:[...previous.lines,{id:uid(),productId:'',productName:'',qtyInvoice:'',qtyProd:'',qtyDelivered:''}]}))},'+ Dòng sản phẩm'),h('button',{type:'button',className:'bp',disabled,onClick:submit},saving?'Đang lưu…':initial._appendToId?'Lưu sản phẩm':'Lưu đơn mới'),h('button',{type:'button',disabled:saving,onClick:onClose,'data-scf-action':'view'},'Hủy')),error&&h('div',{role:'alert',className:'delivery-editor-error'},error))
+    h('td',{colSpan:detailColumnsHidden?2:5},h('input',{type:'text',value:line.note||'',disabled,placeholder:'Chú ý sản phẩm…','aria-label':'Chú ý đơn mới '+(index+1),onChange:e=>{const value=e.target.value;setDraft(previous=>({...previous,lines:previous.lines.map((item,i)=>i===index?{...item,note:value}:item)}));}}))
+  )).concat(h('tr',{key:'draft-actions',className:'delivery-inline-copy-row delivery-inline-copy-footer'},h('td',{colSpan:detailColumnsHidden?9:12},h('div',{className:'delivery-inline-copy-actions'},h('b',null,initial._appendToId?'Thêm vào đơn hiện có':'Đơn nháp'),h('button',{type:'button',disabled,onClick:()=>setDraft(previous=>({...previous,lines:[...previous.lines,{id:uid(),productId:'',productName:'',qtyInvoice:'',qtyProd:'',qtyDelivered:''}]}))},'+ Dòng sản phẩm'),h('button',{type:'button',className:'bp',disabled,onClick:submit},saving?'Đang lưu…':initial._appendToId?'Lưu sản phẩm':'Lưu đơn mới'),h('button',{type:'button',disabled:saving,onClick:onClose,'data-scf-action':'view'},'Hủy')),error&&h('div',{role:'alert',className:'delivery-editor-error'},error))
   ));
 }
 
@@ -4242,7 +4254,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                   orderMap[key].lines.push({
                     id:uid(),productId:prod.id||'',productName:name,
                     unit:prod.unit||unit,weightPerUnit:prod.weightPerUnit||0,
-                    qtyProd:qtyOrdered,qtyInvoice:qtyInvoice,shift:'day',note:''
+                    qtyProd:qtyOrdered,qtyInvoice:qtyInvoice,shift:'day',note:customerImportLineNote(r,raw,columnOffset)
                   });
                 });
                 const newOrders=Object.values(orderMap).filter(o=>o.lines.length>0);
