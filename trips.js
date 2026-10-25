@@ -2442,6 +2442,9 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
                   h('span',{className:'badge trip-mobile-dispatched-badge'},'Đã giao'),
                   h('button',{type:'button',className:'trip-mobile-cancel-dispatch','data-scf-action':'write',onClick:()=>cancelDispatchToDriver(trip)},'Hủy'),
                   h('button',{type:'button',className:'bi trip-mobile-resend',onClick:()=>resendTripNotification(trip),title:trip.driverNotificationSentAt?'Đã gửi gần nhất: '+trip.driverNotificationSentAt:'Gửi lại thông báo cho lái xe','aria-label':'Gửi lại thông báo cho lái xe'},h('i',{className:'ti ti-bell-ringing'}))
+                ),
+                showInlineInvoices&&(trip.summaryInvoiceImage||trip.summaryInvoiceBackImage)&&h('div',{className:canMobileFeature(currentUser,'tripInvoices')?'trip-summary-inline-invoices':'trip-summary-inline-invoices desktop-only',style:{display:'flex',flexWrap:'wrap',gap:12,marginLeft:'auto',maxWidth:'100%'},onClick:event=>event.stopPropagation()},
+                  [trip.summaryInvoiceImage,trip.summaryInvoiceBackImage].map((src,index)=>src&&h(TripInvoicePreview,{key:'summary-'+index+'-'+src,src,size:invoiceSize,landscape:true,label:'Hóa đơn tổng · '+(index===0?'Mặt trước':'Mặt sau')}))
                 )
               ),
               h('div',{className:'trip-card-meta-line',style:{display:'flex',gap:16,fontSize:12,color:'var(--tx2)',flexWrap:'wrap'}},
@@ -2496,9 +2499,6 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
             )
           ),
           isOpen&&h('div',{className:'trip-card-detail',style:{borderTop:'.5px solid var(--bd)',padding:'1rem 1.25rem'}},
-            showInlineInvoices&&h('div',{className:canMobileFeature(currentUser,'tripInvoices')?'trip-summary-inline-invoices':'trip-summary-inline-invoices desktop-only',style:{display:'flex',flexWrap:'wrap',gap:12}},
-              [trip.summaryInvoiceImage,trip.summaryInvoiceBackImage].map((src,index)=>src&&h(TripInvoicePreview,{key:'summary-'+index+'-'+src,src,size:invoiceSize,landscape:true,label:'Hóa đơn tổng · '+(index===0?'Mặt trước':'Mặt sau')}))
-            ),
             // Bảng đơn hàng
             tripOrders.length?h('div',{className:'desktop-only tw'},
               h('table',{className:'trip-detail-table'+(showInlineInvoices?' trip-invoice-review-table':'')},
