@@ -574,10 +574,10 @@ async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,base
     const mutations=scfOrderMutations(baseValue,val);
     if(mutations?.length){
       const actor=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
-      // Real imports can spend >11s inside database triggers for 25 rows.
-      // Start smaller and retry the same idempotent mutations in smaller groups
-      // on timeout; a timed-out request may already have committed.
-      let saved,batchSize=10;
+      // Use the server's maximum batch to avoid repeated full-collection writes
+      // when notification triggers are paused or fast. On timeout, retry the
+      // same idempotent mutations in smaller groups; it may have committed.
+      let saved,batchSize=25;
       for(let offset=0;offset<mutations.length;){
         if(actor!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||''))throw new Error('Tài khoản đã thay đổi. Dữ liệu vẫn được giữ trong hàng chờ.');
         const batch=mutations.slice(offset,offset+batchSize);
