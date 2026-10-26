@@ -1214,7 +1214,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     h('div',{style:{maxHeight:200,overflowY:'auto',marginBottom:'1rem'}},
       h('table',{style:{width:'100%',fontSize:12,borderCollapse:'collapse'}},
         h('thead',null,h('tr',{style:{background:'var(--bg2)'}},
-          ['Ngày','Địa điểm','Giờ','Khách hàng','Sản phẩm','SL đặt','SL HĐ','Trạng thái'].map(c=>
+          ['Ngày','Địa điểm','Giờ','Khách hàng','Sản phẩm','SL đặt','SL HĐ','Chú ý','Trạng thái'].map(c=>
             h('th',{key:c,style:{padding:'5px 8px',textAlign:'left',borderBottom:'1px solid var(--bd)',fontWeight:600}},c)
           )
         )),
@@ -1228,6 +1228,9 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
           )),
           h('td',{style:{padding:'4px 8px'}},(o.lines||[]).reduce((sum,line)=>sum+(Number(line.qtyProd)||0),0)),
           h('td',{style:{padding:'4px 8px'}},(o.lines||[]).reduce((sum,line)=>sum+(Number(line.qtyInvoice)||0),0)),
+          h('td',{className:'import-preview-notes',style:{padding:'4px 8px',minWidth:140,maxWidth:240,verticalAlign:'top'}},(o.lines||[]).map((line,index)=>
+            h('div',{key:line.id||index,style:{lineHeight:1.5,whiteSpace:'pre-wrap',overflowWrap:'anywhere'}},(o.lines.length>1?(index+1)+'. ':'')+(line.note||'—'))
+          )),
           h('td',{style:{padding:'4px 8px'}},
             incompleteIssueMap.has(o.id)?h('span',{style:{color:'#A32D2D',fontSize:11}},'⚠ thiếu: '+incompleteIssueMap.get(o.id).join(', ')):
             dupOrders.includes(o)?h('span',{style:{color:'#856404',fontSize:11}},'⚠️ trùng'):

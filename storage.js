@@ -574,10 +574,20 @@ async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,base
     const mutations=scfOrderMutations(baseValue,val);
     if(mutations?.length){
       const actor=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
-      let saved;
-      for(let offset=0;offset<mutations.length;offset+=25){
+      // Real imports can spend >11s inside database triggers for 25 rows.
+      // Start smaller and retry the same idempotent mutations in smaller groups
+      // on timeout; a timed-out request may already have committed.
+      let saved,batchSize=10;
+      for(let offset=0;offset<mutations.length;){
         if(actor!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||''))throw new Error('Tài khoản đã thay đổi. Dữ liệu vẫn được giữ trong hàng chờ.');
-        saved=await serverSaveOrderMutationBatch(mutations.slice(offset,offset+25),offset+25>=mutations.length,timeoutMs);
+        const batch=mutations.slice(offset,offset+batchSize);
+        try{
+          saved=await serverSaveOrderMutationBatch(batch,offset+batch.length>=mutations.length,timeoutMs);
+          offset+=batch.length;
+        }catch(error){
+          if(!['SCF_DATABASE_TIMEOUT','SCF_REMOTE_TIMEOUT'].includes(error?.code)||batch.length<=1)throw error;
+          batchSize=Math.max(1,Math.floor(batch.length/2));
+        }
       }
       return saved;
     }
