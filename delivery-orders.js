@@ -827,6 +827,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
   const {newOrders=[], dupOrders=[], unknownPts=[], incompleteOrders=[], suspiciousDateRows=[], columnOffset=0} = data||{};
   const [includeIncomplete, setIncludeIncomplete] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [submittedOrders,setSubmittedOrders]=React.useState(null);
   const [ptAssign, setPtAssign] = React.useState({}); // pointName -> customerId
   const [addToCustomer, setAddToCustomer] = React.useState({}); // pointName -> bool
   const [ptArea, setPtArea] = React.useState({}); // pointName -> area
@@ -912,6 +913,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     (!ptMerge[pt]&&!addToCustomer[pt])||
     (addToCustomer[pt]&&!ptArea[pt])
   ));
+  const previewOrders=saving&&submittedOrders?submittedOrders:importableOrders;
 
   const doImport = async () => {
     if(saving)return;
@@ -992,6 +994,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     if(blockedDuplicates.length){const first=blockedDuplicates[0];window.showToast(duplicateDeliveryOrderMessage(first,findExistingDeliveryOrder(orders,first))+(blockedDuplicates.length>1?' Và '+(blockedDuplicates.length-1)+' đơn trùng khác đã bị bỏ qua.':''),'warn',10000);}
     const cleanOrders=preparedOrders.filter(order=>!blockedDuplicates.includes(order));
     if(!cleanOrders.length){window.showToast('Không còn đơn hàng mới để import.','info');return;}
+    setSubmittedOrders(cleanOrders);
     setSaving(true);
     setOrders(p=>ensureUniqueDeliveryOrderIds([...p,...cleanOrders]));
     window.showToast('Đang lưu '+cleanOrders.length+' đơn lên máy chủ…','info',5000);
@@ -1019,8 +1022,8 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     // Summary
     h('div',{style:{display:'flex',gap:10,marginBottom:'1rem',flexWrap:'wrap'}},
       h('div',{style:{background:'#EAF3DE',border:'1px solid #52b788',borderRadius:'var(--r)',padding:'8px 16px',fontSize:13}},
-        h('div',{style:{fontWeight:600,color:'#2D5A0E'}},toImport.length+' đơn có thể import'),
-        h('div',{style:{color:'#555'}},toImport.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng sản phẩm')
+        h('div',{style:{fontWeight:600,color:'#2D5A0E'}},previewOrders.length+(saving?' đơn đang chờ xác nhận':' đơn có thể import')),
+        h('div',{style:{color:'#555'}},previewOrders.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng sản phẩm')
       ),
       dupOrders.length>0&&h('div',{style:{background:'#FFF3CD',border:'1px solid #FFC107',borderRadius:'var(--r)',padding:'8px 16px',fontSize:13}},
         h('div',{style:{fontWeight:600,color:'#856404'}},dupOrders.length+' đơn trùng'),
@@ -1215,7 +1218,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
             h('th',{key:c,style:{padding:'5px 8px',textAlign:'left',borderBottom:'1px solid var(--bd)',fontWeight:600}},c)
           )
         )),
-        h('tbody',null,importableOrders.map(o=>h('tr',{key:o.id},
+        h('tbody',null,previewOrders.map(o=>h('tr',{key:o.id},
           h('td',{style:{padding:'4px 8px'}},o.deliveryDate),
           h('td',{style:{padding:'4px 8px',fontWeight:500}},o.pointName),
           h('td',{style:{padding:'4px 8px'}},o.deliveryTime),
