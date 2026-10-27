@@ -9,6 +9,7 @@ function scfInvoicePhotoSource(src){
   const remote=task=>{const work=remoteTail.catch(()=>{}).then(task);remoteTail=work;return work;};
   const remember=(ref,value)=>{known.delete(key(ref));known.set(key(ref),value);if(known.size>300)known.delete(known.keys().next().value);return value;};
   const valid=row=>row&&[0,90,180,270].includes(row.angle)&&['auto','manual'].includes(row.mode);
+  const queued=row=>row&&['pending','processing','uncertain','failed'].includes(row.backgroundStatus);
   const load=ref=>new Promise((resolve,reject)=>{
     const id=key(ref);if(waiting.has(id)){waiting.get(id).consumers.push({resolve,reject});return;}
     waiting.set(id,{ref,consumers:[{resolve,reject}]});
@@ -19,7 +20,7 @@ function scfInvoicePhotoSource(src){
         const chunk=jobs.slice(i,i+25);
         try{
           const rows=await remote(()=>serverLoadInvoiceOrientations(chunk.map(job=>job.ref)));
-          for(const job of chunk){const row=rows.find(row=>String(row.orderId)===String(job.ref.orderId)&&row.kind===job.ref.kind&&row.photoSource===job.ref.photoSource);job.consumers.forEach(c=>c.resolve(valid(row)?row:null));}
+          for(const job of chunk){const row=rows.find(row=>String(row.orderId)===String(job.ref.orderId)&&row.kind===job.ref.kind&&row.photoSource===job.ref.photoSource);job.consumers.forEach(c=>c.resolve(valid(row)||queued(row)?row:null));}
         }catch(error){chunk.forEach(job=>job.consumers.forEach(c=>c.reject(error)));}
       }
     });
@@ -27,7 +28,7 @@ function scfInvoicePhotoSource(src){
   window.scfSaveSharedInvoiceOrientation=async function(ref,angle,{mode='manual',expectedAt}={}){
     if(![0,90,180,270].includes(angle))throw new Error('Góc xoay không hợp lệ.');
     const actor=scope();let old=known.get(key(ref));
-    if(mode==='manual'&&!old&&expectedAt===undefined){const saved=await load(ref);if(saved)old=remember(ref,saved);}
+    if(mode==='manual'&&!old&&expectedAt===undefined){const saved=await load(ref);if(valid(saved))old=remember(ref,saved);}
     const data=await remote(()=>{if(scope()!==actor)throw new Error('Tài khoản đã thay đổi.');return serverSaveInvoiceOrientation({...ref,angle,mode,expectedAt:expectedAt??old?.updatedAt??''});});
     if(scope()!==actor)throw new Error('Tài khoản đã thay đổi.');
     if(!valid(data.orientation))throw new Error('Máy chủ chưa xác nhận chiều ảnh.');
@@ -45,10 +46,21 @@ function scfInvoicePhotoSource(src){
       let readError;
       stage('loading');
       try{
-        const saved=await load(ref);
+        let saved=await load(ref);
         if(!active())return{status:'cancelled',angle:0};
-        if(saved&&!job.retry)return remember(ref,{...saved,status:'ready',sharedState:'saved'});
-        if(saved)remember(ref,saved);
+        if(queued(saved)&&!job.retry){
+          stage('background');
+          // Poll only while this image is visible, for at most 30 seconds.
+          // Closing the viewer cancels polling, never the durable server job.
+          for(let poll=0;poll<6&&['pending','processing'].includes(saved?.backgroundStatus)&&active();poll++){
+            await new Promise(resolve=>setTimeout(resolve,5000));
+            if(!active())return{status:'cancelled',angle:0};
+            saved=await load(ref);
+          }
+          if(queued(saved))return{status:['pending','processing'].includes(saved.backgroundStatus)?'queued':saved.backgroundStatus,angle:0,sharedState:'background'};
+        }
+        if(valid(saved)&&!job.retry)return remember(ref,{...saved,status:'ready',sharedState:'saved'});
+        if(valid(saved))remember(ref,saved);
       }catch(error){readError=error;}
       if(!active())return{status:'cancelled',angle:0};
       if(!job.consumers.some(c=>c.isActive()&&c.allowRecognition))return{status:'disabled',angle:0,sharedState:readError?'local':'empty',saveError:readError?.message};
@@ -62,5 +74,31 @@ function scfInvoicePhotoSource(src){
       catch(error){return{...result,sharedState:'local',saveError:error.message};}
     })().finally(()=>resolving.delete(id));
     job.promise=work;resolving.set(id,job);return work;
+  };
+  // New servers enqueue OCR transactionally with the photo. This client only checks
+  // the receipt; eligible desktop sessions can resume recognition after reopening.
+  const uploads=new Map();
+  window.scfPrepareUploadedInvoiceOrientation=function(orderId,kind,src,confirmPhoto){
+    if(!src||/^(?:data:|blob:)/i.test(src)||!scope()||typeof window.scfDetectInvoiceOrientation!=='function')return Promise.resolve({status:'unavailable'});
+    const ref={orderId:String(orderId),kind,photoSource:scfInvoicePhotoSource(src)},actor=scope(),id=key(ref);
+    if(uploads.has(id))return uploads.get(id);
+    const active=()=>scope()===actor;
+    const work=(async()=>{
+      const confirmed=await confirmPhoto();
+      if(!confirmed||!active())return {status:active()?'pending':'cancelled'};
+      const saved=await load(ref);
+      if(!active())return {status:'cancelled'};
+      if(valid(saved))return remember(ref,{...saved,status:'ready',sharedState:'saved'});
+      if(queued(saved)){window.scfWakeInvoiceOrientationBackground?.();return {status:'queued',angle:0,sharedState:'background'};}
+      // Compatibility with servers not yet upgraded to the durable queue.
+      if(window.scfCanRunInvoiceOrientationBackground?.()===false)return {status:'pending',angle:0};
+      const result=await window.scfDetectInvoiceOrientation(src,{isActive:active});
+      if(!active())return {status:'cancelled'};
+      if(result.status!=='ready')return result;
+      // Resolver reads shared state first and preserves another user's manual turn.
+      // The detector caches this source, so the already-completed OCR is reused.
+      return await window.scfResolveSharedInvoiceOrientation(ref,src,{isActive:active});
+    })().catch(error=>({status:'failed',saveError:error?.message||String(error)})).finally(()=>uploads.delete(id));
+    uploads.set(id,work);return work;
   };
 })();

@@ -85,14 +85,14 @@ function scfInvoiceImageLayout(width,height,angle){
   const rotation=((Number(angle)||0)%360+360)%360,sideways=rotation===90||rotation===270;
   return{rotation,sideways,ratio:sideways?h/w:w/h,imageWidth:(sideways?w/h:1)*100+'%',imageHeight:(sideways?h/w:1)*100+'%'};
 }
-function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',kind='invoice'}){
+function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',kind='invoice',openAsDialog=false,dialogSize=true,toolbar,onClose}){
   const safeSize=['small','medium','large'].includes(size)?size:'medium';
   const[url,setUrl]=useState(src);
   const[phase,setPhase]=useState('ready');
   const[reload,setReload]=useState(0);
   const[natural,setNatural]=useState({width:0,height:0});
   const[manualRotation,setManualRotation]=useState(null);
-  const[viewer,setViewer]=useState(false);
+  const[viewer,setViewer]=useState(openAsDialog);
   const[zoom,setZoom]=useState(1);
   useEffect(()=>setZoom(1),[src]);
   const[recognitionImage,setRecognitionImage]=useState(null);
@@ -176,6 +176,7 @@ function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',
       sharedSave.status==='saving'?'Đang lưu chiều bạn chọn lên máy chủ…':sharedSave.status==='saved'?'Đã lưu chiều bạn chọn trên máy chủ.':'Chưa lưu được chiều bạn chọn: '+sharedSave.error:
     orientation?.src===src&&orientation.sharedState==='saved'?'Đã dùng chiều lưu trên máy chủ.':
     orientation?.src===src&&orientation.stage==='loading'?'Đang đọc chiều ảnh đã lưu…':
+    orientation?.src===src&&(orientation.stage==='background'||orientation.status==='queued')?'Ảnh đã lưu; chờ nhận diện nền trên máy tính của admin/kế toán.':
     !landscape?'Tự xoay đang tắt. Bật “Tự xoay đúng chiều” ở thanh phía trên.':
     manualRotation?.src===src&&manualRotation?.landscape===landscape?'Đang dùng chiều bạn chọn':
     orientation?.src!==src?'Tự xoay đang bật. Chờ ảnh hiển thị để nhận diện.':
@@ -187,14 +188,8 @@ function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',
     sharedSave?.src===src&&sharedSave.status==='failed'&&h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>setManualRotation({...manualRotation})},'Thử lưu chiều ảnh lại'),
     landscape&&orientation?.src===src&&(['uncertain','failed','unavailable'].includes(orientation.status)||orientation.sharedState==='local')&&h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>{setManualRotation(null);setSharedSave(null);setRecognitionRetry(value=>value+1);}},'Thử nhận diện lại')
   );
-  return h('figure',{className:'trip-invoice-preview invoice-size-'+safeSize+(layout.sideways?' invoice-rotated-sideways':'')},
-    h('figcaption',null,label),
-    h('button',{type:'button',className:'trip-invoice-image-button','data-scf-action':'view','aria-label':'Mở ảnh '+label,onClick:()=>{setZoom(1);setViewer(true);},style:phase==='failed'?{display:'none'}:undefined},imageStage(false)),
-    phase!=='failed'&&controls(),
-    phase!=='failed'&&orientationStatus(),
-    phase==='refreshing'&&h('small',{role:'status'},'Đang tải lại ảnh…'),
-    phase==='failed'&&failure(),
-    viewer&&h(Modal,{title:label,lg:'xl',className:'invoice-photo-viewer',onClose:()=>setViewer(false)},
+  const viewerModal=viewer&&h(Modal,{title:label,lg:openAsDialog?dialogSize:'xl',className:'invoice-photo-viewer',onClose:()=>{setViewer(false);onClose?.();}},
+      toolbar,
       controls(),
       h('div',{className:'invoice-zoom-controls'},
         h('button',{type:'button',className:'bs','data-scf-action':'view','aria-label':'Thu nhỏ hóa đơn',disabled:zoom<=1,onClick:()=>setZoom(value=>Math.max(1,value-0.25))},h('i',{className:'ti ti-zoom-out'}),' Thu nhỏ'),
@@ -207,6 +202,15 @@ function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',
       phase!=='failed'&&orientationStatus(),
       phase==='refreshing'&&h('small',{role:'status'},'Đang tải lại ảnh…'),
       h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>window.open(url,'_blank','noopener')},'Mở tệp ảnh gốc')
-    )
+    );
+  if(openAsDialog)return viewerModal;
+  return h('figure',{className:'trip-invoice-preview invoice-size-'+safeSize+(layout.sideways?' invoice-rotated-sideways':'')},
+    h('figcaption',null,label),
+    h('button',{type:'button',className:'trip-invoice-image-button','data-scf-action':'view','aria-label':'Mở ảnh '+label,onClick:()=>{setZoom(1);setViewer(true);},style:phase==='failed'?{display:'none'}:undefined},imageStage(false)),
+    phase!=='failed'&&controls(),
+    phase!=='failed'&&orientationStatus(),
+    phase==='refreshing'&&h('small',{role:'status'},'Đang tải lại ảnh…'),
+    phase==='failed'&&failure(),
+    viewerModal
   );
 }

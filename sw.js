@@ -1,4 +1,4 @@
-const CACHE = 'scf-v691';
+const CACHE = 'scf-v700';
 const ASSETS = [
   './',
   './index.html',
@@ -14,11 +14,12 @@ const ASSETS = [
   './helpers.js?v=473',
   './defaults.js?v=602',
   './auth.js',
-  './server-auth.js?v=638',
+  './server-auth.js?v=700',
   './templates.js?v=644',
-  './ui-common.js?v=569',
+  './ui-common.js?v=699',
   './invoice-orientation.js?v=457',
-  './invoice-orientation-store.js?v=460',
+  './invoice-orientation-store.js?v=699',
+  './invoice-orientation-background.js?v=700',
   './asset-documents.js?v=475',
   './catalogs.js?v=568',
   './production-shifts.js?v=644',
@@ -50,7 +51,7 @@ const ASSETS = [
   './production-assignments.js?v=644',
   './permissions.js?v=638',
   './permission-settings.js?v=638',
-  './app.js?v=691',
+  './app.js?v=700',
   './bootstrap.js?v=645',
   './manifest.json',
   './icon-192.png',

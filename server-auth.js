@@ -229,6 +229,11 @@ async function serverSaveInvoiceOrientation(item){
   if(error||(!data?.ok&&!data?.conflict))throw await scfServerSaveError(error,data,'Chưa lưu được chiều ảnh lên máy chủ.');
   return data;
 }
+async function serverInvoiceOrientationBackground(body){
+  const{data,error}=await invokeScfAuth({body},12000);
+  if(error||!data?.ok)throw await scfServerSaveError(error,data,'Chưa xử lý được chiều ảnh nền.');
+  return data;
+}
 async function serverSaveEmployees(employees,requestTimeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
   const payload=sanitizeEmployeesForServer(employees);

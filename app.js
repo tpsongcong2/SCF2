@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V691';
+const SCF_BUILD_VERSION='V700';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -910,7 +910,7 @@ function App(){
   const isAccounting=employeeDepartmentIncludes(cu,'Kế toán');
   const activeLevel=getLvl(cu.role,page,cu.permLevels);
   const readOnly=activeLevel==='r';
-  window.__SCF_ACCESS_CONTEXT={employeeId:String(cu.id||''),role:cu.role,page,level:activeLevel,readOnly,reportInvoiceUpload:page==='invoicereport'&&isAccounting&&canAccess(cu.role,'invoicereport',cu.permissions)};
+  window.__SCF_ACCESS_CONTEXT={employeeId:String(cu.id||''),role:cu.role,page,level:activeLevel,readOnly,invoiceBackgroundProcessing:cu.role==='admin'||isAccounting,reportInvoiceUpload:page==='invoicereport'&&isAccounting&&canAccess(cu.role,'invoicereport',cu.permissions)};
   const wips=['purchase','workreport_vp','workreport_sx'];
   const logout=async()=>{await serverLogout();window.scfClearSensitiveLocalData&&window.scfClearSensitiveLocalData();setSession(null);if(SCF_SERVER_AUTH_ENABLED)location.reload();};
   const saveAttendanceZones=async zones=>{
