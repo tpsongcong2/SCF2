@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V701';
+const SCF_BUILD_VERSION='V705';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -338,6 +338,8 @@ function App(){
   const homePage=isFaceMask?'workreport_total':'welcome';
   const[session,setSession]=useLS('scf_session',null);
   const[automaticPlanRevision,setAutomaticPlanRevision]=useState(0);
+  const[warehouseMerging,setWarehouseMerging]=useState(false);
+  const warehouseMergeBusy=React.useRef(false),warehouseMergeAttempts=React.useRef(new Map());
   useEffect(()=>{
     let timer=null;
     const resume=()=>{
@@ -464,7 +466,7 @@ function App(){
       if(previousOrder)order=scfPreserveExistingProductionOrder(previousOrder,incomingOrder);
       else{
         const {kpiAudit,...fresh}=incomingOrder;
-        order={...scfMarkNewProductionOrder(fresh),automaticPlanningPending:true,createdAtIso:new Date().toISOString(),createdById:String(cu?.id||''),createdBy:cu?.name||incomingOrder.createdBy||''};
+        order={...scfMarkNewProductionOrder(fresh),automaticPlanningPending:true,warehouseMergePending:!fresh.warehouseMerged&&fresh.warehouseMergePending===true,createdAtIso:new Date().toISOString(),createdById:String(cu?.id||''),createdBy:cu?.name||incomingOrder.createdBy||''};
       }
       const old=before.get(String(order.id));
       if(old===order)return order;
@@ -752,8 +754,8 @@ function App(){
     const keys=requiredKeys.filter(key=>['orders','trips','notifications','assets'].includes(key));
     let stopped=false,busy=false;
     const refresh=async()=>{
-      if(stopped||busy||document.hidden||!navigator.onLine)return;
-      busy=true;
+      if(stopped||busy||warehouseMergeBusy.current||document.hidden||!navigator.onLine)return;
+      busy=true;window.__SCF_TRIP_REFRESH_BUSY=true;
       try{
         const watchedKeys=[...keys];
         if((productionPreviewOpen||page==='prodsummary')&&canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments))for(const key of SCF_PAGE_DATA.prodsummary)if(dataLoaderRef.current?.loaded.has(key)&&!watchedKeys.includes(key))watchedKeys.push(key);
@@ -769,7 +771,7 @@ function App(){
         const results=await Promise.allSettled(changedKeys.map(key=>dataLoaderRef.current.load(key,true)));
         if(tripRefresh&&!stopped&&results.every(result=>result.status==='fulfilled'))setAutoSyncReady(true);
       }catch(e){console.warn('Auto sync:',e.message||e);}
-      finally{busy=false;}
+      finally{busy=false;window.__SCF_TRIP_REFRESH_BUSY=false;}
     };
     // Phát hiện thay đổi từ máy khác nhanh hơn để giảm thời gian chờ giữa
     // hai kế toán cùng nhập đơn; chỉ truy vấn phiên bản, chỉ tải lại khi có đổi.
@@ -786,7 +788,7 @@ function App(){
     if(loading||!pageReady||!autoSyncReady||!tripInputsReady||!['delivery','trips','orderdetail','prodshifts'].includes(page)||isFaceMask||!automationUser||!canAccess(automationUser.role,'delivery',automationUser.permissions,automationUser.dept)||!canWrite(automationUser.role,'delivery',automationUser.permLevels)||!shifts?.length)return;
     // Chờ lần lưu đơn/chuyến trước được xác nhận rồi mới sửa tối đa 25 đơn.
     // Như vậy các đợt không bị gộp thành một lần ghi toàn bộ danh sách lớn.
-    if(!navigator.onLine||window.scfOrderAutomationPending?.())return;
+    if(!navigator.onLine||warehouseMergeBusy.current||window.scfOrderAutomationPending?.())return;
     const usableTrip=t=>!t?.driverDispatchedAt&&!['active','completion_pending','completed','cancelled'].includes(String(t?.status||''));
     const linkedTripIds=new Set((orders||[]).filter(o=>!['cancelled','done','failed'].includes(String(o?.status||''))).map(o=>String(o?.tripId||'')).filter(Boolean));
     // Chuyến được lập trước theo lịch phải được giữ lại dù chưa có đơn.
@@ -802,6 +804,46 @@ function App(){
     if(tripsChanged)setAutoTrips(reconciled.trips);
     if(planned.changed)setOrders(nextOrders,workingTrips);
   },[loading,pageReady,autoSyncReady,page,isFaceMask,session,employees,orders,trips,shifts,prodShifts,customers,products,automaticPlanRevision]);
+
+  const mergeWarehouseTrip=async(tripId,mode='manual',expectedIds=[])=>{
+    const actorId=String(cu?.id||'');
+    if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==actorId)throw new Error('Tài khoản đã thay đổi. Hãy mở lại màn hình đơn/chuyến.');
+    if(warehouseMergeBusy.current||window.scfGetSyncState?.().pending||window.scfGetSyncState?.().status==='syncing')throw new Error('Chờ đồng bộ đơn/chuyến xong rồi gộp PAC.');
+    warehouseMergeBusy.current=true;setWarehouseMerging(true);document.activeElement?.blur?.();
+    try{
+      const deadline=Date.now()+10000;
+      while(window.__SCF_TRIP_REFRESH_BUSY&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,50));
+      if(window.__SCF_TRIP_REFRESH_BUSY)throw new Error('App đang nhận dữ liệu đơn/chuyến. Hãy đợi xong rồi gộp.');
+      const receipt=await serverMergeWarehouseOrders(String(tripId),mode,expectedIds);
+      if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==actorId)throw new Error('Tài khoản đã thay đổi; không cập nhật dữ liệu của phiên cũ vào màn hình này.');
+      window.scfAcceptWarehouseMergeReceipt(receipt);
+      const deleted=new Set(receipt.removedIds.map(String));
+      _so(previous=>{const replaced=new Map(receipt.orders.map(o=>[String(o.id),o]));return previous.filter(o=>!deleted.has(String(o.id))).map(o=>{const id=String(o.id),next=replaced.get(id);replaced.delete(id);return next||o;}).concat([...replaced.values()]);});
+      _st(previous=>previous.map(t=>String(t.id)===String(receipt.trip.id)?receipt.trip:t));
+      window.showToast('Đã gộp '+receipt.summary.orders+' đơn PAC thành đơn KHO VẬN. Đơn phát sinh giữ riêng.','success');
+      return receipt;
+    }finally{warehouseMergeBusy.current=false;setWarehouseMerging(false);}
+  };
+  useEffect(()=>{
+    if(loading||!pageReady||!autoSyncReady||isFaceMask||!cu||warehouseMerging||!['delivery','trips','orderdetail'].includes(page)||!navigator.onLine||window.scfOrderAutomationPending?.())return;
+    if(!['admin','administrator'].includes(cu.role)&&!employeeHasDepartment(cu,'Kế toán'))return;
+    if(!canWrite(cu.role,'delivery',cu.permLevels)||!canWrite(cu.role,'trips',cu.permLevels)||!canTripAction(cu,'editOrders'))return;
+    const editing=document.activeElement;if(editing&&(['INPUT','TEXTAREA','SELECT'].includes(editing.tagName)||editing.isContentEditable))return;
+    const pendingTripIds=new Set((orders||[]).filter(o=>o.warehouseMergePending&&!o.automaticPlanningPending&&!o.warehouseMerged).map(o=>String(o.tripId||'')));
+    for(const trip of (trips||[]).filter(t=>pendingTripIds.has(String(t.id)))){
+      if(!scfWarehouseOrders.warehouse(trip,shifts))continue;
+      const pending=(orders||[]).filter(o=>String(o.tripId||'')===String(trip.id)&&o.warehouseMergePending&&!o.automaticPlanningPending);
+      if(!pending.length)continue;
+      const signature=JSON.stringify(pending.map(o=>[o.id,o.updatedAt,o.lines]));
+      const previous=warehouseMergeAttempts.current.get(String(trip.id));if(previous?.signature===signature&&Date.now()-previous.at<300000)continue;
+      const preview=scfWarehouseOrders.merge({orders,trips,tripId:trip.id,products,shifts,mode:'auto'});if(!preview.ok)continue;
+      const timer=setTimeout(()=>{
+        warehouseMergeAttempts.current.set(String(trip.id),{signature,at:Date.now()});
+        mergeWarehouseTrip(trip.id,'auto').catch(error=>window.showToast(error.message||'Chưa gộp được PAC; các đơn gốc vẫn còn.','warn'));
+      },1500);
+      return()=>clearTimeout(timer);
+    }
+  },[loading,pageReady,autoSyncReady,isFaceMask,cu?.id,page,orders,trips,products,shifts,automaticPlanRevision,warehouseMerging]);
 
   const addNotification=React.useCallback(data=>{
     const recipientIds=[...new Set((data?.recipientIds||[data?.recipientId]).filter(Boolean).map(String))];
@@ -926,6 +968,7 @@ function App(){
     return latest?.attendanceZones;
   };
   return h('div',{className:'layout'},
+    warehouseMerging&&h('div',{role:'alert',style:{position:'fixed',inset:0,zIndex:100000,background:'rgba(0,0,0,.25)',display:'grid',placeItems:'center'}},h('div',{style:{background:'#fff',padding:24,borderRadius:12}},'Đang gộp PAC và xác nhận trên máy chủ…')),
     h(ProductionPushIdentity,{currentUser:cu,onOpen:()=>{setProductionPreviewOpen(false);setPage('notifications');window.scfSyncNow?.();}}),
     h('div',{className:'main'},
       !menuHidden&&h('div',{className:'topbar'+(page!=='welcome'?' mobile-subpage-topbar':'')},
@@ -1016,7 +1059,7 @@ function App(){
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
         canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{highlightOrderOnHover:uiSettings.deliveryOrderHover!==false,orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify:addNotification,onViewOrderSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(true);}:undefined,onViewProduction:canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments)&&(!window.matchMedia?.('(max-width:768px)')?.matches||canMobileFeature(cu,'prodsummary'))?()=>setProductionPreviewOpen(true):undefined}),
         canAccess(cu.role,'intem',cu.permissions)&&page==='intem'&&h(IntemTab,{products,company}),
-        canAccess(cu.role,'trips',cu.permissions,cuAccessDepartments)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,prodCats,quotes,financeDebts,setFinanceDebts,company,currentUser:cu,notify:addNotification,onBackToDriverReport:()=>setPage('workreport_lx')}),
+        canAccess(cu.role,'trips',cu.permissions,cuAccessDepartments)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,prodCats,quotes,financeDebts,setFinanceDebts,company,currentUser:cu,notify:addNotification,onWarehouseMerge:mergeWarehouseTrip,onBackToDriverReport:()=>setPage('workreport_lx')}),
         canAccess(cu.role,'workreport_lx',cu.permissions,cuAccessDepartments)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,orders,products,customers,employees,currentUser:cu,onOpenTrips:()=>setPage('trips')}),
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,trips,currentUser:cu,prodShifts,quotes,financeDebts,setFinanceDebts,menuHidden,setMenuHidden}),
         canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),

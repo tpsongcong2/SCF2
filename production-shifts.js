@@ -573,6 +573,14 @@ function prodShiftPlan(order,prodShifts,prodShiftRules){
 }
 function prodShiftPlansForOrder(order,prodShifts,prodShiftRules){
   if(!order||order._hdr||order._sub)return [];
+  if(order.warehouseMerged)return(order.lines||[]).map((line,index)=>{
+    // Each warehouse row retains its original SX/label plan. Never borrow the
+    // first source order's plan for other destinations or recalculate on merge.
+    const mode=line.shiftOverride?'manual':order.prodShiftAssignMode||line.warehouseSourceProdShiftAssignMode||'auto';
+    const source={...order,prodDate:'',prodTime:'',prodWorkShiftId:'',labelDate:'',labelTime:'',prodShiftAssignMode:mode};
+    const plan=scfStoredProductionPlan(source,prodShiftRules,line);
+    return plan?{...plan,manual:mode==='manual',line,index,productName:line.productName||('Sản phẩm '+(index+1))}:null;
+  }).filter(Boolean);
   if(!scfUsesTripProductionSchedule(order))return (order.lines||[]).map((line,index)=>{
     const plan=scfStoredProductionPlan(order,prodShiftRules,line);
     return plan?{...plan,line,index,productName:line.productName||('Sản phẩm '+(index+1))}:null;

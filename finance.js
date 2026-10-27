@@ -291,14 +291,15 @@ function financeTripReceivableDrafts(trip,orders,products,quotes,customers,curre
     return numFmt(row?.price);
   };
   const groups=new Map();let missingPrice=0;
-  const tripOrders=(orders||[]).filter(order=>(trip?.orderIds||[]).includes(order.id));
+  const matchedOrders=(orders||[]).filter(order=>(trip?.orderIds||[]).includes(order.id));
+  const tripOrders=typeof scfWarehouseOrders!=='undefined'?scfWarehouseOrders.accounting(matchedOrders):matchedOrders;
   tripOrders.forEach(order=>{
     const point=pointFor(order);
     const customerId=order.customerId||order.custId||point.customerId||'';
     const customerName=order.customer||point.customerName||order.pointName||'Khách hàng chưa xác định';
     const key=String(customerId||customerName);
     if(!groups.has(key))groups.set(key,{customerId,customerName,amount:0,actualRevenue:0,orderIds:[],missingPrice:0});
-    const group=groups.get(key);group.orderIds.push(order.id);
+    const group=groups.get(key);if(!group.orderIds.includes(order.warehouseOrderId||order.id))group.orderIds.push(order.warehouseOrderId||order.id);
     (order.lines||[]).forEach(line=>{
       const product=(products||[]).find(item=>item.id===line.productId)||{};
       // Công nợ khách hàng luôn theo SL HĐ; doanh thu thực tế theo SL đã giao.

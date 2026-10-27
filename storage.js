@@ -340,6 +340,12 @@ document.addEventListener('keydown',e=>{
 const scfLocalWrites=new Map();
 const scfRemoteVersions=new Map();
 const scfRemoteSnapshots=new Map();
+window.scfAcceptWarehouseMergeReceipt=function(receipt){
+  const update=(rows,changes,removed=[])=>{const ids=new Set(removed.map(String)),byId=new Map(changes.map(row=>[String(row.id),row]));return(rows||[]).filter(row=>!ids.has(String(row.id))).map(row=>{const id=String(row.id),next=byId.get(id);byId.delete(id);return next||row;}).concat([...byId.values()]);};
+  scfRemoteSnapshots.set('scf_orders',update(scfRemoteSnapshots.get('scf_orders'),receipt.orders,receipt.removedIds));
+  scfRemoteSnapshots.set('scf_trips',update(scfRemoteSnapshots.get('scf_trips'),[receipt.trip]));
+  for(const key of ['scf_orders','scf_trips'])scfRemoteVersions.set(key,String(receipt.updatedAt||''));
+};
 function syncSnapshot(value){try{return JSON.parse(JSON.stringify(value))}catch{return value}}
 function scfPublishMergedCollection(key,value,requested,writeToken){
   if((!Array.isArray(value)&&!(key==='scf_prod_actuals'&&value&&typeof value==='object'))||readSyncQueue()[key]?.updatedAt!==writeToken)return;

@@ -1,4 +1,4 @@
-const CACHE = 'scf-v701';
+const CACHE = 'scf-v705';
 const ASSETS = [
   './',
   './index.html',
@@ -7,14 +7,15 @@ const ASSETS = [
   './vendor/supabase.min.js?v=358',
   './vendor/react.production.min.js?v=358',
   './vendor/react-dom.production.min.js?v=358',
-  './styles.css?v=638',
+  './styles.css?v=705',
   './runtime.js?v=457',
-  './storage.js?v=643',
+  './storage.js?v=702',
   './print-agent.js',
   './helpers.js?v=473',
+  './warehouse-orders.js?v=703',
   './defaults.js?v=602',
   './auth.js',
-  './server-auth.js?v=700',
+  './server-auth.js?v=702',
   './templates.js?v=644',
   './ui-common.js?v=699',
   './invoice-orientation.js?v=457',
@@ -22,7 +23,7 @@ const ASSETS = [
   './invoice-orientation-background.js?v=700',
   './asset-documents.js?v=475',
   './catalogs.js?v=568',
-  './production-shifts.js?v=644',
+  './production-shifts.js?v=703',
   './organization.js?v=568',
   './notifications.js?v=638',
   './user-guide.js?v=645',
@@ -30,16 +31,16 @@ const ASSETS = [
   './operations.js?v=639',
   './personnel.js?v=638',
   './goods-inventory.js?v=638',
-  './navigation-reports.js?v=701',
+  './navigation-reports.js?v=702',
   './order-detail.js?v=643',
   './delivery-shifts.js?v=455',
   './auth-workforce.js?v=551',
   './quotations.js',
-  './finance.js?v=347',
-  './delivery-orders.js?v=645',
+  './finance.js?v=702',
+  './delivery-orders.js?v=705',
   './qrcode.min.js?v=357',
-  './import-tools.js?v=638',
-  './trips.js?v=640',
+  './import-tools.js?v=702',
+  './trips.js?v=702',
   './delivery-excel.js?v=557',
   './vendor/exceljs-4.4.0.min.js',
   './production-closing-domain.js?v=644',
@@ -51,7 +52,7 @@ const ASSETS = [
   './production-assignments.js?v=644',
   './permissions.js?v=638',
   './permission-settings.js?v=638',
-  './app.js?v=701',
+  './app.js?v=705',
   './bootstrap.js?v=645',
   './manifest.json',
   './icon-192.png',
@@ -64,7 +65,7 @@ const ASSETS = [
 // thật sự cần tới; tránh tải lặp toàn bộ ứng dụng và ba bản font ngay lần mở đầu.
 const PRECACHE_ASSETS = [
   './index.html',
-  './styles.css?v=638',
+  './styles.css?v=705',
   './vendor/tabler-icons.min.css?v=394'
 ];
 

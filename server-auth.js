@@ -234,6 +234,11 @@ async function serverInvoiceOrientationBackground(body){
   if(error||!data?.ok)throw await scfServerSaveError(error,data,'Chưa xử lý được chiều ảnh nền.');
   return data;
 }
+async function serverMergeWarehouseOrders(tripId,mode,expectedIds=[]){
+  const{data,error}=await invokeScfAuth({body:{action:'merge_warehouse_pac_orders',tripId,mode,expectedIds}},30000);
+  if(error||!data?.ok)throw await scfServerSaveError(error,data,'Chưa gộp được đơn PAC kho vận.');
+  return data;
+}
 async function serverSaveEmployees(employees,requestTimeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ nhân viên.');
   const payload=sanitizeEmployeesForServer(employees);

@@ -250,6 +250,10 @@ function buildPrintHTMLBody(template, order, company) {
   const co = company || {};
   const lines = (order.lines || []).filter(l => l.productName).map(l=>({...l,productName:scfOrderPrintProductName(order,l)}));
   const totalQty = lines.reduce((s,l) => s + scfOrderPrintInvoiceQty(l), 0);
+  if(order.warehouseMerged){
+    const rows=lines.map((line,index)=>'<tr><td>'+(index+1)+'</td><td>'+(line.warehouseSourcePointName||order.pointName||'')+'</td><td>'+(line.warehouseSourceDeliveryTime||order.deliveryTime||'')+'</td><td>'+line.productName+'</td><td>'+(line.unit||'')+'</td><td>'+scfOrderPrintInvoiceQty(line)+'</td><td></td><td>'+(line.note||'')+'</td></tr>').join('');
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Đơn PAC kho vận</title><style>body{font:13px Arial;padding:20px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #333;padding:7px}th{background:#eee}@media print{@page{size:A4 landscape;margin:8mm}}</style></head><body><h2>ĐƠN PAC GIAO TẠI KHO VẬN</h2><p>Mã: '+order.id+' · Ngày chuyến: '+(order.deliveryDate||'')+'</p><table><thead><tr><th>STT</th><th>Địa điểm theo đơn</th><th>Giờ giao</th><th>Sản phẩm</th><th>ĐVT</th><th>SL HĐ</th><th>SL giao</th><th>Chú ý</th></tr></thead><tbody>'+rows+'</tbody></table><p>Tổng SL HĐ: '+totalQty+'</p><p>Giao tập trung tại kho vận; các địa điểm và giờ trên từng dòng được giữ để đối chiếu.</p><p>Người giao ____________________ Người nhận ____________________</p></body></html>';
+  }
 
   if (template === 'welstory' || template === 'songcong') {
     const isSongCong = template === 'songcong';
