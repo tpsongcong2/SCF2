@@ -2693,7 +2693,9 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
 }
 
 function InvoiceUploadReportTab({orders,setOrders,currentUser,customers,products,trips=[],setPage}){
-  const displayDate=value=>String(fmtAnyDate(value)||'').replace(/\/(\d{2})(\d{2})$/,'/$2');
+  // Use the same explicit day/month interpretation as the report filters.
+  // The generic formatter guesses US month/day for ambiguous slash dates.
+  const displayDate=value=>{const key=dateKey(value);return key?key.slice(8,10)+'/'+key.slice(5,7)+'/'+key.slice(2,4):'—';};
   const canUpload=!!setOrders&&!!currentUser&&(currentUser.role==='admin'||employeeDepartmentIncludes(currentUser,'Kế toán'))&&canAccess(currentUser.role,'invoicereport',currentUser.permissions);
   const live=React.useRef({}),busy=React.useRef(new Set());live.current={orders,currentUser,canUpload};
   const uploadInvoice=async(order,file)=>{
