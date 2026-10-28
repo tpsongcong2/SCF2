@@ -1231,7 +1231,7 @@ function isPrivilegedEmployeeRecord(employee){
       h('hr',{className:'divider'}),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
         h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phân quyền chi tiết (có thể chỉnh riêng cho nhân viên này)'),
-        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,orderHistoryDays:60,salesDebtAllCustomers:false,driverReportMonthlyWeight:false,productionShiftWeight:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
+        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,orderHistoryDays:60,salesDebtAllCustomers:false,driverReportMonthlyWeight:false,productionShiftWeight:false,deliveryQuantityTotals:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
       ),
       h(OrderNoticePermissionFields,{employee:f,onChange:value=>s('orderNoticePermissions',value)}),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = chỉ đọc dữ liệu | Thêm + Xem + Sửa = không được xóa | Thêm + Xem + Sửa + Xóa = toàn quyền'),
@@ -1266,6 +1266,9 @@ function isPrivilegedEmployeeRecord(employee){
         ))
       ),
       !isFaceMask&&h(MobilePermissionFields,{employee:f,onChange:value=>s('mobilePermissions',value),onStartPageChange:value=>s('mobileStartPage',value)}),
+      canAccess(f.role,'delivery',f.permissions,selectedDepartments)&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,marginTop:10,background:'var(--bg2)'}},
+        h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền trong Đơn hàng'),
+        h(DeliveryQuantityTotalsPermissionField,{employee:f,onChange:value=>s('deliveryQuantityTotals',value)})),
       canAccess(f.role,'trips',f.permissions,selectedDepartments)&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,marginTop:10,background:'var(--bg2)'}},
         h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền nghiệp vụ trong Chuyến giao hàng'),
         h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:8}},'Số lượng thực giao tách khỏi quyền sửa thông tin chuyến.'),

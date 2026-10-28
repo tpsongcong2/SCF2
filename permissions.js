@@ -162,6 +162,15 @@ function getLvl(role, page, lvls) {
 }
 function canWrite(role, page, lvls) { const l=getLvl(role,page,lvls); return l==='rw'||l==='rwd'; }
 function canDel(role, page, lvls)   { return getLvl(role,page,lvls)==='rwd'; }
+function canViewDeliveryQuantityTotals(user={}){
+  return ['admin','administrator'].includes(String(user?.role||'').trim().toLowerCase())||user?.deliveryQuantityTotals===true;
+}
+function DeliveryQuantityTotalsPermissionField({employee,onChange,disabled=false}){
+  const admin=['admin','administrator'].includes(String(employee?.role||'').trim().toLowerCase());
+  return h('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'7px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6}},
+    h('input',{type:'checkbox',disabled:disabled||admin,checked:canViewDeliveryQuantityTotals(employee),onChange:event=>onChange(event.target.checked)}),
+    'Xem tổng SL HĐ, SL Đặt, SL giao dưới tiêu đề Đơn hàng');
+}
 
 // Quyền nút trên điện thoại bổ sung cho quyền trang/nghiệp vụ hiện có.
 // Tài khoản cũ chưa cấu hình giữ cách hiển thị hiện tại.
