@@ -1,4 +1,10 @@
 /* Excel summary uses the same trip, stop, product ordering and colors as PNGs. */
+function scfDeliveryExcelDriverName(name){
+  const raw=String(name||'').trim();
+  if(!raw||/^(chưa có|chưa chọn|chưa xếp)/i.test(raw))return tripImageDriverName(name);
+  const last=raw.split(/\s+/).pop().replace(/^a\./i,'');
+  return last?'A.'+last.charAt(0).toLocaleUpperCase('vi-VN')+last.slice(1).toLocaleLowerCase('vi-VN'):tripImageDriverName(name);
+}
 function scfDeliveryExcelGroups({orders=[],trips=[],products=[],customers=[],prodCats=[],group='all',tripForOrder}){
   const resolve=tripForOrder||scfCreateOrderTripIndex(orders,trips).tripForOrder;
   const groups=new Map(),productById=new Map(products.map(p=>[String(p.id),p]));
@@ -74,7 +80,7 @@ function scfCreateDeliveryExcelWorkbook(Excel,groups,{group='all'}={}){
       row.getCell(9).value=data.kgPerUnit??0;
       const setFill=(col,color)=>{row.getCell(col).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF'+color.replace('#','').toUpperCase()}};};
       setFill(1,'#ffffff');setFill(8,'#ffffff');
-      if(['#ffff00','#f4af86'].includes(String(data.fill).toLowerCase()))[3,4,5,6].forEach(col=>setFill(col,data.fill));
+      if(['#ffff00','#f4af86'].includes(String(data.fill).toLowerCase()))[2,3,4,5,6,7].forEach(col=>setFill(col,data.fill));
       if(data[6])row.getCell(8).font={name:'Arial',size:11,bold:true,color:{argb:'FFC00000'}};
       row.getCell(2).numFmt='dd/mm/yyyy';row.getCell(7).numFmt='hh:mm';
       [5,6].forEach(col=>row.getCell(col).numFmt=Number.isInteger(values[col-1])?'#,##0':'#,##0.########');
@@ -82,7 +88,7 @@ function scfCreateDeliveryExcelWorkbook(Excel,groups,{group='all'}={}){
       row.height=Math.min(409,Math.max(23,wrapped*15+8));
     });
     const lastDetailRow=sheet.rowCount;
-    const driver=tripImageDriverName(trip.driverName);
+    const driver=scfDeliveryExcelDriverName(trip.driverName);
     const total=sheet.addRow([driver,scfDeliveryExcelDate(trip.deliveryDate),trip.shiftName||trip.shiftCode||trip.shiftId||'Chưa có ca giao']);
     paint(total,totalFill,true);total.height=Math.max(28,Math.ceil(driver.length/(widths[0]-2))*15+8);
     total.getCell(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFF00'}};

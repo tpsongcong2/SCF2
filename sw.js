@@ -1,4 +1,4 @@
-const CACHE = 'scf-v715';
+const CACHE = 'scf-v717';
 const ASSETS = [
   './',
   './index.html',
@@ -41,7 +41,7 @@ const ASSETS = [
   './qrcode.min.js?v=357',
   './import-tools.js?v=702',
   './trips.js?v=702',
-  './delivery-excel.js?v=715',
+  './delivery-excel.js?v=717',
   './vendor/exceljs-4.4.0.min.js',
   './production-closing-domain.js?v=644',
   './production-closing.js?v=593',
@@ -52,7 +52,7 @@ const ASSETS = [
   './production-assignments.js?v=644',
   './permissions.js?v=707',
   './permission-settings.js?v=707',
-  './app.js?v=715',
+  './app.js?v=717',
   './bootstrap.js?v=645',
   './manifest.json',
   './icon-192.png',
