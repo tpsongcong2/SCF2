@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V703';
+const SCF_BUILD_VERSION='V706';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -854,7 +854,8 @@ function App(){
       type:data.type||'info',icon:data.icon||'ti-bell',sourceType:data.sourceType||'',sourceId:data.sourceId||'',
       targetPage:data.targetPage||'notifications',createdAt:stamp,createdAtIso:nowIso,createdBy:cu?.name||'Hệ thống',readAt:''
     }));
-    setNotifications(prev=>data?.dedupeKey&&(prev||[]).some(item=>item.sourceType==='sync-error'&&item.sourceId===data.dedupeKey&&!item.readAt)?prev:[...rows,...(prev||[])].slice(0,2000));
+    // Creating a notice must not delete old notices from the shared collection.
+    setNotifications(prev=>data?.dedupeKey&&(prev||[]).some(item=>item.sourceType==='sync-error'&&item.sourceId===data.dedupeKey&&!item.readAt)?prev:[...rows,...(prev||[])]);
     setTimeout(()=>window.scfFlushPendingWrites&&window.scfFlushPendingWrites(),900);
     return rows.length;
   },[cu?.id,cu?.name]);

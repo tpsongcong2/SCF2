@@ -573,7 +573,27 @@ window.scfResolveFuelSyncConflict=async function(choices){
   delete window.__SCF_FUEL_SYNC_CONFLICT;window.dispatchEvent(new CustomEvent('scf-fuel-sync-conflict'));
   return window.scfSendCollectionsNow([key]);
 };
+function scfRestoreClippedNotificationTail(value,base){
+  if(!Array.isArray(value)||value.length<2000||!Array.isArray(base)||base.length<2000)return value;
+  const ids=new Set(value.map(item=>String(item?.id||'')));
+  const firstMissing=base.findIndex(item=>!ids.has(String(item?.id||'')));
+  if(firstMissing<0)return value;
+  const tail=base.slice(firstMissing);
+  // V705 prepended a new notice then sliced to 2,000: only restore a missing
+  // contiguous tail, never reinterpret arbitrary removals as an append.
+  if(tail.some(item=>ids.has(String(item?.id||''))))return value;
+  return [...value,...tail];
+}
 async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,baseValue,timeoutMs){
+  if(key==='scf_notifications'&&Array.isArray(val)&&val.length>=2000){
+    const actor=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
+    if(!Array.isArray(baseValue)){
+      const loaded=await serverLoadPermittedCollection(key);
+      if(actor!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||''))throw new Error('Tài khoản đã thay đổi. Giữ nguyên hàng chờ để kiểm tra.');
+      baseValue=loaded.value;expectedUpdatedAt=String(loaded.updatedAt||'');
+    }
+    val=scfRestoreClippedNotificationTail(val,baseValue);
+  }
   // Recover full snapshots already queued by older releases. The baseline is
   // essential: never infer deletions or new IDs from a partial server view.
   if(key==='scf_orders'&&!patches&&Array.isArray(baseValue)&&Array.isArray(val)){
