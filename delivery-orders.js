@@ -532,7 +532,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
       labelTime:normalizeTimeInput(f.labelTime||selectedDefaultTiming.labelTime),
       labelDate:f.labelDate||selectedDefaultTiming.labelDate
     }:selectedDefaultTiming;
-    const lines=(f.lines||[]).map(line=>line.shiftOverride?line:{
+    const lines=(f.lines||[]).map(line=>f.warehouseMerged||line.shiftOverride?line:{
       ...line,
       prodTime:selectedTiming.prodTime,
       prodDate:selectedTiming.prodDate,
@@ -549,7 +549,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
   return h(Modal,{title:copyMode?'Tạo đơn từ bản sao'+(order?.copySourceId?' · '+order.copySourceId:''):(order?'Sửa đơn '+order.id:'Tạo đơn giao hàng mới'),onClose,lg:true},
     lockedTripLabel&&h('div',{className:'order-copy-notice'},h('i',{className:'ti ti-truck-delivery'}),' Đơn thuộc chuyến '+lockedTripLabel+'. Khi lưu, app giữ nguyên chuyến và trạng thái giao.'),
     copyMode&&h('div',{className:'order-copy-notice'},h('i',{className:'ti ti-copy'}),' Nội dung đã được sao chép từ đơn cũ. Kiểm tra ngày giao, số lượng rồi lưu để tạo mã đơn mới.'),
-    h(F,{label:'Địa điểm giao * ('+customers.reduce((n,c)=>n+(c.points||[]).length,0)+' điểm)'},h('div',null,
+    h(F,{label:(f.warehouseMerged?'Địa điểm chung của đơn KHO VẬN * (':'Địa điểm giao * (')+customers.reduce((n,c)=>n+(c.points||[]).length,0)+' điểm)'},h('div',null,
       h('div',{className:'order-point-picker'},
         h('select',{className:'order-point-area',value:pointAreaFilter,onChange:e=>{setPointAreaFilter(e.target.value);setPointQuery('');setPointSearchOpen(true);},title:'Lọc địa điểm theo khu vực'},
           h('option',{value:''},'Tất cả khu vực'),
@@ -632,11 +632,23 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
         [totalWeight>0?'Tổng KL hóa đơn: '+totalWeight.toFixed(2)+' kg':'',totalPurchase>0?'Giá mua: '+moneyFmt(totalPurchase):''].filter(Boolean).join(' · ')
       )
     ),
-      f.lines.map(l=>h(OrderDetailLine,{key:l.id,line:l,products,prodCats:prodCats||[],prodShifts:prodShifts||[],deliveryDate:f.deliveryDate,deliveryTime:f.deliveryTime,pointName:resolvedPointName,area:matchedPointArea,
+      f.lines.map(l=>h('div',{key:l.id},
+        f.warehouseMerged&&h('div',{className:'warehouse-line-point',style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8,padding:'8px 10px',background:'#fff'}},
+          h('label',{htmlFor:'warehouse-point-'+l.id,style:{fontWeight:400}},'Địa điểm dòng PAC'),
+          h('select',{id:'warehouse-point-'+l.id,'aria-label':'Địa điểm dòng PAC '+l.id,value:allPoints.find(pt=>l.warehouseSourcePointId?String(pt.id)===String(l.warehouseSourcePointId)&&(!l.warehouseSourceCustomerId||String(pt.customerId)===String(l.warehouseSourceCustomerId)):normPoint(pt.name)===normPoint(l.warehouseSourcePointName)&&(!l.warehouseSourceCustomerId||String(pt.customerId)===String(l.warehouseSourceCustomerId)))?.pointKey||'',onChange:e=>{
+            const pt=allPoints.find(pt=>pt.pointKey===e.target.value);if(!pt)return;
+            updLine(l.id,{...l,warehouseSourcePointId:pt.id||'',warehouseSourcePointName:pt.name,warehouseSourceCustomerId:pt.customerId,warehouseSourceCustomer:pt.customerName,warehouseSourceAddress:pt.address||'',warehouseSourceArea:pt.area||''});
+          },style:{flex:'1 1 220px',maxWidth:440}},
+            h('option',{value:'',disabled:true},l.warehouseSourcePointName||'Chọn địa điểm dòng PAC'),
+            allPoints.map(pt=>h('option',{key:pt.pointKey,value:pt.pointKey},pt.searchLabel))
+          ),
+          h('span',{style:{fontSize:12}},(l.warehouseSourceDeliveryDate||f.deliveryDate||'')+' · '+(l.warehouseSourceDeliveryTime||f.deliveryTime||''))
+        ),
+        h(OrderDetailLine,{line:l,products,prodCats:prodCats||[],prodShifts:prodShifts||[],deliveryDate:l.warehouseSourceDeliveryDate||f.deliveryDate,deliveryTime:l.warehouseSourceDeliveryTime||f.deliveryTime,pointName:l.warehouseSourcePointName||resolvedPointName,area:l.warehouseSourceArea||matchedPointArea,
         inheritedShift:hasLineOverrides?autoShift:effectiveShift,
-        inheritedTiming:hasLineOverrides?timingForShift(autoShift):effectiveTiming,
+        inheritedTiming:f.warehouseMerged?{prodTime:l.prodTime||'',prodDate:l.prodDate||'',labelTime:l.labelTime||'',labelDate:l.labelDate||'',prodWorkShiftId:l.prodWorkShiftId||''}:hasLineOverrides?timingForShift(autoShift):effectiveTiming,
         inheritedMode:hasLineOverrides?'auto':prodShiftMode,
-        onChange:data=>updLine(l.id,data),onRemove:()=>delLine(l.id)})),
+        onChange:data=>updLine(l.id,data),onRemove:()=>delLine(l.id)}))),
     h('button',{onClick:addLine,style:{fontSize:12,padding:'5px 12px',marginBottom:8}},h('i',{className:'ti ti-plus',style:{fontSize:13,marginRight:4}}),'Thêm hàng hóa'),
     h('div',{className:'form-actions order-form-actions'},h('button',{onClick:onClose,disabled:saving},'Hủy'),h('button',{className:'bp',onClick:submit,disabled:saving,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),saving?'Đang lưu…':'Lưu đơn hàng'))
   );
@@ -1945,7 +1957,7 @@ function IntemTab({products,company}){
       +'<text x=\"425\" y=\"68\" font-family=\"Arial,sans-serif\" font-size=\"52\" font-weight=\"700\" text-anchor=\"middle\">'+formatKg(kg)+'</text>'
       +'<text x=\"520\" y=\"68\" font-family=\"Arial,sans-serif\" font-size=\"38\" font-weight=\"700\" text-anchor=\"middle\">KG</text>'
       +'<text x=\"22\" y=\"112\" font-family=\"Arial,sans-serif\"><tspan font-size=\"22\">SP CỦA: C.TY TNHH </tspan><tspan font-size=\"23\" font-weight=\"700\">THỰC PHẨM SÔNG CÔNG</tspan></text>'
-      +'<text x=\"22\" y=\"154\" font-family=\"Arial,sans-serif\" font-size=\"23\">ĐC: Tổ 1. P.Mỏ Chè, Sông Công, T.Thái Nguyên</text>'
+      +'<text x=\"22\" y=\"154\" font-family=\"Arial,sans-serif\" font-size=\"23\">ĐC: Tổ 1, Phường Bá Xuyên, Tỉnh Thái Nguyên</text>'
       +'<text x=\"22\" y=\"196\" font-family=\"Arial,sans-serif\" font-size=\"23\" font-weight=\"700\">SĐT : 0969709878</text>'
       +'<text x=\"258\" y=\"196\" font-family=\"Arial,sans-serif\" font-size=\"23\">THÀNH PHẦN: Bột gạo, nước</text>'
       +'<text x=\"22\" y=\"238\" font-family=\"Arial,sans-serif\" font-size=\"23\">HDSD: '+hdsd.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))+'</text>'
@@ -1975,7 +1987,7 @@ function IntemTab({products,company}){
       +'<text x=\"802\" y=\"118\" font-family=\"Times New Roman,serif\" font-size=\"58\" font-weight=\"700\" text-anchor=\"middle\">'+formatKg(kg)+'</text>'
       +'<text x=\"886\" y=\"118\" font-family=\"Times New Roman,serif\" font-size=\"46\" text-anchor=\"middle\">KG</text>'
       +'<text x=\"88\" y=\"214\" font-family=\"Times New Roman,serif\" font-size=\"28\" font-weight=\"700\">SP CỦA: CÔNG TY TNHH THỰC PHẨM SÔNG CÔNG</text>'
-      +'<text x=\"88\" y=\"294\" font-family=\"Times New Roman,serif\" font-size=\"28\" font-weight=\"700\">ĐC: Tổ 1. P.Mỏ Chè, Sông Công, T.Thái Nguyên</text>'
+      +'<text x=\"88\" y=\"294\" font-family=\"Times New Roman,serif\" font-size=\"28\" font-weight=\"700\">ĐC: Tổ 1, Phường Bá Xuyên, Tỉnh Thái Nguyên</text>'
       +'<line x1=\"86\" y1=\"332\" x2=\"914\" y2=\"332\" stroke=\"#bbb\" stroke-width=\"1\"/>'
       +'<line x1=\"352\" y1=\"332\" x2=\"352\" y2=\"408\" stroke=\"#bbb\" stroke-width=\"1\"/>'
       +'<text x=\"88\" y=\"386\" font-family=\"Times New Roman,serif\" font-size=\"32\" font-weight=\"700\">SĐT : 0969709878</text>'
@@ -2028,7 +2040,7 @@ function IntemTab({products,company}){
       +'<text x="804" y="143" font-family="Times New Roman,serif" font-size="70" font-weight="700" text-anchor="middle">'+escapeSvg(kgNum)+'</text>'
       +'<text x="922" y="143" font-family="Times New Roman,serif" font-size="52" font-weight="700" text-anchor="middle">KG</text>'
       +'<text x="72" y="245" font-family="Times New Roman,serif" font-size="32" font-weight="700">SP CỦA: CÔNG TY TNHH THỰC PHẨM SÔNG CÔNG</text>'
-      +'<text x="72" y="329" font-family="Times New Roman,serif" font-size="32" font-weight="700">ĐC: Tổ 1. P.Mỏ Chè, Sông Công, T.Thái Nguyên</text>'
+      +'<text x="72" y="329" font-family="Times New Roman,serif" font-size="32" font-weight="700">ĐC: Tổ 1, Phường Bá Xuyên, Tỉnh Thái Nguyên</text>'
       +'<text x="72" y="413" font-family="Times New Roman,serif" font-size="32" font-weight="700">SĐT : 0969709878</text>'
       +'<text x="510" y="413" font-family="Times New Roman,serif" font-size="32" font-weight="700">TP: Bột gạo, nước</text>'
       +'<text x="72" y="497" font-family="Times New Roman,serif" font-size="31" font-weight="700">BQ : 15°C-20°C. Đóng gói hở. HSD 12h trần nước sôi trước khi dùng.</text>'
@@ -2759,7 +2771,7 @@ function DeliveryOrderTripModal({order,trips,trip,defaultDate,disabled,onConfirm
     finally{savingRef.current=false;setSaving(false);}
   };
   return h('section',{ref:panelRef,className:'delivery-order-trip-panel',role:'region','aria-label':'Chuyển chuyến cho '+(order.pointName||order.id),onKeyDown:event=>{if(event.key==='Escape'){event.stopPropagation();close();}}},
-    h('div',{className:'delivery-transfer-context',title:[order.deliveryDate,order.deliveryTime,'Hiện tại: '+(trip?manualTripText(trip):'Chưa xếp chuyến')].filter(Boolean).join(' · ')},h('span',null,'Chuyển chuyến + ca SX · '+(order.pointName||order.customer||order.id))),
+    h('div',{className:'delivery-transfer-context',title:[order.deliveryDate,order.deliveryTime,'Hiện tại: '+(trip?manualTripText(trip):'Chưa xếp chuyến')].filter(Boolean).join(' · ')},h('span',null,order.pointName||order.customer||order.id)),
     h(F,{label:'Ngày chuyến'},h('input',{type:'date','aria-label':'Ngày chuyến mới',value:date,disabled:disabled||saving,onChange:e=>{setDate(e.target.value);setTripId('');setError('');}})),
     h(F,{label:'Ca giao – Người giao'},h('select',{'aria-label':'Chuyến mới',value:options.some(t=>String(t.id)===tripId)?tripId:'',disabled:disabled||saving,onChange:e=>{setTripId(e.target.value);setError('');}},h('option',{value:''},options.length?'Chọn chuyến trong ngày':'Không có chuyến trong ngày'),options.map(t=>h('option',{key:t.id,value:String(t.id)},manualTripText(t))))),
     h('div',{className:'delivery-transfer-production'},
@@ -3547,7 +3559,11 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const orderRowKey=order=>orderRowKeyByObject.get(order)||order?._rowKey||('delivery-order-fallback\u001f'+String(order?.id||''));
   const tripFilterMeta=React.useMemo(()=>{
     const people=new Map((employees||[]).map(person=>[String(person.id),String(person.name||'').trim()]));
-    return (trips||[]).map(trip=>{const driverName=people.get(String(trip.driverId||''))||String(trip.driverName||'').trim();return {trip,date:manualTripDateToISO(trip.deliveryDate||trip.date),shift:String(trip.shiftId||trip.shiftName||'__unassigned'),shiftName:trip.shiftName||'Chưa có ca',driver:trip.driverId?'id:'+trip.driverId:driverName?'name:'+normalizeLookupText(driverName):'__unassigned',driverName:driverName||'Chưa có người giao'};});
+    const idsByName=new Map();
+    for(const person of employees||[]){const key=normalizeLookupText(person.name);if(key)idsByName.set(key,idsByName.has(key)?null:String(person.id));}
+    return (trips||[]).map(trip=>{const storedName=String(trip.driverName||'').trim(),driverId=String(trip.driverId||'')||idsByName.get(normalizeLookupText(storedName))||'';
+      const driverName=people.get(driverId)||storedName||driverId;
+      return {trip,date:manualTripDateToISO(trip.deliveryDate||trip.date),shift:String(trip.shiftId||trip.shiftName||'__unassigned'),shiftName:trip.shiftName||'Chưa có ca',driver:driverId?'id:'+driverId:driverName?'name:'+normalizeLookupText(driverName):'__unassigned',driverName:driverName||'Chưa có lái xe'};});
   },[trips,employees]);
   const tripFilterMetaById=React.useMemo(()=>new Map(tripFilterMeta.map(meta=>[String(meta.trip.id),meta])),[tripFilterMeta]);
   const baseFilterRows=React.useMemo(()=>orders.filter(x=>{
@@ -4049,7 +4065,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         '<text x="425" y="68" font-family="Arial,sans-serif" font-size="52" font-weight="700" text-anchor="middle">'+kgNum+'</text>'+
         '<text x="520" y="68" font-family="Arial,sans-serif" font-size="38" font-weight="700" text-anchor="middle">KG</text>'+
         '<text x="22" y="112" font-family="Arial,sans-serif"><tspan font-size="22">SP CỦA: C.TY TNHH </tspan><tspan font-size="23" font-weight="700">THỰC PHẨM SÔNG CÔNG</tspan></text>'+
-        '<text x="22" y="154" font-family="Arial,sans-serif" font-size="23">ĐC: Tổ 1. P.Mỏ Chè, Sông Công, T.Thái Nguyên</text>'+
+        '<text x="22" y="154" font-family="Arial,sans-serif" font-size="23">ĐC: Tổ 1, Phường Bá Xuyên, Tỉnh Thái Nguyên</text>'+
         '<text x="22" y="196" font-family="Arial,sans-serif" font-size="23" font-weight="700">SĐT : 0969709878</text>'+
         '<text x="258" y="196" font-family="Arial,sans-serif" font-size="23">THÀNH PHẦN: Bột gạo, nước</text>'+
         '<text x="22" y="238" font-family="Arial,sans-serif" font-size="23">HDSD: '+esc(hdsd)+'</text>'+
@@ -4085,7 +4101,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         '<text x="804" y="143" font-family="Times New Roman,serif" font-size="70" font-weight="700" text-anchor="middle">'+esc(kgNum)+'</text>'+
         '<text x="922" y="143" font-family="Times New Roman,serif" font-size="52" font-weight="700" text-anchor="middle">KG</text>'+
         '<text x="72" y="245" font-family="Times New Roman,serif" font-size="32" font-weight="700">SP CỦA: CÔNG TY TNHH THỰC PHẨM SÔNG CÔNG</text>'+
-        '<text x="72" y="329" font-family="Times New Roman,serif" font-size="32" font-weight="700">ĐC: Tổ 1. P.Mỏ Chè, Sông Công, T.Thái Nguyên</text>'+
+        '<text x="72" y="329" font-family="Times New Roman,serif" font-size="32" font-weight="700">ĐC: Tổ 1, Phường Bá Xuyên, Tỉnh Thái Nguyên</text>'+
         '<text x="72" y="413" font-family="Times New Roman,serif" font-size="32" font-weight="700">SĐT : 0969709878</text>'+
         '<text x="510" y="413" font-family="Times New Roman,serif" font-size="32" font-weight="700">TP: Bột gạo, nước</text>'+
         '<text x="72" y="497" font-family="Times New Roman,serif" font-size="31" font-weight="700">BQ : 15°C-20°C. Đóng gói hở. HSD 12h trần nước sôi trước khi dùng.</text>'+
@@ -4253,7 +4269,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     if(key==='trip')return h(DeliveryColumnFilter,{key,label,onClear:()=>clearColumnFilter(key),active:!!(fTripId||fTripDate||fTripShift||fTripDriver)},
       h('label',null,'1. Ngày chuyến',h('input',{type:'date','aria-label':'Lọc ngày chuyến',value:fTripDate,onChange:e=>{sfTripDate(e.target.value);sfTripShift('');sfTripDriver('');sfTripId('');}})),
       h('label',null,'2. Ca giao hàng',h('select',{'aria-label':'Lọc ca giao hàng',value:fTripShift,disabled:!fTripDate,onChange:e=>{sfTripShift(e.target.value);sfTripDriver('');sfTripId('');}},h('option',{value:''},'Không giới hạn'),tripShiftOptions.map(([v,l])=>h('option',{key:v,value:v},l)))),
-      h('label',null,'3. Người giao hàng',h('select',{'aria-label':'Lọc người giao hàng',value:fTripDriver,disabled:!fTripDate||!fTripShift,onChange:e=>{sfTripDriver(e.target.value);sfTripId('');}},h('option',{value:''},'Không giới hạn'),tripDriverOptions.map(([v,l])=>h('option',{key:v,value:v},l)))),
+      h('label',null,'3. Lái xe / Người giao hàng',h('select',{'aria-label':'Lọc người giao hàng',value:fTripDriver,onChange:e=>{sfTripDriver(e.target.value);sfTripId('');setCurrentPage(1);}},h('option',{value:''},'Tất cả lái xe'),h('option',{value:'__unassigned'},'Chuyến chưa có lái xe'),tripDriverOptions.filter(([value])=>value!=='__unassigned').map(([v,l])=>h('option',{key:v,value:v},l)))),
       h('label',null,'Chuyến cụ thể',h('select',{'aria-label':'Giá trị lọc Chuyến',value:fTripId,onChange:e=>{sfTripId(e.target.value);if(e.target.value==='__none'){sfTripDate('');sfTripShift('');sfTripDriver('');}}},h('option',{value:''},'Không giới hạn'),!fTripDate&&h('option',{value:'__none'},'Chưa xếp chuyến'),fTripDate&&tripFilteredOptions.map(meta=>h('option',{key:meta.trip.id,value:String(meta.trip.id)},[meta.trip.deliveryDate||meta.trip.date,meta.shiftName,meta.driverName].join(' · '))))),
       h('button',{type:'button',onClick:()=>{sfTripDate('');sfTripShift('');sfTripDriver('');sfTripId('');}},'Xóa lọc')
     );
@@ -4599,9 +4615,10 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                   title:'Chọn đơn '+(o.id||''),
                   style:{width:16,height:16,margin:0,flex:'0 0 auto',cursor:'pointer'}
                 }):h('span',{'aria-hidden':true,style:{width:16,flex:'0 0 16px'}})),
-                h('span',{title:ctx.deliveryDate||''},(()=>{
-                  const parts=String(ctx.deliveryDate||'').split('/');
-                  return parts.length>=2?parts.slice(0,2).join('/'):ctx.deliveryDate||'—';
+                h('span',{title:row.line?.warehouseSourceDeliveryDate||ctx.deliveryDate||''},(()=>{
+                  const date=row.line?.warehouseSourceDeliveryDate||ctx.deliveryDate||'';
+                  const parts=String(date).split('/');
+                  return parts.length>=2?parts.slice(0,2).join('/'):date||'—';
                 })())
               )
             ),

@@ -55,9 +55,9 @@ function scfWarehouseOrderTools(){
     }
     const customers=[...new Set(sourceOrders.map(o=>String(o.customerId||o.custId||o.customer||'')))];
     const base=existing||selected[0].order;
-    const merged={...base,id,pointId:'',ptId:'',pointName:'KHO VẬN',address:'Giao tại kho vận',tripId:trip.id,tripAssignMode:assignmentMode(base.tripAssignMode),
-      deliveryDate:trip.deliveryDate||base.deliveryDate,deliveryTime:trip.deliveryTime||base.deliveryTime||'',status:base.status||'assigned',
-      customerId:customers.length===1?(base.customerId||base.custId||''):'',customer:customers.length===1?(base.customer||base.customerName||''):'Kho vận',
+    const merged={...base,id,pointId:existing?.pointId||'',ptId:existing?.ptId||'',pointName:existing?.pointName||'KHO VẬN',address:existing?.address||'Giao tại kho vận',tripId:trip.id,tripAssignMode:assignmentMode(base.tripAssignMode),
+      deliveryDate:sourceOrders[0]?.deliveryDate||base.deliveryDate,deliveryTime:sourceOrders[0]?.deliveryTime||base.deliveryTime||'',status:base.status||'assigned',
+      customerId:existing?.pointId?existing.customerId:customers.length===1?(base.customerId||base.custId||''):'',customer:existing?.pointId?existing.customer:customers.length===1?(base.customer||base.customerName||''):'Kho vận',
       lines,warehouseMerged:true,warehouseMergePending:false,automaticPlanningPending:false,warehouseSourceOrders:sourceOrders,
       warehouseSourceOrderIds:sourceOrders.map(o=>String(o.id)),invoiceImage:existing?.invoiceImage||'',driverInvoiceImage:existing?.driverInvoiceImage||'',
       workOut:(Number(existing?.workOut)||0)+sourceOrders.slice(existing?.warehouseSourceOrders?.length||0).reduce((s,o)=>s+(Number(o.workOut)||0),0),workReturn:(Number(existing?.workReturn)||0)+sourceOrders.slice(existing?.warehouseSourceOrders?.length||0).reduce((s,o)=>s+(Number(o.workReturn)||0),0),
@@ -74,8 +74,17 @@ function scfWarehouseOrderTools(){
     if(!order.warehouseMerged||!order.warehouseSourceOrders?.length)return[order];
     const grouped=new Map();
     for(const line of order.lines||[]){const id=String(line.warehouseSourceOrderId||'');if(!grouped.has(id))grouped.set(id,[]);grouped.get(id).push(line);}
-    const rows=order.warehouseSourceOrders.map(source=>({...source,id:String(order.id)+'#'+String(source.id),warehouseOrderId:order.id,tripId:order.tripId,status:order.status,
-      lines:grouped.get(String(source.id))||[],invoiceImage:order.invoiceImage||'',warehouseMerged:true,warehouseSourceOrders:undefined})).filter(o=>o.lines.length);
+    const rows=order.warehouseSourceOrders.flatMap(source=>{
+      const points=new Map();
+      for(const line of grouped.get(String(source.id))||[]){
+        const pointName=line.warehouseSourcePointName||source.pointName||'',pointId=line.warehouseSourcePointId??source.pointId??'',customerId=line.warehouseSourceCustomerId??source.customerId??'',customer=line.warehouseSourceCustomer??source.customer??'';
+        const key=JSON.stringify([pointId,pointName,customerId,customer]);
+        if(!points.has(key))points.set(key,{...source,pointId,pointName,customerId,customer,address:line.warehouseSourceAddress??source.address,area:line.warehouseSourceArea??source.area,lines:[]});
+        points.get(key).lines.push(line);
+      }
+      return [...points.values()].map((row,index)=>({...row,id:String(order.id)+'#'+String(source.id)+(index?'#'+index:''),warehouseOrderId:order.id,tripId:order.tripId,status:order.status,
+        invoiceImage:order.invoiceImage||'',warehouseMerged:true,warehouseSourceOrders:undefined}));
+    });
     const unassigned=grouped.get('');if(unassigned?.length)rows.push({...order,warehouseSourceOrders:undefined,lines:unassigned});
     return rows;
   });
@@ -84,7 +93,7 @@ function scfWarehouseOrderTools(){
     return(orders||[]).map(order=>{const image=photo(order,tripMap.get(String(order.tripId)),products,shifts);return image?.inherited?{...order,invoiceImage:image.src,warehouseInvoiceInherited:true}:order;});
   };
   const importRows=(existing,incoming,products=[])=>{
-    const known=new Map(),skipped=[],conflicts=[];
+    const known=new Map(),skipped=[],conflicts=[],existingCounts=new Map(),incomingCounts=new Map();
     const date=value=>{const m=String(value||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);return m?m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'):String(value||'').slice(0,10);};
     const names=new Map(products.map(p=>[text(p.name),String(p.id)]));
     const byId=new Map(products.map(p=>[String(p.id),p]));
@@ -95,14 +104,21 @@ function scfWarehouseOrderTools(){
       const product=String(line.productId||names.get(text(line.productName))||text(line.productName));
       return point&&time&&product?JSON.stringify([date(line.warehouseSourceDeliveryDate||order.deliveryDate),point,time,product,text(line.unit||byId.get(product)?.unit)]):'';
     };
-    accounting(existing).filter(o=>!['cancelled','failed'].includes(o.status)).forEach(order=>(order.lines||[]).forEach(line=>{const id=key(order,line);if(id)known.set(id,line);}));
+    const occurrenceKey=(order,line,counts)=>{
+      const base=key(order,line);if(!base)return null;
+      const saved=Number(line.warehouseImportOccurrence),occurrence=Number.isSafeInteger(saved)&&saved>0?saved:(counts.get(base)||0)+1;
+      counts.set(base,Math.max(counts.get(base)||0,occurrence));
+      return {id:JSON.stringify([base,occurrence]),occurrence};
+    };
+    accounting(existing).filter(o=>!['cancelled','failed'].includes(o.status)).forEach(order=>(order.lines||[]).forEach(line=>{const slot=occurrenceKey(order,line,existingCounts);if(slot)known.set(slot.id,line);}));
     const orders=[];
     for(const order of incoming){
       if(!(order.lines||[]).some(line=>pac(line,products))){orders.push(order);continue;}
-      const lines=(order.lines||[]).filter(line=>{
-        const id=key(order,line),old=known.get(id);
-        if(old){skipped.push({orderId:order.id,pointName:order.pointName,deliveryTime:order.deliveryTime,productName:line.productName});if(quantity(old)!==quantity(line))conflicts.push({orderId:order.id,pointName:order.pointName,productName:line.productName});return false;}
-        if(id)known.set(id,line);return true;
+      const lines=(order.lines||[]).flatMap(line=>{
+        const slot=occurrenceKey(order,line,incomingCounts),old=slot&&known.get(slot.id);
+        if(old){skipped.push({orderId:order.id,pointName:order.pointName,deliveryTime:order.deliveryTime,productName:line.productName});if(quantity(old)!==quantity(line))conflicts.push({orderId:order.id,pointName:order.pointName,productName:line.productName});return [];}
+        if(slot)known.set(slot.id,line);
+        return [{...line,...(slot?{warehouseImportOccurrence:slot.occurrence}:{})}];
       });
       if(lines.length)orders.push({...order,lines,warehouseImportLineChecked:true});
     }
