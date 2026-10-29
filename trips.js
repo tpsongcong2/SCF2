@@ -640,7 +640,7 @@ function scfOpenDriverReportTrip(trip,onOpenTrips,currentUser){
 function DriverTripWorkReportTab({trips,orders,products,customers,employees,currentUser,onOpenTrips}){
   const[month,setMonth]=useLS('scf_driver_report_month_'+currentUser.id,isoDate().slice(0,7));
   const[driverFilter,setDriverFilter]=useLS('scf_driver_report_driver_'+currentUser.id,'');
-  const[shiftFilter,setShiftFilter]=useLS('scf_driver_report_shift_'+currentUser.id,'');
+  const[shiftFilter,setShiftFilter]=useLS('scf_driver_report_shift_'+currentUser.id,[]);
   const[listSelection,setListSelection]=useState(null);
   const isDriver=currentUser?.role==='driver'||employeeHasDepartment(currentUser,'Lái xe');
   // Attendance counts every own assigned trip, just as the Admin report does.
@@ -656,9 +656,11 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
   const canOpen=typeof onOpenTrips==='function'&&canAccess(currentUser?.role,'trips',currentUser?.permissions,employeeDepartments(currentUser));
   const canOpenTrip=row=>canOpen&&(!isDriver||!!row.driverDispatchedAt||['active','completion_pending','completed'].includes(row.status));
   const canViewMonthWeight=canViewDriverReportMonthlyWeight(currentUser);
-  const activeShift=report.shifts.some(item=>item.name===shiftFilter)?shiftFilter:'';
-  const rows=report.rows.filter(row=>!activeShift||row.deliveryShift===activeShift);
-  const listKey=month+'|'+driverKey+'|'+activeShift;
+  // Retain a single saved selection from older versions as a one-item list.
+  const activeShifts=[...new Set((Array.isArray(shiftFilter)?shiftFilter:shiftFilter?[shiftFilter]:[]).filter(name=>report.shifts.some(item=>item.name===name)))];
+  const toggleShift=name=>setShiftFilter(previous=>{const selected=(Array.isArray(previous)?previous:previous?[previous]:[]).filter(value=>report.shifts.some(item=>item.name===value));return selected.includes(name)?selected.filter(value=>value!==name):[...selected,name];});
+  const rows=report.rows.filter(row=>!activeShifts.length||activeShifts.includes(row.deliveryShift));
+  const listKey=JSON.stringify([month,driverKey,[...activeShifts].sort()]);
   const visible=scfTripListWindow(rows,listSelection,listKey);
   const fmt=value=>Number(value||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
   const status=row=>row.driverCompleted?'Đã hoàn thành':'Chưa hoàn thành';
@@ -677,11 +679,12 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
         h('div',{className:'driver-report-metrics'+(canViewMonthWeight?'':' without-weight')},metric('Tổng chuyến',report.total.trips),metric('Ngày có chuyến',report.workDays),metric('Ngày nghỉ',report.restDays,report.elapsedDays+' ngày đã tính'),canViewMonthWeight&&metric('Khối lượng tháng',fmt(report.total.weight)+' kg')),
         h('p',{className:'driver-report-note'},'Ngày nghỉ = ngày không có chuyến có hàng. '+(month===today.slice(0,7)?'Tính từ đầu tháng đến hôm nay ('+today.slice(8,10)+'/'+today.slice(5,7)+').':month>today.slice(0,7)?'Tháng chưa bắt đầu nên chưa tính ngày nghỉ.':'Tính toàn bộ '+report.daysInMonth+' ngày trong tháng.')+' Tổng chuyến gồm các chuyến có hàng trong cả tháng.'),
         h('h4',null,'Số chuyến theo ca giao'),
-        report.shifts.length?h('div',{className:'driver-report-shifts'},report.shifts.map(item=>h('button',{key:item.name,type:'button',className:'driver-report-shift'+(activeShift===item.name?' active':''),'aria-pressed':activeShift===item.name,onClick:()=>setShiftFilter(activeShift===item.name?'':item.name)},h('span',null,item.name),h('b',null,item.trips+' chuyến'),canViewMonthWeight&&h('small',null,fmt(item.weight)+' kg')))):h('p',{className:'driver-report-note'},'Chưa có chuyến có hàng trong tháng này.'),
+        report.shifts.length?h('div',{className:'driver-report-shifts'},report.shifts.map(item=>h('button',{key:item.name,type:'button',className:'driver-report-shift'+(activeShifts.includes(item.name)?' active':''),'aria-pressed':activeShifts.includes(item.name),onClick:()=>toggleShift(item.name)},h('span',null,item.name),h('b',null,item.trips+' chuyến'),canViewMonthWeight&&h('small',null,fmt(item.weight)+' kg')))):h('p',{className:'driver-report-note'},'Chưa có chuyến có hàng trong tháng này.'),
         h('div',{className:'driver-report-totals'},h('span',null,report.total.orders+' đơn'),h('span',null,report.total.completed+' chuyến đã hoàn thành'),h('span',null,'Công: '+fmt(report.total.work)),h('span',null,'Tiền công: '+fmt(report.total.pay)+' đ'))
       ),
       h('section',{className:'card driver-report-details'},
-        h('div',{className:'driver-report-list-head'},h('h3',null,'Danh sách chuyến ('+rows.length+')'),h('label',null,h('select',{value:activeShift,'aria-label':'Lọc ca giao hàng',onChange:event=>setShiftFilter(event.target.value)},h('option',{value:''},'Tất cả ca giao'),report.shifts.map(item=>h('option',{key:item.name,value:item.name},item.name))))),
+        h('div',{className:'driver-report-list-head'},h('h3',null,'Danh sách chuyến ('+rows.length+')'),h('details',{className:'driver-report-multishift'},h('summary',null,activeShifts.length?'Đã chọn '+activeShifts.length+' ca giao':'Tất cả ca giao'),h('div',{className:'driver-report-multishift-options'},h('button',{type:'button',onClick:()=>setShiftFilter([])},'Tất cả ca giao'),report.shifts.map(item=>h('label',{key:item.name},h('input',{type:'checkbox',checked:activeShifts.includes(item.name),onChange:()=>toggleShift(item.name),'aria-label':'Lọc ca '+item.name}),item.name))))),
+        h('p',{className:'driver-report-note',role:'status'},activeShifts.length?'Đang lọc: '+activeShifts.join(' · ')+'. Bấm lại ca để bỏ chọn.':'Bấm các ca phía trên để chọn nhiều ca giao hàng cùng lúc.'),
         h('p',{className:'driver-report-note'},canOpen?(isDriver?'Báo công gồm cả chuyến đã xếp. Bấm vào chuyến đã giao cho bạn để xem chi tiết. Chuyến 0 kg và chuyến hủy được ẩn.':'Bấm vào chuyến để xem chi tiết. Chuyến 0 kg và chuyến hủy được ẩn.'):'Chuyến 0 kg và chuyến hủy được ẩn. Tài khoản chưa có quyền xem chi tiết chuyến.'),
         !rows.length?h('div',{className:'driver-report-empty'},'Chưa có chuyến có hàng theo lựa chọn này.'):
         h(React.Fragment,null,

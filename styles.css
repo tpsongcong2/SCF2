@@ -1785,3 +1785,10 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 .invoice-inbox-open{font-weight:400!important;font-size:12px!important;white-space:nowrap}
 @media(max-width:768px){.invoice-inbox-layout{grid-template-columns:1fr}.invoice-inbox-toolbar button,.invoice-inbox-order button{min-height:42px}.invoice-inbox-modal{width:100%}.trip-mobile-tools-left{min-width:0;flex-wrap:wrap}.trip-mobile-tools-left .invoice-inbox-open{flex-basis:100%;white-space:normal}}
 .invoice-orientation-loading{position:absolute;inset:0;display:grid;place-items:center;color:var(--tx2);font-size:12px;padding:12px;text-align:center}
+.driver-report-multishift{position:relative;min-width:190px}
+.driver-report-multishift summary{cursor:pointer;padding:10px 12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--card)}
+.driver-report-multishift-options{position:absolute;right:0;top:100%;z-index:20;min-width:240px;max-height:320px;overflow:auto;padding:10px;background:var(--card);border:1px solid var(--bd2);border-radius:var(--r);box-shadow:0 6px 18px #0001}
+.driver-report-multishift-options label{display:flex;align-items:center;gap:10px;padding:9px 4px;cursor:pointer}
+.driver-report-multishift-options input{width:18px;height:18px;flex-shrink:0;accent-color:var(--pri)}
+.driver-report-multishift-options button{width:100%;margin-bottom:5px}
+@media(max-width:500px){.driver-report-multishift{width:100%}.driver-report-multishift-options{width:100%;min-width:0}.driver-report-multishift-options label{min-height:44px}}
