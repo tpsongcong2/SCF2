@@ -112,6 +112,7 @@ async function scfServerSaveError(error,data,fallback){
   if(error?.context?.clone)try{body=await error.context.clone().json();}catch{}
   const result=new Error(await serverFunctionErrorMessage(error,body,fallback));
   if(/^SCF_[A-Z_]+$/.test(String(body?.code||'')))result.code=body.code;
+  if(/not having enough compute resources|WORKER_LIMIT|CPU time limit/i.test(String(body?.message||body?.error||result.message)))result.code='SCF_EDGE_RESOURCE_LIMIT';
   result.diagnosticId=String(body?.diagnostic?.id||'');
   return result;
 }

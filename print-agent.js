@@ -78,7 +78,7 @@ async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperW
     createdAt:new Date().toISOString(),
     attempts:0
   };
-  await dbSet(SCF_PRINT_QUEUE_KEY,[...queue.filter(item=>item&&item.status!=='done').slice(-99),job]);
+  await dbSet(SCF_PRINT_QUEUE_KEY,[...queue.filter(Boolean),job]);
   scfSavePrintAgentSettings({agentId:target});
   return job;
 }
@@ -111,7 +111,8 @@ async function scfQueueA4Print(html,{agentId,title='Đơn hàng SCF'}={}){
     attempts:0
   };
   if(!job.html)throw new Error('Không tạo được nội dung đơn hàng để in.');
-  await dbSet(SCF_PRINT_QUEUE_KEY,[...queue.filter(item=>item&&item.status!=='done').slice(-99),job]);
+  await dbSet(SCF_PRINT_QUEUE_KEY,[...queue.filter(Boolean),job]);
+  scfSavePrintAgentSettings({agentId:target});
   return job;
 }
 

@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V717';
+const SCF_BUILD_VERSION='V720';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -466,7 +466,7 @@ function App(){
       if(previousOrder)order=scfPreserveExistingProductionOrder(previousOrder,incomingOrder);
       else{
         const {kpiAudit,...fresh}=incomingOrder;
-        order={...scfMarkNewProductionOrder(fresh),automaticPlanningPending:true,warehouseMergePending:!fresh.warehouseMerged&&fresh.warehouseMergePending===true,createdAtIso:new Date().toISOString(),createdById:String(cu?.id||''),createdBy:cu?.name||incomingOrder.createdBy||''};
+        order={...(fresh.productionScheduleCopiedFromTripId?fresh:scfMarkNewProductionOrder(fresh)),automaticPlanningPending:!fresh.productionScheduleCopiedFromTripId,warehouseMergePending:!fresh.warehouseMerged&&fresh.warehouseMergePending===true,createdAtIso:new Date().toISOString(),createdById:String(cu?.id||''),createdBy:cu?.name||incomingOrder.createdBy||''};
       }
       const old=before.get(String(order.id));
       if(old===order)return order;

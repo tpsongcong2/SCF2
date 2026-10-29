@@ -611,7 +611,7 @@ async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,base
           saved=await serverSaveOrderMutationBatch(batch,offset+batch.length>=mutations.length,timeoutMs);
           offset+=batch.length;
         }catch(error){
-          if(!['SCF_DATABASE_TIMEOUT','SCF_REMOTE_TIMEOUT'].includes(error?.code)||batch.length<=1)throw error;
+          if(!['SCF_DATABASE_TIMEOUT','SCF_REMOTE_TIMEOUT','SCF_EDGE_RESOURCE_LIMIT'].includes(error?.code)||batch.length<=1)throw error;
           batchSize=Math.max(1,Math.floor(batch.length/2));
         }
       }
@@ -705,7 +705,7 @@ async function performDbSet(key,val,queuedAt='',mode=''){
       if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
       scfRememberSyncFailure(key,queuedAt,e);
       if(e?.code==='SCF_FUEL_WRITE_CONFLICT'){reportSyncError(key,e,val);return false;}
-      if(['SCF_DATABASE_BUSY','SCF_DATABASE_TIMEOUT'].includes(e?.code)){
+      if(['SCF_DATABASE_BUSY','SCF_DATABASE_TIMEOUT','SCF_EDGE_RESOURCE_LIMIT'].includes(e?.code)){
         setSyncState('syncing','Máy chủ đang bận. Thay đổi vẫn được giữ để tự đồng bộ lại.');scheduleSyncRetry();return false;
       }
       if(e?.code==='SCF_WRITE_CONFLICT'){

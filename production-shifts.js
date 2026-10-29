@@ -347,7 +347,7 @@ function scfResolveTripProductionSchedule(shift,order,trip,prodShifts=window.__S
 // Existing orders have no version marker. Never infer their policy from delivery
 // dates or date-only createdAt values, which cannot distinguish today's orders.
 function scfUsesTripProductionSchedule(order){
-  return !!order&&(!order.id||order.productionScheduleVersion===2);
+  return !!order&&!order.productionScheduleCopiedFromTripId&&(!order.id||order.productionScheduleVersion===2);
 }
 function scfMarkNewProductionOrder(order){
   return {...order,productionScheduleVersion:2,productionScheduleStartedAt:new Date().toISOString()};
@@ -357,7 +357,7 @@ function scfRequestTripProduction(order,trips=[]){
   const trip=trips.find(t=>String(t.id)===String(order?.tripId||''));
   if(!order||order.id&&!trip||!['','pending','assigned'].includes(String(order.status||''))||trip&&(trip.driverDispatchedAt||['active','completion_pending','completed','cancelled'].includes(trip.status)))return order;
   const stamp=new Date().toISOString();
-  return {...order,prodShiftAssignMode:'auto',productionScheduleVersion:2,productionScheduleStartedAt:order.productionScheduleStartedAt||stamp,productionScheduleResetAt:stamp,productionScheduleResetTripId:String(order.tripId||'')};
+  return {...order,productionScheduleCopiedFromTripId:'',lines:(order.lines||[]).map(line=>line.productionScheduleCopiedFromTripId?{...line,productionScheduleCopiedFromTripId:''}:line),prodShiftAssignMode:'auto',productionScheduleVersion:2,productionScheduleStartedAt:order.productionScheduleStartedAt||stamp,productionScheduleResetAt:stamp,productionScheduleResetTripId:String(order.tripId||'')};
 }
 function scfPreserveExistingProductionOrder(previous,incoming){
   if(previous===incoming)return incoming;
@@ -378,6 +378,7 @@ function scfPreserveExistingProductionOrder(previous,incoming){
     const matching=old&&(line.id||String(old.productId||'')===String(line.productId||''))?old:null;
     const lineReset=!!line.productionScheduleResetAt&&line.productionScheduleResetAt!==matching?.productionScheduleResetAt;
     if(lineReset)return line;
+    if(line.productionScheduleCopiedFromTripId)return line;
     if(line.shiftOverride)return line;
     if(!manualLocked&&!matching?.shiftOverride&&(adopt||scfUsesTripProductionSchedule(previous)||incoming.prodShiftAssignMode==='manual'))return line;
     const saved=matching||previous;
@@ -437,7 +438,7 @@ function scfApplyAutomaticProduction(order,plannedShift,trips){
   let touched=Object.entries(values).some(([key,value])=>String(order[key]||'')!==String(value));
   const lineValues={prodDate:values.prodDate,prodTime:values.prodTime,prodWorkShiftId:values.prodWorkShiftId,labelDate:values.labelDate,labelTime:values.labelTime};
   const lines=(order.lines||[]).map(line=>{
-    if(line.shiftOverride||!Object.entries(lineValues).some(([key,value])=>String(line[key]||'')!==String(value)))return line;
+    if(line.shiftOverride||line.productionScheduleCopiedFromTripId||!Object.entries(lineValues).some(([key,value])=>String(line[key]||'')!==String(value)))return line;
     touched=true;return {...line,...lineValues};
   });
   return touched?{...order,...values,lines}:order;
@@ -588,6 +589,7 @@ function prodShiftPlansForOrder(order,prodShifts,prodShiftRules){
   const defaultOrder=order;
   const defaultPlan=prodShiftPlan({...defaultOrder,lines:(order.lines||[]).filter(l=>!l.shiftOverride)},prodShifts,prodShiftRules);
   return (order.lines||[]).map((l,i)=>{
+    if(l.productionScheduleCopiedFromTripId){const saved=scfStoredProductionPlan(order,prodShiftRules,l);return saved?{...saved,line:l,index:i,productName:l.productName||('Sản phẩm '+(i+1))}:null;}
     if(l.shiftOverride&&(l.prodTime||l.prodDate||l.labelTime||l.labelDate)){
       const manualShift=getProdShiftByProdTime(l.prodTime,prodShifts||[]);
       return {

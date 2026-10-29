@@ -103,6 +103,28 @@ function scfCreateDeliveryExcelWorkbook(Excel,groups,{group='all'}={}){
       total.getCell(col).numFmt='#,##0.########" kg"';
     });
   });
+  const displayText=cell=>{
+    const value=cell.value;
+    if(value==null)return '';
+    if(value instanceof Date)return '00/00/0000';
+    if(typeof value==='object'&&value.formula)return Number(value.result||0).toLocaleString('vi-VN',{maximumFractionDigits:8})+' kg';
+    if(cell.numFmt==='hh:mm'&&typeof value==='number')return '00:00';
+    return typeof value==='number'?value.toLocaleString('vi-VN',{maximumFractionDigits:8}):String(value);
+  };
+  const minimums=[12,12,12,16,10,10,10,10],maximums=[30,16,42,48,20,20,14,60];
+  for(let col=1;col<=8;col++){
+    let longest=0;
+    for(let number=3;number<=sheet.rowCount;number++){
+      const cell=sheet.getRow(number).getCell(col);
+      longest=Math.max(longest,...displayText(cell).split('\n').map(text=>[...text].reduce((n,ch)=>n+(/[A-ZÀ-Ỹ]/.test(ch)?1.12:1),0)));
+    }
+    sheet.getColumn(col).width=Math.min(maximums[col-1],Math.max(minimums[col-1],longest+2));
+  }
+  for(let number=3;number<=sheet.rowCount;number++){
+    const row=sheet.getRow(number);let lines=1;
+    for(let col=1;col<=8;col++)lines=Math.max(lines,displayText(row.getCell(col)).split('\n').reduce((n,text)=>n+Math.max(1,Math.ceil(text.length/(sheet.getColumn(col).width-2))),0));
+    row.height=Math.min(409,Math.max(25,lines*15+8));
+  }
   sheet.pageSetup.printArea='A1:H'+sheet.rowCount;
   return wb;
 }

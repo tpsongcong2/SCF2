@@ -532,7 +532,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
       labelTime:normalizeTimeInput(f.labelTime||selectedDefaultTiming.labelTime),
       labelDate:f.labelDate||selectedDefaultTiming.labelDate
     }:selectedDefaultTiming;
-    const lines=(f.lines||[]).map(line=>f.warehouseMerged||line.shiftOverride?line:{
+    const lines=(f.lines||[]).map(line=>f.warehouseMerged||line.productionScheduleCopiedFromTripId||line.shiftOverride?line:{
       ...line,
       prodTime:selectedTiming.prodTime,
       prodDate:selectedTiming.prodDate,
@@ -646,7 +646,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
         ),
         h(OrderDetailLine,{line:l,products,prodCats:prodCats||[],prodShifts:prodShifts||[],deliveryDate:l.warehouseSourceDeliveryDate||f.deliveryDate,deliveryTime:l.warehouseSourceDeliveryTime||f.deliveryTime,pointName:l.warehouseSourcePointName||resolvedPointName,area:l.warehouseSourceArea||matchedPointArea,
         inheritedShift:hasLineOverrides?autoShift:effectiveShift,
-        inheritedTiming:f.warehouseMerged?{prodTime:l.prodTime||'',prodDate:l.prodDate||'',labelTime:l.labelTime||'',labelDate:l.labelDate||'',prodWorkShiftId:l.prodWorkShiftId||''}:hasLineOverrides?timingForShift(autoShift):effectiveTiming,
+        inheritedTiming:f.warehouseMerged||l.productionScheduleCopiedFromTripId?{prodTime:l.prodTime||'',prodDate:l.prodDate||'',labelTime:l.labelTime||'',labelDate:l.labelDate||'',prodWorkShiftId:l.prodWorkShiftId||''}:hasLineOverrides?timingForShift(autoShift):effectiveTiming,
         inheritedMode:hasLineOverrides?'auto':prodShiftMode,
         onChange:data=>updLine(l.id,data),onRemove:()=>delLine(l.id)}))),
     h('button',{onClick:addLine,style:{fontSize:12,padding:'5px 12px',marginBottom:8}},h('i',{className:'ti ti-plus',style:{fontSize:13,marginRight:4}}),'Thêm hàng hóa'),
