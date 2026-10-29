@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V721';
+const SCF_BUILD_VERSION='V722';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -969,6 +969,7 @@ function App(){
     return latest?.attendanceZones;
   };
   return h('div',{className:'layout'},
+    h(InvoiceInboxWorker,{trips,orders,setTrips,setOrders,currentUser:cu}),
     warehouseMerging&&h('div',{role:'alert',style:{position:'fixed',inset:0,zIndex:100000,background:'rgba(0,0,0,.25)',display:'grid',placeItems:'center'}},h('div',{style:{background:'#fff',padding:24,borderRadius:12}},'Đang gộp PAC và xác nhận trên máy chủ…')),
     h(ProductionPushIdentity,{currentUser:cu,onOpen:()=>{setProductionPreviewOpen(false);setPage('notifications');window.scfSyncNow?.();}}),
     h('div',{className:'main'},

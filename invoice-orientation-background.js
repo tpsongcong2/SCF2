@@ -6,7 +6,7 @@
   const eligible=()=>window.__SCF_ACCESS_CONTEXT?.invoiceBackgroundProcessing===true&&window.matchMedia?.('(min-width:769px) and (pointer:fine)')?.matches===true;
   window.scfCanRunInvoiceOrientationBackground=eligible;
   const syncBusy=()=>{const state=window.scfGetSyncState?.();return !!(state?.pending||state?.status==='syncing');};
-  const busy=()=>syncBusy()||Date.now()-lastInteraction<10000||!!navigator.scheduling?.isInputPending?.();
+  const busy=()=>window.__scfInvoiceMatchingBusy||syncBusy()||Date.now()-lastInteraction<10000||!!navigator.scheduling?.isInputPending?.();
   const schedule=ms=>{clearTimeout(timer);timer=setTimeout(run,ms);};
   async function run(){
     if(running)return;
@@ -14,7 +14,7 @@
     if(busy()){schedule(15000);return;}
     const actor=scope();if(owner!==actor){owner=actor;cursor=0;}
     const active=()=>scope()===actor&&eligible()&&visible()&&navigator.onLine!==false&&!busy();
-    running=true;let delay=60000;
+    running=true;window.__scfInvoiceOrientationRunning=true;let delay=60000;
     try{
       const response=await serverInvoiceOrientationBackground({action:'claim_invoice_orientation_job',after:cursor,desktop:true});
       if(!active()){schedule(30000);return;}
@@ -36,7 +36,7 @@
       }
       delay=15000;
     }catch{delay=60000;}
-    finally{running=false;schedule(delay);}
+    finally{running=false;window.__scfInvoiceOrientationRunning=false;schedule(delay);}
   }
   window.scfWakeInvoiceOrientationBackground=()=>{if(!running)schedule(2000);};
   document.addEventListener('visibilitychange',()=>{if(visible())window.scfWakeInvoiceOrientationBackground();});

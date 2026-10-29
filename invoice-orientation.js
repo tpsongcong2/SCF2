@@ -86,4 +86,26 @@ function scfChooseInvoiceOrientation(candidates){
     job.promise=tail.catch(()=>{}).then(()=>analyze(src,active)).then(result=>{if(result.status!=='cancelled')remember(key,result);return result;}).finally(()=>pending.delete(key));
     tail=job.promise;pending.set(key,job);return job.promise;
   };
+  // Share the same worker and serial tail with orientation. Recognized text is
+  // transient; only the matching result is saved, never the complete OCR text.
+  window.scfReadInvoiceMatchText=function(src,{isActive=()=>true}={}){
+    const work=tail.catch(()=>{}).then(async()=>{
+      const orientation=await analyze(src,isActive);
+      if(!isActive())return {status:'cancelled'};
+      if(orientation.status!=='ready')return orientation;
+      let canvas,output;
+      try{
+        clearTimeout(idleTimer);
+        canvas=await imageCanvas(src);if(!isActive())return {status:'cancelled'};
+        output=document.createElement('canvas');const sideways=orientation.angle===90||orientation.angle===270;
+        output.width=sideways?canvas.height:canvas.width;output.height=sideways?canvas.width:canvas.height;
+        const context=output.getContext('2d');context.translate(output.width/2,output.height/2);context.rotate(orientation.angle*Math.PI/180);context.drawImage(canvas,-canvas.width/2,-canvas.height/2);
+        const engine=await getWorker();if(!isActive())return {status:'cancelled'};
+        const {data}=await bounded(engine.recognize(output,{tessedit_pageseg_mode:'11',user_defined_dpi:'150'},{text:true,blocks:true,hocr:false,tsv:false}),45000,terminate);
+        return isActive()?{status:'ready',text:String(data.text||''),confidence:Number(data.confidence||0),angle:orientation.angle}:{status:'cancelled'};
+      }catch{return {status:'failed'};}
+      finally{if(canvas)canvas.width=canvas.height=1;if(output)output.width=output.height=1;idleTimer=setTimeout(terminate,30000);}
+    });
+    tail=work;return work;
+  };
 })();
