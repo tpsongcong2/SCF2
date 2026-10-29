@@ -126,9 +126,11 @@ function DeliveryTripDriverModal({trip,employees,onSave,onClose}){
     error&&h('p',{role:'alert',style:{color:'#A32D2D'}},error),
     h(Row,null,h('button',{onClick:close},saving||error?'Đóng':'Hủy'),h('button',{className:'bp',disabled:saving||!driverId,onClick:save},saving?'Đang lưu…':'Lưu lái xe')));
 }
-function DeliveryOrderGroupHeader({group,count,weight,onEditDriver,mobile=false,summaryInvoiceButton,dispatchButton}){
+function DeliveryOrderGroupHeader({group,count,weight,onEditDriver,mobile=false,summaryInvoiceButton,dispatchButton,onToggleDetails,detailsHidden=false}){
   const isTrip=group?.mode==='trip';
-  return h('div',{className:'delivery-group-header'+(mobile?' delivery-group-header-mobile':'')},
+  const toggle=event=>{if(event.target?.closest?.('button,a,input,select'))return;event.stopPropagation();onToggleDetails?.();};
+  return h('div',{className:'delivery-group-header'+(mobile?' delivery-group-header-mobile':'')+(onToggleDetails?' delivery-group-toggle':''),role:onToggleDetails?'button':undefined,tabIndex:onToggleDetails?0:undefined,'aria-expanded':onToggleDetails?!detailsHidden:undefined,'aria-label':onToggleDetails?(detailsHidden?'Hiện':'Ẩn')+' đơn chi tiết chuyến '+group.label:undefined,onClick:mobile&&onToggleDetails?toggle:undefined,onKeyDown:onToggleDetails?event=>{if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();event.stopPropagation();onToggleDetails();}}:undefined},
+    onToggleDetails&&h('i',{className:detailsHidden?'ti ti-chevron-right':'ti ti-chevron-down','aria-hidden':true}),
     h('span',{className:'delivery-group-title'},(group?.mode==='unassigned'?'⚠ ':isTrip?'🚚 Chuyến: ':'📍 Khu vực: ')+(group?.label||'')),
     isTrip&&h('span',{className:'delivery-group-driver'},h('span',null,group?.driverName?'Lái xe: '+group.driverName:'Chưa có lái'),
       onEditDriver&&h('button',{type:'button',className:'delivery-group-driver-edit','data-scf-action':'write',title:'Đổi lái xe chuyến','aria-label':'Đổi lái xe chuyến '+group.label,onClick:()=>onEditDriver(group.tripId)},h('i',{className:'ti ti-pencil'}))),
@@ -2928,6 +2930,11 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const[bulkSelected,setBulkSelected]=useState(()=>new Set());
   const[hiddenColumns,setHiddenColumns]=useLS('scf_delivery_hidden_columns_v705',['status']);
   const[ordersHidden,setOrdersHidden]=useLS('scf_delivery_orders_hidden',false);
+  const[groupDetailsHidden,setGroupDetailsHidden]=useState({});
+  const changeOrdersHidden=value=>{setOrdersHidden(value);setGroupDetailsHidden({});};
+  const groupIsHidden=group=>group?.mode==='trip'&&Object.prototype.hasOwnProperty.call(groupDetailsHidden,group.key)?groupDetailsHidden[group.key]:ordersHidden;
+  const toggleGroupDetails=group=>{if(group?.mode==='trip')setGroupDetailsHidden(previous=>({...previous,[group.key]:!(Object.prototype.hasOwnProperty.call(previous,group.key)?previous[group.key]:ordersHidden)}));};
+  const groupDetailProps=group=>group?.mode==='trip'?{detailsHidden:groupIsHidden(group),onToggleDetails:()=>toggleGroupDetails(group)}:{};
   const[invoiceFilter,setInvoiceFilter]=useState('');
   const detailColumnsHidden=false;
   const visibleColumns=DELIVERY_ORDER_COLUMNS.filter(([key])=>!hiddenColumns.includes(key));
@@ -4311,7 +4318,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         h(DeliveryTripGroupSwitch,{value:fTripGroup,onChange:sfTripGroup,exclusive:true}),
         h(ExportBtn,{onClick:()=>sm('excel')}),
         !isMobile&&h('div',{className:'delivery-view-actions'},
-          h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction,menuOnly:true,visibilityControl:h(DeliveryVisibilityMenu,{menuHidden,setMenuHidden,ordersHidden,setOrdersHidden,hiddenColumns,setHiddenColumns}),utility:renderDeliveryUtilities(),onCreate:canEditMobileOrder&&!window.__SCF_ACCESS_CONTEXT?.readOnly?()=>{se(null);setCopyDraft(null);sm('f');}:null}),
+          h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction,menuOnly:true,visibilityControl:h(DeliveryVisibilityMenu,{menuHidden,setMenuHidden,ordersHidden,setOrdersHidden:changeOrdersHidden,hiddenColumns,setHiddenColumns}),utility:renderDeliveryUtilities(),onCreate:canEditMobileOrder&&!window.__SCF_ACCESS_CONTEXT?.readOnly?()=>{se(null);setCopyDraft(null);sm('f');}:null}),
           renderPagination('toolbar')
         )
   );
@@ -4356,7 +4363,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           h('div',{className:'delivery-create-action'},h(AddBtn,{onClick:()=>{se(null);setCopyDraft(null);sm('f')},label:'Tạo đơn giao'}))
         )
       ),
-    isMobile&&h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction,visibilityControl:h(DeliveryVisibilityMenu,{menuHidden,setMenuHidden,ordersHidden,setOrdersHidden,hiddenColumns,setHiddenColumns})}),
+    isMobile&&h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction,visibilityControl:h(DeliveryVisibilityMenu,{menuHidden,setMenuHidden,ordersHidden,setOrdersHidden:changeOrdersHidden,hiddenColumns,setHiddenColumns})}),
     h('div',{className:'mobile-only delivery-mobile-filter-head'},
       h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn hàng...'}),
       renderColumnFilter('audit','Tạo/sửa'),
@@ -4556,11 +4563,11 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         h('tbody',null,list.length?orderTableRows.map((o,_i)=>{
           if(o._hdr){
             const photoColumn=visibleColumns.findIndex(([key])=>key==='invoice');
-            return h('tr',{key:'oh'+_i},photoColumn>0?h('td',{colSpan:photoColumn,className:'delivery-group-header-cell'},h(DeliveryOrderGroupHeader,{group:o.group,count:o.cnt,weight:o.kl,dispatchButton:groupDispatchButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null}))
-              :h('td',{colSpan:columnCount,className:'delivery-group-header-cell'},h(DeliveryOrderGroupHeader,{group:o.group,count:o.cnt,weight:o.kl,dispatchButton:groupDispatchButton(o.group),summaryInvoiceButton:summaryInvoiceButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null})),
+            return h('tr',{key:'oh'+_i,onClick:event=>{if(!event.target?.closest?.('button,a,input,select'))toggleGroupDetails(o.group);}},photoColumn>0?h('td',{colSpan:photoColumn,className:'delivery-group-header-cell'},h(DeliveryOrderGroupHeader,{group:o.group,...groupDetailProps(o.group),count:o.cnt,weight:o.kl,dispatchButton:groupDispatchButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null}))
+              :h('td',{colSpan:columnCount,className:'delivery-group-header-cell'},h(DeliveryOrderGroupHeader,{group:o.group,...groupDetailProps(o.group),count:o.cnt,weight:o.kl,dispatchButton:groupDispatchButton(o.group),summaryInvoiceButton:summaryInvoiceButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null})),
               photoColumn>0&&h('td',{className:'delivery-group-header-cell delivery-center-cell'},summaryInvoiceButton(o.group)),photoColumn>0&&columnCount-photoColumn-1>0&&h('td',{colSpan:columnCount-photoColumn-1,className:'delivery-group-header-cell'}));
           }
-          if(ordersHidden)return null;
+          if(groupIsHidden(groupInfoForOrder(o)))return null;
           const ctx=o._ctx||orderContext(o);
           const totalW=o._totalW||calcOrderWeight(ctx);
           const prodShiftMode=o.prodShiftAssignMode==='manual'?'manual':'auto';
@@ -4655,8 +4662,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     ),
     isMobile&&h('div',{className:'mobile-only mobile-card-list delivery-order-mobile-list'},
       list.length?orderTableRows.map((o,_i)=>{
-        if(o._hdr)return h(DeliveryOrderGroupHeader,{key:'mobile-header-'+_i,group:o.group,count:o.cnt,weight:o.kl,mobile:true,dispatchButton:groupDispatchButton(o.group),summaryInvoiceButton:summaryInvoiceButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null});
-        if(ordersHidden)return null;
+        if(o._hdr)return h(DeliveryOrderGroupHeader,{key:'mobile-header-'+_i,group:o.group,...groupDetailProps(o.group),count:o.cnt,weight:o.kl,mobile:true,dispatchButton:groupDispatchButton(o.group),summaryInvoiceButton:summaryInvoiceButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null});
+        if(groupIsHidden(groupInfoForOrder(o)))return null;
         const ctx=o._ctx||orderContext(o);
         const tripMode=o.tripAssignMode==='manual'?'manual':'auto';
         const preferredTripDate=o._preferredTripDate||getOrderTripDate(ctx,prodShifts||[])||'';

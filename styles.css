@@ -1792,3 +1792,5 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 .driver-report-multishift-options input{width:18px;height:18px;flex-shrink:0;accent-color:var(--pri)}
 .driver-report-multishift-options button{width:100%;margin-bottom:5px}
 @media(max-width:500px){.driver-report-multishift{width:100%}.driver-report-multishift-options{width:100%;min-width:0}.driver-report-multishift-options label{min-height:44px}}
+.delivery-group-toggle{cursor:pointer}
+.delivery-group-toggle:focus-visible{outline:2px solid #fff;outline-offset:-3px}
