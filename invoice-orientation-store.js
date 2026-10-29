@@ -7,8 +7,11 @@ function scfInvoicePhotoSource(src){
   const scope=()=>String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
   const key=ref=>JSON.stringify([scope(),String(ref.orderId),ref.kind,ref.photoSource]);
   const remote=task=>{const work=remoteTail.catch(()=>{}).then(task);remoteTail=work;return work;};
-  const remember=(ref,value)=>{known.delete(key(ref));known.set(key(ref),value);if(known.size>300)known.delete(known.keys().next().value);return value;};
+  const remember=(ref,value)=>{const cached={...value,cachedAt:Date.now()};known.delete(key(ref));known.set(key(ref),cached);if(known.size>300)known.delete(known.keys().next().value);return cached;};
   const valid=row=>row&&[0,90,180,270].includes(row.angle)&&['auto','manual'].includes(row.mode);
+  // Short, account-scoped cache of confirmed server angles, never OCR guesses.
+  // URL signatures are excluded by photoSource, so renewal keeps the identity.
+  window.scfGetCachedInvoiceOrientation=ref=>{const row=known.get(key(ref));return valid(row)&&Date.now()-row.cachedAt<30000?row:null;};
   const queued=row=>row&&['pending','processing','uncertain','failed'].includes(row.backgroundStatus);
   const load=ref=>new Promise((resolve,reject)=>{
     const id=key(ref);if(waiting.has(id)){waiting.get(id).consumers.push({resolve,reject});return;}
@@ -38,6 +41,8 @@ function scfInvoicePhotoSource(src){
   };
   window.scfResolveSharedInvoiceOrientation=function(ref,src,{isActive=()=>true,retry=false,onStage=()=>{},allowRecognition=true}={}){
     const id=key(ref),actor=scope();
+    const cached=!retry&&window.scfGetCachedInvoiceOrientation(ref);
+    if(cached)return Promise.resolve(isActive()?cached:{status:'cancelled',angle:0});
     if(resolving.has(id)){const job=resolving.get(id);job.consumers.push({isActive,onStage,allowRecognition});job.retry=job.retry||retry;return job.promise;}
     const job={consumers:[{isActive,onStage,allowRecognition}],retry};
     const active=()=>scope()===actor&&job.consumers.some(c=>c.isActive());
@@ -48,6 +53,7 @@ function scfInvoicePhotoSource(src){
       try{
         let saved=await load(ref);
         if(!active())return{status:'cancelled',angle:0};
+        if(valid(saved)&&!job.retry)return remember(ref,{...saved,status:'ready',sharedState:'saved'});
         if(queued(saved)&&!job.retry){
           stage('background');
           // Poll only while this image is visible, for at most 30 seconds.

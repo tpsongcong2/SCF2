@@ -87,6 +87,9 @@ function scfInvoiceImageLayout(width,height,angle){
 }
 function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',kind='invoice',openAsDialog=false,dialogSize=true,toolbar,onClose}){
   const safeSize=['small','medium','large'].includes(size)?size:'medium';
+  const shared=!!orderId&&!/^(?:data:|blob:)/i.test(src||'')&&typeof window!=='undefined'&&typeof window.scfResolveSharedInvoiceOrientation==='function';
+  const photoSource=shared?scfInvoicePhotoSource(src):'';
+  const sharedRef={orderId:String(orderId),kind,photoSource};
   const[url,setUrl]=useState(src);
   const[phase,setPhase]=useState('ready');
   const[reload,setReload]=useState(0);
@@ -96,12 +99,9 @@ function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',
   const[zoom,setZoom]=useState(1);
   useEffect(()=>setZoom(1),[src]);
   const[recognitionImage,setRecognitionImage]=useState(null);
-  const[orientation,setOrientation]=useState(null);
+  const[orientation,setOrientation]=useState(()=>{const saved=shared&&window.scfGetCachedInvoiceOrientation?.(sharedRef);return saved?{...saved,src}:null;});
   const[recognitionRetry,setRecognitionRetry]=useState(0);
   const[sharedSave,setSharedSave]=useState(null);
-  const shared=!!orderId&&!/^(?:data:|blob:)/i.test(src||'')&&typeof window!=='undefined'&&typeof window.scfResolveSharedInvoiceOrientation==='function';
-  const photoSource=shared?scfInvoicePhotoSource(src):'';
-  const sharedRef={orderId:String(orderId),kind,photoSource};
   const autoRotation=(landscape||orientation?.sharedState==='saved')&&orientation?.src===src&&orientation.status==='ready'?orientation.angle:0;
   const angle=manualRotation?.src===src&&manualRotation?.landscape===landscape?manualRotation.angle:autoRotation;
   const layout=scfInvoiceImageLayout(natural.width,natural.height,angle);
@@ -128,9 +128,9 @@ function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',
     let active=true,started=false,observer;
     const run=()=>{
       if(started||!active)return;started=true;observer?.disconnect();
-      setOrientation({src,status:'working',angle:0,stage:shared?'loading':'recognizing'});
+      setOrientation(previous=>previous?.src===src&&previous.status==='ready'?previous:{src,status:'working',angle:0,stage:shared?'loading':'recognizing'});
       const request=shared?window.scfResolveSharedInvoiceOrientation(sharedRef,url,{isActive:()=>active,retry:recognitionRetry>0,allowRecognition:landscape,
-        onStage:stage=>{if(active)setOrientation({src,status:'working',angle:0,stage});}}):window.scfDetectInvoiceOrientation(url,{isActive:()=>active,retry:recognitionRetry>0});
+        onStage:stage=>{if(active)setOrientation(previous=>previous?.src===src&&previous.status==='ready'?previous:{src,status:'working',angle:0,stage});}}):window.scfDetectInvoiceOrientation(url,{isActive:()=>active,retry:recognitionRetry>0});
       request.then(result=>{
         if(active&&result.status!=='cancelled')setOrientation({src,...result});
       }).catch(()=>{if(active)setOrientation({src,status:'failed',angle:0});});
@@ -163,11 +163,13 @@ function TripInvoicePreview({src,label,size='medium',landscape=false,orderId='',
     landscape&&((manualRotation?.src===src&&manualRotation?.landscape===landscape)||(shared&&orientation?.mode==='manual'))&&h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>{setManualRotation(null);setSharedSave(null);if(shared||orientation?.status!=='ready')setRecognitionRetry(value=>value+1);}},'Theo chiều chữ')
   );
   const zoomWidth=Math.min(1020,Math.max(200,(window.innerWidth||1100)-80),(window.innerHeight||800)*0.68*layout.ratio)*zoom;
+  const waitingForSavedAngle=shared&&(orientation?.src!==src||(orientation.status==='working'&&orientation.stage==='loading'));
   const imageStage=full=>h('div',{className:'invoice-photo-stage',style:{'--invoice-ratio':layout.ratio,aspectRatio:String(layout.ratio),...(full?{width:zoomWidth,maxWidth:'none'}:{})}},
+    waitingForSavedAngle&&h('span',{className:'invoice-orientation-loading',role:'status'},'Đang đọc chiều ảnh đã lưu…'),
     // This component renews expired URLs once; skip the document-wide image retry.
     h('img',{key:reload,src:url,alt:label,loading:full?'eager':'lazy',decoding:'async','data-scf-photo-refreshing':'1',
-      style:{width:layout.imageWidth,height:layout.imageHeight,transform:'translate(-50%, -50%) rotate('+layout.rotation+'deg)'},
-      onLoad:event=>{const img=event?.currentTarget;if(img?.naturalWidth&&img?.naturalHeight){setNatural({width:img.naturalWidth,height:img.naturalHeight});if(!full)setRecognitionImage(img);}setPhase('ready');},onError:refresh})
+      style:{width:layout.imageWidth,height:layout.imageHeight,visibility:waitingForSavedAngle?'hidden':'visible',transform:'translate(-50%, -50%) rotate('+layout.rotation+'deg)'},
+      onLoad:event=>{const img=event?.currentTarget;if(img?.naturalWidth&&img?.naturalHeight){setNatural({width:img.naturalWidth,height:img.naturalHeight});setRecognitionImage(img);}setPhase('ready');},onError:refresh})
   );
   const failure=()=>h('div',{className:'trip-invoice-preview-error',role:'status'},'Chưa tải được ảnh.',
     h('button',{type:'button',className:'bs','data-scf-action':'view',onClick:()=>{attempt.current=false;setPhase('ready');setReload(value=>value+1);}},'Thử lại'));

@@ -1784,3 +1784,4 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 .invoice-inbox-error{background:#fff0ee;color:#9c2e25;padding:12px;border-radius:8px;margin-bottom:12px}
 .invoice-inbox-open{font-weight:400!important;font-size:12px!important;white-space:nowrap}
 @media(max-width:768px){.invoice-inbox-layout{grid-template-columns:1fr}.invoice-inbox-toolbar button,.invoice-inbox-order button{min-height:42px}.invoice-inbox-modal{width:100%}.trip-mobile-tools-left{min-width:0;flex-wrap:wrap}.trip-mobile-tools-left .invoice-inbox-open{flex-basis:100%;white-space:normal}}
+.invoice-orientation-loading{position:absolute;inset:0;display:grid;place-items:center;color:var(--tx2);font-size:12px;padding:12px;text-align:center}
