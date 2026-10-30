@@ -50,9 +50,9 @@ function scfChooseInvoiceOrientation(candidates){
     });
     worker=await bounded(initializing,45000,()=>{expired=true;});return worker;
   };
-  const imageCanvas=src=>bounded(new Promise((resolve,reject)=>{
+  const imageCanvas=(src,upscale=false)=>bounded(new Promise((resolve,reject)=>{
     const image=new Image();image.crossOrigin='anonymous';
-    image.onload=()=>{try{const scale=Math.min(1,1600/Math.max(image.naturalWidth,image.naturalHeight)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);resolve(canvas);}catch(error){reject(error);}};
+    image.onload=()=>{try{const scale=Math.min(upscale?2:1,1600/Math.max(image.naturalWidth,image.naturalHeight)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);resolve(canvas);}catch(error){reject(error);}};
     image.onerror=()=>reject(new Error('Cannot read invoice pixels'));image.src=src;
   }),15000);
   const analyze=async(src,isActive)=>{
@@ -88,6 +88,26 @@ function scfChooseInvoiceOrientation(candidates){
   };
   // Share the same worker and serial tail with orientation. Recognized text is
   // transient; only the matching result is saved, never the complete OCR text.
+  // Explicit image-to-order entry shares the serial OCR queue; no server writes.
+  window.scfReadOrderTableText=function(src,{isActive=()=>true}={}){
+    const work=tail.catch(()=>{}).then(async()=>{
+      if(!isActive())return {status:'cancelled'};
+      let engine,canvas,expired=false;
+      try{
+        clearTimeout(idleTimer);terminate();
+        if(!window.Tesseract)await bounded(window.scfLoadExternalScript('tesseract'),20000);
+        if(!isActive())return {status:'cancelled'};
+        const initializing=window.Tesseract.createWorker('vie+eng',1,{cachePath:'scf-order-table',errorHandler:()=>{}}).then(value=>{if(expired){value.terminate();throw Error('OCR expired');}return value;});
+        engine=await bounded(initializing,60000,()=>{expired=true;});
+        if(!isActive())return {status:'cancelled'};
+        canvas=await imageCanvas(src,true);
+        const {data}=await bounded(engine.recognize(canvas,{tessedit_pageseg_mode:'6',preserve_interword_spaces:'1'},{text:true}),60000,()=>{engine.terminate();engine=null;});
+        return isActive()?{status:'ready',text:String(data.text||'')}:{status:'cancelled'};
+      }catch{return {status:'failed'};}
+      finally{if(engine)await Promise.resolve(engine.terminate()).catch(()=>{});if(canvas)canvas.width=canvas.height=1;}
+    });
+    tail=work;return work;
+  };
   window.scfReadInvoiceMatchText=function(src,{isActive=()=>true}={}){
     const work=tail.catch(()=>{}).then(async()=>{
       const orientation=await analyze(src,isActive);
