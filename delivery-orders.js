@@ -3008,6 +3008,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[copyDraft,setCopyDraft]=useState(null);const[print,spr]=useState(null);const[invoiceView,setInvoiceView]=useState(null);const[historyView,setHistoryView]=useState(null);const[q,sq]=useState('');const[filter,sf]=useState('all');const[sortMode,setSortMode]=useState('trip');const _td0=fmtDate();const _ti0=_td0.split('/').reverse().join('-');
   const[dateFilterMode,setDateFilterMode]=useState('day');
   const[dateBasis,setDateBasis]=useState('trip');
+  const[summaryPrintTrip,setSummaryPrintTrip]=useState(null);
   const[driverEditTripId,setDriverEditTripId]=useState('');
   const[tripTransferOrderId,setTripTransferOrderId]=useState('');
   const deliveryDrag=useRef(null);
@@ -4097,18 +4098,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       window.showToast('Đã đổi vị trí hai đơn trong chuyến.','success');
     }catch(error){window.showToast(error.message,'warn');}
   };
-  const printGroupSummary=async group=>{
-    const trip=tripById.get(String(group.tripId));if(!trip)return;
-    const useAgent=window.scfShouldUsePrintAgent?.();const popup=useAgent?null:window.open('','_blank');
-    if(!useAgent&&!popup){window.showToast('Hãy cho phép mở cửa sổ in.','warn');return;}
-    try{
-      const blob=await renderTripImage([trip],orders,products,customers,'ĐƠN TỔNG CHUYẾN',prodCats||[]);
-      const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob);});
-      const html='<html><head><meta charset="utf-8"><title>Đơn tổng chuyến</title><style>@page{size:A4 landscape;margin:8mm}body{margin:0}img{width:100%;height:auto}</style></head><body><img src="'+dataUrl+'"></body></html>';
-      if(useAgent){await window.scfQueueA4Print(html,{title:'Đơn tổng chuyến · '+trip.deliveryDate+' · '+trip.shiftName});window.showToast('Đã gửi đơn tổng tới máy in.','success');}
-      else{popup.document.write(html);popup.document.close();const img=popup.document.querySelector('img');if(!img.complete)await new Promise(resolve=>{img.onload=resolve;img.onerror=resolve;});popup.print();}
-    }catch(error){popup?.close();window.showToast(error.message||'Chưa tạo được bản in đơn tổng.','error');}
-  };
+  const printGroupSummary=group=>{const trip=tripById.get(String(group.tripId));if(trip)setSummaryPrintTrip(trip);};
   const groupPrintButton=group=>group.mode==='trip'?h('button',{type:'button',className:'bi delivery-group-print','data-scf-action':'view',title:'In đơn tổng chuyến','aria-label':'In đơn tổng chuyến '+group.label,onClick:()=>printGroupSummary(group)},h('i',{className:'ti ti-printer'})):null;
   const exportDetailedExcel=async()=>{
           await scfLoadOptionalScript('XLSX','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
@@ -4997,6 +4987,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         (auditActive||hasDateFilter||fPoint||fCustomer||fProduct||fTime||fArea||fTripGroup||fNote||fTripId||fTripDate||fTripShift||fTripDriver||filter!=='all')&&h('button',{type:'button',onClick:resetDeliveryFilters},h('i',{className:'ti ti-filter-x'}),' Xóa bộ lọc')
       )
     ),
+    summaryPrintTrip&&h(TripSummaryPrintOptions,{trip:summaryPrintTrip,onClose:()=>setSummaryPrintTrip(null),onPrint:include=>{scfPrintTripSummary(summaryPrintTrip,orders,products,customers,shifts,include);setSummaryPrintTrip(null);}}),
     driverEditTripId&&tripById.get(String(driverEditTripId))&&h(DeliveryTripDriverModal,{key:driverEditTripId,trip:tripById.get(String(driverEditTripId)),employees,onSave:saveGroupDriver,onClose:()=>setDriverEditTripId('')}),
     mobileEdit&&h(DeliveryMobileOrderEditor,{key:mobileEdit.id,order:mobileEdit,customers,canEditDelivered:canMobileEditDelivered(mobileEdit),onSave:saveMobileOrder,onClose:()=>setMobileEdit(null)}),
     isMobile&&totalPages>1&&renderPagination('bottom'),
