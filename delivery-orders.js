@@ -2901,12 +2901,13 @@ function DeliveryViewControls({menuHidden,setMenuHidden,toolsHidden,setToolsHidd
     onViewProduction&&h(DeliveryToolbarButton,{'data-scf-action':'view',onClick:onViewProduction,icon:'ti-clipboard-list',label:'KL SX'})
   );
 }
-function DeliveryVisibilityMenu({menuHidden,setMenuHidden,ordersHidden,setOrdersHidden,hiddenColumns,setHiddenColumns}){
+function DeliveryVisibilityMenu({menuHidden,setMenuHidden,ordersHidden,setOrdersHidden,hiddenColumns,setHiddenColumns,canSelectOrders=false,selectionHidden=false,onSelectionHiddenChange}){
   const menuRef=useRef(null);
   useEffect(()=>{const outside=event=>{if(menuRef.current?.open&&!menuRef.current.contains(event.target))menuRef.current.open=false;};const escape=event=>{if(event.key==='Escape'&&menuRef.current)menuRef.current.open=false;};document.addEventListener('pointerdown',outside,true);document.addEventListener('keydown',escape,true);return()=>{document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',escape,true);};},[]);
   return h('details',{ref:menuRef,className:'delivery-visibility-menu'},h('summary',{'aria-label':'Ẩn và hiện giao diện'},h('i',{className:'ti ti-eye-off','aria-hidden':true}),' Ẩn ',h('i',{className:'ti ti-chevron-down','aria-hidden':true})),
     h('div',{className:'delivery-visibility-options'},
       h('label',null,h('input',{type:'checkbox',checked:!!menuHidden,onChange:e=>setMenuHidden(e.target.checked)}),'Ẩn menu'),
+      canSelectOrders&&h('label',null,h('input',{type:'checkbox','aria-label':'Hiện ô chọn đơn',checked:!selectionHidden,onChange:e=>onSelectionHiddenChange(!e.target.checked)}),'Ô chọn đơn'),
       h('label',null,h('input',{type:'checkbox',checked:!!ordersHidden,onChange:e=>setOrdersHidden(e.target.checked)}),'Ẩn đơn chi tiết'),h('hr'),h('span',{className:'delivery-visibility-caption'},'Hiện các cột'),
       DELIVERY_ORDER_COLUMNS.map(([key,label])=>{const optionLabel=key==='actions'?'Cụm nút thao tác đơn hàng (Tạo-sửa)':label;return h('label',{key},h('input',{type:'checkbox','aria-label':key==='actions'?'Hiện cụm nút thao tác đơn hàng':'Hiện cột '+label,checked:!hiddenColumns.includes(key),disabled:DELIVERY_ORDER_COLUMNS.filter(([id])=>!hiddenColumns.includes(id)).length<=1&&!hiddenColumns.includes(key),onChange:e=>{const checked=e.target.checked;setHiddenColumns(previous=>checked?previous.filter(item=>item!==key):[...new Set([...previous,key])]);}}),optionLabel);})));
 }
@@ -3032,6 +3033,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const[toolsHidden,setToolsHidden]=useState(false);
   const[toolbarCollapsed,setToolbarCollapsed]=useState(false);
   const[bulkSelected,setBulkSelected]=useState(()=>new Set());
+  const[selectionHidden,setSelectionHidden]=useLS('scf_delivery_selection_hidden_'+String(currentUser?.id||''),false);
+  const changeSelectionHidden=value=>{setSelectionHidden(value);if(value)setBulkSelected(new Set());};
   const[hiddenColumns,setHiddenColumns]=useLS('scf_delivery_hidden_columns_v705',['status']);
   const[ordersHidden,setOrdersHidden]=useLS('scf_delivery_orders_hidden',false);
   const[groupDetailsHidden,setGroupDetailsHidden]=useState({});
@@ -3061,6 +3064,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const canDispatchFromOrders=canEditMobileOrder&&canTripAction(currentUser,'dispatch')&&canAccess(currentUser?.role,'trips',currentUser?.permissions,employeeDepartments(currentUser));
   const dispatchBusy=useRef(new Set());
   const isAdmin=['admin','administrator'].includes(String(currentUser?.role||'').trim().toLowerCase());
+  const showOrderSelection=isAdmin&&!selectionHidden;
   const currentDeptKey=normalizeLookupText(currentUser?.dept||'');
   const isAccounting=currentDeptKey.includes('ke toan');
   const canWithdrawStartedOrder=isAdmin||isAccounting;
@@ -4566,14 +4570,14 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const renderDeliveryUtilities=()=>h('select',{'aria-label':'Tiện ích đơn hàng',className:'delivery-utility-menu',value:'',onChange:e=>{const action=e.target.value;if(action==='import')document.getElementById('import-from-customer-hidden')?.click();else if(action)sm(action);}},
           h('option',{value:''},'Tiện ích'),h('option',{value:'import'},'Import từ KH'),h('option',{value:'imageImport'},'Lấy đơn từ ảnh'),h('option',{value:'print'},'In phiếu KH'),h('option',{value:'printlabels'},'In tem nhiều đơn'));
   const renderDeliveryOrderActions=()=>h(React.Fragment,null,
-        isAdmin&&h('button',{
+        showOrderSelection&&h('button',{
           type:'button',
           disabled:!filteredOrderKeys.length,
           onClick:toggleFilteredSelection,
           title:allFilteredSelected?'Bỏ chọn toàn bộ kết quả đang lọc':'Chọn toàn bộ kết quả đang lọc',
           style:{padding:'5px 9px',fontSize:12,borderRadius:'var(--r)',border:'1px solid #2d6a4f',background:allFilteredSelected?'#e8f5e9':'#fff',color:'#1f5c45',cursor:filteredOrderKeys.length?'pointer':'not-allowed',fontWeight:600,whiteSpace:'nowrap'}
         },h('i',{className:allFilteredSelected?'ti ti-checkbox':'ti ti-square',style:{fontSize:14}}),' ',allFilteredSelected?'Bỏ chọn tất cả':'Chọn tất cả ('+filteredOrderKeys.length+')'),
-        isAdmin&&(isMobile||selectedOrderKeys.length>0)&&h('button',{
+        showOrderSelection&&(isMobile||selectedOrderKeys.length>0)&&h('button',{
           type:'button',
           disabled:!selectedOrderKeys.length,
           onClick:deleteSelectedOrders,
@@ -4588,7 +4592,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         !isMobile&&h(DeliveryToolbarButton,{'aria-pressed':compactEntry||hiddenColumns.includes('label'),onClick:()=>{const show=compactEntry||hiddenColumns.includes('label');setCompactEntry(!show);if(show)setHiddenColumns(previous=>previous.filter(key=>key!=='label'));},icon:compactEntry||hiddenColumns.includes('label')?'ti-tags':'ti-tags-off',label:compactEntry||hiddenColumns.includes('label')?'Hiện tem':'Ẩn tem'}),
         !isMobile&&lastCellEdit&&h('button',{type:'button','data-scf-action':'write',title:'Hoàn tác lần sửa ô gần nhất; kiểm tra xung đột trước khi khôi phục',onClick:()=>{try{if(lastCellEdit.field==='note')saveLineNote(lastCellEdit.base,lastCellEdit.lineIndex,lastCellEdit.value);else saveLineQuantity(lastCellEdit.base,lastCellEdit.lineIndex,lastCellEdit.field,lastCellEdit.value);setLastCellEdit(null);}catch(error){window.showToast(error.message,'warn');}}},'Hoàn tác sửa ô'),
         !isMobile&&h('div',{className:'delivery-view-actions'},
-          h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction,menuOnly:true,visibilityControl:h(DeliveryVisibilityMenu,{menuHidden,setMenuHidden,ordersHidden,setOrdersHidden:changeOrdersHidden,hiddenColumns:effectiveHiddenColumns,setHiddenColumns:changeColumnVisibility}),utility:renderDeliveryUtilities(),onCreate:null}),
+          h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction,menuOnly:true,visibilityControl:h(DeliveryVisibilityMenu,{canSelectOrders:isAdmin,selectionHidden,onSelectionHiddenChange:changeSelectionHidden,menuHidden,setMenuHidden,ordersHidden,setOrdersHidden:changeOrdersHidden,hiddenColumns:effectiveHiddenColumns,setHiddenColumns:changeColumnVisibility}),utility:renderDeliveryUtilities(),onCreate:null}),
           renderPagination('toolbar')
         )
   );
@@ -4634,7 +4638,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
           canEditMobileOrder&&!window.__SCF_ACCESS_CONTEXT?.readOnly&&h('button',{type:'button',className:'bp',onClick:()=>sm('fastEntry')},'Tạo đơn')
         )
       ),
-    isMobile&&h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction,visibilityControl:h(DeliveryVisibilityMenu,{menuHidden,setMenuHidden,ordersHidden,setOrdersHidden:changeOrdersHidden,hiddenColumns:effectiveHiddenColumns,setHiddenColumns:changeColumnVisibility})}),
+    isMobile&&h(DeliveryViewControls,{menuHidden,setMenuHidden,toolsHidden,setToolsHidden,onViewOrderSummary,onViewProduction,visibilityControl:h(DeliveryVisibilityMenu,{canSelectOrders:isAdmin,selectionHidden,onSelectionHiddenChange:changeSelectionHidden,menuHidden,setMenuHidden,ordersHidden,setOrdersHidden:changeOrdersHidden,hiddenColumns:effectiveHiddenColumns,setHiddenColumns:changeColumnVisibility})}),
     h('div',{className:'mobile-only delivery-mobile-filter-head'},
       h(SearchBar,{value:q,onChange:sq,placeholder:'Tìm đơn hàng...'}),
       renderColumnFilter('audit','Tạo/sửa'),
@@ -4821,7 +4825,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         h('table',{className:'delivery-orders-table delivery-orders-configurable',style:{width:renderedTableWidth,minWidth:renderedTableWidth}},
         h('colgroup',null,visibleColumns.map(([key])=>h('col',{key,'data-column':key,style:{width:renderedColumnWidths[key]}}))),
         h('thead',null,h('tr',null,visibleColumns.map(([key,label])=>h('th',{key,'data-column':key,className:['qtyInvoice','qtyProd','qtyDelivered','time','productionDate','production','label','invoice','status'].includes(key)?'delivery-center-head':undefined},
-          key==='date'?h('div',{className:'delivery-date-header'},isAdmin&&h('input',{type:'checkbox',checked:allPageSelected,onChange:e=>setPageSelection(e.target.checked),title:'Chọn hoặc bỏ chọn toàn bộ đơn của trang này'}),renderColumnFilter('date','Ngày'),[-1,1].map(offset=>h('button',{key:offset,type:'button','data-scf-action':'view',title:offset<0?'Lùi lọc 1 ngày':'Tiến lọc 1 ngày',onClick:()=>moveFilterDay(offset)},offset<0?'<':'>')))
+          key==='date'?h('div',{className:'delivery-date-header'},showOrderSelection&&h('input',{type:'checkbox',checked:allPageSelected,onChange:e=>setPageSelection(e.target.checked),title:'Chọn hoặc bỏ chọn toàn bộ đơn của trang này'}),renderColumnFilter('date','Ngày'),[-1,1].map(offset=>h('button',{key:offset,type:'button','data-scf-action':'view',title:offset<0?'Lùi lọc 1 ngày':'Tiến lọc 1 ngày',onClick:()=>moveFilterDay(offset)},offset<0?'<':'>')))
           :key==='point'?renderColumnFilter('point','Địa điểm')
           :key==='product'?renderColumnFilter('product','Tên sản phẩm')
           :key==='time'?renderColumnFilter('time','Giờ')
@@ -4878,7 +4882,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
               sequence:pi===0&&h('td',{key:'sequence',rowSpan:displayRows.length,className:'delivery-center-cell delivery-sequence-cell',style:{background:baseFill}},h('div',{className:'delivery-sequence-control'},h('b',null,autoTrip?deliverySequenceIndex.get(String(autoTrip.id)+'|'+String(o.id))||'—':'—'),h('button',{type:'button',className:'bi delivery-order-drag',draggable:canReorderDelivery(autoTrip),disabled:!canReorderDelivery(autoTrip),title:'Kéo thả lên đơn khác trong cùng chuyến để đổi vị trí','aria-label':'Kéo đổi thứ tự đơn '+o.id,onDragStart:event=>{if(!canReorderDelivery(autoTrip)){event.preventDefault();return;}deliveryDrag.current={orderId:String(o.id),tripId:String(autoTrip.id)};event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',String(o.id));},onDragEnd:()=>{deliveryDrag.current=null;setDragTarget('');}},h('i',{className:'ti ti-grip-vertical'})))),
               date:h('td',{key:'date',style:{background:baseFill}},
               h('div',{className:'delivery-order-date'},
-                isAdmin&&(pi===0?h('input',{
+                showOrderSelection&&(pi===0?h('input',{
                   type:'checkbox',
                   checked:bulkSelected.has(o._rowKey),
                   onChange:()=>toggleBulkOrder(o),
@@ -4939,7 +4943,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         const {plans,firstPlan}=productionDisplayForOrder(ctx);
         return h(DeliveryMobileOrderCard,{key:'mod_'+o._rowKey,rowKey:o._rowKey,order:ctx,catalogOrder:o,onSaveCatalog:saveCatalogCell,pointChoices:catalogPointChoices,productChoices:catalogProductChoices,catalogEditable:canEditCatalogOrder(ctx),trip:displayTrip,tripMode,preferredTripDate,preferredTripShiftName,plans,firstPlan,
           canEditDelivered:canMobileEditDelivered(o),canEdit:canEditMobileOrder,onEdit:()=>setMobileEdit(cleanDeliveryOrderRecord(o)),onSaveQuantity:saveLineQuantity,onSaveProduction:saveMobileProduction,productionLocked:assignmentLocked||window.__SCF_ACCESS_CONTEXT?.readOnly,
-          selection:isAdmin&&h('input',{type:'checkbox',checked:bulkSelected.has(o._rowKey),onChange:()=>toggleBulkOrder(o),'aria-label':'Chọn đơn '+(ctx.pointName||'')+' '+(ctx.deliveryTime||'')}),
+          selection:showOrderSelection&&h('input',{type:'checkbox',checked:bulkSelected.has(o._rowKey),onChange:()=>toggleBulkOrder(o),'aria-label':'Chọn đơn '+(ctx.pointName||'')+' '+(ctx.deliveryTime||'')}),
           renderTripControls:()=>{
             if(!canEditMobileOrder)return null;
             const tripOptions=pickerTripsForOrder(ctx);
