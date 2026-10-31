@@ -44,6 +44,20 @@ function normalizeOrderForStorage(order){
   if(order.deliveryTime===deliveryTime&&order.prodShiftAssignMode===prodShiftAssignMode)return order;
   return {...order,deliveryTime,prodShiftAssignMode};
 }
+function scfOrderAwaitingDelivery(order,trips=[]){
+  if(!order||!['','pending','assigned','scheduled','planning'].includes(String(order.status||'')))return false;
+  const trip=(trips||[]).find(t=>String(t.id)===String(order.tripId||''))||(!order.tripId?(trips||[]).find(t=>(t.orderIds||[]).some(id=>String(id)===String(order.id))):null);
+  if(order.tripId&&!trip)return false;
+  return !trip||!trip.driverDispatchedAt&&!['active','completion_pending','completed','cancelled'].includes(trip.status);
+}
+function scfSyncPendingDeliveryQty(order,trips=[]){
+  if(!scfOrderAwaitingDelivery(order,trips))return order;
+  let changed=false;const lines=(order.lines||[]).map(line=>{
+    const qty=numFmt(line.qtyProd??line.qty??line.quantity??line.qtyInvoice??0);
+    if(line.qtyDelivered!==undefined&&line.qtyDelivered!==null&&line.qtyDelivered!==''&&numFmt(line.qtyDelivered)===qty)return line;
+    changed=true;return {...line,qtyDelivered:qty};
+  });return changed?{...order,lines}:order;
+}
 function normalizeOrdersForStorage(list){
   if(!Array.isArray(list))return list;
   let changed=false;
