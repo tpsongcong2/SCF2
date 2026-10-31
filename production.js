@@ -222,13 +222,18 @@ function scfBuildProductionRows({orders=[],products=[],prodCats=[],prodShifts=[]
   Object.values(aggMap).forEach(row=>{row.stockMetrics=allocatedStock.get(row);row.display=scfProductionProductDisplay({...row,rows:[row]});});
   return Object.values(aggMap);
 }
-function scfProductionDefaultShift(now=new Date()){
-  const hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Ho_Chi_Minh',hour:'2-digit',hourCycle:'h23'}).format(now));
-  return hour>=10&&hour<20?'__group_afternoon':hour>=20&&hour<22?'all':'__group_night';
+function scfProductionDefaultPeriod(now=new Date()){
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(now);
+  const get=key=>Number(parts.find(p=>p.type===key).value),hour=get('hour');
+  const day=new Date(Date.UTC(get('year'),get('month')-1,get('day')+(hour>=22?1:0)));
+  const date=String(day.getUTCDate()).padStart(2,'0')+'/'+String(day.getUTCMonth()+1).padStart(2,'0')+'/'+day.getUTCFullYear();
+  return {date,shift:hour>=22||hour<8?'__group_night':hour>=10&&hour<20?'__group_afternoon':'all'};
 }
+function scfProductionDefaultShift(now=new Date()){return scfProductionDefaultPeriod(now).shift;}
 function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftRules,prodActuals,setProdActuals,stock,currentUser,onOpenClosing,onClosingWorkshopChange,preparedRows=null,preparedDate='',snapshotReadOnly=false}){
-  const[date,setDate]=useState(fmtDate());
-  const[shift,setShift]=useState(()=>scfProductionDefaultShift());
+  const initialPeriod=React.useMemo(()=>scfProductionDefaultPeriod(),[]);
+  const[date,setDate]=useState(initialPeriod.date);
+  const[shift,setShift]=useState(initialPeriod.shift);
   const[workshop,setWorkshop]=useState('all');
   const canEditActual=!snapshotReadOnly&&canWrite(currentUser?.role,'prodsummary',currentUser?.permLevels);
   const showShiftWeight=canViewProductionShiftWeight(currentUser);
@@ -406,7 +411,6 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
         h('div',{className:'production-product-expanded'},product.rows.map(row=>h('details',{key:actualKey(row.prodDate,row.shift,row.productId),className:'production-source-shift'},
           h('summary',{className:'production-shift-toggle production-subshift-inventory '+(scfClosingGroupSafe(row.shiftGroup)==='night'?'night':scfClosingGroupSafe(row.shiftGroup)==='afternoon'?'afternoon':'')},h('span',null,scfProductionShortShiftName(row.shiftName),row.display.pac&&h('small',{className:'production-pac-count'},' ('+stockQtyText(row.qtyProd)+' '+row.unit+')')),h('b',{'aria-label':'SL đặt thực tế',className:'production-subshift-demand'},row.display.qty===null?'Chưa quy đổi':stockQtyText(row.display.qty)+' '+(row.display.unit||'')),h('b',{'aria-label':'Tồn sử dụng',className:'production-subshift-stock',title:'Phần tồn được phân bổ cho ca này'},stockQtyText(row.display.stock)),h('b',{'aria-label':'SL cần SX',className:'production-subshift-needed'},stockQtyText(row.display.needed)),h('i',{className:'ti ti-chevron-down','aria-hidden':true})),
           h('div',{className:'production-shift-sections'},
-            h('details',{className:'production-source-section'},h('summary',null,h('span',null,'Nhập sản lượng'),h('i',{className:'ti ti-chevron-down','aria-hidden':true})),h(ProductionMobileActualEntry,{qty:readActualQty(row.prodDate,row.shift,row.productId),badQty:readBadQty(row.prodDate,row.shift,row.productId),canEdit:canEditActual&&(typeof scfClosingActualDeadline!=='function'||Date.now()<scfClosingActualDeadline(actualKey(row.prodDate,row.shift,row.productId),rules)),onSave:data=>saveActuals(row.prodDate,row.shift,row.productId,row.productName,data)})),
             h('details',{className:'production-source-section'},
               h('summary',null,h('span',null,'Xem mã lẻ'),h('i',{className:'ti ti-chevron-down','aria-hidden':true})),
               h('div',{className:'production-code-detail'},
@@ -533,24 +537,8 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
                     h('td',null,h('span',{className:'badge',style:{background:rule.color||'#EAF3DE',color:rule.textColor||'#3B6D11'}},r.unit)),
                     h('td',null,h('span',{style:{fontSize:16,fontWeight:600,color:'var(--pri)'}},r.qtyProd.toLocaleString())),
                     stockFieldForShift(rule)&&h('td',{className:'production-summary-stock',title:'Số tồn theo ngày sản xuất trong mục Tồn kho'},numFmt(scfStockOnDate(stockByProductId.get(String(r.productId)),r.prodDate||date)?.[stockFieldForShift(rule)]||0).toLocaleString('vi-VN')),
-                    h('td',null,h('input',{
-                      type:'number',
-                      min:0,
-                      step:'0.01',
-                      value:readActualQty(r.prodDate,r.shift,r.productId),
-                      onChange:e=>saveActuals(r.prodDate,r.shift,r.productId,r.productName,{qty:e.target.value}),
-                      placeholder:'Nhập SL SX ĐẠT',
-                      style:{width:110,fontSize:13,padding:'5px 8px',borderRadius:'var(--r)',border:'1px solid var(--bd)',textAlign:'right'}
-                    })),
-                    h('td',null,h('input',{
-                      type:'number',
-                      min:0,
-                      step:'0.01',
-                      value:readBadQty(r.prodDate,r.shift,r.productId),
-                      onChange:e=>saveActuals(r.prodDate,r.shift,r.productId,r.productName,{badQty:e.target.value}),
-                      placeholder:'Nhập SL lỗi',
-                      style:{width:110,fontSize:13,padding:'5px 8px',borderRadius:'var(--r)',border:rowInvalid?'1px solid #DC2626':'1px solid #FDBA74',textAlign:'right',background:rowInvalid?'#FEF2F2':'#FFF7ED',color:rowInvalid?'#B91C1C':'inherit'}
-                    })),
+                    h('td',null,readActualQty(r.prodDate,r.shift,r.productId)===''?'—':numFmt(readActualQty(r.prodDate,r.shift,r.productId)).toLocaleString('vi-VN')),
+                    h('td',null,readBadQty(r.prodDate,r.shift,r.productId)===''?'—':numFmt(readBadQty(r.prodDate,r.shift,r.productId)).toLocaleString('vi-VN')),
                     h('td',null,h('div',{style:{fontSize:16,fontWeight:700,color:rowInvalid?'#B91C1C':'#1D4ED8'}},fmtRate(rowBadRate))),
                     h('td',null,
                       h('button',{
