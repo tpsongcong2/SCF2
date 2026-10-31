@@ -2615,7 +2615,7 @@ function DeliveryMobileOrderCard({order,rowKey,trip,tripMode,preferredTripDate,p
       h('div',{className:'delivery-card-dates'},field('Ngày giao',mobileDeliveryDate(order.deliveryDate)),field('Giờ giao',order.deliveryTime)),
       h('div',{className:'delivery-card-products'},(order.lines||[]).length?(order.lines||[]).map((line,index)=>h('div',{key:line.id||index,className:'delivery-card-product'},
         order.warehouseMerged&&h(DeliveryCatalogCell,{order:catalogOrder||order,lineIndex:index,kind:'point',label:line.warehouseSourcePointName||order.pointName||'—',choices:pointChoices,canEdit:false,onSave:onSaveCatalog}),
-        h('div',{className:'delivery-card-product-name'},h('span',null,(index+1)+'. '),h(DeliveryCatalogCell,{order:catalogOrder||order,lineIndex:index,kind:'product',label:line.productName||'Sản phẩm',choices:productChoices,canEdit:catalogEditable,onSave:onSaveCatalog}),line.unit&&h('span',null,' ('+line.unit+')')),
+        h('div',{className:'delivery-card-product-name'},h(DeliveryCatalogCell,{order:catalogOrder||order,lineIndex:index,kind:'product',label:line.productName||'Sản phẩm',choices:productChoices,canEdit:catalogEditable,onSave:onSaveCatalog}),line.unit&&h('span',null,' ('+line.unit+')')),
         h('div',{className:'delivery-card-quantities'},... [['qtyProd','SL đặt'],['qtyInvoice','SL HĐ'],['qtyDelivered','SL giao']].map(([key,label])=>key==='qtyDelivered'&&!canEditDelivered?field(label,mobileDeliveryQty(line,key).toLocaleString('vi-VN',{maximumFractionDigits:2})):h('div',{key,className:'delivery-card-field'},h('span',null,label),h(DeliveryQuantityCell,{order,lineIndex:index,field:key,canEdit:canEdit&&!window.__SCF_ACCESS_CONTEXT?.readOnly,onSave:onSaveQuantity})))),
         h('div',{className:'delivery-card-field',style:{marginTop:8,whiteSpace:'pre-wrap'}},h('span',null,'Chú ý'),h('b',null,String(line.note||'').trim()||'—'))
       )):h('div',{className:'delivery-card-empty'},'Chưa có sản phẩm')),
@@ -2699,7 +2699,7 @@ function DeliveryMobileOrderEditor({order,customers,canEditDelivered,onSave,onCl
         h(F,{label:'Giờ giao'},h('input',{type:'time','aria-label':'Giờ giao',value:draft.deliveryTime,disabled:saving,onChange:e=>set('deliveryTime',e.target.value)}))
       ),
       (draft.lines||[]).map((line,index)=>h('div',{key:line.id||index,className:'delivery-editor-product'},
-        h('b',null,(index+1)+'. '+(line.productName||'Sản phẩm')+(line.unit?' ('+line.unit+')':'')),
+        h('b',null,(line.productName||'Sản phẩm')+(line.unit?' ('+line.unit+')':'')),
         h('div',{className:'delivery-editor-quantities'},... [['qtyProd','SL đặt'],['qtyInvoice','SL HĐ'],['qtyDelivered','SL giao']].map(([key,label])=>h(F,{label},h('input',{type:'text',inputMode:'decimal',value:line[key],disabled:saving,readOnly:key==='qtyDelivered'&&!canEditDelivered,'aria-label':label+' '+(line.productName||''),onChange:e=>setDraft(previous=>({...previous,lines:previous.lines.map((item,i)=>i===index?{...item,[key]:e.target.value}:item)}))}))))
       )),
       error&&h('div',{role:'alert',className:'delivery-editor-error'},error)
@@ -4154,7 +4154,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const visibleProductLabels=React.useMemo(()=>pagedList.flatMap(order=>{
     const lines=(order._ctx||orderContext(order)).lines||[];
     return lines.map((line,index)=>({
-      label:(index+1)+'. '+String(line?.productName||'Sản phẩm').trim(),
+      label:String(line?.productName||'Sản phẩm').trim(),
       name:String(line?.productName||'Sản phẩm').trim()
     }));
   }),[pagedList,productsById]);
@@ -4937,7 +4937,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
               )
             ),
               point:h('td',{key:'point',style:coloredCell},h('span',{title:'Địa điểm đã khóa; tạo đơn mới để đổi'},row.line?.warehouseSourcePointName||ctx.pointName||'—')),
-              product:h('td',{key:'product',style:coloredCell},row.empty?'—':h('div',{className:'delivery-catalog-product'},h('span',null,(pi+1)+'. '),h(DeliveryCatalogCell,{order:o,lineIndex:row.line?.id?(o.lines||[]).findIndex(line=>String(line.id)===String(row.line.id)):pi,kind:'product',label:row.productName,choices:catalogProductChoices,canEdit:canEditCatalogOrder(ctx),onSave:saveCatalogCell}))),
+              product:h('td',{key:'product',style:coloredCell},row.empty?'—':h('div',{className:'delivery-catalog-product'},h(DeliveryCatalogCell,{order:o,lineIndex:row.line?.id?(o.lines||[]).findIndex(line=>String(line.id)===String(row.line.id)):pi,kind:'product',label:row.productName,choices:catalogProductChoices,canEdit:canEditCatalogOrder(ctx),onSave:saveCatalogCell}))),
               ...Object.fromEntries(['qtyInvoice','qtyProd','qtyDelivered'].map(field=>[field,h('td',{key:field,className:'delivery-center-cell',style:coloredCell},row.empty?'—':field==='qtyDelivered'&&!canMobileEditDelivered(o)?numFmt(row.line?.qtyDelivered!==undefined&&row.line?.qtyDelivered!==null&&row.line?.qtyDelivered!==''?row.line.qtyDelivered:row.line?.qtyProd??row.line?.qty??row.line?.quantity??row.line?.qtyInvoice??0).toLocaleString('vi-VN',{maximumFractionDigits:2}):h(DeliveryQuantityCell,{order:o,lineIndex:row.line?.id?(o.lines||[]).findIndex(line=>String(line.id)===String(row.line.id)):pi,field,canEdit:canEditMobileOrder&&!window.__SCF_ACCESS_CONTEXT?.readOnly,onSave:saveLineQuantity}))])),
               time:h('td',{key:'time',className:'delivery-center-cell',style:coloredCell},o.warehouseMerged?(row.line?.warehouseSourceDeliveryTime||ctx.deliveryTime||'—'):h(DeliveryGridCell,{order:o,lineIndex:null,field:'deliveryTime',canEdit:canEditMobileOrder&&!window.__SCF_ACCESS_CONTEXT?.readOnly&&!assignmentClosed&&(!assignmentStarted||canWithdrawStartedOrder),onSave:saveGridDeliveryTime})),
               note:h('td',{key:'note',className:'delivery-line-note-cell'},h('div',{className:'delivery-line-note-row'},h(DeliveryLineNoteCell,{order:o,lineIndex:row.empty?null:row.line?.id?(o.lines||[]).findIndex(line=>String(line.id)===String(row.line.id)):pi,canEdit:canEditMobileOrder&&!window.__SCF_ACCESS_CONTEXT?.readOnly,onSave:saveLineNote}))),
