@@ -334,3 +334,23 @@ function scfOnlyMissingInvoiceChanges(before,after){
     if([...allowed].some(key=>next[key]!==undefined&&typeof next[key]!=='string'))return false;changed=true;
   }return changed;
 }
+
+function deliveryDeleteLimitDays(user={}){
+  const fallback=['admin','administrator'].includes(String(user.role||'').toLowerCase())?0:1;
+  const raw=user.deliveryDeleteLimitDays;if(raw===undefined||raw===null||raw==='')return fallback;
+  const days=Number(raw);return Number.isInteger(days)&&days>=0&&days<=3650?days:fallback;
+}
+function scfDeliveryDeleteIssue(user,order,trip,today){
+  if(!order)return 'Đơn không còn tồn tại.';
+  if(!['','pending','assigned','scheduled','planning'].includes(String(order.status||''))||trip&&(trip.driverDispatchedAt||!['','planning','planned','assigned','scheduled'].includes(String(trip.status||''))))return 'Chỉ được xóa đơn chưa giao lái xe.';
+  if(order.tripId&&!trip)return 'Chưa xác định được trạng thái chuyến. Hãy tải lại dữ liệu.';
+  const raw=String(order.deliveryDate||''),vn=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/),iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!vn&&!iso)return 'Ngày giao không hợp lệ.';
+  const y=Number(vn?vn[3]:iso[1]),m=Number(vn?vn[2]:iso[2]),d=Number(vn?vn[1]:iso[3]),stamp=Date.UTC(y,m-1,d),date=new Date(stamp);
+  if(date.getUTCFullYear()!==y||date.getUTCMonth()!==m-1||date.getUTCDate()!==d)return 'Ngày giao không hợp lệ.';
+  if(!today){const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());today=['year','month','day'].map(k=>parts.find(p=>p.type===k).value).join('-');}
+  const days=deliveryDeleteLimitDays(user),age=(Date.parse(today+'T00:00:00Z')-stamp)/86400000;
+  return days&&age>=days?'Đơn đã ngoài giới hạn '+days+' ngày được xóa.':'';
+}
+
+function scfCanDeleteDeliveryOrder(user,order,trip){return canDel(user?.role,'delivery',user?.permLevels)&&!scfDeliveryDeleteIssue(user,order,trip);}

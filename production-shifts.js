@@ -303,8 +303,10 @@ function scfProductionScheduleKey(schedule){
 function scfProductionRuleTimeMatches(rule,time){
   const from=rule.deliveryTimeFrom||'',to=rule.deliveryTimeTo||from;
   if(!from&&!to)return true;
-  if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(time||''))return false;
-  return timeInRange(time,from,to);
+  const match=String(time||'').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if(!match||Number(match[1])>23||Number(match[2])>59)return false;
+  const normalized=match[1].padStart(2,'0')+':'+match[2];
+  return timeInRange(normalized,from,to);
 }
 function scfProductionRuleTimesOverlap(a,b){
   const af=a.deliveryTimeFrom||'',at=a.deliveryTimeTo||af,bf=b.deliveryTimeFrom||'',bt=b.deliveryTimeTo||bf;

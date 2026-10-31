@@ -1146,6 +1146,7 @@ function isPrivilegedEmployeeRecord(employee){
     if(!f.dept){window.showToast('Chọn bộ phận chính!','warn');return;}
     const viewDays=Number(f.orderHistoryDays??orderHistoryDays(f));
     if(f.orderHistoryDays===''||!Number.isInteger(viewDays)||viewDays<0||viewDays>3650){window.showToast('Số ngày xem đơn hàng phải từ 0 đến 3650.','warn');return;}
+    if(f.deliveryDeleteLimitDays!==undefined&&(f.deliveryDeleteLimitDays===''||!Number.isInteger(Number(f.deliveryDeleteLimitDays))||Number(f.deliveryDeleteLimitDays)<0||Number(f.deliveryDeleteLimitDays)>3650)){window.showToast('Số ngày xóa đơn phải từ 0 đến 3650.','warn');return;}
     const actualQtyLimitDays=Number(f.tripActualQtyLimitDays??2);
     if(f.tripActualQtyLimitDays===''||!Number.isInteger(actualQtyLimitDays)||actualQtyLimitDays<0||actualQtyLimitDays>365){window.showToast('Số ngày giới hạn nhập SL thực giao phải từ 0 đến 365.','warn');return;}
     const requestsAdmin=f.permissionProfileId==='admin'||['admin','administrator'].includes(String(f.role||'').toLowerCase());
@@ -1166,7 +1167,7 @@ function isPrivilegedEmployeeRecord(employee){
       const driverDepartment=departments.some(value=>normalizeEmployeeDept(value)==='lai xe');
       const tripPermissions=driverDepartment?normalizedTripPermissions({...f,dept,departments}):f.tripPermissions;
       const mobileStartPage=scfMobileStartTarget({...f,dept,departments,permissions,permLevels});
-      onSave({...f,dept,departments,tripPermissions,permissions,permLevels,mobileStartPage,orderHistoryDays:viewDays,tripActualQtyLimitDays:actualQtyLimitDays,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
+      onSave({...f,dept,departments,tripPermissions,permissions,permLevels,mobileStartPage,orderHistoryDays:viewDays,deliveryDeleteLimitDays:deliveryDeleteLimitDays(f),tripActualQtyLimitDays:actualQtyLimitDays,password,gender,female:gender==='female',updatedBy:cu.name,updatedAt:fmtDT()});
     }catch(e){window.showToast(e.message||'Không thể lưu mật khẩu.','error');}
     finally{setBusy(false);}
   };
@@ -1231,7 +1232,7 @@ function isPrivilegedEmployeeRecord(employee){
       h('hr',{className:'divider'}),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
         h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phân quyền chi tiết (có thể chỉnh riêng cho nhân viên này)'),
-        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,orderHistoryDays:60,salesDebtAllCustomers:false,driverReportMonthlyWeight:false,productionShiftWeight:false,deliveryQuantityTotals:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
+        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,deliveryDeleteLimitDays:1,orderHistoryDays:60,salesDebtAllCustomers:false,driverReportMonthlyWeight:false,productionShiftWeight:false,deliveryQuantityTotals:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
       ),
       h(OrderNoticePermissionFields,{employee:f,onChange:value=>s('orderNoticePermissions',value)}),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = chỉ đọc dữ liệu | Thêm + Xem + Sửa = không được xóa | Thêm + Xem + Sửa + Xóa = toàn quyền'),
@@ -1287,8 +1288,9 @@ function isPrivilegedEmployeeRecord(employee){
         ),
         h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:5}},'Mặc định chỉ Admin được xem tổng kg bên phải tên ca. Không ảnh hưởng danh sách và số lượng từng sản phẩm.')
       ),
+      canAccess(f.role,'delivery',f.permissions,selectedDepartments)&&h('div',{className:'card'},h('b',null,'Xóa đơn giao hàng'),h('label',null,h('input',{type:'checkbox','aria-label':'Cho phép xóa đơn giao hàng',disabled:f.role==='admin',checked:canDel(f.role,'delivery',f.permLevels),onChange:e=>s('permLevels',{...f.permLevels,delivery:e.target.checked?'rwd':'rw'})}),' Cho phép xóa đơn chưa giao'),h('label',null,'Số ngày được xóa (tính theo ngày giao; 0 = không giới hạn)',h('input',{type:'number',min:0,max:3650,'aria-label':'Giới hạn ngày xóa đơn',value:f.deliveryDeleteLimitDays??deliveryDeleteLimitDays(f),onChange:e=>s('deliveryDeleteLimitDays',e.target.value)}))),
       canAccess(f.role,'workreport_lx',f.permissions,selectedDepartments)&&h('div',{style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,marginTop:10,background:'var(--bg2)'}},
-        h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền trong Báo công lái xe'),
+      h('div',{style:{fontSize:13,fontWeight:700,color:'var(--pri)',marginBottom:7}},'Quyền trong Báo công lái xe'),
         h('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,padding:'7px 8px',background:'#fff',border:'1px solid var(--bd)',borderRadius:6}},
           h('input',{type:'checkbox',disabled:f.role==='admin',checked:canViewDriverReportMonthlyWeight(f),onChange:event=>s('driverReportMonthlyWeight',event.target.checked)}),
           'Xem tổng khối lượng chuyến trong tháng'
