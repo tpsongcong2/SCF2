@@ -1897,3 +1897,5 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 /* Assignment mode colors for delivery, production and label schedules. */
 .delivery-trip-mode-switch[data-mode],.delivery-transfer-production>.delivery-trip-mode-switch[data-mode],.delivery-production-mode[data-mode]{background:#d8efe1!important;color:#17613f!important;border-color:#8fc5a6!important}
 .delivery-trip-mode-switch[data-mode="manual"],.delivery-transfer-production>.delivery-trip-mode-switch[data-mode="manual"],.delivery-production-mode[data-mode="manual"]{background:#fff1a8!important;color:#765400!important;border-color:#dfc04f!important}
+
+button.delivery-group-toggle{display:inline-flex;align-items:center;justify-content:center;flex:0 0 30px;width:30px;min-height:32px;padding:0;border:0;border-radius:4px;background:transparent;color:inherit;font:inherit;cursor:pointer}button.delivery-group-toggle:hover{background:#0000000d}button.delivery-group-toggle:focus-visible{outline:2px solid #17613f;outline-offset:1px}

@@ -198,9 +198,9 @@ function DeliveryFastEntryModal({customers,products,prodCats=[],orders,currentUs
     }catch(error){setError(error.message||'Chưa lưu được.');}finally{submitPending.current=false;setSaving(false);}
   };
   return h(Modal,{title:'Tạo đơn',lg:true,className:'delivery-fast-entry-modal',onClose:()=>{if(!saving)onClose();}},
-    h('p',null,'Mỗi dòng: Ngày → Địa điểm → Sản phẩm → SL đặt → SL HĐ → Giờ → Chú ý. Dán ô Excel hoặc ảnh bảng bằng Ctrl+V vào vùng bản nháp. Chọn Một địa điểm hoặc Nhiều địa điểm phù hợp với bảng.'),
-    h('div',{onPaste:pasteImage,tabIndex:0,'aria-label':'Dán ảnh tạo đơn',style:{padding:'8px',border:'1px dashed #789c91',marginBottom:'8px'}},
-      h('button',{type:'button',disabled:saving||imageBusy,onClick:()=>imageInput.current?.click()},imageBusy?'Đang đọc ảnh…':'Chọn ảnh bảng đơn'),
+    h('p',null,'Mỗi dòng: Ngày → Địa điểm → Sản phẩm → SL đặt → SL HĐ → Giờ → Chú ý. Bấm vùng văn bản bên dưới rồi Ctrl+V để dán ô Excel/chữ; bấm vùng ảnh để dán ảnh bảng. Chọn Một địa điểm hoặc Nhiều địa điểm phù hợp với bảng.'),
+    h('div',{onPaste:pasteImage,onClick:event=>{if(!event.target?.closest?.('button,input'))event.currentTarget.focus();},tabIndex:0,'aria-label':'Dán ảnh tạo đơn',style:{padding:'8px',border:'1px dashed #789c91',marginBottom:'8px'}},
+      h('button',{type:'button',disabled:saving||imageBusy,onClick:event=>{event.stopPropagation();imageInput.current?.click();}},imageBusy?'Đang đọc ảnh…':'Chọn ảnh bảng đơn'),
       h('span',null,' hoặc bấm vào đây rồi Ctrl+V để dán ảnh'),
       h('input',{ref:imageInput,type:'file',accept:'image/png,image/jpeg,image/webp,image/bmp',hidden:true,onChange:event=>{readImage(event.target.files?.[0]);event.target.value='';}})),
     imageNotice&&h('p',{role:'status'},imageNotice),
@@ -215,7 +215,7 @@ function DeliveryFastEntryModal({customers,products,prodCats=[],orders,currentUs
     h('datalist',{id:'scf-fast-points'},pointChoices.map(({point,customer,label})=>h('option',{key:String(customer.id)+'|'+point.id,value:label}))),
     h('datalist',{id:'scf-fast-products'},productChoices.map(product=>h('option',{key:product.id,value:scfFastEntryProductLabel(product)},product.unit||''))),
     h('button',{type:'button',disabled:saving,onClick:addDraftLine},'+ Thêm dòng vào bản nháp'),
-    h('textarea',{'aria-label':'Dữ liệu dán từ Excel',value:text,disabled:saving,rows:7,spellCheck:false,onPaste:pasteImage,placeholder:'30/10/2026\tSEVT1\tBÚN TƯƠI\t30\t30\t02:00\tChú ý',onChange:event=>{setText(event.target.value);setPreview(null);}}),
+    h('textarea',{'aria-label':'Dữ liệu dán từ Excel',value:text,disabled:saving,rows:7,spellCheck:false,onPaste:event=>event.stopPropagation(),placeholder:'30/10/2026\tSEVT1\tBÚN TƯƠI\t30\t30\t02:00\tChú ý',onChange:event=>{setText(event.target.value);setPreview(null);}}),
     h('button',{type:'button',disabled:saving||imageBusy,onClick:review},'Xem trước'),
     preview&&h('p',{role:preview.some(item=>item.error)?'alert':'status'},preview.some(item=>item.error)?'Có '+preview.filter(item=>item.error).length+' dòng chưa hợp lệ. Chọn lại địa điểm hoặc sản phẩm ngay trong bảng bên dưới.':'Đã kiểm tra '+preview.length+' dòng. Anh có thể xác nhận lưu.'),
     preview&&h('div',{className:'tw delivery-fast-preview'},h('table',null,h('thead',null,h('tr',null,['Dòng','Ngày','Địa điểm','Sản phẩm','SL đặt','SL HĐ','Giờ','Chú ý','Xử lý'].map(label=>h('th',{key:label},label)))),h('tbody',null,preview.map((item,index)=>{
