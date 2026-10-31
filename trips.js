@@ -637,6 +637,43 @@ function scfOpenDriverReportTrip(trip,onOpenTrips,currentUser){
   catch{window.showToast?.('Không mở được chuyến. Hãy thử lại.','warn');return false;}
   onOpenTrips();return true;
 }
+function scfDriverReportExcelWorkbook(ExcelJS,{report,month,driverName,activeShifts=[]}){
+  const workbook=new ExcelJS.Workbook();workbook.creator='SCFOOD';
+  const number=value=>Number.isFinite(Number(value))?Number(value):0;
+  const rows=report.rows.filter(row=>!activeShifts.length||activeShifts.includes(row.deliveryShift));
+  const addSheet=(name,headers,data,widths)=>{
+    const sheet=workbook.addWorksheet(name);
+    sheet.columns=widths.map(width=>({width}));sheet.addRow(headers);sheet.addRows(data);
+    sheet.views=[{state:'frozen',ySplit:1}];
+    sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};
+    sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF28684F'}};
+    sheet.getRow(1).height=28;
+    sheet.eachRow(row=>row.eachCell(cell=>{cell.alignment={vertical:'middle',wrapText:true};if(typeof cell.value==='number')cell.numFmt='#,##0.##';}));
+    return sheet;
+  };
+  addSheet('Tong hop thang',['BÁO CÔNG LÁI XE','Giá trị'],[
+    ['Lái xe',driverName||'Lái xe'],['Tháng',month.slice(5,7)+'/'+month.slice(0,4)],
+    ['Phạm vi tổng hợp','Toàn bộ tháng'],['Tổng chuyến',number(report.total.trips)],
+    ['Ngày có chuyến',number(report.workDays)],['Ngày nghỉ',number(report.restDays)],
+    ['Số ngày đã tính nghỉ',number(report.elapsedDays)],['Số đơn',number(report.total.orders)],
+    ['Khối lượng tháng (kg)',number(report.total.weight)],['Chuyến đã hoàn thành',number(report.total.completed)],
+    ['Công',number(report.total.work)],['Tiền công (đ)',number(report.total.pay)],
+    ['Bộ lọc chi tiết',activeShifts.length?activeShifts.join(' · '):'Tất cả ca giao'],
+    ['Số chuyến theo bộ lọc',rows.length],
+    ['Khối lượng theo bộ lọc (kg)',rows.reduce((sum,row)=>sum+number(row.weight),0)],
+    ['Ghi chú','Ngày nghỉ tính theo báo cáo tháng. Chuyến hủy và chuyến 0 kg không tính công.']
+  ],[36,65]);
+  addSheet('Theo ca giao',['Ca giao hàng (cả tháng)','Số chuyến','Khối lượng (kg)'],report.shifts.map(item=>[item.name,number(item.trips),number(item.weight)]),[32,18,24]);
+  const detail=addSheet('Chi tiet chuyen',['STT','Ngày','Ca giao hàng','Số đơn','Khối lượng (kg)','Trạng thái','Công','Tiền công (đ)'],rows.map((row,index)=>{
+    const key=row.dateKey||scfTripDateKey(row.deliveryDate),match=/^(\d{4})-?(\d{2})-?(\d{2})$/.exec(key||'');
+    const date=match?new Date(Date.UTC(+match[1],+match[2]-1,+match[3])):row.deliveryDate;
+    return[index+1,date,row.deliveryShift,number(row.orderCount),number(row.weight),row.driverCompleted?'Đã hoàn thành':'Chưa hoàn thành',number(row.work),number(row.totalPay)];
+  }),[8,16,28,14,22,24,14,24]);
+  detail.getColumn(2).numFmt='dd/mm/yyyy';
+  detail.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,rows.length+1),column:8}};
+  return workbook;
+}
+
 function DriverTripWorkReportTab({trips,orders,products,customers,employees,currentUser,onOpenTrips}){
   const[month,setMonth]=useLS('scf_driver_report_month_'+currentUser.id,isoDate().slice(0,7));
   const[driverFilter,setDriverFilter]=useLS('scf_driver_report_driver_'+currentUser.id,'');
@@ -677,11 +714,31 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
   const listKey=JSON.stringify([month,driverKey,[...activeShifts].sort()]);
   const visible=scfTripListWindow(rows,listSelection,listKey);
   const fmt=value=>Number(value||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
+  const [exportBusy,setExportBusy]=useState(false);
+  const [exportError,setExportError]=useState('');
+  const isAdmin=['admin','administrator'].includes(currentUser?.role);
+  const exportReady=!!driverKey&&(typeof invokeScfAuth!=='function'||monthlySnapshot?.key===monthlyKey);
+  const exportExcel=async()=>{
+    if(!isAdmin||!exportReady||exportBusy)return;
+    const actorId=String(currentUser.id);setExportBusy(true);setExportError('');
+    try{
+      await scfLoadOptionalScript('ExcelJS','./vendor/exceljs-4.4.0.min.js');
+      const workbook=scfDriverReportExcelWorkbook(window.ExcelJS,{report,month,driverName:selectedName,activeShifts});
+      const bytes=await workbook.xlsx.writeBuffer();
+      if(window.__SCF_ACCESS_CONTEXT&&String(window.__SCF_ACCESS_CONTEXT.employeeId)!==actorId)throw Error('Tài khoản đã thay đổi. Hãy mở lại báo công.');
+      const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+      const link=document.createElement('a');link.href=url;
+      link.download='Bao_cong_lai_xe_'+String(selectedName||'Lai_xe').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^a-zA-Z0-9_-]+/g,'_')+'_'+month+'.xlsx';
+      document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }catch(error){setExportError(error.message||'Chưa xuất được Excel. Hãy thử lại.');}
+    finally{setExportBusy(false);}
+  };
   const status=row=>row.driverCompleted?'Đã hoàn thành':'Chưa hoàn thành';
   const open=row=>{if(canOpenTrip(row))scfOpenDriverReportTrip(row,onOpenTrips,currentUser);};
   const metric=(label,value,extra)=>h('div',{className:'driver-report-metric'},h('span',null,label),h('b',null,value),extra&&h('small',null,extra));
   return h('div',{className:'driver-work-report'},
-    h('div',{className:'ptitle'},h('i',{className:'ti ti-steering-wheel',style:{fontSize:20}}),'Báo công lái xe'),
+    h('div',{className:'ptitle',style:{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}},h('i',{className:'ti ti-steering-wheel',style:{fontSize:20}}),'Báo công lái xe',isAdmin&&h('button',{type:'button',className:'bp',style:{marginLeft:'auto'},disabled:!exportReady||exportBusy,onClick:exportExcel,'aria-label':'Xuất Excel báo công lái xe',title:exportReady?'Xuất tổng hợp tháng và tất cả chuyến theo bộ lọc':'Chọn lái xe và chờ tải đủ dữ liệu tháng'},h('i',{className:'ti ti-file-spreadsheet'}),exportBusy?' Đang xuất…':' Xuất Excel')),
+    exportError&&h('div',{className:'card',role:'alert'},exportError),
     monthlyError&&h('div',{className:'card',role:'alert'},monthlyError+' Số đang hiển thị lấy từ dữ liệu đã tải, có thể chưa đủ tháng.'),
     driverKey&&typeof invokeScfAuth==='function'&&monthlySnapshot?.key!==monthlyKey&&!monthlyError&&h('p',{role:'status'},'Đang đối chiếu công đủ tháng…'),
     h('div',{className:'card driver-report-filters'},

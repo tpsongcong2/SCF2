@@ -2355,23 +2355,25 @@ function deliveryOrderStatusForTrip(order,trip){
   if(!trip||String(order?.tripId||'')!==String(trip.id||'')||order?.status!=='pending')return order?.status;
   return trip.status==='active'?'delivering':'assigned';
 }
-function deliveryProductTextWidth(text){
-  const value=String(text||'');
-  const fallback=Array.from(value).reduce((width,char)=>width+(/[MWĐƯƠÔ]/i.test(char)?10:/[il1.,' ]/i.test(char)?4.5:7.5),0);
-  try{
-    if(typeof document==='undefined'||typeof getComputedStyle!=='function')return fallback;
-    const canvas=deliveryProductTextWidth._canvas||(deliveryProductTextWidth._canvas=document.createElement('canvas'));
-    const context=canvas.getContext('2d');
-    if(!context)return fallback;
-    const rootStyle=getComputedStyle(document.documentElement);
-    const fontStyle=rootStyle.getPropertyValue('--ui-table-style').trim()||'normal';
-    const fontWeight=rootStyle.getPropertyValue('--ui-table-weight').trim()||'400';
-    const fontSize=rootStyle.getPropertyValue('--ui-table-size').trim()||'13px';
-    const fontFamily=rootStyle.getPropertyValue('--ui-font-family').trim()||'sans-serif';
-    context.font=[fontStyle,fontWeight,fontSize,fontFamily].join(' ');
-    return context.measureText(value).width;
-  }catch(_err){return fallback;}
+// Read computed font once per measurement pass, rather than for every cell.
+function deliveryProductTextMeasurer(){
+  let context=null,initialized=false;const widths=new Map();
+  return text=>{
+    const value=String(text||'');if(widths.has(value))return widths.get(value);
+    if(!initialized){initialized=true;
+      try{if(typeof document!=='undefined'&&typeof getComputedStyle==='function'){
+        const canvas=deliveryProductTextWidth._canvas||(deliveryProductTextWidth._canvas=document.createElement('canvas'));
+        context=canvas.getContext('2d');
+        if(context){const style=getComputedStyle(document.documentElement);
+          context.font=[style.getPropertyValue('--ui-table-style').trim()||'normal',style.getPropertyValue('--ui-table-weight').trim()||'400',style.getPropertyValue('--ui-table-size').trim()||'13px',style.getPropertyValue('--ui-font-family').trim()||'sans-serif'].join(' ');
+        }
+      }}catch(_error){context=null;}
+    }
+    const width=context?context.measureText(value).width:Array.from(value).reduce((sum,char)=>sum+(/[MWĐƯƠÔ]/i.test(char)?10:/[il1.,' ]/i.test(char)?4.5:7.5),0);
+    widths.set(value,width);return width;
+  };
 }
+function deliveryProductTextWidth(text){return deliveryProductTextMeasurer()(text);}
 function currentISOWeekInput(date=new Date()){
   const target=new Date(date.getFullYear(),date.getMonth(),date.getDate());
   const day=target.getDay()||7;
@@ -2440,9 +2442,11 @@ function mergeDeliveryLineNote(live,base,lineIndex,raw){
 // Move only between visible, permitted editable cells; use stable line identities.
 function scfDeliveryGridMove(input,key,reverse=false){
   const table=input?.closest?.('.delivery-orders-table');if(!table)return;
-  const cells=[...table.querySelectorAll('input[data-grid-field]')].filter(node=>!node.disabled&&node.getClientRects().length);
+  const cells=[...table.querySelectorAll('input[data-grid-field]')].filter(node=>!node.disabled);
   const index=cells.indexOf(input),field=input.dataset.gridField;
-  const next=key==='Enter'?cells.slice(index+1).find(node=>node.dataset.gridField===field):cells[index+(reverse?-1:1)];
+  // Read layout only for potential destinations, not every input in the table.
+  const candidates=key==='Enter'?cells.slice(index+1).filter(node=>node.dataset.gridField===field):reverse?cells.slice(0,index).reverse():cells.slice(index+1);
+  const next=candidates.find(node=>node.getClientRects().length);
   if(!next)return;
   const identity=next.dataset.gridIdentity;
   requestAnimationFrame(()=>{const target=[...table.querySelectorAll('input[data-grid-identity]')].find(node=>node.dataset.gridIdentity===identity);target?.focus();target?.select();});
@@ -4044,6 +4048,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       sortText:o._area||'Chưa phân khu vực'
     };
   };
+  const deliverySequenceCache=React.useMemo(()=>new WeakMap(),[customers]);
   const deliverySequenceIndex=React.useMemo(()=>{
     const result=new Map(),byTrip=new Map(),unassigned=new Map();
     for(const order of orders||[]){if(order.status==='cancelled')continue;
@@ -4052,7 +4057,11 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     }
     for(const trip of trips||[]){const members=[...(byTrip.get(String(trip.id))||[])];
       for(const id of new Set((trip.orderIds||[]).map(String))){if(unassigned.has(id))members.push(unassigned.get(id));}
-      sortTripOrdersByDeliveryOrder(trip,members,customers||[]).forEach((o,i)=>result.set(String(trip.id)+'|'+String(o.id),i+1));
+      let cached=deliverySequenceCache.get(trip);
+      if(!cached||cached.members.length!==members.length||members.some((order,index)=>order!==cached.members[index])){
+        cached={members,sorted:sortTripOrdersByDeliveryOrder(trip,members,customers||[])};deliverySequenceCache.set(trip,cached);
+      }
+      cached.sorted.forEach((o,i)=>result.set(String(trip.id)+'|'+String(o.id),i+1));
     }return result;
   },[orders,trips,customers]);
   const sortedList=React.useMemo(()=>[...sortableOrderMeta].sort((a,b)=>{
@@ -4148,18 +4157,19 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       name:String(line?.productName||'Sản phẩm').trim()
     }));
   }),[pagedList,productsById]);
-  const longestVisibleProduct=React.useMemo(()=>visibleProductLabels.reduce((longest,item)=>deliveryProductTextWidth(item.label)>deliveryProductTextWidth(longest.label)?item:longest,{label:'',name:''}),[visibleProductLabels]);
-  const productColumnWidth=Math.max(145,Math.min(420,Math.ceil(deliveryProductTextWidth(longestVisibleProduct.label)+28)));
+  const measureProductText=deliveryProductTextMeasurer();
+  const longestVisibleProduct=React.useMemo(()=>visibleProductLabels.reduce((longest,item)=>measureProductText(item.label)>measureProductText(longest.label)?item:longest,{label:'',name:''}),[visibleProductLabels]);
+  const productColumnWidth=Math.max(145,Math.min(420,Math.ceil(measureProductText(longestVisibleProduct.label)+28)));
   const fittedColumnWidths=React.useMemo(()=>{
     const result={sequence:105,date:155,point:150,product:productColumnWidth,qtyInvoice:85,qtyProd:85,qtyDelivered:85,time:75,invoice:65,note:180,trip:compactEntry?130:310,production:210,label:135,status:105,actions:150};
     for(const order of pagedList){const ctx=order._ctx||order;
       for(const line of ctx.lines||[]){
-        result.point=Math.min(300,Math.max(result.point,deliveryProductTextWidth(line.warehouseSourcePointName||ctx.pointName||'')+22));
-        result.note=Math.min(340,Math.max(result.note,deliveryProductTextWidth(line.note||ctx.note||'')+24));
-        for(const field of ['qtyInvoice','qtyProd','qtyDelivered'])result[field]=Math.max(result[field],Math.min(145,deliveryProductTextWidth(String(line[field]??''))+32));
+        result.point=Math.min(300,Math.max(result.point,measureProductText(line.warehouseSourcePointName||ctx.pointName||'')+22));
+        result.note=Math.min(340,Math.max(result.note,measureProductText(line.note||ctx.note||'')+24));
+        for(const field of ['qtyInvoice','qtyProd','qtyDelivered'])result[field]=Math.max(result[field],Math.min(145,measureProductText(String(line[field]??''))+32));
       }
     }
-    if(quantityTotals)for(const field of ['qtyInvoice','qtyProd','qtyDelivered'])result[field]=Math.max(result[field],Math.ceil(deliveryProductTextWidth('('+quantityTotals[field].toLocaleString('vi-VN',{maximumFractionDigits:2})+')')+20));
+    if(quantityTotals)for(const field of ['qtyInvoice','qtyProd','qtyDelivered'])result[field]=Math.max(result[field],Math.ceil(measureProductText('('+quantityTotals[field].toLocaleString('vi-VN',{maximumFractionDigits:2})+')')+20));
     return result;
   },[pagedList,productColumnWidth,compactEntry,quantityTotals]);
   const renderedColumnWidths=scfDeliveryLayoutWidths(visibleColumns,fittedColumnWidths,customColumnWidths,tableViewportWidth);

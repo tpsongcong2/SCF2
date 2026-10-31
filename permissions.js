@@ -348,8 +348,9 @@ function scfDeliveryDeleteIssue(user,order,trip,today){
   if(!vn&&!iso)return 'Ngày giao không hợp lệ.';
   const y=Number(vn?vn[3]:iso[1]),m=Number(vn?vn[2]:iso[2]),d=Number(vn?vn[1]:iso[3]),stamp=Date.UTC(y,m-1,d),date=new Date(stamp);
   if(date.getUTCFullYear()!==y||date.getUTCMonth()!==m-1||date.getUTCDate()!==d)return 'Ngày giao không hợp lệ.';
-  if(!today){const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());today=['year','month','day'].map(k=>parts.find(p=>p.type===k).value).join('-');}
-  const days=deliveryDeleteLimitDays(user),age=(Date.parse(today+'T00:00:00Z')-stamp)/86400000;
+  const days=deliveryDeleteLimitDays(user);if(!days)return '';
+  if(!today){const formatter=scfDeliveryDeleteIssue._dateFormatter||(scfDeliveryDeleteIssue._dateFormatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}));const parts=formatter.formatToParts(new Date());today=['year','month','day'].map(k=>parts.find(p=>p.type===k).value).join('-');}
+  const age=(Date.parse(today+'T00:00:00Z')-stamp)/86400000;
   return days&&age>=days?'Đơn đã ngoài giới hạn '+days+' ngày được xóa.':'';
 }
 

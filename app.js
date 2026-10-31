@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V760';
+const SCF_BUILD_VERSION='V762';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -462,6 +462,8 @@ function App(){
     const before=new Map(previous.map(o=>[String(o.id),o]));
     const planned=updated.map(incomingOrder=>{
       const previousOrder=before.get(String(incomingOrder.id));
+      // Untouched records need no schedule preservation or trip/quantity scan.
+      if(previousOrder===incomingOrder)return incomingOrder;
       let order;
       if(previousOrder)order=scfPreserveExistingProductionOrder(previousOrder,incomingOrder);
       else{
