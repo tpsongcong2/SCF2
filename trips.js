@@ -651,7 +651,21 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
   const driverKey=isDriver?'id:'+currentUser.id:driverFilter;
   const ownDrivers=isDriver?{...drivers,tripKey:()=>driverKey}:drivers;
   const today=isoDate();
-  const report=React.useMemo(()=>scfBuildDriverTripReport({trips:scopedTrips,orders,products,customers,month,driverKey,drivers:ownDrivers,today}),[scopedTrips,orders,products,customers,month,driverKey,drivers,isDriver,today]);
+  const localReport=React.useMemo(()=>scfBuildDriverTripReport({trips:scopedTrips,orders,products,customers,month,driverKey,drivers:ownDrivers,today}),[scopedTrips,orders,products,customers,month,driverKey,drivers,isDriver,today]);
+  const [monthlySnapshot,setMonthlySnapshot]=useState(null);
+  const [monthlyError,setMonthlyError]=useState('');
+  const monthlyKey=JSON.stringify([String(currentUser.id),month,driverKey]);
+  useEffect(()=>{
+    let active=true;setMonthlySnapshot(null);setMonthlyError('');
+    if(!driverKey||typeof invokeScfAuth!=='function')return()=>{active=false;};
+    (async()=>{try{
+      const {data,error}=await invokeScfAuth({body:{action:'driver_month_report',month,driverKey}},15000);
+      if(error||!data?.ok||data.month!==month||data.driverKey!==driverKey)throw Error(error?.message||data?.error||'Chưa tải được báo công đủ tháng.');
+      if(active)setMonthlySnapshot({key:monthlyKey,report:data.report});
+    }catch(error){if(active)setMonthlyError(error.message||'Chưa tải được báo công đủ tháng.');}})();
+    return()=>{active=false;};
+  },[monthlyKey,trips,orders,products,customers]);
+  const report=monthlySnapshot?.key===monthlyKey?monthlySnapshot.report:localReport;
   const selectedName=isDriver?currentUser.name:drivers.options.find(item=>item.key===driverKey)?.name;
   const canOpen=typeof onOpenTrips==='function'&&canAccess(currentUser?.role,'trips',currentUser?.permissions,employeeDepartments(currentUser));
   const canOpenTrip=row=>canOpen&&(!isDriver||!!row.driverDispatchedAt||['active','completion_pending','completed'].includes(row.status));
@@ -668,6 +682,8 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
   const metric=(label,value,extra)=>h('div',{className:'driver-report-metric'},h('span',null,label),h('b',null,value),extra&&h('small',null,extra));
   return h('div',{className:'driver-work-report'},
     h('div',{className:'ptitle'},h('i',{className:'ti ti-steering-wheel',style:{fontSize:20}}),'Báo công lái xe'),
+    monthlyError&&h('div',{className:'card',role:'alert'},monthlyError+' Số đang hiển thị lấy từ dữ liệu đã tải, có thể chưa đủ tháng.'),
+    driverKey&&typeof invokeScfAuth==='function'&&monthlySnapshot?.key!==monthlyKey&&!monthlyError&&h('p',{role:'status'},'Đang đối chiếu công đủ tháng…'),
     h('div',{className:'card driver-report-filters'},
       !isDriver?h('label',null,h('span',null,'Lái xe'),h('select',{value:driverFilter,onChange:event=>{setDriverFilter(event.target.value);setShiftFilter('');},'aria-label':'Chọn lái xe'},h('option',{value:''},'— Chọn một lái xe —'),drivers.options.map(item=>h('option',{key:item.key,value:item.key},item.label)))):h('div',{className:'driver-report-owner'},h('span',null,'Lái xe'),h('b',null,currentUser.name)),
       h('label',null,h('span',null,'Tháng'),h('input',{type:'month',value:month,onChange:event=>{setMonth(event.target.value||isoDate().slice(0,7));setShiftFilter('');},'aria-label':'Tháng báo công'}))
@@ -924,7 +940,9 @@ function tripImageRows(trip,orders,products,customers,prodCats=[]){
     .flatMap(order=>(order.lines||[]).map(line=>{
       const product=products.find(p=>String(p.id)===String(line.productId));
       const note=order.isAdditionalTripOrder?'Đơn PS':[order.note,line.note].filter(Boolean).join(' · ');
-      const row=[order.deliveryDate||trip.deliveryDate||'',order.pointName||order.address||'—',line.productName||product?.name||'—',numFmt(line.qtyProd),line.unit||product?.unit||'',normalizeTimeInput(order.deliveryTime||trip.deliveryTime||''),note];
+      const source=order.warehouseMerged?(order.warehouseSourceOrders||[]).find(item=>String(item.id)===String(line.warehouseSourceOrderId||'')):null;
+      const pointName=order.warehouseMerged?(line.warehouseSourcePointName||source?.pointName||source?.address||order.pointName||order.address):order.pointName||order.address;
+      const row=[order.deliveryDate||trip.deliveryDate||'',pointName||'—',line.productName||product?.name||'—',numFmt(line.qtyProd),line.unit||product?.unit||'',normalizeTimeInput(order.deliveryTime||trip.deliveryTime||''),note];
       row.isGoods=isGoodsProduct(product||line,prodCats);
       return row;
     }));

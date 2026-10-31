@@ -222,9 +222,13 @@ function scfBuildProductionRows({orders=[],products=[],prodCats=[],prodShifts=[]
   Object.values(aggMap).forEach(row=>{row.stockMetrics=allocatedStock.get(row);row.display=scfProductionProductDisplay({...row,rows:[row]});});
   return Object.values(aggMap);
 }
+function scfProductionDefaultShift(now=new Date()){
+  const hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Ho_Chi_Minh',hour:'2-digit',hourCycle:'h23'}).format(now));
+  return hour>=10&&hour<20?'__group_afternoon':hour>=20&&hour<22?'all':'__group_night';
+}
 function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftRules,prodActuals,setProdActuals,stock,currentUser,onOpenClosing,onClosingWorkshopChange,preparedRows=null,preparedDate='',snapshotReadOnly=false}){
   const[date,setDate]=useState(fmtDate());
-  const[shift,setShift]=useState('all');
+  const[shift,setShift]=useState(()=>scfProductionDefaultShift());
   const[workshop,setWorkshop]=useState('all');
   const canEditActual=!snapshotReadOnly&&canWrite(currentUser?.role,'prodsummary',currentUser?.permLevels);
   const showShiftWeight=canViewProductionShiftWeight(currentUser);
