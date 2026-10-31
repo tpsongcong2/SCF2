@@ -1,5 +1,5 @@
 // Drafts contain no live mutations. The page commits a reviewed batch against latest orders.
-function scfFastEntryRows(text){
+function scfFastEntryRows(text,{customers=[]}={}){
   const rows=[];let cells=[],cell='',quoted=false;const source=String(text||'').replace(/^\uFEFF/,'');
   for(let i=0;i<source.length;i++){
     const c=source[i];
@@ -11,7 +11,20 @@ function scfFastEntryRows(text){
   if(quoted)throw Error('Ô Excel có dấu nháy chưa đóng. Hãy sao chép lại đầy đủ các ô.');
   cells.push(cell);if(cells.some(value=>value.trim()))rows.push(cells);
   if(rows[0]&&/ngày|ngay/i.test(rows[0][0])&&/bếp|bep|địa|dia/i.test(rows[0][1]||''))rows.shift();
-  return rows.map(cells=>({date:cells[0]?.trim()||'',point:cells[1]?.trim()||'',product:cells[2]?.trim()||'',ordered:cells[3]?.trim()||'',invoice:cells[4]?.trim()||'',time:cells[5]?.trim()||'',note:cells.slice(6).join('\t').trim()}));
+  return rows.map(cells=>{
+    // Keep proper TSV cells intact. Also accept a typed line or mixed text/TSV.
+    const typed=String(cells[0]||'').match(/^(\d{1,2}\/\d{1,2}\/(?:\d{4}|\d{2}))\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s+(\d{1,2}:\d{2})(?:\s+(.*))?$/);
+    if(typed){
+      const description=typed[2].trim(),norm=v=>normalizeLookupText(String(v||'')).replace(/\s+/g,' ').trim();
+      const choices=customers.flatMap(c=>(c.points||[]).flatMap(p=>[c.name+' / '+p.name,p.name])).filter(Boolean);
+      const exact=choices.find(name=>norm(name)===norm(description));
+      const prefix=choices.filter(name=>norm(description).startsWith(norm(name)+' ')).sort((a,b)=>norm(b).length-norm(a).length)[0];
+      let point=description,product=cells.slice(1).join(' ').trim(),note=typed[6]||'';
+      if(!exact&&prefix){point=prefix;product=norm(description).slice(norm(prefix).length).trim();if(cells.length>1)note=[note,...cells.slice(1)].filter(Boolean).join(' ');}
+      return {date:typed[1],point,product,ordered:typed[3],invoice:typed[4],time:typed[5],note};
+    }
+    return {date:cells[0]?.trim()||'',point:cells[1]?.trim()||'',product:cells[2]?.trim()||'',ordered:cells[3]?.trim()||'',invoice:cells[4]?.trim()||'',time:cells[5]?.trim()||'',note:cells.slice(6).join('\t').trim()};
+  });
 }
 function scfFastEntryProductLabel(product){return [product.code||product.id,product.name].filter(Boolean).join(' - ');}
 function scfFastEntryProductMatch(value,products){
@@ -77,7 +90,7 @@ function scfFastEntryEncodeRows(rows){
 }
 function scfFastEntryResolve(row,customers,products){
   const norm=value=>normalizeLookupText(String(value||'')).trim();
-  let date=row.date;
+  let date=String(row.date||'').trim();
   if(/^\d{4}-\d{2}-\d{2}$/.test(date))date=vnDateFromISO(date);
   if(/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(date))date=date.replace(/\/(\d{2})$/,'/20$1');
   if(!isValidCustomerImportDate(date)||!isPlausibleCustomerImportYear(date))throw Error('Ngày không hợp lệ (dd/mm/yyyy).');
@@ -88,7 +101,7 @@ function scfFastEntryResolve(row,customers,products){
   const input=norm(row.product),byCode=(products||[]).filter(product=>norm(product.id)===input||norm(product.code)===input);
   const byLabel=(products||[]).filter(product=>norm(scfFastEntryProductLabel(product))===input);
   const matches=byCode.length?byCode:byLabel.length?byLabel:(products||[]).filter(product=>norm(product.name)===input);
-  if(matches.length!==1)throw Error(matches.length?'Tên sản phẩm chưa duy nhất, dùng mã sản phẩm.':'Sản phẩm chưa có trong danh mục.');
+  if(matches.length!==1)throw Error(matches.length?'Tên sản phẩm chưa duy nhất, chọn đúng sản phẩm trong bảng xem trước.':'Sản phẩm chưa có trong danh mục.');
   const qty=value=>{const raw=String(value).replace(',','.');if(!/^\d+(?:\.\d+)?$/.test(raw)||!Number.isFinite(Number(raw)))throw Error('Nhập riêng SL đặt và SL HĐ, không để trống.');return Number(raw);};
   const time=mobileDeliveryTime(row.time);if(!time)throw Error('Giờ giao phải có dạng hh:mm.');
   const {point,customer}=points[0],product=matches[0];
@@ -147,7 +160,7 @@ function DeliveryFastEntryModal({customers,products,prodCats=[],orders,currentUs
   useEffect(()=>{
     if(discarded.current||saving||(!defaultPoint&&!preview))return;
     try{
-      const rows=scfFastEntryRows(text);if(!rows.some(row=>!String(row.point||'').trim()))return;
+      const rows=scfFastEntryRows(text,{customers});if(!rows.some(row=>!String(row.point||'').trim()))return;
       const next=scfFastEntryBuildPreview(rows,customers,products,orders,{defaultPoint,previous:preview||[]});
       if(preview)setPreview(next);setError('');
     }catch(_){} // Incomplete pasted text stays untouched for the user to finish editing.
@@ -155,14 +168,13 @@ function DeliveryFastEntryModal({customers,products,prodCats=[],orders,currentUs
   const addDraftLine=()=>{
     if(saving)return false;
     try{
+      if(!['product','ordered','invoice','note'].some(key=>String(manual[key]||'').trim()))throw Error('Nhập sản phẩm hoặc số lượng trước khi thêm dòng.');
       const matchingPoints=pointChoices.filter(({point,label})=>normalizeLookupText(point.name)===normalizeLookupText(manual.point)||normalizeLookupText(label)===normalizeLookupText(manual.point));
-      if(matchingPoints.length!==1)throw Error(matchingPoints.length?'Chọn rõ khách hàng và địa điểm.':'Hãy chọn địa điểm thuộc khu vực/khách hàng đang lọc.');
-      const row={...manual,point:matchingPoints[0].label};
-      const resolved=scfFastEntryResolve(row,customers,products);
-      if(!productChoices.some(product=>String(product.id)===String(resolved.lines[0].productId)))throw Error('Sản phẩm không thuộc loại TP/HH đang chọn. Hãy đổi loại hoặc chọn lại sản phẩm.');
+      const match=scfFastEntryProductMatch(manual.product,productChoices);
+      const row={...manual,point:matchingPoints.length===1?matchingPoints[0].label:manual.point,product:match.product?scfFastEntryProductLabel(match.product):manual.product};
       const encode=value=>/[\t\n\r"]/.test(String(value||''))?'"'+String(value).replace(/"/g,'""')+'"':String(value||'');
       const line=['date','point','product','ordered','invoice','time','note'].map(key=>encode(row[key])).join('\t');
-      const nextText=(text.trim()?text.trim()+'\n':'')+line,nextManual={...manual,product:'',ordered:'',invoice:'',note:''};
+      const nextText=(text.trim()?text.replace(/\r?\n+$/,'')+'\n':'')+line,nextManual={...manual,product:'',ordered:'',invoice:'',note:''};
       // Persist immediately so Enter followed by closing the app keeps the line.
       try{localStorage.setItem(storageKey,nextText);localStorage.setItem(storageKey+'_row',JSON.stringify(nextManual));}catch(_){}
       setText(nextText);setManual(nextManual);setPreview(null);setError('');return true;
@@ -170,7 +182,7 @@ function DeliveryFastEntryModal({customers,products,prodCats=[],orders,currentUs
   };
   const closeAndDiscard=()=>{if(saving)return;discarded.current=true;try{localStorage.removeItem(storageKey);localStorage.removeItem(storageKey+'_row');}catch(_){}onClose();};
   const review=()=>{
-    let rows;try{rows=scfFastEntryRows(text);}catch(error){setError(error.message);return;}if(!rows.length){setError('Hãy nhập hoặc dán ít nhất một dòng.');return;}
+    let rows;try{rows=scfFastEntryRows(text,{customers});}catch(error){setError(error.message);return;}if(!rows.length){setError('Hãy nhập hoặc dán ít nhất một dòng.');return;}
     if(rows.length>1000){setError('Mỗi lần tối đa 1.000 dòng để kiểm tra dễ hơn.');return;}
     const hasManyPoints=new Set(rows.map(row=>normalizeLookupText(row.point)).filter(Boolean)).size>1;
     if(hasManyPoints)setManual(previous=>({...previous,_pointMode:'rows'}));
@@ -211,7 +223,7 @@ function DeliveryFastEntryModal({customers,products,prodCats=[],orders,currentUs
       h('label',null,'Khách hàng',h('select',{'aria-label':'Khách hàng nhập nhanh',value:customerFilter,disabled:saving,onChange:event=>setManual(previous=>({...previous,_customerFilter:event.target.value,point:''}))},h('option',{value:''},'Tất cả khách hàng'),pointCustomers.map(customer=>h('option',{key:customer.id,value:String(customer.id)},customer.name)))),
       h('label',null,'Loại sản phẩm',h('select',{'aria-label':'Loại sản phẩm nhập nhanh',value:productType,disabled:saving,onChange:event=>setManual(previous=>({...previous,_productType:event.target.value,product:''}))},h('option',{value:'TP'},'TP · Thành phẩm'),h('option',{value:'HH'},'HH · Hàng hóa')))),
     h('p',null,pointMode==='rows'?'Nhiều địa điểm: giữ địa điểm riêng từng dòng. Dòng chưa nhận ra phải chọn lại; không lấy chung địa điểm ở ô nhập phía trên.':'Một địa điểm: ô địa điểm phía trên áp dụng cho dòng còn trống. Dòng đã có địa điểm riêng luôn được giữ nguyên.'),
-    h('div',{className:'tw delivery-fast-manual'},h('table',null,h('thead',null,h('tr',null,['Ngày','Địa điểm','Sản phẩm (mã - tên)','SL đặt','SL HĐ','Giờ','Chú ý'].map(label=>h('th',{key:label},label)))),h('tbody',null,h('tr',null,...['date','point','product','ordered','invoice','time','note'].map(key=>h('td',{key},h('input',{'aria-label':'Nhập nhanh '+key,value:manual[key],disabled:saving,list:key==='point'?'scf-fast-points':key==='product'?'scf-fast-products':undefined,inputMode:['ordered','invoice'].includes(key)?'decimal':undefined,onChange:event=>setManual(previous=>({...previous,[key]:event.target.value})),onKeyDown:event=>{if(event.key==='Enter'&&!event.isComposing&&!event.nativeEvent?.isComposing){event.preventDefault();const inputs=[...event.currentTarget.closest('tr').querySelectorAll('input')];if(key==='note'){if(addDraftLine())inputs[2]?.focus();}else inputs[inputs.indexOf(event.currentTarget)+1]?.focus();}}}))))))),
+    h('div',{className:'tw delivery-fast-manual'},h('table',null,h('thead',null,h('tr',null,['Ngày','Địa điểm','Sản phẩm (tên hoặc mã)','SL đặt','SL HĐ','Giờ','Chú ý'].map(label=>h('th',{key:label},label)))),h('tbody',null,h('tr',null,...['date','point','product','ordered','invoice','time','note'].map(key=>h('td',{key},h('input',{'aria-label':'Nhập nhanh '+key,value:manual[key],disabled:saving,list:key==='point'?'scf-fast-points':key==='product'?'scf-fast-products':undefined,inputMode:['ordered','invoice'].includes(key)?'decimal':undefined,onChange:event=>setManual(previous=>({...previous,[key]:event.target.value})),onKeyDown:event=>{if(event.key==='Enter'&&!event.isComposing&&!event.nativeEvent?.isComposing){event.preventDefault();const inputs=[...event.currentTarget.closest('tr').querySelectorAll('input')];if(key==='note'){if(addDraftLine())inputs[2]?.focus();}else inputs[inputs.indexOf(event.currentTarget)+1]?.focus();}}}))))))),
     h('datalist',{id:'scf-fast-points'},pointChoices.map(({point,customer,label})=>h('option',{key:String(customer.id)+'|'+point.id,value:label}))),
     h('datalist',{id:'scf-fast-products'},productChoices.map(product=>h('option',{key:product.id,value:scfFastEntryProductLabel(product)},product.unit||''))),
     h('button',{type:'button',disabled:saving,onClick:addDraftLine},'+ Thêm dòng vào bản nháp'),
