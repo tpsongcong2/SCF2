@@ -50,10 +50,13 @@ function scfOrderAwaitingDelivery(order,trips=[]){
   if(order.tripId&&!trip)return false;
   return !trip||!trip.driverDispatchedAt&&!['active','completion_pending','completed','cancelled'].includes(trip.status);
 }
-function scfSyncPendingDeliveryQty(order,trips=[]){
+function scfSyncPendingDeliveryQty(order,trips=[],previousOrder){
   if(!scfOrderAwaitingDelivery(order,trips))return order;
-  let changed=false;const lines=(order.lines||[]).map(line=>{
+  const previousLines=new Map((previousOrder?.lines||[]).filter(l=>l.id).map(l=>[String(l.id),l]));
+  let changed=false;const lines=(order.lines||[]).map((line,index)=>{
     const qty=numFmt(line.qtyProd??line.qty??line.quantity??line.qtyInvoice??0);
+    const old=previousOrder&&(line.id?previousLines.get(String(line.id)):previousOrder.lines?.[index]);
+    if(old&&String(old.productId||'')===String(line.productId||'')&&numFmt(old.qtyProd??old.qty??old.quantity??old.qtyInvoice??0)===qty)return line;
     if(line.qtyDelivered!==undefined&&line.qtyDelivered!==null&&line.qtyDelivered!==''&&numFmt(line.qtyDelivered)===qty)return line;
     changed=true;return {...line,qtyDelivered:qty};
   });return changed?{...order,lines}:order;

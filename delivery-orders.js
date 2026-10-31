@@ -3265,7 +3265,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       const copiedTrip=tripById.get(String(d.tripId||''));
       planned={...planned,tripId:d.tripId||null,tripAssignMode:d.tripAssignMode==='manual'?'manual':'auto',status:d.tripId?(copiedTrip?.status==='active'?'delivering':'assigned'):'pending'};
     }
-    const duplicate=findExistingDeliveryOrder(orders,planned,edit?.id||'');
+    const duplicate=edit?null:findExistingDeliveryOrder(orders,planned);
     if(duplicate){window.showToast(duplicateDeliveryOrderMessage(planned,duplicate),'warn',10000);return false;}
     if(edit){
       const currentTrip=orderTrip(edit);
@@ -3545,8 +3545,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const currentTrip=orderTrip(live),keepTrip=dispatchedTrip(currentTrip)||closedTrip(currentTrip)||['delivering','done'].includes(live.status);
     let updated=result.scheduleChanged?prepareAutomaticTripForSave(result.order):result.order;
     if(keepTrip)updated={...updated,tripId:live.tripId||currentTrip?.id||null,tripAssignMode:live.tripAssignMode||'manual',status:live.status};
-    const duplicate=result.scheduleChanged&&findExistingDeliveryOrder(orders,updated,live.id);
-    if(duplicate)throw new Error(duplicateDeliveryOrderMessage(updated,duplicate));
+    // Existing orders may share a delivery slot; creation still checks duplicates.
     const stamp=fmtDT(),actor=currentUser?.name||'';
     updated={...updated,lines:updated.lines.map((line,index)=>line.qtyDelivered!==live.lines?.[index]?.qtyDelivered?{...line,deliveredAt:stamp,deliveredBy:actor}:line),orderHistory:[...(live.orderHistory||[]),historyEntry('Sửa đơn trên điện thoại',result.changes)],updatedAt:stamp,updatedBy:actor};
     applyOrdersAndTripSync(previous=>previous.map(order=>String(order.id)===String(live.id)?updated:order));
@@ -3570,7 +3569,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         if(mobileDeliveryTime(live.deliveryTime)!==mobileDeliveryTime(base.deliveryTime))throw Error('Giờ giao đã được sửa ở nơi khác. Hãy mở lại ô.');
         let next=prepareAutomaticTripForSave({...live,deliveryTime:time});
         if(dispatchedTrip(trip)||live.status==='delivering')next={...next,tripId:live.tripId,tripAssignMode:live.tripAssignMode,status:live.status};
-        const duplicate=findExistingDeliveryOrder(previous,next,live.id);if(duplicate)throw Error(duplicateDeliveryOrderMessage(next,duplicate));
+        // Editing an existing order may share a delivery slot with another order.
         updated={...next,updatedAt:fmtDT(),updatedBy:currentUser?.name||'',orderHistory:[...(live.orderHistory||[]),historyEntry('Sửa nhanh giờ giao',[(live.deliveryTime||'—')+' → '+time])]};
         const result=previous.map(o=>o===live?updated:o);syncTripOrderIds(result);return result;
       }catch(error){failure=error;return previous;}
@@ -3598,13 +3597,11 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const confirmManualTripSave=async(orderId,newTripId,expectedProduction)=>{
     // Chờ React ghi thay đổi vào hàng đồng bộ trước khi kiểm tra kết quả.
     await new Promise(resolve=>setTimeout(resolve,0));
-    window.scfSendCollectionsNow?.(['scf_orders','scf_trips']).catch(error=>console.warn('Transfer sync:',error?.message||error));
-    const confirmed=await(window.scfWaitForCollectionSync?.('scf_orders',50000)??Promise.resolve(!serverAuthEnabled()));
-    const saved=window.__SCF_CONFIRMED_ORDER_TRIPS?.[String(orderId)];
-    const productionSaved=typeof scfRemoteSnapshots==='undefined'?null:(scfRemoteSnapshots.get('scf_orders')||[]).find(o=>String(o.id)===String(orderId));
-    const productionExact=!expectedProduction||!serverAuthEnabled()||Object.entries(expectedProduction).every(([key,value])=>String(productionSaved?.[key]||'')===String(value||''));
-    const exact=productionExact&&(!serverAuthEnabled()||String(saved?.tripId||'')===String(newTripId||'')&&saved?.tripAssignMode==='manual');
+    const confirmed=!serverAuthEnabled()||await window.scfWaitForOrderTripSync?.(orderId,newTripId,expectedProduction,50000);
+    const exact=!!confirmed;
     if(confirmed&&exact){window.showToast(expectedProduction?'Máy chủ đã xác nhận chuyến và ca SX.':newTripId?'Máy chủ đã xác nhận chuyển chuyến.':'Máy chủ đã xác nhận rút đơn khỏi chuyến.','success');return true;}
+    const syncFailure=window.scfGetSyncReport?.()?.items?.find(item=>item.key==='scf_orders')?.errorMessage;
+    if(syncFailure)throw Error(syncFailure+' Đơn vẫn được giữ trong hàng chờ; không cần tạo lại đơn.');
     window.showToast('Máy chủ chưa xác nhận chuyển chuyến. Thay đổi vẫn đang chờ đồng bộ; hãy thử xác nhận lại.','warn',10000);
     return false;
   };

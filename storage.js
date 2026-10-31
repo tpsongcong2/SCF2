@@ -932,6 +932,33 @@ window.scfWaitForOrderInvoiceSync=async function(orderId,url,timeoutMs=50000){
     await new Promise(resolve=>setTimeout(resolve,150));
   }
 };
+window.scfWaitForOrderTripSync=async function(orderId,tripId,expectedProduction,timeoutMs=50000){
+  const id=String(orderId),destination=String(tripId||''),actor=String(window.__SCF_ACCESS_CONTEXT?.employeeId||''),deadline=Date.now()+timeoutMs;
+  const matches=row=>!!row&&String(row.tripId||'')===destination&&row.tripAssignMode==='manual'&&(!expectedProduction||Object.entries(expectedProduction).every(([key,value])=>String(row[key]||'')===String(value||'')));
+  if(!navigator.onLine)return false;
+  window.scfSendCollectionsNow(['scf_orders','scf_trips']).catch(error=>console.warn('Order transfer sync:',error?.message||error));
+  let verifyAfter=Date.now()+Math.min(5000,timeoutMs/3);
+  while(Date.now()<deadline){
+    if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==actor||!navigator.onLine)return false;
+    const pending=readSyncQueue().scf_orders||scfDebouncedWrites.scf_orders;
+    const queued=Array.isArray(pending?.patches)?pending.patches.find(p=>String(p.id)===id)?.value:Array.isArray(pending?.value)?pending.value.find(o=>String(o.id)===id):null;
+    if(queued&&!matches(queued))return false;
+    // Read the specific server record, even after a reload or an unrelated pending write.
+    // Never infer success from the local row or from an empty collection queue.
+    if(typeof serverLoadOrderSyncRecords==='function'&&(!pending||Date.now()>=verifyAfter)){
+      verifyAfter=Date.now()+5000;
+      try{
+        const saved=await serverLoadOrderSyncRecords([id],Math.max(1,Math.min(10000,deadline-Date.now())));
+        if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==actor)return false;
+        const row=saved?.items?.find(o=>String(o.id)===id);
+        if(matches(row))return true;
+      }catch(error){console.warn('Transfer verification:',error?.message||error);}
+      if(!pending)return false;
+    }
+    await new Promise(resolve=>setTimeout(resolve,150));
+  }
+  return false;
+};
 window.scfWaitForTripDriverSync=async function(tripId,driverId,orderIds,timeoutMs=6000){
   if(!navigator.onLine)return false;
   // Gửi ngay các thay đổi đã xếp hàng; không giữ cửa sổ chờ toàn bộ thời gian
