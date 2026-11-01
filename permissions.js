@@ -176,7 +176,7 @@ function DeliveryQuantityTotalsPermissionField({employee,onChange,disabled=false
 // Quyền nút trên điện thoại bổ sung cho quyền trang/nghiệp vụ hiện có.
 // Tài khoản cũ chưa cấu hình giữ cách hiển thị hiện tại.
 const SCF_MOBILE_PERMISSION_GROUPS=[
-  {label:'Truy cập từ thanh dưới điện thoại',options:[['welcome','Thời tiết'],['delivery','Đơn giao hàng'],['trips','Chuyến giao hàng'],['attendance','Chấm công'],['prodsummary','SX · Tổng hợp sản xuất'],['quick-summary','Đơn tổng'],['more','Thêm · Danh sách chức năng']]},
+  {label:'Truy cập từ thanh dưới điện thoại',options:[['welcome','Thời tiết'],['delivery','Đơn giao hàng'],['trips','Chuyến giao hàng'],['attendance','Chấm công'],['prodsummary','SX · Tổng hợp sản xuất'],['quick-summary','Đơn tổng'],['workreport_lx','Công lái xe'],['fuelpurchases','Mua xăng dầu'],['notifications','Thông báo'],['leaves','Xin nghỉ'],['tasks','Giao việc'],['more','Thêm · Danh sách chức năng']]},
   {label:'Tính năng chuyến giao trên điện thoại',options:[['tripSummary','Xem ảnh đơn tổng'],['tripUpdate','Cập nhật SL giao và HĐ'],['tripPrint','In đơn'],['tripInvoices','Hiện ảnh hóa đơn'],['tripImage','Tạo ảnh chuyến']]}
 ];
 function canMobileFeature(user,key){
@@ -319,11 +319,16 @@ function orderHistoryDays(user={}){
  if(raw===undefined||raw===null||raw==='')return 60;
  const days=Number(raw);return Number.isInteger(days)&&days>=0&&days<=3650?days:60;
 }
+const scfOrderViewDayCache=new Map();
+function scfOrderViewTodayUtc(now){
+ const minute=Math.floor(Number(now)/60000),cached=scfOrderViewDayCache.get(minute);if(cached!==undefined)return cached;
+ const formatter=scfOrderViewDayCache.get('formatter')||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'});
+ const parts=formatter.formatToParts(now),part=key=>Number(parts.find(p=>p.type===key).value),utc=Date.UTC(part('year'),part('month')-1,part('day'));
+ if(scfOrderViewDayCache.size>8)scfOrderViewDayCache.clear();scfOrderViewDayCache.set('formatter',formatter);scfOrderViewDayCache.set(minute,utc);return utc;
+}
 function scfOrderInViewPeriod(order,user,now=new Date()){
  const days=orderHistoryDays(user);if(!days)return true;
- const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
- const part=key=>Number(parts.find(p=>p.type===key).value);
- const cutoff=Date.UTC(part('year'),part('month')-1,part('day')-(days-1));
+ const cutoff=scfOrderViewTodayUtc(now)-(days-1)*86400000;
  const raw=String(order?.deliveryDate||order?.date||'');
  const vn=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/),iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
  if(!vn&&!iso)return false;

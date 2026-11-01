@@ -1917,3 +1917,5 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 .driver-demo{max-width:460px;margin:0 auto}.driver-demo>.card{margin-bottom:12px}.driver-demo>.card p{font-size:13px;line-height:1.5}.driver-demo .driver-mobile-page{width:100%}
 
 .driver-mobile-page .dm-body{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}.driver-mobile-page .dm-body>*{grid-column:1 / -1}.driver-mobile-page .dm-body>label:nth-child(-n+2){grid-column:auto;min-width:0}.driver-mobile-page .dm-body>label:nth-child(-n+2) select,.driver-mobile-page .dm-body>label:nth-child(-n+2) input{min-width:0;padding:8px;font-size:14px}
+
+@media(max-width:768px){.driver-mobile-page{padding-bottom:calc(84px + env(safe-area-inset-bottom));}}

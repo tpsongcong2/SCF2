@@ -300,10 +300,12 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
     const done=check?.completed===true&&Number(check.orderedQty)===qty;
     const toggle=()=>{
       if(!sourceEditable)return;
+      const sourceEventId='PSC'+uid(),sourceClickedAt=new Date().toISOString();
       setProdActuals(previous=>{
         const record=previous?.[key]||{},old=record.sourceChecks?.[String(id)];
-        const completed=!done;
-        const event={completed,orderedQty:qty,checkedBy:currentUser?.name||currentUser?.username||'',checkedById:currentUser?.id||'',checkedAt:new Date().toISOString()};
+        const currentCheck=scfEffectiveProductionSourceCheck(row,orderById.get(String(id)),old,globalThis.window?.__SCF_UI_SETTINGS);
+        const completed=!(currentCheck?.completed===true&&Number(currentCheck.orderedQty)===qty);
+        const event={eventId:sourceEventId,completed,orderedQty:qty,checkedBy:currentUser?.name||currentUser?.username||'',checkedById:currentUser?.id||'',checkedAt:sourceClickedAt};
         return{...previous,[key]:{...record,date:row.prodDate,shiftId:row.shift,productId:row.productId,productName:row.productName,sourceChecks:{...record.sourceChecks,[String(id)]:{...event,history:[...(old?.history||[]),event]}}}};
       });
     };

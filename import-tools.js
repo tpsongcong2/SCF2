@@ -775,6 +775,10 @@ function MobileNav({page,setPage,role,perms,dept,currentUser,onLogout,onQuickTri
   if(productionDept)preferred.push('prodsummary');
   const quick=preferred.map(key=>{const item=NAV.find(item=>item.key===key);return item&&key==='trips'&&(viewer.role==='driver'||employeeHasDepartment(viewer,'Lái xe'))?{...item,label:'Đơn hàng lái xe'}:item;})
     .filter(item=>item&&canAccess(role,item.key,perms,dept)&&allowed(item.key));
+  const reserved=(onQuickTripSummary&&allowed('quick-summary')?1:0)+(allowed('more')?1:0);
+  const extraKeys=(viewer.role==='driver'||employeeHasDepartment(viewer,'Lái xe'))?['workreport_lx','fuelpurchases','notifications','leaves','tasks']:['notifications','leaves','tasks','workreport_lx','fuelpurchases'];
+  const shortLabels={workreport_lx:'Công',fuelpurchases:'Xăng',notifications:'TB',leaves:'Xin nghỉ',tasks:'Việc'};
+  for(const key of quick.length+reserved>0?extraKeys:[]){if(quick.length+reserved>=6)break;const item=NAV.find(item=>item.key===key);if(item&&!quick.some(row=>row.key===key)&&canAccess(role,key,perms,dept)&&allowed(key))quick.push({...item,shortLabel:shortLabels[key]});}
   const currentIsQuick=quick.some(item=>item.key===page);
   const go=key=>{if(allowed(key)&&canAccess(role,key,perms,dept)){setPage(key);setOpen(false);}};
   const items=[...quick,...(onQuickTripSummary&&allowed('quick-summary')?[{key:'quick-summary',icon:'ti-photo-search',label:'Đơn tổng'}]:[]),...(allowed('more')?[{key:'more',icon:'ti-grid-dots',label:'Thêm'}]:[])];
@@ -816,9 +820,9 @@ function MobileNav({page,setPage,role,perms,dept,currentUser,onLogout,onQuickTri
         ?h('button',{key:item.key,className:'mobile-nav-btn'+(open||!currentIsQuick?' on':''),onClick:()=>setOpen(v=>!v),'aria-label':'Mở tất cả chức năng',title:'Thêm'},
           h('i',{className:'ti '+(open?'ti-x':item.icon)})
         )
-        :h('button',{key:item.key,className:'mobile-nav-btn'+(item.key==='prodsummary'?' mobile-nav-summary':'')+(page===item.key?' on':''),onClick:()=>{if(allowed(item.key))go(item.key);},'aria-label':item.key==='prodsummary'?'Tổng hợp sản xuất':item.label,title:item.key==='prodsummary'?'Tổng hợp sản xuất':item.label},
+        :h('button',{key:item.key,className:'mobile-nav-btn'+(item.key==='prodsummary'||item.shortLabel?' mobile-nav-summary':'')+(page===item.key?' on':''),onClick:()=>{if(allowed(item.key))go(item.key);},'aria-label':item.key==='prodsummary'?'Tổng hợp sản xuất':item.label,title:item.key==='prodsummary'?'Tổng hợp sản xuất':item.label},
           h('i',{className:'ti '+item.icon}),
-          item.key==='prodsummary'&&h('span',null,'SX')
+          (item.key==='prodsummary'||item.shortLabel)&&h('span',null,item.shortLabel||'SX')
         )
       )
     )

@@ -2166,7 +2166,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
   };
   const completionIssues=(trip,sourceOrders=orders)=>{
     const tripOrders=trip.driverMobileWorkflowVersion===1?scfDriverWorkflowMembers(trip,sourceOrders):(sourceOrders||[]).filter(o=>(trip.orderIds||[]).includes(o.id));
-    const missingInvoice=tripOrders.filter(o=>!scfWarehouseOrders.photo(o,trip,products,shifts,'driver')&&!(trip.driverMobileWorkflowVersion===1&&o.driverNoInvoiceAt));
+    const missingInvoice=trip.driverMobileWorkflowVersion===1?[]:tripOrders.filter(o=>!scfWarehouseOrders.photo(o,trip,products,shifts,'driver'));
     const missingQty=[];
     tripOrders.forEach(o=>(o.lines||[]).forEach(l=>{if(!Number.isFinite(tripDeliveredQty(l)))missingQty.push((o.pointName||o.id)+' / '+(l.productName||'Sản phẩm'));}));
     const issues=typeof scfDriverMobileCompletionIssues==='function'?scfDriverMobileCompletionIssues(trip,sourceOrders):[];
@@ -2181,7 +2181,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
   const approvalIssues=(trip,sourceOrders=orders)=>{
     const base=completionIssues(trip,sourceOrders);
     const tripOrders=trip.driverMobileWorkflowVersion===1?scfDriverWorkflowMembers(trip,sourceOrders):(sourceOrders||[]).filter(o=>(trip.orderIds||[]).includes(o.id));
-    const unapprovedInvoices=tripOrders.filter(o=>!(trip.driverMobileWorkflowVersion===1&&o.driverNoInvoiceAt)&&o.driverInvoiceReviewStatus!=='approved'&&!(scfWarehouseOrders.photo(o,trip,products,shifts,'driver')?.inherited&&trip.summaryInvoiceReviewStatus==='approved'));
+    const unapprovedInvoices=tripOrders.filter(o=>{const photo=scfWarehouseOrders.photo(o,trip,products,shifts,'driver');if(!photo&&trip.driverMobileWorkflowVersion===1)return false;return o.driverInvoiceReviewStatus!=='approved'&&!(photo?.inherited&&trip.summaryInvoiceReviewStatus==='approved');});
     const issues=[...base.issues];
     if(unapprovedInvoices.length)issues.push(unapprovedInvoices.length+' HĐ LX chưa được duyệt');
     if(trip.summaryInvoiceReviewStatus!=='approved')issues.push('hóa đơn tổng chưa được duyệt');
