@@ -14,7 +14,10 @@ function scfSavePrintAgentSettings(value){
   return next;
 }
 
-function scfSvgToJpegFile(svg,index,rotate180=false){
+function scfSvgToPngFile(svg,index,rotate180=false,paperWidthMm=58,paperHeightMm=40){
+  const width=Number(paperWidthMm),height=Number(paperHeightMm);
+  if(!(width>0&&width<=210&&height>0&&height<=297))return Promise.reject(new Error('Khổ tem không hợp lệ.'));
+  // Render directly from SVG at 600 dpi; never enlarge a previously rasterized image.
   return new Promise((resolve,reject)=>{
     const source=new Blob([svg],{type:'image/svg+xml;charset=utf-8'});
     const url=URL.createObjectURL(source);
@@ -22,8 +25,8 @@ function scfSvgToJpegFile(svg,index,rotate180=false){
     image.onload=()=>{
       try{
         const canvas=document.createElement('canvas');
-        canvas.width=image.naturalWidth||image.width||1000;
-        canvas.height=image.naturalHeight||image.height||1000;
+        canvas.width=Math.round(width/25.4*600);
+        canvas.height=Math.round(height/25.4*600);
         const ctx=canvas.getContext('2d');
         ctx.fillStyle='#fff';
         ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -35,8 +38,9 @@ function scfSvgToJpegFile(svg,index,rotate180=false){
         canvas.toBlob(blob=>{
           URL.revokeObjectURL(url);
           if(!blob){reject(new Error('Không tạo được ảnh tem.'));return;}
-          resolve(new File([blob],'scf-label-'+String(index+1).padStart(3,'0')+'.jpg',{type:'image/jpeg'}));
-        },'image/jpeg',0.98);
+          resolve(new File([blob],'scf-label-'+String(index+1).padStart(3,'0')+'.png',{type:'image/png'}));
+          canvas.width=canvas.height=1;
+        },'image/png');
       }catch(error){
         URL.revokeObjectURL(url);
         reject(error);
@@ -50,14 +54,27 @@ function scfSvgToJpegFile(svg,index,rotate180=false){
   });
 }
 
+// Print artwork must bypass uploadPhoto, which intentionally recompresses photos as JPEG.
+async function scfUploadLabelPng(file,target){
+  if(file?.type!=='image/png'||!file.size||file.size>5242880)throw new Error('Ảnh tem PNG không hợp lệ hoặc vượt 5 MB.');
+  if(!sb)throw new Error('Chưa kết nối kho ảnh tem. Hãy kiểm tra mạng.');
+  const folder=String(target).replace(/[^A-Z0-9_-]/g,'_');
+  const path='print-agent/'+folder+'/'+new Date().toISOString().slice(0,10)+'/'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)+'-'+file.name;
+  const {error}=await withRemoteTimeout(sb.storage.from(SUPA_PHOTO_BUCKET).upload(path,file,{contentType:'image/png',upsert:false}),30000);
+  if(error)throw new Error('Không tải được ảnh tem: '+(error.message||error));
+  const url=await withRemoteTimeout(createPrivatePhotoUrl(path),15000);
+  if(!url)throw new Error('Không tạo được đường dẫn ảnh tem.');
+  return url;
+}
+
 async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperWidthMm,paperHeightMm,svgs,rotate180=false}){
   const target=String(agentId||'SCF-PC-01').trim().toUpperCase();
   if(!target)throw new Error('Chưa nhập mã SCF Print Agent.');
   if(!Array.isArray(svgs)||!svgs.length)throw new Error('Chưa có tem để gửi in.');
   const imageUrls=[];
   for(let index=0;index<svgs.length;index++){
-    const file=await scfSvgToJpegFile(svgs[index],index,rotate180);
-    const url=await uploadPhoto(file,'print-agent/'+target,{max:1800,quality:.98});
+    const file=await scfSvgToPngFile(svgs[index],index,rotate180,paperWidthMm,paperHeightMm);
+    const url=await scfUploadLabelPng(file,target);
     if(!url||String(url).startsWith('data:')){
       throw new Error('Không tải được ảnh tem lên máy chủ. Hãy kiểm tra mạng rồi thử lại.');
     }
@@ -74,6 +91,8 @@ async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperW
     paperWidthMm:Number(paperWidthMm)||58,
     paperHeightMm:Number(paperHeightMm)||40,
     images:imageUrls,
+    labelImageVersion:2,
+    labelSourceDpi:600,
     status:'pending',
     createdAt:new Date().toISOString(),
     attempts:0

@@ -1,4 +1,4 @@
-const CACHE = 'scf-v762';
+const CACHE = 'scf-v764';
 const ASSETS = [
   './',
   './index.html',
@@ -10,7 +10,7 @@ const ASSETS = [
   './styles.css?v=757',
   './runtime.js?v=457',
   './storage.js?v=755',
-  './print-agent.js?v=718',
+  './print-agent.js?v=763',
   './helpers.js?v=473',
   './warehouse-orders.js?v=711',
   './defaults.js?v=602',
@@ -37,7 +37,7 @@ const ASSETS = [
   './auth-workforce.js?v=551',
   './quotations.js',
   './finance.js?v=702',
-  './delivery-orders.js?v=762',
+  './delivery-orders.js?v=764',
   './delivery-fast-entry.js?v=751',
   './delivery-catalog-edit.js?v=733',
   './qrcode.min.js?v=357',
@@ -54,7 +54,7 @@ const ASSETS = [
   './production-assignments.js?v=644',
   './permissions.js?v=762',
   './permission-settings.js?v=756',
-  './app.js?v=762',
+  './app.js?v=764',
   './bootstrap.js?v=645',
   './manifest.json',
   './icon-192.png',
