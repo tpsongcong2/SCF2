@@ -1708,7 +1708,7 @@ function scfTripSummaryPrintHtml(trip,orders,products=[],customers=[],shifts=[],
 }
 function scfPrintTripSummary(trip,orders,products,customers,shifts,includeReport){
   const printHtml=scfTripSummaryPrintHtml(trip,orders,products,customers,shifts,includeReport);
-  if(window.scfShouldUsePrintAgent?.())return window.scfQueueA4Print(printHtml,{title:'Đơn tổng chuyến · '+trip.deliveryDate+' · '+(trip.shiftName||'')}).then(()=>window.showToast('Đã gửi đơn tổng chuyến tới máy in A4.','success')).catch(e=>window.showToast(e.message||'Chưa gửi được lệnh in.','error'));
+  if(window.scfShouldUsePrintAgent?.())return window.scfQueueA4Print(printHtml,{title:'Đơn tổng chuyến · '+trip.deliveryDate+' · '+(trip.shiftName||''),tripContext:{tripId:trip.id,orderIds:(orders||[]).filter(o=>o.status!=='cancelled'&&(o.tripId?String(o.tripId)===String(trip.id):(trip.orderIds||[]).map(String).includes(String(o.id)))).map(o=>String(o.id)),mode:'summary'}}).then(()=>window.showToast('Đã gửi đơn tổng chuyến tới máy in A4.','success')).catch(e=>window.showToast(e.message||'Chưa gửi được lệnh in.','error'));
   const popup=window.open('','_blank','width=900,height=700');if(!popup){window.showToast('Hãy cho phép mở cửa sổ in.','warn');return;}
   popup.document.write(printHtml);popup.document.close();setTimeout(()=>popup.print(),400);
 }

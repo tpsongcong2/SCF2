@@ -1849,7 +1849,7 @@ function deliverySelectedTripPrintOrders(orders,trips,tripId,customers=[]){
   const members=(orders||[]).filter(order=>order.status!=='cancelled'&&String(manualTripForOrder(trips,order)?.id||'')===String(tripId));
   return sortTripOrdersByDeliveryOrder(trip,members,customers);
 }
-function PrintByCustomerModal({orders,customers,products,company,trips=[],initialDate,initialDateTo,initialDateBasis,initialGroup,tripOnlyId='',onClose}) {
+function PrintByCustomerModal({orders,customers,products,company,trips=[],initialDate,initialDateTo,initialDateBasis,initialGroup,tripOnlyId='',simulate=false,onClose}) {
   const tripOrders=tripOnlyId?deliverySelectedTripPrintOrders(orders,trips,tripOnlyId,customers):[];
   const selectedTrip=tripOnlyId?trips.find(trip=>String(trip.id)===String(tripOnlyId)):null;
   const [tpl,setTpl]=useState(()=>tripOnlyId?resolveOrderPrintTemplate(tripOrders[0],customers.find(customer=>String(customer.id)===String(tripOrders[0]?.customerId||tripOrders[0]?.custId||''))):'welstory');
@@ -1874,8 +1874,8 @@ function PrintByCustomerModal({orders,customers,products,company,trips=[],initia
       return idx<docs.length-1?body+'<div style="page-break-after:always"></div>':body;
     }).join('');
     const printHtml='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Phieu giao hang</title><style>'+style+'<\/style><\/head><body>'+bodyParts+'<\/body><\/html>';
-    if(window.scfShouldUsePrintAgent?.()){
-      window.scfQueueA4Print(printHtml,{title:'Phiếu giao hàng · '+selectedOrders.length+' đơn'})
+    if(simulate||window.scfShouldUsePrintAgent?.()){
+      window.scfQueueA4Print(printHtml,{title:'Phiếu giao hàng · '+selectedOrders.length+' đơn',simulate,tripContext:tripOnlyId?{tripId:tripOnlyId,orderIds:selectedOrders.map(o=>String(o.id)),mode:'delivery'}:undefined})
         .then(()=>window.showToast('Đã gửi '+selectedOrders.length+' đơn tới Canon 2900.','success'))
         .catch(error=>window.showToast(error?.message||'Chưa gửi được lệnh in tới Canon 2900.','error'));
       return;
@@ -4429,16 +4429,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const pack=Number(rule.pack||10);
     return scfLabelPackWeights(kg,pack,rule.mergeSmallRemainder);
   };
-  const labelLinesForOrder=o=>{
-    const plan=prodShiftPlan(o,prodShifts||[],prodShiftRules);
-    const labels=[];
-    (o.lines||[]).forEach(l=>{
-      const kg=orderLineWeight(l);
-      if(!kg)return;
-      splitLabelWeights(kg,l).forEach(partKg=>labels.push({line:l,kg:partKg,plan,order:o}));
-    });
-    return labels;
-  };
+  const labelLinesForOrder=o=>scfOrderLabelItems(o,products,prodShifts||[],prodShiftRules||[]);
   const cleanPacProductName=name=>String(name||'')
     .replace(/\s+/g,' ')
     .replace(/\s*,\s*\d+(?:[.,]\d+)?\s*KG\s*\/\s*PAC\b/ig,'')
@@ -4488,81 +4479,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       rows: rows||'<div class="summary-row"><div class="summary-product">Chưa có sản phẩm</div></div>'
     };
   };
-  const buildClassicLabelSvg=(it,o)=>{
-    const l=it.line;
-    const product=l.productName||'';
-    const nsx=it.plan?.labelDate||o.deliveryDate||'';
-    const gioSx=(it.plan?.labelTime||'').replace(':','H').replace(/H00$/,'H');
-    const kgNum=Number(it.kg).toLocaleString('vi-VN',{maximumFractionDigits:2});
-    const pName=product.toUpperCase();
-    const directUse=pName.includes('BÚN LÁ')||pName.includes('BUN LA')||pName.includes('BÁNH CUỐN')||pName.includes('BANH CUON')||pName.includes('BÁNH PHỞ CUỐN')||pName.includes('BANH PHO CUON');
-    const hdsd=directUse?'Ăn trực tiếp':'Trần qua nước sôi trước khi ăn.';
-    return (
-      '<svg xmlns="http://www.w3.org/2000/svg" width="580" height="400" viewBox="0 0 580 400">'+
-        '<rect width="580" height="400" fill="white"/>'+
-        '<rect x="10" y="10" width="560" height="380" fill="white" stroke="#111" stroke-width="2"/>'+
-        '<text x="160" y="68" font-family="Arial,sans-serif" font-size="54" font-weight="700" text-anchor="middle" lengthAdjust="spacingAndGlyphs" textLength="270">'+esc(product)+'</text>'+
-        '<text x="425" y="68" font-family="Arial,sans-serif" font-size="52" font-weight="700" text-anchor="middle">'+kgNum+'</text>'+
-        '<text x="520" y="68" font-family="Arial,sans-serif" font-size="38" font-weight="700" text-anchor="middle">KG</text>'+
-        '<text x="22" y="112" font-family="Arial,sans-serif"><tspan font-size="22">SP CỦA: C.TY TNHH </tspan><tspan font-size="23" font-weight="700">THỰC PHẨM SÔNG CÔNG</tspan></text>'+
-        '<text x="22" y="154" font-family="Arial,sans-serif" font-size="23">ĐC: Tổ 1, Phường Bá Xuyên, Tỉnh Thái Nguyên</text>'+
-        '<text x="22" y="196" font-family="Arial,sans-serif" font-size="23" font-weight="700">SĐT : 0969709878</text>'+
-        '<text x="258" y="196" font-family="Arial,sans-serif" font-size="23">THÀNH PHẦN: Bột gạo, nước</text>'+
-        '<text x="22" y="238" font-family="Arial,sans-serif" font-size="23">HDSD: '+esc(hdsd)+'</text>'+
-        '<text x="512" y="238" font-family="Arial,sans-serif" font-size="25" text-anchor="end"><tspan font-weight="700">PH</tspan> 5-8</text>'+
-        '<text x="22" y="280" font-family="Arial,sans-serif" font-size="23">K.cáo: Không dùng khi biến màu hoặc có mùi lạ</text>'+
-        '<text x="22" y="322" font-family="Arial,sans-serif" font-size="26" font-weight="700">NSX:</text>'+
-        '<text x="132" y="322" font-family="Arial,sans-serif" font-size="26" font-weight="700">'+esc(nsx)+'</text>'+
-        '<text x="342" y="322" font-family="Arial,sans-serif" font-size="26" font-weight="700">GIỜ SX:</text>'+
-        '<text x="512" y="322" font-family="Arial,sans-serif" font-size="26" font-weight="700" text-anchor="end">'+esc(gioSx)+'</text>'+
-        '<text x="28" y="364" font-family="Arial,sans-serif" font-size="23">HSD: 24H</text>'+
-        '<text x="170" y="364" font-family="Arial,sans-serif" font-size="23">FORMOL: 0</text>'+
-        '<text x="302" y="364" font-family="Arial,sans-serif" font-size="23">HÀN THE: 0</text>'+
-        '<text x="552" y="364" font-family="Arial,sans-serif" font-size="23" text-anchor="end">BQ: 0-10°C</text>'+
-      '</svg>'
-    );
-  };
-  const buildPacLabelSvg=(it,o)=>{
-    const l=it.line;
-    const matchedPoint=(customers||[])
-      .flatMap(c=>(c.points||[]))
-      .find(p=>p.id===o.pointId||p.id===o.ptId||p.name===o.pointName);
-    const pointName=String(matchedPoint?.name||o.pointName||'KHO VẬN').toUpperCase();
-    const product=cleanPacProductName(l.productName||'');
-    const kgNum=Number(it.kg||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
-    const nsx=it.plan?.labelDate||o.deliveryDate||'';
-    const gioSx=String(it.plan?.labelTime||'').replace(':','H').replace(/H00$/,'H')||'';
-    return (
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000">'+
-        '<rect width="1000" height="1000" fill="white"/>'+
-        '<g transform="translate(28 41) scale(0.95)">'+
-        '<rect x="0" y="0" width="1000" height="1006" fill="white" stroke="#111" stroke-width="6"/>'+
-        '<text x="430" y="143" font-family="Times New Roman,serif" font-size="70" font-weight="700" text-anchor="middle">'+esc(product)+'</text>'+
-        '<text x="804" y="143" font-family="Times New Roman,serif" font-size="70" font-weight="700" text-anchor="middle">'+esc(kgNum)+'</text>'+
-        '<text x="922" y="143" font-family="Times New Roman,serif" font-size="52" font-weight="700" text-anchor="middle">KG</text>'+
-        '<text x="72" y="245" font-family="Times New Roman,serif" font-size="32" font-weight="700">SP CỦA: CÔNG TY TNHH THỰC PHẨM SÔNG CÔNG</text>'+
-        '<text x="72" y="329" font-family="Times New Roman,serif" font-size="32" font-weight="700">ĐC: Tổ 1, Phường Bá Xuyên, Tỉnh Thái Nguyên</text>'+
-        '<text x="72" y="413" font-family="Times New Roman,serif" font-size="32" font-weight="700">SĐT : 0969709878</text>'+
-        '<text x="510" y="413" font-family="Times New Roman,serif" font-size="32" font-weight="700">TP: Bột gạo, nước</text>'+
-        '<text x="72" y="497" font-family="Times New Roman,serif" font-size="31" font-weight="700">BQ : 15°C-20°C. Đóng gói hở. HSD 12h trần nước sôi trước khi dùng.</text>'+
-        '<text x="72" y="581" font-family="Times New Roman,serif" font-size="31" font-weight="700">BQ : 10°C-15°C. Đóng gói hở. HSD 24h trần nước sôi trước khi dùng.</text>'+
-        '<text x="72" y="665" font-family="Times New Roman,serif" font-size="31" font-weight="700">BQ : 5°C-10°C. Đóng gói hở. HSD 36h trần nước sôi trước khi dùng.</text>'+
-        '<text x="72" y="749" font-family="Times New Roman,serif" font-size="31" font-weight="700">BQ : 0°C-5°C. Đóng gói kín. HSD 72h trần nước sôi trước khi dùng.</text>'+
-        '<text x="72" y="833" font-family="Times New Roman,serif" font-size="31" font-weight="700">K.cáo: Không dùng khi biến màu hoặc có mùi lạ</text>'+
-        '<text x="105" y="918" font-family="Times New Roman,serif" font-size="31" font-weight="700">Formol:</text>'+
-        '<text x="292" y="918" font-family="Times New Roman,serif" font-size="31" font-weight="700" text-anchor="middle">0</text>'+
-        '<text x="448" y="918" font-family="Times New Roman,serif" font-size="31" font-weight="700">PH:</text>'+
-        '<text x="560" y="918" font-family="Times New Roman,serif" font-size="31" font-weight="700" text-anchor="middle">5-8</text>'+
-        '<text x="634" y="918" font-family="Times New Roman,serif" font-size="31" font-weight="700">Hàn the:</text>'+
-        '<text x="846" y="918" font-family="Times New Roman,serif" font-size="31" font-weight="700" text-anchor="middle">0</text>'+
-        '<text x="140" y="997" font-family="Times New Roman,serif" font-size="36" font-weight="700" text-anchor="middle">NSX:</text>'+
-        '<text x="335" y="997" font-family="Times New Roman,serif" font-size="36" font-weight="700" text-anchor="middle">'+esc(nsx)+'</text>'+
-        '<text x="620" y="997" font-family="Times New Roman,serif" font-size="36" font-weight="700" text-anchor="middle">GIỜ SX:</text>'+
-        '<text x="860" y="997" font-family="Times New Roman,serif" font-size="36" font-weight="700" text-anchor="middle">'+esc(gioSx)+'</text>'+
-        '</g>'+
-      '</svg>'
-    );
-  };
+  const buildClassicLabelSvg=scfBuildClassicOrderLabelSvg;
+  const buildPacLabelSvg=(it,o)=>scfBuildPacOrderLabelSvg(it,o,customers);
   const openLabelPrintWindow=(labels,ordersForPrint,mode)=>{
     if(!labels.length)return;
     const isPacMode=mode==='pac';

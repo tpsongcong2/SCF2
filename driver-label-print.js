@@ -6,22 +6,9 @@ function scfDriverLabelWeight(line,products=[]){
   const perUnit=numFmt(product?.weightPerUnit||line.weightPerUnit||packMatch?.[1]);
   return {product,qty,unit,pac,perUnit,kg:/^(kg|kgs|kilogram|kilograms)$/.test(unit)?qty:qty*perUnit};
 }
-function scfDriverOrderLabels(trip,orders,products=[]){
-  const labels=[];
-  for(const order of scfDriverWorkflowMembers(trip,orders))for(const line of order.lines||[]){
-    const info=scfDriverLabelWeight(line,products);if(!(info.qty>0))continue;
-    const name=line.productName||info.product?.name||'Sản phẩm',rule=resolveProductLabelPackRule(info.product,name);
-    if(!rule.enabled)continue;
-    if(info.pac){
-      if(!Number.isSafeInteger(info.qty)||!(info.perUnit>0))throw Error('Kiểm tra quy cách PAC của '+name+'.');
-      if(labels.length+info.qty>1000)throw Error('Tối đa 1.000 tem mỗi lần. Hãy chọn ít đơn hơn.');
-      for(let i=0;i<info.qty;i++)labels.push({order,line,qty:info.perUnit,unit:'kg'});
-    }else if(info.kg>0){
-      for(const kg of scfLabelPackWeights(info.kg,rule.pack,rule.mergeSmallRemainder))labels.push({order,line,qty:kg,unit:'kg'});
-    }else labels.push({order,line,qty:info.qty,unit:line.unit||info.product?.unit||''});
-    if(labels.length>1000)throw Error('Tối đa 1.000 tem mỗi lần. Hãy chọn ít đơn hơn.');
-  }
-  return labels;
+function scfDriverOrderLabels(trip,orders,products=[],prodShifts=window.__SCF_PROD_SHIFTS||[],prodShiftRules=window.__SCF_PROD_SHIFT_RULES||[]){
+ const labels=scfDriverWorkflowMembers(trip,orders).flatMap(order=>scfOrderLabelItems(order,products,prodShifts,prodShiftRules).map(it=>({...it,qty:it.kg,unit:'kg'})));
+ if(labels.length>1000)throw Error('Tối đa 1.000 tem mỗi lần. Hãy chọn ít đơn hơn.');return labels;
 }
 function scfDriverManualLabels(trip,product,raw){
   if(!product||product.active===false||isGoodsProduct(product,[])||!resolveProductLabelPackRule(product,product.name).enabled)throw Error('Chọn một mã thành phẩm được in tem.');
@@ -29,11 +16,11 @@ function scfDriverManualLabels(trip,product,raw){
   if(!/^\d+(?:\.\d+)?$/.test(text)||!Number.isFinite(Number(text))||Number(text)<=0)throw Error('Nhập số lượng kg lớn hơn 0.');
   const rule=resolveProductLabelPackRule(product,product.name),weights=scfLabelPackWeights(Number(text),rule.pack,rule.mergeSmallRemainder);
   if(weights.length>1000)throw Error('Tối đa 1.000 tem mỗi lần. Hãy giảm số lượng.');
-  return weights.map(qty=>({order:{deliveryDate:trip.deliveryDate},line:{productId:product.id,productName:product.name,productCode:product.code},qty,unit:'kg',manual:true}));
+  const order={deliveryDate:trip.deliveryDate,deliveryTime:'',tripId:trip.id,shiftId:trip.shiftId};const line={productId:product.id,productName:product.name,productCode:product.code,unit:'kg',qtyProd:Number(text)};const plan=prodShiftPlan({...order,lines:[line]},window.__SCF_PROD_SHIFTS||[],window.__SCF_PROD_SHIFT_RULES||[]);return weights.map(qty=>({order,line,plan,qty,unit:'kg',manual:true}));
 }
 function scfDriverLabelSvg(trip,label){
-  const esc=scfEscapePrintHtml,{order,line,qty,unit}=label,fmt=value=>Number(value).toLocaleString('vi-VN',{maximumFractionDigits:3});
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="580" height="400" viewBox="0 0 580 400"><rect width="580" height="400" fill="white"/><rect x="12" y="12" width="556" height="376" fill="none" stroke="black" stroke-width="2"/><g font-family="Arial,sans-serif" fill="black"><text x="28" y="65" font-size="32" font-weight="bold" textLength="520" lengthAdjust="spacingAndGlyphs">'+esc(label.manual?'IN KHÁC ĐƠN':order.pointName||order.customer||order.id)+'</text><text x="28" y="120" font-size="25">Giao: '+esc(order.deliveryDate||trip.deliveryDate)+' · '+esc(order.deliveryTime||'')+'</text><text x="28" y="185" font-size="30" font-weight="bold" textLength="520" lengthAdjust="spacingAndGlyphs">'+esc(line.productName)+'</text><text x="28" y="255" font-size="54" font-weight="bold">'+esc(fmt(qty))+' '+esc(unit)+'</text><text x="28" y="315" font-size="23">Chuyến: '+esc(trip.shiftName||trip.id)+'</text><text x="28" y="360" font-size="23">'+esc(trip.driverName||'')+'</text></g></svg>';
+ const order=label.order||{deliveryDate:trip.deliveryDate},it={...label,kg:label.qty,plan:label.plan||prodShiftPlan({...order,lines:[label.line]},window.__SCF_PROD_SHIFTS||[],window.__SCF_PROD_SHIFT_RULES||[])};
+ return label.isPac?scfBuildPacOrderLabelSvg(it,order,window.__SCF_CUSTOMERS||[]):scfBuildClassicOrderLabelSvg(it,order);
 }
 function DriverLabelPreview({trip,label}){
   const [url,setUrl]=useState('');
@@ -41,7 +28,7 @@ function DriverLabelPreview({trip,label}){
   useEffect(()=>{if(!svg){setUrl('');return;}const value=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));setUrl(value);return()=>URL.revokeObjectURL(value);},[svg]);
   return url?h('img',{className:'dm-label-preview',src:url,alt:'Tem giao hàng xem thử'}):null;
 }
-function DriverLabelPrintModal({trip,orders,products,prodCats=[],user,onClose,getLatest}){
+function DriverLabelPrintModal({trip,orders,products,prodCats=[],user,onClose,getLatest,previewMode=false}){
   const [mode,setMode]=useState('orders'),[excluded,setExcluded]=useState([]),[productId,setProductId]=useState(''),[qty,setQty]=useState('10'),[settings,setSettings]=useState(false),[preview,setPreview]=useState(false),[confirm,setConfirm]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const saved=scfPrintAgentSettings(),[agent,setAgent]=useState(saved.agentId||'SCF-PC-01'),[printer,setPrinter]=useState(saved.printerRole||'x350');
   const ctx=useRef(null),working=useRef(false);ctx.current={trip,orders,products,user,getLatest};
@@ -53,10 +40,10 @@ function DriverLabelPrintModal({trip,orders,products,prodCats=[],user,onClose,ge
   const change=fn=>{fn();setConfirm(null);setError('');};
   const check=()=>{
     const current=ctx.current,live=current.getLatest(),access=window.__SCF_ACCESS_CONTEXT;
-    if(String(live.user?.id)!==String(user.id)||access?.employeeId&&String(access.employeeId)!==String(user.id)||access?.readOnly||!live.trip||!scfTripBelongsToDriver(live.trip,live.user)||!scfTripImageDispatched(live.trip)||!canMobileFeature(live.user,'tripPrint')||!canAccess(live.user.role,'trips',live.user.permissions,employeeDepartments(live.user)))throw Error('Chuyến hoặc quyền in đã thay đổi. Hãy mở lại chuyến.');
+    if(String(live.user?.id)!==String(user.id)||!previewMode&&access?.employeeId&&String(access.employeeId)!==String(user.id)||access?.readOnly||!live.trip||!scfTripBelongsToDriver(live.trip,live.user)||!scfTripImageDispatched(live.trip)||!canMobileFeature(live.user,'tripPrint')||!canAccess(live.user.role,'trips',live.user.permissions,employeeDepartments(live.user)))throw Error('Chuyến hoặc quyền in đã thay đổi. Hãy mở lại chuyến.');
     return live;
   };
-  const prepare=()=>{try{check();if(issue)throw Error(issue);if(!labels.length)throw Error('Chọn ít nhất một đơn có tem để in.');if(!agent.trim())throw Error('Nhập mã SCF trong Chọn máy in.');setConfirm({mode,ids:chosen.map(o=>String(o.id)),productId:effectiveId,qty,svgs:labels.map(label=>scfDriverLabelSvg(trip,label)),agent:agent.trim().toUpperCase(),printer});}catch(e){setError(e.message);}};
+  const prepare=()=>{try{check();if(issue)throw Error(issue);if(!labels.length)throw Error('Chọn ít nhất một đơn có tem để in.');if(!agent.trim())throw Error('Nhập mã SCF trong Chọn máy in.');setConfirm({mode,ids:chosen.map(o=>String(o.id)),productId:effectiveId,qty,svgs:labels.map(label=>scfDriverLabelSvg(trip,label)),pac:labels.map(label=>!!label.isPac),sentGroups:[],agent:agent.trim().toUpperCase(),printer});}catch(e){setError(e.message);}};
   const send=async()=>{
     if(working.current||!confirm)return;working.current=true;setBusy(true);setError('');
     try{
@@ -66,9 +53,9 @@ function DriverLabelPrintModal({trip,orders,products,prodCats=[],user,onClose,ge
         else actual=scfDriverManualLabels(live.trip,(live.products||products).find(p=>String(p.id)===request.productId),request.qty);
         const svgs=actual.map(label=>scfDriverLabelSvg(live.trip,label));if(JSON.stringify(svgs)!==JSON.stringify(request.svgs))throw Error('Thông tin đơn, số lượng hoặc quy cách vừa thay đổi. Hãy xem lại trước khi in.');
       };
-      validate();await scfQueueLabelPrint({agentId:request.agent,printerRole:request.printer,title:'Tem giao hàng '+(trip.shiftName||trip.id),paperWidthMm:58,paperHeightMm:40,svgs:request.svgs,rotate180:true,beforeEnqueue:validate});
-      scfSavePrintAgentSettings({agentId:request.agent,printerRole:request.printer});window.showToast('Đã gửi '+request.svgs.length+' tem đến Agent máy in.','success');onClose();
-    }catch(e){setError(e.message||'Chưa gửi được tem.');setConfirm(null);}finally{working.current=false;setBusy(false);}
+      validate();for(const pac of [false,true]){const svgs=request.svgs.filter((svg,index)=>request.pac[index]===pac);if(!svgs.length||request.sentGroups.includes(pac))continue;await scfQueueLabelPrint({agentId:request.agent,printerRole:request.printer,title:'Tem giao hàng '+(trip.shiftName||trip.id),paperWidthMm:pac?100:58,paperHeightMm:pac?100:40,svgs,rotate180:!pac,beforeEnqueue:validate,simulate:previewMode,tripContext:{tripId:trip.id,orderIds:request.mode==='orders'?request.ids:[],mode:request.mode}});request.sentGroups.push(pac);}
+      if(!previewMode)scfSavePrintAgentSettings({agentId:request.agent,printerRole:request.printer});window.showToast(previewMode?'Trải nghiệm: đã mô phỏng gửi '+request.svgs.length+' tem; không gửi máy in thật.':'Đã gửi '+request.svgs.length+' tem đến Agent máy in.','success');onClose();
+    }catch(e){setError((confirm.sentGroups.length?'Đã gửi một phần tem. Bấm xác nhận để gửi phần còn lại. ':'')+(e.message||'Chưa gửi được tem.'));if(!confirm.sentGroups.length)setConfirm(null);}finally{working.current=false;setBusy(false);}
   };
   return h(Modal,{title:'In tem giao hàng',className:'driver-label-modal',onClose:()=>{if(!working.current)onClose();}},
     h('div',{className:'dm-label-trip'},h('div',null,h('b',null,(trip.shiftName||trip.id)+' · '+trip.deliveryDate),h('small',null,members.length+' đơn trong chuyến')),h('button',{type:'button',disabled:busy,'aria-expanded':settings,'aria-controls':'driver-printer-settings',onClick:()=>setSettings(v=>!v)},'Chọn máy in')),

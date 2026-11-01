@@ -296,13 +296,13 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
     const qty=row.sourceQty?.[String(id)]||0;
     const key=actualKey(row.prodDate,row.shift,row.productId);
     const sourceEditable=canCheckSource&&(typeof scfClosingActualDeadline!=='function'||Date.now()<scfClosingActualDeadline(key,rules));
-    const check=prodActuals?.[key]?.sourceChecks?.[String(id)];
+    const check=scfEffectiveProductionSourceCheck(row,orderById.get(String(id)),prodActuals?.[key]?.sourceChecks?.[String(id)],globalThis.window?.__SCF_UI_SETTINGS);
     const done=check?.completed===true&&Number(check.orderedQty)===qty;
     const toggle=()=>{
       if(!sourceEditable)return;
       setProdActuals(previous=>{
         const record=previous?.[key]||{},old=record.sourceChecks?.[String(id)];
-        const completed=!(old?.completed===true&&Number(old.orderedQty)===qty);
+        const completed=!done;
         const event={completed,orderedQty:qty,checkedBy:currentUser?.name||currentUser?.username||'',checkedById:currentUser?.id||'',checkedAt:new Date().toISOString()};
         return{...previous,[key]:{...record,date:row.prodDate,shiftId:row.shift,productId:row.productId,productName:row.productName,sourceChecks:{...record.sourceChecks,[String(id)]:{...event,history:[...(old?.history||[]),event]}}}};
       });
@@ -423,7 +423,7 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
             ),
             h('details',{className:'production-source-section'},
               h('summary',null,h('span',null,'Xem nguồn đơn ('+[...new Set(row.orders)].length+')'),h('i',{className:'ti ti-chevron-down','aria-hidden':true})),
-              h('small',{className:'production-source-quantities'},(()=>{const confirmed=Object.entries(row.sourceQty||{}).reduce((sum,[id,qty])=>{const check=prodActuals?.[actualKey(row.prodDate,row.shift,row.productId)]?.sourceChecks?.[id];return sum+(check?.completed===true&&Math.abs(Number(check.orderedQty)-qty)<1e-8?qty:0);},0);return 'Đã SX theo đơn: '+confirmed.toLocaleString('vi-VN')+' '+row.unit+' · Còn thiếu: '+Math.max(0,row.qtyProd-confirmed).toLocaleString('vi-VN')+' '+row.unit;})()),
+              h('small',{className:'production-source-quantities'},(()=>{const confirmed=Object.entries(row.sourceQty||{}).reduce((sum,[id,qty])=>{const check=scfEffectiveProductionSourceCheck(row,orderById.get(String(id)),prodActuals?.[actualKey(row.prodDate,row.shift,row.productId)]?.sourceChecks?.[id],globalThis.window?.__SCF_UI_SETTINGS);return sum+(check?.completed===true&&Math.abs(Number(check.orderedQty)-qty)<1e-8?qty:0);},0);return 'Đã SX theo đơn: '+confirmed.toLocaleString('vi-VN')+' '+row.unit+' · Còn thiếu: '+Math.max(0,row.qtyProd-confirmed).toLocaleString('vi-VN')+' '+row.unit;})()),
               [...new Set(row.orders)].map(id=>sourceControl(row,id))
             )
           )

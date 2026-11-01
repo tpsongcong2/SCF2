@@ -102,6 +102,7 @@ function roleDefaults(role) {
 }
 // canAccess checks employee's custom permissions first, else falls back to role
 function canAccess(role, page, perms, dept='') {
+  if(['driver-preview','trip-settings'].includes(page))return ['admin','administrator'].includes(String(role||'').toLowerCase());
   if(['kpi4p','kpi4p_manage','kpi4p_approve','kpi4p_settings','payroll4p','payroll4p_approve'].includes(page))return ['admin','administrator'].includes(String(role||'').trim().toLowerCase());
   // Báo cáo sử dụng Supabase chứa thông tin hạ tầng và hạn mức của công ty.
   // Không cho quyền tùy chỉnh của nhân viên/quản lý mở trang này.

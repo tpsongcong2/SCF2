@@ -67,8 +67,9 @@ async function scfUploadLabelPng(file,target){
   return url;
 }
 
-async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperWidthMm,paperHeightMm,svgs,rotate180=false,beforeEnqueue}){
+async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperWidthMm,paperHeightMm,svgs,rotate180=false,beforeEnqueue,tripContext,simulate=false}){
   beforeEnqueue?.();
+  if(simulate){window.showToast('Trải nghiệm: đã mô phỏng gửi '+svgs.length+' tem; không gửi máy in thật.','success');return {id:'PREVIEW'};}
   const target=String(agentId||'SCF-PC-01').trim().toUpperCase();
   if(!target)throw new Error('Chưa nhập mã SCF Print Agent.');
   if(!Array.isArray(svgs)||!svgs.length)throw new Error('Chưa có tem để gửi in.');
@@ -82,7 +83,8 @@ async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperW
     }
     imageUrls.push(url);
   }
-  const current=await dbGet(SCF_PRINT_QUEUE_KEY,[]);
+  const scoped=tripContext&&typeof serverAuthEnabled==='function'&&serverAuthEnabled();
+  const current=scoped?[]:await dbGet(SCF_PRINT_QUEUE_KEY,[]);
   const queue=Array.isArray(current)?current:[];
   const job={
     id:'PJ'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
@@ -100,7 +102,8 @@ async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperW
     attempts:0
   };
   beforeEnqueue?.();
-  await dbSet(SCF_PRINT_QUEUE_KEY,[...queue.filter(Boolean),job]);
+  if(scoped){const {data,error}=await invokeScfAuth({body:{action:'driver_print',job,tripContext}});if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Chưa gửi được lệnh in cho chuyến.'));}
+  else await dbSet(SCF_PRINT_QUEUE_KEY,[...queue.filter(Boolean),job]);
   scfSavePrintAgentSettings({agentId:target});
   return job;
 }
@@ -114,10 +117,12 @@ function scfShouldUsePrintAgent(){
     /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||'');
 }
 
-async function scfQueueA4Print(html,{agentId,title='Đơn hàng SCF'}={}){
+async function scfQueueA4Print(html,{agentId,title='Đơn hàng SCF',tripContext,simulate=false}={}){
+  if(simulate){window.showToast('Trải nghiệm: đã mô phỏng in phiếu; không gửi máy in thật.','success');return {id:'PREVIEW'};}
   const settings=scfPrintAgentSettings();
   const target=String(agentId||settings.agentId||'SCF-PC-01').trim().toUpperCase();
-  const current=await dbGet(SCF_PRINT_QUEUE_KEY,[]);
+  const scoped=tripContext&&typeof serverAuthEnabled==='function'&&serverAuthEnabled();
+  const current=scoped?[]:await dbGet(SCF_PRINT_QUEUE_KEY,[]);
   const queue=Array.isArray(current)?current:[];
   const job={
     id:'PJ'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
@@ -133,7 +138,8 @@ async function scfQueueA4Print(html,{agentId,title='Đơn hàng SCF'}={}){
     attempts:0
   };
   if(!job.html)throw new Error('Không tạo được nội dung đơn hàng để in.');
-  await dbSet(SCF_PRINT_QUEUE_KEY,[...queue.filter(Boolean),job]);
+  if(scoped){const {data,error}=await invokeScfAuth({body:{action:'driver_print',job,tripContext}});if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Chưa gửi được lệnh in cho chuyến.'));}
+  else await dbSet(SCF_PRINT_QUEUE_KEY,[...queue.filter(Boolean),job]);
   scfSavePrintAgentSettings({agentId:target});
   return job;
 }

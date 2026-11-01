@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V775';
+const SCF_BUILD_VERSION='V777';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -13,7 +13,7 @@ const PTITLES = {
   customers:'Khách hàng', workcats:'Danh mục công việc', tasks:'Giao việc', notifications:'Thông báo', userguide:'HDSD SCFOOD', shifts:'Ca giao hàng',
   workreport_vp:'Công kế toán', workreport_sx:'Công sản xuất', workreport_lx:'Công lái xe', workreport_total:'Tổng công',
   process_accounting:'QUY TRÌNH KẾ TOÁN', process_bun:'QT SẢN XUẤT BÚN', process_pho:'QT SX PHỞ', process_banhcuon:'QT SX BÁNH CUỐN',
-  quotes:'Báo giá', delivery:'Đơn giao hàng', intem:'Intem', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng', deliverysequence:'Cài đặt thứ tự giao',
+  quotes:'Báo giá', delivery:'Đơn giao hàng', intem:'Intem', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng', 'driver-preview':'Trải nghiệm giao diện lái xe', 'trip-settings':'Cài đặt chuyến giao hàng', deliverysequence:'Cài đặt thứ tự giao',
   salesreport:'Báo cáo bán hàng', cashflowreport:'Báo cáo dòng tiền', fuelreport:'Báo cáo mua xăng dầu', marketsales:'Báo cáo công nợ', invoicereport:'Báo cáo hóa đơn', powdersales:'Bán bột bún',
   nccs:'Nhà CC NVL', nccgoods:'Nhà CC Hàng hóa', purchaseorders:'Đơn mua hàng NVL', purchasegoods:'Đơn mua hàng hàng hóa', fuelpurchases:'Đơn mua xăng dầu', utilityexpenses:'Chi phí điện nước', purchasereport:'Báo cáo mua hàng', maintreport:'Báo cáo sửa chữa', materialusage:'Báo cáo NVL tồn và tiêu dùng', powderdebtreport:'Báo cáo công nợ', syncreport:'Đồng bộ dữ liệu', dbusage:'Dung lượng Supabase',
   maint_vehicle:'Bảo dưỡng xe', maint_machine:'Bảo dưỡng máy',
@@ -44,7 +44,7 @@ const SCF_PAGE_DATA={
   maint_vehicle:['assets','garages'],maint_machine:['assets'],shifts:['shifts','trips'],
   quotes:['quotes','customers','products'],intem:['products'],
   delivery:['orders','customers','products','prodcats','quotes','trips','prod_shifts','prod_shift_rules','shifts','print_template_settings'],
-  trips:['trips','orders','shifts','prod_shifts','customers','products','prodcats','quotes','finance_debts'],
+  trips:['trips','orders','shifts','prod_shifts','prod_shift_rules','customers','products','prodcats','quotes','finance_debts'],
   orderdetail:['orders','products','customers','shifts','trips','prod_shifts','quotes','finance_debts'],
   workreport_lx:['trips','orders','products','customers'],
   salesreport:['orders','customers','products','prod_shifts','quotes','shifts','trips'],
@@ -255,6 +255,8 @@ function scfLoadOptionalScript(name,url){
 }
 // Kiểm tra thành phần trước khi render: một tệp tải lỗi không được làm trắng trang.
 const SCF_PAGE_COMPONENTS={
+  'trip-settings':'DeliveryTripSettings',
+  'driver-preview':'DriverMobilePreview DriverOrdersMobile DriverLabelPrintModal',
   kpi4p:'KPI4PTab',
   attp_claims:'ATTPDocumentsTab',attp_process:'ATTPDocumentsTab',attp_standards:'ATTPDocumentsTab',attp_daily:'ATTPDocumentsTab',attp_legal:'ATTPDocumentsTab',
   'mobile-home':'MobileRestrictedHome',welcome:'WelcomePage',company:'CompanySettings',appearance:'AppearanceSettingsTab',printtemplates:'PrintTemplateSettingsTab',
@@ -283,7 +285,7 @@ async function scfEnsurePageTools(page){
   }
   // Chuyến giao hàng không dùng thư viện Excel/ZIP. Không chặn giao diện bằng
   // hai gói CDN lớn chỉ để mở trang này.
-  if(['mobile-home','personnel','welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','deliverysequence','delivery'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
+  if(['mobile-home','personnel','welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','driver-preview','trip-settings','deliverysequence','delivery'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
   return Promise.all([
     scfLoadOptionalScript('JSZip','https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'),
     scfLoadOptionalScript('XLSX','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js')
@@ -429,6 +431,7 @@ function App(){
   const[notifications,_snotifications]=useState([]);
   const[deliveryRules,_sdr]=useState([]);
   const[processPosts,_spp]=useState({});
+  window.__SCF_UI_SETTINGS=uiSettings;
   window.__SCF_CUSTOMERS=customers||[];
   window.__SCF_PROD_SHIFTS=prodShifts||[];
   window.__SCF_PROD_SHIFT_RULES=prodShiftRules||[];
@@ -1040,7 +1043,7 @@ function App(){
         page==='mobile-home'&&h(MobileRestrictedHome),
         canOpenCurrentPage(cu)&&page==='welcome'&&h(WelcomePage,{emp:cu,employees,company,uiSettings,news:companyNews,setNews:setCompanyNews,messages:internalMessages,setMessages:setInternalMessages,notifications,onRefresh:refreshCommunityData}),
         canAccess(cu.role,'company',cu.permissions,cuAccessDepartments)&&page==='company'&&h(CompanySettings,{company,setCompany,canEdit:canWrite(cu.role,'company',cu.permLevels)}),
-        canAccess(cu.role,'appearance',cu.permissions)&&page==='appearance'&&h(AppearanceSettingsTab,{uiSettings,setUiSettings}),
+        canAccess(cu.role,'appearance',cu.permissions)&&page==='appearance'&&h(AppearanceSettingsTab,{uiSettings,setUiSettings,currentUser:cu}),
         canAccess(cu.role,'printtemplates',cu.permissions)&&page==='printtemplates'&&h(PrintTemplateSettingsTab,{templateSettings:printTemplateSettings,setTemplateSettings:setPrintTemplateSettings,products,customers}),
         canAccess(cu.role,'personnel',cu.permissions)&&page==='personnel'&&h(PersonnelInformationTab,{key:cu.id,employees,currentUser:cu,depts}),
         canAccess(cu.role,'employees',cu.permissions)&&page==='employees'&&h(EmployeeTab,{employees,setEmployees,cu,depts,permissionProfiles}),
@@ -1086,6 +1089,8 @@ function App(){
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
         canAccess(cu.role,'delivery',cu.permissions)&&page==='delivery'&&h(DeliveryOrdersTab,{highlightOrderOnHover:uiSettings.deliveryOrderHover!==false,orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify:addNotification,onViewOrderSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(true);}:undefined,onViewProduction:canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments)&&(!window.matchMedia?.('(max-width:768px)')?.matches||canMobileFeature(cu,'prodsummary'))?()=>setProductionPreviewOpen(true):undefined}),
         canAccess(cu.role,'intem',cu.permissions)&&page==='intem'&&h(IntemTab,{products,company}),
+        page==='trip-settings'&&canAccess(cu.role,'trip-settings',cu.permissions,cuAccessDepartments)&&h(DeliveryTripSettings,{uiSettings,setUiSettings,currentUser:cu}),
+        page==='driver-preview'&&canAccess(cu.role,'driver-preview',cu.permissions,cuAccessDepartments)&&h(DriverMobilePreview,{currentUser:cu}),
         canAccess(cu.role,'trips',cu.permissions,cuAccessDepartments)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,prodCats,quotes,financeDebts,setFinanceDebts,company,currentUser:cu,notify:addNotification,onWarehouseMerge:mergeWarehouseTrip,onBackToDriverReport:()=>setPage('workreport_lx')}),
         canAccess(cu.role,'workreport_lx',cu.permissions,cuAccessDepartments)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,orders,products,customers,employees,currentUser:cu,onOpenTrips:()=>setPage('trips')}),
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,trips,currentUser:cu,prodShifts,quotes,financeDebts,setFinanceDebts,menuHidden,setMenuHidden}),
