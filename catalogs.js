@@ -307,7 +307,7 @@ function ProductForm({prod,prodCats,onSave,onClose}){
       weightPerUnit:f.weightPerUnit?numFmt(f.weightPerUnit):0,
       needsLabel:!!f.needsLabel,
       labelPackSize:f.needsLabel&&f.labelPackSize?numFmt(f.labelPackSize):0,
-      labelMergeSmallRemainder:!!f.labelMergeSmallRemainder
+      labelMergeSmallRemainder:resolveProductLabelPackRule(f,f.name).mergeSmallRemainder
     }));
   };
   return h(Modal,{title:prod?'Sửa sản phẩm':'Thêm sản phẩm',onClose},
@@ -343,8 +343,8 @@ function ProductForm({prod,prodCats,onSave,onClose}){
         h('div',{className:'g2'},
           h(F,{label:'Kg mỗi tem chuẩn'},h('input',{type:'number',min:0,step:.01,value:f.labelPackSize,onChange:e=>s('labelPackSize',e.target.value),placeholder:'Ví dụ: 10 hoặc 5'})),
           h(F,{label:'Cho gộp phần lẻ nhỏ vào tem cuối'},h('label',{style:{display:'flex',alignItems:'center',gap:8,height:38,padding:'0 4px'}},
-            h('input',{type:'checkbox',checked:!!f.labelMergeSmallRemainder,onChange:e=>s('labelMergeSmallRemainder',e.target.checked),style:{width:16,height:16}}),
-            h('span',{style:{fontSize:13,color:'var(--tx)'}},'Bật nếu muốn gộp phần lẻ rất nhỏ vào tem cuối')
+            h('input',{type:'checkbox',checked:resolveProductLabelPackRule(f,f.name).mergeSmallRemainder,disabled:/bun|pho|banh cuon|b cuon/.test(normalizePlainText(f.name||'').replace(/[^a-z0-9]+/g,' ')),onChange:e=>s('labelMergeSmallRemainder',e.target.checked),style:{width:16,height:16}}),
+            h('span',{style:{fontSize:13,color:'var(--tx)'}},'Gộp phần dư từ 2 kg trở xuống vào tem cuối')
           ))
         ),
         h('div',{style:{background:'var(--bg2)',padding:'8px 12px',borderRadius:'var(--r)',fontSize:12,color:'var(--tx2)',marginBottom:'.85rem'}},

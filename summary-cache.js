@@ -2,7 +2,7 @@
 async function scfReadPreparedSummary(kind,date,options={}){
  if(typeof invokeScfAuth!=='function'||typeof sb==='undefined'||!sb)return null;
  try{
-  const {data,error}=await invokeScfAuth({body:{action:'summary_cache',operation:'read',kind,date,...options}},4000);
+  const {data,error}=await invokeScfAuth({body:{action:'summary_cache',operation:'read',kind,date,...options}},kind==='trip'&&options.liveFallback?12000:4000);
   if(error||!data?.ok)return null;
   return data;
  }catch{return null;}

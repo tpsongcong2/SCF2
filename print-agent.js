@@ -67,12 +67,14 @@ async function scfUploadLabelPng(file,target){
   return url;
 }
 
-async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperWidthMm,paperHeightMm,svgs,rotate180=false}){
+async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperWidthMm,paperHeightMm,svgs,rotate180=false,beforeEnqueue}){
+  beforeEnqueue?.();
   const target=String(agentId||'SCF-PC-01').trim().toUpperCase();
   if(!target)throw new Error('Chưa nhập mã SCF Print Agent.');
   if(!Array.isArray(svgs)||!svgs.length)throw new Error('Chưa có tem để gửi in.');
   const imageUrls=[];
   for(let index=0;index<svgs.length;index++){
+    beforeEnqueue?.();
     const file=await scfSvgToPngFile(svgs[index],index,rotate180,paperWidthMm,paperHeightMm);
     const url=await scfUploadLabelPng(file,target);
     if(!url||String(url).startsWith('data:')){
@@ -97,6 +99,7 @@ async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperW
     createdAt:new Date().toISOString(),
     attempts:0
   };
+  beforeEnqueue?.();
   await dbSet(SCF_PRINT_QUEUE_KEY,[...queue.filter(Boolean),job]);
   scfSavePrintAgentSettings({agentId:target});
   return job;

@@ -99,7 +99,7 @@ function scfProductionLineCodes(line,product={}){
   const unit=String(line.unit||product.unit||'').trim().toLowerCase();
   const weight=['kg','kgs','kilogram','kilograms'].includes(unit)?qty:qty*(numFmt(product.weightPerUnit||line.weightPerUnit)||0);
   if(!pack||!(weight>0))return {pack,full:0,remainder:0,unknown:qty>0};
-  const full=Math.floor((weight+1e-9)/pack),remainder=Number((weight-full*pack).toFixed(3));
+  const {full,remainder}=scfLabelPackParts(weight,pack,true);
   return {pack,full,remainder,unknown:false};
 }
 function scfProductionOddText(row){

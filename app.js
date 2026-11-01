@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V764';
+const SCF_BUILD_VERSION='V775';
 const PTITLES = {
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
@@ -257,7 +257,7 @@ function scfLoadOptionalScript(name,url){
 const SCF_PAGE_COMPONENTS={
   kpi4p:'KPI4PTab',
   attp_claims:'ATTPDocumentsTab',attp_process:'ATTPDocumentsTab',attp_standards:'ATTPDocumentsTab',attp_daily:'ATTPDocumentsTab',attp_legal:'ATTPDocumentsTab',
-  welcome:'WelcomePage',company:'CompanySettings',appearance:'AppearanceSettingsTab',printtemplates:'PrintTemplateSettingsTab',
+  'mobile-home':'MobileRestrictedHome',welcome:'WelcomePage',company:'CompanySettings',appearance:'AppearanceSettingsTab',printtemplates:'PrintTemplateSettingsTab',
   personnel:'PersonnelInformationTab PersonnelProfileForm',employees:'EmployeeTab EmpForm CpwModal',permission_settings:'PermissionSettingsTab',
   attendance:'AttendanceTab',attendance_settings:'AttendanceTab',attendance_report:'AttendanceTab',workreport_total:'AttendanceTab',
   advances:'MoneyTab',rewards:'MoneyTab',employee_errors:'EmployeeErrorsTab',employee_uniforms:'EmployeeUniformsTab',leaves:'LeaveTab',
@@ -266,7 +266,7 @@ const SCF_PAGE_COMPONENTS={
   notifications:'NotificationsTab',userguide:'UserGuideTab',nccs:'NCCTab',nccgoods:'NCCTab',purchaseorders:'PurchaseTab',purchasegoods:'PurchaseTab',
   fuelpurchases:'FuelPurchaseTab',utilityexpenses:'UtilityExpenseTab',fuelreport:'FuelPurchaseReportTab',purchasereport:'PurchaseReportTab',
   maintreport:'MaintenanceReportTab',materialusage:'MaterialUsageReportTab',powderdebtreport:'PowderDebtReportTab',maint_vehicle:'MaintenanceTab',maint_machine:'MaintenanceTab',
-  shifts:'ShiftsTab',quotes:'QuotesTab',delivery:'DeliveryOrdersTab ProductionSummaryPreviewModal',intem:'IntemTab',trips:'TripsTab',workreport_lx:'DriverTripWorkReportTab',
+  shifts:'ShiftsTab',quotes:'QuotesTab',delivery:'DeliveryOrdersTab ProductionSummaryPreviewModal',intem:'IntemTab',trips:'TripsTab DriverOrdersMobile DriverLabelPrintModal',workreport_lx:'DriverTripWorkReportTab',
   orderdetail:'OrderDetailListTab',salesreport:'SalesReportTab',marketsales:'SalesDebtReportTab',invoicereport:'InvoiceUploadReportTab TripInvoicePreview',cashflowreport:'FinanceReportTab',
   prodreport:'ProductionReportTab',prodbom:'ProductionRecipesTab',powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab ProductionClosingDialog scfClosingAutoScope scfClosingCalculate',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab'
 };
@@ -283,7 +283,7 @@ async function scfEnsurePageTools(page){
   }
   // Chuyến giao hàng không dùng thư viện Excel/ZIP. Không chặn giao diện bằng
   // hai gói CDN lớn chỉ để mở trang này.
-  if(['personnel','welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','deliverysequence','delivery'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
+  if(['mobile-home','personnel','welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','deliverysequence','delivery'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
   return Promise.all([
     scfLoadOptionalScript('JSZip','https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'),
     scfLoadOptionalScript('XLSX','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js')
@@ -336,6 +336,8 @@ function App(){
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
   const employeeStorageKey=isFaceMask?'scf_privileged_employees':'scf_employees';
   const homePage=isFaceMask?'workreport_total':'welcome';
+  const [isPhone,setIsPhone]=useState(()=>!!window.matchMedia?.('(max-width:768px)')?.matches);
+  useEffect(()=>{const media=window.matchMedia?.('(max-width:768px)');if(!media)return;const update=()=>setIsPhone(media.matches);media.addEventListener?.('change',update);return()=>media.removeEventListener?.('change',update);},[]);
   const[session,setSession]=useLS('scf_session',null);
   const[automaticPlanRevision,setAutomaticPlanRevision]=useState(0);
   const[warehouseMerging,setWarehouseMerging]=useState(false);
@@ -566,9 +568,10 @@ function App(){
   const trips=React.useMemo(()=>allTrips.filter(item=>scfOrderInViewPeriod(item,cu)),[allTrips,cu?.id,viewDays,viewToday]);
   const cuAccessDepartments=employeeDepartments(cu);
   quickSummaryUserRef.current=cu;
-  const mobileStartTarget=user=>!isFaceMask&&window.matchMedia?.('(max-width:768px)')?.matches?scfMobileStartTarget(user):'';
-  const canOpenCurrentPage=user=>canAccess(user.role,page,user.permissions,employeeDepartments(user))&&(isFaceMask||page===homePage||!window.matchMedia?.('(max-width:768px)')?.matches||canMobileFeature(user,page));
-  const applyMobileStart=user=>{const target=mobileStartTarget(user);if(target)setPage(target==='quick-summary'?homePage:target);};
+  const mobileStartTarget=user=>!isFaceMask&&isPhone?scfMobileStartTarget(user):'';
+  const canOpenCurrentPage=user=>scfCanOpenUserPage(user,page,{mobile:isPhone,faceMask:isFaceMask});
+  const safeHomePage=user=>!isFaceMask&&isPhone?scfMobileFallbackPage(user):homePage;
+  const applyMobileStart=user=>{const target=mobileStartTarget(user);if(target)setPage(target==='quick-summary'?scfMobileSummaryHost(user):target);};
   useEffect(()=>setQuickTripSummaryOpen(mobileStartTarget(cu)==='quick-summary'),[cu?.id]);
   const loadQuickSummaryData=async()=>{
     const owner=quickSummaryUserRef.current;
@@ -616,6 +619,24 @@ function App(){
   const browserPopRef=React.useRef(false);
   const[serverAuthReady,setServerAuthReady]=useState(false);
   useEffect(()=>{
+    if(!SCF_SERVER_AUTH_ENABLED||!serverAuthReady||!cu)return;
+    const ownerId=String(cu.id);let stopped=false,busy=false,lastAttempt=0;
+    const refresh=async()=>{
+      if(stopped||busy||document.hidden||!navigator.onLine||Date.now()-lastAttempt<15000)return;
+      busy=true;lastAttempt=Date.now();
+      try{const context=await serverLoadEmployeeContext(12000),next=context.currentEmployee;
+        if(stopped||!next||String(next.id)!==ownerId||String(quickSummaryUserRef.current?.id||'')!==ownerId)return;
+        window.__SCF_CURRENT_EMPLOYEE=next;
+        _se(previous=>{const old=previous.find(employee=>String(employee.id)===ownerId);if(old&&JSON.stringify(old)===JSON.stringify(next))return previous;return old?previous.map(employee=>String(employee.id)===ownerId?next:employee):[...previous,next];});
+        setAuthEmployee(previous=>previous&&String(previous.id)===ownerId&&JSON.stringify(previous)!==JSON.stringify(next)?next:previous);
+      }catch(error){console.warn('Employee permission refresh:',error?.message||error);}
+      finally{busy=false;}
+    };
+    const timer=setInterval(refresh,60000);window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',refresh);
+    return()=>{stopped=true;clearInterval(timer);window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',refresh);};
+  },[serverAuthReady,cu?.id]);
+
+  useEffect(()=>{
     const onPopState=e=>{
       browserPopRef.current=true;
       setPage(e.state?.scfPage||homePage);
@@ -639,7 +660,7 @@ function App(){
   const goBackPage=()=>{
     if(page===homePage)return;
     if(history.state?.scfPage===page)history.back();
-    else setPage(homePage);
+    else setPage(safeHomePage(cu));
   };
   useEffect(()=>{
     let cancelled=false;
@@ -736,7 +757,7 @@ function App(){
       .then(()=>{if(!cancelled){setAutoSyncReady(true);setReadyPage(page);}})
       .catch(error=>{if(!cancelled)setPageError(error.message||'Không tải được dữ liệu màn hình.');});
     return()=>{cancelled=true;};
-  },[serverAuthReady,bootError,cu?.id,cu?.permissions,cu?.mobilePermissions,employeeDepartmentLabel(cu),page,pageAttempt]);
+  },[serverAuthReady,bootError,cu?.id,cu?.permissions,cu?.mobilePermissions,employeeDepartmentLabel(cu),page,pageAttempt,isPhone]);
   useEffect(()=>{
     const vars=uiSettingsToCssVars(uiSettings);
     Object.entries(vars).forEach(([key,val])=>document.documentElement.style.setProperty(key,val));
@@ -909,8 +930,8 @@ function App(){
     }
   },[cu?.id,cu?.mustChangePw]);
   useEffect(()=>{
-    if(cu&&!canOpenCurrentPage(cu))setPage(homePage);
-  },[cu?.id,cu?.role,cu?.permissions,cu?.mobilePermissions,employeeDepartmentLabel(cu),page]);
+    if(cu&&!canOpenCurrentPage(cu))setPage(safeHomePage(cu));
+  },[cu?.id,cu?.role,cu?.permissions,cu?.mobilePermissions,employeeDepartmentLabel(cu),page,isPhone]);
   if(bootError)return h('div',{className:'login-bg'},h('div',{className:'login-card',role:'alert'},
     h('h2',null,'Chưa tải được hồ sơ đăng nhập'),
     h('p',null,'App chưa xác định được hồ sơ của bạn. Không cần thay đổi quyền hay nhập lại đơn hàng.'),
@@ -999,13 +1020,13 @@ function App(){
             h('button',{className:'topbar-logout',onClick:logout,style:{fontSize:12,padding:'5px 10px',color:'#A32D2D',borderColor:'#F7C1C1'},title:'Đăng xuất','aria-label':'Đăng xuất'},h('i',{className:'ti ti-logout',style:{fontSize:14}}),h('span',{className:'topbar-logout-label'},'Đăng xuất'))
           )
         ),
-        h(TopNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments})
+        h(TopNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,currentUser:cu,mobile:isPhone&&!isFaceMask})
       ),
-      page!=='welcome'&&h('div',{className:'mobile-page-backbar'},
+      page!=='welcome'&&page!=='mobile-home'&&h('div',{className:'mobile-page-backbar'},
         h('button',{className:'mobile-page-back',onClick:goBackPage,'aria-label':'Quay lại trang trước'},
           h('i',{className:'ti ti-arrow-left'}),h('span',null,'Quay lại')
         ),
-        h('div',{className:'mobile-page-title'},PTITLES[page]||(isFaceMask?'FACE MASK':'SCF')),
+        h('div',{className:'mobile-page-title'},page==='trips'&&(cu.role==='driver'||employeeHasDepartment(cu,'Lái xe'))?'Đơn hàng lái xe':PTITLES[page]||(isFaceMask?'FACE MASK':'SCF')),
         page==='prodsummary'&&h('button',{type:'button',className:'mobile-production-closing',onClick:()=>setProductionClosingScope({...scfClosingAutoScope(),workshop:productionClosingWorkshop})},'Chốt cuối ca')
       ),
       h('div',{
@@ -1016,7 +1037,8 @@ function App(){
           h('p',null,pageError||'Đang tải dữ liệu '+(PTITLES[page]||'màn hình')+'…'),
           pageError&&h('button',{className:'bp',onClick:()=>{if(scfMissingPageComponents(page).length)location.reload();else setPageAttempt(v=>v+1);}},'Thử tải lại')
         ):h(React.Fragment,null,
-        canAccess(cu.role,page)&&page==='welcome'&&h(WelcomePage,{emp:cu,employees,company,uiSettings,news:companyNews,setNews:setCompanyNews,messages:internalMessages,setMessages:setInternalMessages,notifications,onRefresh:refreshCommunityData}),
+        page==='mobile-home'&&h(MobileRestrictedHome),
+        canOpenCurrentPage(cu)&&page==='welcome'&&h(WelcomePage,{emp:cu,employees,company,uiSettings,news:companyNews,setNews:setCompanyNews,messages:internalMessages,setMessages:setInternalMessages,notifications,onRefresh:refreshCommunityData}),
         canAccess(cu.role,'company',cu.permissions,cuAccessDepartments)&&page==='company'&&h(CompanySettings,{company,setCompany,canEdit:canWrite(cu.role,'company',cu.permLevels)}),
         canAccess(cu.role,'appearance',cu.permissions)&&page==='appearance'&&h(AppearanceSettingsTab,{uiSettings,setUiSettings}),
         canAccess(cu.role,'printtemplates',cu.permissions)&&page==='printtemplates'&&h(PrintTemplateSettingsTab,{templateSettings:printTemplateSettings,setTemplateSettings:setPrintTemplateSettings,products,customers}),
@@ -1087,8 +1109,8 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         )
       ),
       productionPreviewOpen&&page==='delivery'&&!isFaceMask&&canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments)&&h(ProductionSummaryPreviewModal,{key:cu.id,currentUser:cu,loadData:loadProductionPreviewData,onClose:()=>setProductionPreviewOpen(false),orders,products,prodCats,prodShifts,prodShiftRules,prodActuals,setProdActuals,stock}),
-      quickTripSummaryOpen&&!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')&&h(TripQuickSummaryModal,{key:cu.id,mobileFullscreen:page==='delivery',currentUser:cu,employees,loadData:loadQuickSummaryData,onClose:()=>setQuickTripSummaryOpen(false)}),
-      (page==='welcome'||isFaceMask||(quickTripSummaryOpen&&page!=='delivery')||daySummaryOpen)&&h(MobileNav,{page,setPage:next=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(false);setPage(next);},role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,currentUser:cu,onLogout:logout,onQuickTripSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(true);}:undefined})
+      quickTripSummaryOpen&&!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')&&h(TripQuickSummaryModal,{key:cu.id,mobileFullscreen:page==='delivery',currentUser:cu,employees,loadData:loadQuickSummaryData,onClose:()=>setQuickTripSummaryOpen(false),onExit:()=>{setQuickTripSummaryOpen(false);if((cu.role==='driver'||employeeHasDepartment(cu,'Lái xe'))&&scfCanOpenUserPage(cu,'trips',{mobile:isPhone,faceMask:isFaceMask}))setPage('trips');}}),
+      (page==='welcome'||page==='mobile-home'||(page==='trips'&&isPhone&&(cu.role==='driver'||String(cu.dept||'').includes('Lái xe')))||isFaceMask||(quickTripSummaryOpen&&page!=='delivery')||daySummaryOpen)&&h(MobileNav,{page,setPage:next=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(false);setPage(next);},role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,currentUser:cu,onLogout:logout,onQuickTripSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(true);}:undefined})
     ),
     cu.mustChangePw&&h(CpwModal,{
       emp:cu,cu,forced:true,onClose:logout,onExit:logout,

@@ -713,8 +713,8 @@ function fontModeMeta(mode){return UI_FONT_MODE_OPTIONS.find(x=>x.value===mode)|
 function fontFamilyLabel(value){return(UI_FONT_FAMILY_OPTIONS.find(x=>x.value===value)||UI_FONT_FAMILY_OPTIONS[0]).label;}
 function inferLabelPackRuleByName(name){
   const n=String(name||'').toUpperCase();
-  if(n.includes('PHỞ')||n.includes('PHO'))return {pack:5,mergeSmallRemainder:false};
-  if(n.includes('BÚN')||n.includes('BUN')||n.includes('BÁNH CUỐN')||n.includes('BANH CUON'))return {pack:10,mergeSmallRemainder:false};
+  if(n.includes('PHỞ')||n.includes('PHO'))return {pack:5,mergeSmallRemainder:true};
+  if(n.includes('BÚN')||n.includes('BUN')||n.includes('BÁNH CUỐN')||n.includes('BANH CUON'))return {pack:10,mergeSmallRemainder:true};
   return {pack:10,mergeSmallRemainder:true};
 }
 function resolveProductLabelPackRule(product,name){
@@ -725,7 +725,7 @@ function resolveProductLabelPackRule(product,name){
   return {
     enabled:hasExplicitNeedsLabel?!!product?.needsLabel:true,
     pack:explicitPack>0?explicitPack:fallback.pack,
-    mergeSmallRemainder:hasExplicitMerge?!!product?.labelMergeSmallRemainder:fallback.mergeSmallRemainder
+    mergeSmallRemainder:/(bun|pho|banh cuon|b cuon)/.test(normalizePlainText(name||product?.name||'').replace(/[^a-z0-9]+/g,' '))?true:hasExplicitMerge?!!product?.labelMergeSmallRemainder:fallback.mergeSmallRemainder
   };
 }
 function normalizeUiSettings(raw){

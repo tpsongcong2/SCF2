@@ -584,7 +584,35 @@ function scfRestoreClippedNotificationTail(value,base){
   if(tail.some(item=>ids.has(String(item?.id||''))))return value;
   return [...value,...tail];
 }
+// Notification read receipts are monotonic. Recover only identical notice content;
+// never reinterpret an ID collision in orders or overwrite a different notification.
+function scfRebaseNotificationReadState(value,base,remote){
+  const stable=rows=>Array.isArray(rows)&&rows.every(row=>row&&String(row.id||'').trim())&&new Set(rows.map(row=>String(row.id))).size===rows.length;
+  if(!stable(value)||!stable(remote)||base!==undefined&&!stable(base))return null;
+  const payload=row=>JSON.stringify(Object.fromEntries(Object.keys(row||{}).filter(key=>key!=='readAt').sort().map(key=>[key,row[key]])));
+  const bases=new Map((base||[]).map(row=>[String(row.id),row])),locals=new Map(value.map(row=>[String(row.id),row]));
+  if([...bases.keys()].some(id=>!locals.has(id)))return null; // Explicit deletions need their normal conflict review.
+  const merged=new Map(remote.map(row=>[String(row.id),row])),added=[];
+  for(const row of value){const id=String(row.id),old=bases.get(id),current=merged.get(id);
+    if(old&&JSON.stringify(row)===JSON.stringify(old))continue;
+    if(old&&payload(row)!==payload(old))return null;
+    if(!current){if(!old){added.push(row);merged.set(id,row);}continue;}
+    if(payload(current)!==payload(row))return null;
+    const readAt=current.readAt||row.readAt||'';
+    merged.set(id,readAt===current.readAt?current:{...current,readAt});
+  }
+  return [...added,...remote.map(row=>merged.get(String(row.id)))];
+}
+async function scfSaveNotificationsAfterConflict(value,base,timeoutMs,actor){
+  const ensureActor=()=>{if(actor!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||''))throw new Error('Tài khoản đã thay đổi. Giữ nguyên hàng chờ để kiểm tra.');};
+  ensureActor();const loaded=await serverLoadPermittedCollection('scf_notifications');ensureActor();
+  const merged=scfRebaseNotificationReadState(value,base,loaded.value);
+  if(!merged){const error=new Error('Thông báo cùng mã đã đổi nội dung hoặc có thao tác xóa. Giữ hàng chờ để kiểm tra.');error.code='SCF_WRITE_CONFLICT';throw error;}
+  if(JSON.stringify(merged)===JSON.stringify(loaded.value))return loaded;
+  return withRemoteTimeout(serverSavePermittedCollection('scf_notifications',merged,loaded.updatedAt||'',loaded.value,timeoutMs),timeoutMs);
+}
 async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,baseValue,timeoutMs){
+  const syncActor=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
   if(key==='scf_notifications'&&Array.isArray(val)&&val.length>=2000){
     const actor=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
     if(!Array.isArray(baseValue)){
@@ -622,6 +650,7 @@ async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,base
   return measuredCollectionSave(key,patches?'patch':'full',payload,async()=>{
     try{return await withRemoteTimeout(patches?serverPatchPermittedCollection(key,patches,expectedUpdatedAt,timeoutMs):serverSavePermittedCollection(key,val,expectedUpdatedAt,baseValue,timeoutMs),timeoutMs);}
     catch(error){
+      if(key==='scf_notifications'&&error?.code==='SCF_WRITE_CONFLICT')return scfSaveNotificationsAfterConflict(val,baseValue,timeoutMs,syncActor);
       if(key==='scf_fuelpurchases'&&error?.code==='SCF_WRITE_CONFLICT')return scfSaveFuelAfterConflict(val,baseValue,timeoutMs);
       if(!['SCF_REMOTE_TIMEOUT','SCF_DATABASE_TIMEOUT'].includes(error?.code)||key!=='scf_orders'||!patches?.length)throw error;
       // A timed-out HTTP response is ambiguous: the server may already have

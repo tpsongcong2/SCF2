@@ -53,6 +53,19 @@ function scfTripMembershipView(trips,orders){
 const fmtDate=()=>{const d=new Date();return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()};
 const fmtDT=()=>{const d=new Date();return fmtDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
 const numFmt=n=>{if(n===null||n===undefined||n==='')return 0;if(typeof n==='number')return Number.isFinite(n)?n:0;const s=String(n).trim().replace(/\s+/g,'').replace(',','.');const m=s.match(/-?\d+(\.\d+)?/);return m?Number(m[0])||0:0;};
+// A remainder <= 2 kg joins the last regular package, within the same order line.
+function scfLabelPackParts(total,pack,mergeSmall=true){
+  const kg=Number(total),size=Number(pack);
+  if(!Number.isFinite(kg)||!Number.isFinite(size)||kg<=0||size<=0)return {full:0,remainder:0,pack:size||0};
+  let full=Math.floor((kg+1e-9)/size),remainder=Number((kg-full*size).toFixed(3));
+  if(remainder>0&&remainder<=2&&mergeSmall&&full>0){full--;remainder=Number((size+remainder).toFixed(3));}
+  return {full,remainder,pack:size};
+}
+function scfLabelPackWeights(total,pack,mergeSmall=true){
+  const parts=scfLabelPackParts(total,pack,mergeSmall),count=parts.full+(parts.remainder>0?1:0);
+  if(count>5000)throw Error('Quá nhiều tem. Hãy chia nhỏ số lượng in.');
+  return [...Array.from({length:parts.full},()=>parts.pack),...(parts.remainder>0?[parts.remainder]:[])];
+}
 const moneyFmt=n=>n?Number(n).toLocaleString('vi-VN')+'đ':'—';
 const pad2=n=>String(parseInt(n,10)||0).padStart(2,'0');
 const isoDate=()=>{const d=new Date();return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())};
