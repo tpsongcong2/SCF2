@@ -2,14 +2,19 @@
 const SCF_PRINT_QUEUE_KEY='scf_print_jobs';
 const SCF_PRINT_SETTINGS_KEY='scf_print_agent_settings';
 
-function scfPrintAgentSettings(){
+function scfPrintAgentSettings({trip=false}={}){
+  let local={};
   try{
-    return JSON.parse(localStorage.getItem(SCF_PRINT_SETTINGS_KEY)||'{}')||{};
-  }catch{return {};}
+    local=JSON.parse(localStorage.getItem(SCF_PRINT_SETTINGS_KEY)||'{}')||{};
+  }catch{}
+  const shared=window.__SCF_UI_SETTINGS?.driverPrinters,access=window.__SCF_ACCESS_CONTEXT;
+  if(shared?.enabled===true&&(trip||access?.role==='driver'||['trips','driver-preview'].includes(access?.page)))return {...local,agentId:shared.labelAgentId,printerRole:shared.labelPrinterRole,a4AgentId:shared.a4AgentId,sharedManaged:true};
+  return local;
 }
 
 function scfSavePrintAgentSettings(value){
-  const next={...scfPrintAgentSettings(),...(value||{})};
+  let previous={};try{previous=JSON.parse(localStorage.getItem(SCF_PRINT_SETTINGS_KEY)||'{}')||{};}catch{}
+  const next={...previous,...(value||{})};delete next.sharedManaged;
   localStorage.setItem(SCF_PRINT_SETTINGS_KEY,JSON.stringify(next));
   return next;
 }
@@ -70,6 +75,8 @@ async function scfUploadLabelPng(file,target){
 async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperWidthMm,paperHeightMm,svgs,rotate180=false,beforeEnqueue,tripContext,simulate=false}){
   beforeEnqueue?.();
   if(simulate){window.showToast('Trải nghiệm: đã mô phỏng gửi '+svgs.length+' tem; không gửi máy in thật.','success');return {id:'PREVIEW'};}
+  const sharedSettings=scfPrintAgentSettings({trip:!!tripContext});
+  if(sharedSettings.sharedManaged){agentId=sharedSettings.agentId;printerRole=sharedSettings.printerRole;}
   const target=String(agentId||'SCF-PC-01').trim().toUpperCase();
   if(!target)throw new Error('Chưa nhập mã SCF Print Agent.');
   if(!Array.isArray(svgs)||!svgs.length)throw new Error('Chưa có tem để gửi in.');
@@ -119,8 +126,8 @@ function scfShouldUsePrintAgent(){
 
 async function scfQueueA4Print(html,{agentId,title='Đơn hàng SCF',tripContext,simulate=false}={}){
   if(simulate){window.showToast('Trải nghiệm: đã mô phỏng in phiếu; không gửi máy in thật.','success');return {id:'PREVIEW'};}
-  const settings=scfPrintAgentSettings();
-  const target=String(agentId||settings.agentId||'SCF-PC-01').trim().toUpperCase();
+  const settings=scfPrintAgentSettings({trip:!!tripContext});
+  const target=String(settings.sharedManaged?settings.a4AgentId:agentId||settings.a4AgentId||settings.agentId||'SCF-PC-01').trim().toUpperCase();
   const scoped=tripContext&&typeof serverAuthEnabled==='function'&&serverAuthEnabled();
   const current=scoped?[]:await dbGet(SCF_PRINT_QUEUE_KEY,[]);
   const queue=Array.isArray(current)?current:[];

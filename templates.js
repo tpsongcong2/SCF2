@@ -736,6 +736,7 @@ function normalizeUiSettings(raw){
     birthdayEffect:birthdayEffects.includes(src.birthdayEffect)?src.birthdayEffect:(DEF_UI_SETTINGS.birthdayEffect||'fireworks'),
     deliveryOrderHover:src.deliveryOrderHover!==false,
     driverProductionLink:src.driverProductionLink===true,
+    driverPrinters:{enabled:src.driverPrinters?.enabled===true,labelAgentId:String(src.driverPrinters?.labelAgentId||'SCF-PC-01').trim().toUpperCase(),labelPrinterRole:src.driverPrinters?.labelPrinterRole==='x420'?'x420':'x350',a4AgentId:String(src.driverPrinters?.a4AgentId||src.driverPrinters?.labelAgentId||'SCF-PC-01').trim().toUpperCase()},
     driverProductionLinkStartedAt:String(src.driverProductionLinkStartedAt||''),
     scopes:{}
   };
