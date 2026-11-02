@@ -1888,7 +1888,7 @@ function PrintByCustomerModal({orders,customers,products,company,trips=[],initia
   };
 
   return h(Modal,{title:tripOnlyId?'In phiếu giao hàng trong chuyến':'In phiếu giao hàng theo khách hàng',lg:true,onClose},
-    tripOnlyId&&h('p',{className:'dm-hint'},'Máy in A4: '+(scfPrintAgentSettings({trip:true}).a4AgentId||scfPrintAgentSettings({trip:true}).agentId||'SCF-PC-01')+' · Cài chung tại Bán hàng → Cài đặt chuyến giao hàng.'),
+    tripOnlyId&&h('p',{className:'dm-hint'},'Máy in A4: '+(scfPrintAgentSettings({trip:true}).a4AgentId||scfPrintAgentSettings({trip:true}).agentId||'SCF-PC-01')),
     tripOnlyId?h('p',{className:'delivery-print-trip-scope'},h('b',null,selectedTrip?.shiftName||'Chuyến đã chọn'),' · '+(selectedTrip?.deliveryDate||'')+' · '+(selectedTrip?.driverName||'Chưa có lái xe')):fields(id=>{const customer=customers.find(c=>String(c.id)===id);if(customer)setTpl(resolveOrderPrintTemplate({},customer));}),
     h(F,{label:'Mẫu in'},h('select',{'aria-label':'Mẫu in',value:tpl,onChange:e=>setTpl(e.target.value)},PRINT_TEMPLATES.map(t=>h('option',{key:t.id,value:t.id},t.name)))),
     tripOnlyId&&h('p',{style:{fontSize:12,color:'var(--tx2)'}},'Mẫu in áp dụng cho các phiếu đã chọn bên dưới.'),

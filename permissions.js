@@ -71,6 +71,7 @@ const PAGE_ACCESS = {
   prodsummary:  ['admin','manager','staff'],
   prodbom:      ['admin','manager'],
   prodreport:   ['admin'],
+  driverprintlog:['admin'],
   prodorders:   ['admin','manager','staff'],
   stock:        ['admin','manager','staff'],
   purchase:     ['admin','manager'],
@@ -133,6 +134,7 @@ function canAccess(role, page, perms, dept='') {
   if(['nccgoods','purchasegoods'].includes(page)&&(role==='admin'||isAccounting)) return true;
   if(['nccs','purchaseorders','utilityexpenses','purchasereport'].includes(page)&&role!=='admin') return false;
   if(page==='utilityexpenses'&&role==='admin') return true;
+  if(page==='driverprintlog')return role==='admin'||Array.isArray(perms)&&perms.includes(page);
   const allowed = PAGE_ACCESS[page];
   if (!allowed) return false;
   if (perms && perms.length > 0) {

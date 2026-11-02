@@ -660,6 +660,7 @@ const NAV=[
   {key:'trip-settings',icon:'ti-settings',label:'Cài đặt chuyến giao hàng'},
   {key:'marketsales',icon:'ti-report-money',label:'Báo cáo công nợ'},
   {key:'invoicereport',icon:'ti-file-alert',label:'Báo cáo hóa đơn'},
+  {key:'driverprintlog',icon:'ti-printer',label:'Thông tin lái xe in đơn'},
   {key:'powdersales',icon:'ti-bowl',label:'Bán bột bún'},
   {key:'prodshifts',icon:'ti-clock-play',label:'Cài đặt ca SX + ca GH tự động'},
   {key:'deliverysequence',icon:'ti-list-numbers',label:'Cài đặt thứ tự giao'},

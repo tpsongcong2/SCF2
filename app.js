@@ -1,6 +1,7 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V781';
+const SCF_BUILD_VERSION='V782';
 const PTITLES = {
+  driverprintlog:'Thông tin lái xe in đơn',
   kpi4p:'KPI & Lương 4P',
   attp_claims:'Nhật ký claim chất lượng',
   attp_process:'Tài liệu ATTP · Quy trình',
@@ -25,6 +26,7 @@ const PROCESS_POST_KEYS={attp_process:'scf_attp_process',attp_standards:'scf_att
 // Every editable page must load all of its input collections before mounting.
 // Names below are kv_store keys without the scf_ prefix; employees load separately.
 const SCF_PAGE_DATA={
+  driverprintlog:[],
   welcome:['company_news','internal_messages'], company:['company'], appearance:[],
   printtemplates:['print_template_settings','products','customers'],
   personnel:['depts'],employees:['depts','permission_profiles'], permission_settings:['permission_profiles'],
@@ -255,6 +257,7 @@ function scfLoadOptionalScript(name,url){
 }
 // Kiểm tra thành phần trước khi render: một tệp tải lỗi không được làm trắng trang.
 const SCF_PAGE_COMPONENTS={
+  driverprintlog:'DriverPrintHistoryTab',
   'trip-settings':'DeliveryTripSettings',
   'driver-preview':'DriverMobilePreview DriverOrdersMobile DriverLabelPrintModal',
   kpi4p:'KPI4PTab',
@@ -285,7 +288,7 @@ async function scfEnsurePageTools(page){
   }
   // Chuyến giao hàng không dùng thư viện Excel/ZIP. Không chặn giao diện bằng
   // hai gói CDN lớn chỉ để mở trang này.
-  if(['mobile-home','personnel','welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','driver-preview','trip-settings','deliverysequence','delivery'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
+  if(['mobile-home','personnel','welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','driver-preview','trip-settings','deliverysequence','delivery','driverprintlog'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
   return Promise.all([
     scfLoadOptionalScript('JSZip','https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'),
     scfLoadOptionalScript('XLSX','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js')
@@ -293,6 +296,7 @@ async function scfEnsurePageTools(page){
 }
 
 const PICONS = {
+  driverprintlog:'ti-printer',
   kpi4p:'ti-chart-bar',
   attp_claims:'ti-message-report',attp_process:'ti-list-check',
   attp_standards:'ti-certificate',
@@ -1096,6 +1100,7 @@ function App(){
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,trips,currentUser:cu,prodShifts,quotes,financeDebts,setFinanceDebts,menuHidden,setMenuHidden}),
         canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),
         canAccess(cu.role,'marketsales',cu.permissions)&&page==='marketsales'&&h(SalesDebtReportTab,{orders,setOrders,customers,products,quotes,trips,currentUser:cu}),
+        page==='driverprintlog'&&canAccess(cu.role,'driverprintlog',cu.permissions,cuAccessDepartments)&&h(DriverPrintHistoryTab,{currentUser:cu}),
         canAccess(cu.role,'invoicereport',cu.permissions)&&page==='invoicereport'&&h(InvoiceUploadReportTab,{orders,setOrders,currentUser:cu,customers,products,trips,setPage}),
 canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(FinanceReportTab,{entries:financeEntries,setEntries:setFinanceEntries,debts:financeDebts,setDebts:setFinanceDebts,openings:financeOpenings,setOpenings:setFinanceOpenings,customers,nccs,currentUser:cu,orders,products,quotes,purchases,goodsPurchases}),
         canAccess(cu.role,'powdersales',cu.permissions)&&page==='powdersales'&&h(PowderSalesTab,{customers,trips,employees,setPage}),
