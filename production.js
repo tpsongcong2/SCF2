@@ -51,6 +51,9 @@ function ProductionSummaryPreviewModal({loadData,onClose,currentUser,...summaryP
     h('div',{className:'production-preview-close-row'},h('button',{type:'button','data-scf-action':'view',onClick:onClose},'Đóng cửa sổ'))
   );
 }
+function canViewProductionSourceOrders(user){
+  return ['admin','administrator'].includes(String(user?.role||'').trim().toLowerCase())||user?.productionSourceOrders===true;
+}
 function canViewProductionShiftWeight(user){
   return ['admin','administrator'].includes(String(user?.role||'').trim().toLowerCase())||user?.productionShiftWeight===true;
 }
@@ -255,6 +258,7 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
   const[workshop,setWorkshop]=useState('all');
   const canEditActual=!snapshotReadOnly&&canWrite(currentUser?.role,'prodsummary',currentUser?.permLevels);
   const showShiftWeight=canViewProductionShiftWeight(currentUser);
+  const showSourceOrders=canViewProductionSourceOrders(currentUser);
   const canCheckSource=canEditActual&&['admin','administrator','manager'].includes(String(currentUser?.role||'').toLowerCase());
   const[openOrderRows,setOpenOrderRows]=useState(()=>new Set());
   const[stockClock,setStockClock]=useState(()=>Date.now());
@@ -312,6 +316,7 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
   };
   const sourceRanks=React.useMemo(()=>scfProductionSourceRanks(orders,globalThis.window?.__SCF_TRIPS||[],globalThis.window?.__SCF_CUSTOMERS||[]),[orders,globalThis.window?.__SCF_TRIPS,globalThis.window?.__SCF_CUSTOMERS]);
   const sourceControl=(row,id)=>{
+    if(!showSourceOrders)return null;
     const qty=row.sourceQty?.[String(id)]||0;
     const key=actualKey(row.prodDate,row.shift,row.productId);
     const sourceEditable=canCheckSource&&(typeof scfClosingActualDeadline!=='function'||Date.now()<scfClosingActualDeadline(key,rules));
@@ -442,7 +447,7 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
                 row.unknownCodes>0&&h('div',{className:'production-mobile-error'},row.unknownCodes+' dòng chưa có quy cách/khối lượng, chưa tính mã.')
               )
             ),
-            h('details',{className:'production-source-section'},
+            showSourceOrders&&h('details',{className:'production-source-section'},
               h('summary',null,h('span',null,'Xem nguồn đơn ('+[...new Set(row.orders)].length+')'),h('i',{className:'ti ti-chevron-down','aria-hidden':true})),
               h('small',{className:'production-source-quantities'},(()=>{const confirmed=Object.entries(row.sourceQty||{}).reduce((sum,[id,qty])=>{const check=scfEffectiveProductionSourceCheck(row,orderById.get(String(id)),prodActuals?.[actualKey(row.prodDate,row.shift,row.productId)]?.sourceChecks?.[id],globalThis.window?.__SCF_UI_SETTINGS);return sum+(check?.completed===true&&Math.abs(Number(check.orderedQty)-qty)<1e-8?qty:0);},0);return 'Đã SX theo đơn: '+confirmed.toLocaleString('vi-VN')+' '+row.unit+' · Còn thiếu: '+Math.max(0,row.qtyProd-confirmed).toLocaleString('vi-VN')+' '+row.unit;})()),
               sourceRanks.sort(row.orders).map(id=>sourceControl(row,id))
@@ -552,7 +557,7 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
                     const rowBadRate=calcBadRate(rowActualQty,rowBadQty);
                     const orderRowKey=[r.prodDate,r.shift,r.productId].join('|');
                     const orderIds=sourceRanks.sort(r.orders);
-                    const ordersOpen=openOrderRows.has(orderRowKey);
+                    const ordersOpen=showSourceOrders&&openOrderRows.has(orderRowKey);
                     return h('tr',{key:i,className:rowInvalid?'production-summary-invalid':isBanhCuon(r.productName)?'production-summary-banh-cuon':undefined},
                     h('td',null,h('div',{style:{fontWeight:500}},r.productName)),
                     h('td',null,h('span',{className:'badge',style:{background:rule.color||'#EAF3DE',color:rule.textColor||'#3B6D11'}},r.unit)),
@@ -562,7 +567,7 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
                     h('td',null,readBadQty(r.prodDate,r.shift,r.productId)===''?'—':numFmt(readBadQty(r.prodDate,r.shift,r.productId)).toLocaleString('vi-VN')),
                     h('td',null,h('div',{style:{fontSize:16,fontWeight:700,color:rowInvalid?'#B91C1C':'#1D4ED8'}},fmtRate(rowBadRate))),
                     h('td',null,
-                      h('button',{
+                      showSourceOrders&&h('button',{
                         type:'button',
                         onClick:()=>toggleOrderRow(orderRowKey),
                         'aria-expanded':ordersOpen,
