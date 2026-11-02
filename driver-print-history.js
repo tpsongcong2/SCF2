@@ -22,15 +22,14 @@ function DriverPrintHistoryTab({currentUser}){
   },[identity,allowed,offset,refresh]);
   if(!allowed)return h('p',{role:'alert'},'Bạn chưa được cấp quyền xem lịch sử in.');
   const kind=mode=>({orders:'Tem giao',manual:'Tem giao · In khác đơn',delivery:'Phiếu giao',summary:'Đơn tổng'}[mode]||mode||'');
-  const state=value=>({pending:'Đã gửi lệnh',printing:'Đang in',processing:'Đang xử lý',done:'Agent đã xử lý in',error:'Lỗi in',failed:'Lỗi in'}[value]||value||'Đã gửi lệnh');
+  const state=value=>value==='done'?'Đã in':'Chưa in';
   return h('div',{className:'card'},h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'}},h('h2',null,'Thông tin lái xe in đơn'),h('button',{type:'button',disabled:busy,'data-scf-action':'view',onClick:()=>setRefresh(n=>n+1)},'Tải lại')),
-    h('p',null,'Ghi nhận lệnh in theo chuyến. “Agent đã xử lý in” là phản hồi phần mềm in; chưa xác nhận giấy đã ra khỏi máy.'),
     busy&&h('p',{role:'status'},'Đang tải lịch sử in…'),error&&h('p',{role:'alert'},error),
     !busy&&!error&&rows.length===0&&h('p',null,'Chưa có lịch sử in.'),
     rows.length>0&&h('div',{style:{overflowX:'auto'}},h('table',null,h('thead',null,h('tr',null,['Người in','In gì','Ngày, giờ','Đơn nào','Chuyến nào','Trạng thái'].map(label=>h('th',{key:label},label)))),h('tbody',null,rows.map(row=>h('tr',{key:row.job_id},
       h('td',null,row.actor_name||row.actor_id),h('td',null,kind(row.print_mode)),h('td',null,new Date(row.created_at).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'})),
       h('td',null,(row.orders||[]).length?(row.orders||[]).map((order,index)=>h('div',{key:order.id||index},scfPrintHistoryOrderLabel(order))):row.print_mode==='manual'?'In khác đơn · Không gắn đơn':'Chưa có thông tin đơn'),
-      h('td',null,row.trip_name||'Chưa có tên chuyến',h('br'),row.trip_date||''),h('td',null,state(row.status),row.error&&h('small',{style:{display:'block'}},row.error))
+      h('td',null,row.trip_name||'Chưa có tên chuyến',h('br'),row.trip_date||''),h('td',null,state(row.status))
     ))))),
     h('div',{style:{display:'flex',gap:12,alignItems:'center',marginTop:16}},h('button',{type:'button','data-scf-action':'view',disabled:busy||offset===0,onClick:()=>setOffset(n=>Math.max(0,n-50))},'Trang trước'),h('span',null,'Trang '+(offset/50+1)),h('button',{type:'button','data-scf-action':'view',disabled:busy||!hasMore,onClick:()=>setOffset(n=>n+50)},'Trang sau')));
 }

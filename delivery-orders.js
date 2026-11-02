@@ -1937,9 +1937,11 @@ function PrintLabelsMultiModal({orders,customers,trips=[],initialDate,initialDat
   const allChecked=filtered.length>0&&selectedOrders.length===filtered.length;
   const toggleAll=checked=>setSelected(p=>{const n={...p};filtered.forEach(o=>{n[o.id]=checked;});return n;});
   const toggleOne=(id,checked)=>setSelected(p=>({...p,[id]:checked}));
-  const doPrint=()=>{
+  const [sending,setSending]=useState(false);
+  const doPrint=async()=>{
+    if(sending)return;
     if(!selectedOrders.length){window.showToast('Chọn ít nhất 1 đơn để in tem!','warn');return;}
-    onPrint(selectedOrders,labelMode);
+    setSending(true);try{await onPrint(selectedOrders,labelMode);}finally{setSending(false);}
   };
   return h(Modal,{title:'In tem cho nhiều đơn hàng',lg:true,onClose},
     fields(),
@@ -1970,7 +1972,7 @@ function PrintLabelsMultiModal({orders,customers,trips=[],initialDate,initialDat
       ),
       h(Row,null,
         h('button',{onClick:onClose},'Hủy'),
-        h('button',{className:'bp',onClick:doPrint,disabled:!selectedOrders.length,style:{padding:'8px 20px'}},h('i',{className:'ti ti-printer',style:{fontSize:15}}),' In tem '+selectedOrders.length+' đơn')
+        h('button',{className:'bp',onClick:doPrint,disabled:sending||!selectedOrders.length,style:{padding:'8px 20px'}},h('i',{className:'ti ti-printer',style:{fontSize:15}}),sending?' Đang gửi tem…':' In tem '+selectedOrders.length+' đơn')
       )
     ):h('div',null,
       h('div',{style:{textAlign:'center',padding:'2rem',color:'var(--tx2)',fontSize:13}},'Không có đơn hàng. Điều chỉnh khách hàng, địa điểm hoặc khoảng ngày.'),
@@ -3140,7 +3142,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     return()=>media.removeEventListener?.('change',update);
   },[]);
   const canEditMobileOrder=canWrite(currentUser?.role,'delivery',currentUser?.permLevels);
-  const deleteContext=useRef(null);deleteContext.current={user:currentUser,trips,orders,canEdit:canEditMobileOrder};
+  const deleteContext=useRef(null);deleteContext.current={user:currentUser,trips,orders,products,canEdit:canEditMobileOrder};
   const canChangeTripDriver=canEditMobileOrder&&canTripAction(currentUser,'manage');
   const canDispatchFromOrders=canEditMobileOrder&&canTripAction(currentUser,'dispatch')&&canAccess(currentUser?.role,'trips',currentUser?.permissions,employeeDepartments(currentUser));
   const dispatchBusy=useRef(new Set());
@@ -4549,7 +4551,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     if(pacLabels.length)openLabelPrintWindow(pacLabels,[o],'pac');
     if(classicLabels.length)openLabelPrintWindow(classicLabels,[o],'classic');
   };
-  const printLabelsForOrders=(ordersToPrint,mode='auto')=>{
+  const printLabelsForOrders=async(ordersToPrint,mode='auto')=>{
     const printOrders=(ordersToPrint||[]).filter(Boolean);
     if(!printOrders.length){window.showToast('Chọn ít nhất 1 đơn để in tem!','warn');return;}
     const labels=printOrders.flatMap(o=>labelLinesForOrder(o));
@@ -4557,6 +4559,9 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const pacLabels=labels.filter(it=>mode!=='classic'&&isPacPackageLine(it?.line));
     const classicLabels=labels.filter(it=>mode!=='pac'&&!isPacPackageLine(it?.line));
     if(!pacLabels.length&&!classicLabels.length){window.showToast('Không có sản phẩm phù hợp với mẫu tem đã chọn.','warn');return;}
+    if(window.scfShouldUsePrintAgent?.()){
+      try{await scfAccountingPrintOrderLabels({selectedOrders:printOrders,products,customers,trips,mode,currentUser,getLatest:()=>deleteContext.current});window.showToast('Đã gửi tem tới máy in.','success');}catch(error){window.showToast(error.message||'Chưa gửi được tem.','error');}return;
+    }
     if(pacLabels.length&&classicLabels.length)window.showToast('Danh sách đang có cả tem PAC kho vận 10x10 và tem thường. Hệ thống sẽ mở 2 cửa sổ in riêng.','ok');
     if(pacLabels.length)openLabelPrintWindow(pacLabels,printOrders,'pac');
     if(classicLabels.length)openLabelPrintWindow(classicLabels,printOrders,'classic');

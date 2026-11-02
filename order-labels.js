@@ -17,6 +17,47 @@ function scfOrderLabelItems(order,products=[],prodShifts=[],prodShiftRules=[]){
  });return labels;
 }
 function scfCleanPacProductName(name){return String(name||'').replace(/\s+/g,' ').replace(/\s*,?\s*\d+(?:[.,]\d+)?\s*KG\s*\/\s*PAC\b/ig,'').replace(/\s*,\s*PAC\b/ig,'').trim().toUpperCase();}
+const scfAccountingLabelRequests=new Map();
+function scfCanAccountingPrintLabels(user){
+ return !!user&&(['admin','administrator'].includes(String(user.role||'').toLowerCase())||employeeDepartmentIncludes(user,'Kế toán')&&canAccess(user.role,'delivery',user.permissions,employeeDepartments(user))&&canWrite(user.role,'delivery',user.permLevels))&&canMobileFeature(user,'tripPrint');
+}
+async function scfAccountingPrintOrderLabels({selectedOrders,products,customers,trips,mode,currentUser,getLatest}){
+ const actor=String(currentUser?.id||''),settings=scfPrintAgentSettings({trip:true});
+ const validate=()=>{
+  const live=getLatest(),access=window.__SCF_ACCESS_CONTEXT;
+  if(String(live.user?.id)!==actor||access?.readOnly||access?.employeeId&&String(access.employeeId)!==actor||!scfCanAccountingPrintLabels(live.user))throw Error('Bạn chưa được cấp quyền in tem nhiều đơn.');
+  if(selectedOrders.some(old=>!live.orders.some(order=>String(order.id)===String(old.id)&&order.status!=='cancelled'&&JSON.stringify(order)===JSON.stringify(old))))throw Error('Đơn đã thay đổi. Hãy mở lại danh sách in tem.');
+  if(live.products&&JSON.stringify(live.products)!==JSON.stringify(products))throw Error('Quy cách sản phẩm đã thay đổi. Hãy mở lại danh sách in tem.');
+  return live;
+ };
+ validate();
+ const grouped=new Map();
+ for(const order of selectedOrders){
+  const trip=order.tripId?(trips||[]).find(t=>String(t.id)===String(order.tripId)):order.tripAssignMode==='manual'?null:(trips||[]).find(t=>(t.orderIds||[]).map(String).includes(String(order.id)));
+  if(order.tripId&&!trip)throw Error('Chưa tải đủ chuyến của đơn. Tải lại trang trước khi in.');
+  const id=trip?.id||'__accounting_unassigned__';if(!grouped.has(id))grouped.set(id,[]);grouped.get(id).push(order);
+ }
+ const tasks=[];
+ for(const [tripId,orders] of grouped){
+  const labels=orders.flatMap(order=>scfOrderLabelItems(order,products,window.__SCF_PROD_SHIFTS||[],window.__SCF_PROD_SHIFT_RULES||[]));
+  for(const pac of [false,true]){
+   const list=labels.filter(label=>!!label.isPac===pac&&(mode==='auto'||(pac?mode==='pac':mode==='classic')));if(!list.length)continue;
+   if(list.length>1000)throw Error('Tối đa 1.000 tem mỗi nhóm. Chọn ít đơn hơn để in.');
+   tasks.push({tripId,ids:orders.filter(order=>list.some(label=>String(label.order?.id)===String(order.id))).map(order=>String(order.id)),pac,svgs:list.map(label=>pac?scfBuildPacOrderLabelSvg(label,label.order,customers):scfBuildClassicOrderLabelSvg(label,label.order))});
+  }
+ }
+ if(!tasks.length)throw Error('Không có tem phù hợp để in.');
+ const fingerprint=JSON.stringify(tasks),prior=scfAccountingLabelRequests.get(actor);
+ if(prior&&prior.fingerprint!==fingerprint&&prior.sent.size)throw Error('Lần trước đã gửi một phần tem. Chọn lại đúng danh sách để gửi tiếp phần còn lại.');
+ const request=prior?.fingerprint===fingerprint?prior:{fingerprint,sent:new Set()};scfAccountingLabelRequests.set(actor,request);
+ try{
+  for(let index=0;index<tasks.length;index++){
+   if(request.sent.has(index))continue;validate();const task=tasks[index];
+   await scfQueueLabelPrint({agentId:settings.agentId,printerRole:settings.printerRole||'x350',title:'Kế toán · Tem nhiều đơn',paperWidthMm:task.pac?100:58,paperHeightMm:task.pac?100:40,svgs:task.svgs,rotate180:!task.pac,beforeEnqueue:validate,tripContext:{tripId:task.tripId,orderIds:task.ids,mode:'orders',accountingLabels:true}});request.sent.add(index);
+  }
+  scfAccountingLabelRequests.delete(actor);
+ }catch(error){throw Error((request.sent.size?'Đã gửi '+request.sent.size+' nhóm tem. Bấm in lại để gửi tiếp phần còn lại. ':'')+error.message);}
+}
 function scfBuildClassicOrderLabelSvg(it,o){
  const esc=scfEscapePrintHtml;
     const l=it.line;
