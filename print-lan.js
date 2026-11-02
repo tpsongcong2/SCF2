@@ -13,6 +13,15 @@ async function scfLanRequest(endpoint,path,body,timeoutMs=12000){
   }catch(error){if(error?.name==='AbortError'||error instanceof TypeError)throw Error('Chưa nhận được phản hồi Wi-Fi. Kiểm tra cùng mạng, Agent Wi-Fi và quyền mạng nội bộ của trình duyệt. Không tự gửi lại qua máy chủ.');throw error;}
   finally{clearTimeout(timer);}
 }
+async function scfSelectPrintRoute(settings,printerRole){
+  const manual=printerRole==='canon'?settings.a4LanUrl:settings.labelLanUrl;
+  if(!settings.autoRoute)return {route:'lan',endpoint:manual};
+  const {data,error}=await invokeScfAuth({body:{action:'driver_print_route',agentId:printerRole==='canon'?settings.a4AgentId:settings.agentId,printerRole}});
+  if(error||!data?.ok)throw Error(await serverFunctionErrorMessage(error,data,'Chưa kiểm tra được máy in.'));
+  if(data.route!=='lan')return {route:'cloud'};
+  try{const endpoints=(data.endpoints?.length?data.endpoints:[data.endpoint]).slice(0,3);const endpoint=await Promise.any(endpoints.map(async endpoint=>{await scfLanRequest(endpoint,'/health',{authorization:data.lanAuthorization},2000);return endpoint;}));return {route:'lan',endpoint};}
+  catch{return {route:'cloud'};}
+}
 const scfLanActive=new Map();
 function scfLanPendingKey(){return 'scf_lan_pending_'+String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');}
 function scfLanPending(){try{const rows=JSON.parse(localStorage.getItem(scfLanPendingKey())||'[]');return Array.isArray(rows)?rows.slice(0,50):[];}catch{return [];}}

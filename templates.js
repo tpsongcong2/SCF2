@@ -736,7 +736,7 @@ function normalizeUiSettings(raw){
     birthdayEffect:birthdayEffects.includes(src.birthdayEffect)?src.birthdayEffect:(DEF_UI_SETTINGS.birthdayEffect||'fireworks'),
     deliveryOrderHover:src.deliveryOrderHover!==false,
     driverProductionLink:src.driverProductionLink===true,
-    driverPrinters:{enabled:src.driverPrinters?.enabled===true,labelAgentId:String(src.driverPrinters?.labelAgentId||'SCF-PC-01').trim().toUpperCase(),labelPrinterRole:src.driverPrinters?.labelPrinterRole==='x420'?'x420':'x350',a4AgentId:String(src.driverPrinters?.a4AgentId||src.driverPrinters?.labelAgentId||'SCF-PC-01').trim().toUpperCase(),lanEnabled:src.driverPrinters?.lanEnabled===true,labelLanUrl:String(src.driverPrinters?.labelLanUrl||'').trim(),a4LanUrl:String(src.driverPrinters?.a4LanUrl||src.driverPrinters?.labelLanUrl||'').trim()},
+    driverPrinters:{enabled:src.driverPrinters?.enabled===true,labelAgentId:String(src.driverPrinters?.labelAgentId||'SCF-PC-01').trim().toUpperCase(),labelPrinterRole:src.driverPrinters?.labelPrinterRole==='x420'?'x420':'x350',a4AgentId:String(src.driverPrinters?.a4AgentId||src.driverPrinters?.labelAgentId||'SCF-PC-01').trim().toUpperCase(),lanEnabled:src.driverPrinters?.lanEnabled===true,autoRoute:src.driverPrinters?.autoRoute===true,labelAutoAddress:src.driverPrinters?.labelAutoAddress===true,a4AutoAddress:src.driverPrinters?.a4AutoAddress===true,labelLanUrl:String(src.driverPrinters?.labelLanUrl||'').trim(),a4LanUrl:String(src.driverPrinters?.a4LanUrl||src.driverPrinters?.labelLanUrl||'').trim()},
     driverProductionLinkStartedAt:String(src.driverProductionLinkStartedAt||''),
     scopes:{}
   };

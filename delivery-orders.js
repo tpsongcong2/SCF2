@@ -1849,7 +1849,7 @@ function deliverySelectedTripPrintOrders(orders,trips,tripId,customers=[]){
   const members=(orders||[]).filter(order=>order.status!=='cancelled'&&String(manualTripForOrder(trips,order)?.id||'')===String(tripId));
   return sortTripOrdersByDeliveryOrder(trip,members,customers);
 }
-function PrintByCustomerModal({orders,customers,products,company,trips=[],initialDate,initialDateTo,initialDateBasis,initialGroup,tripOnlyId='',simulate=false,onClose}) {
+function PrintByCustomerModal({orders,customers,products,company,trips=[],initialDate,initialDateTo,initialDateBasis,initialGroup,tripOnlyId='',simulate=false,currentUser,getLatest,onClose}) {
   const tripOrders=tripOnlyId?deliverySelectedTripPrintOrders(orders,trips,tripOnlyId,customers):[];
   const selectedTrip=tripOnlyId?trips.find(trip=>String(trip.id)===String(tripOnlyId)):null;
   const [tpl,setTpl]=useState(()=>tripOnlyId?resolveOrderPrintTemplate(tripOrders[0],customers.find(customer=>String(customer.id)===String(tripOrders[0]?.customerId||tripOrders[0]?.custId||''))):'welstory');
@@ -1861,19 +1861,27 @@ function PrintByCustomerModal({orders,customers,products,company,trips=[],initia
   const toggleAll=checked=>setSelected(p=>{const n={...p};filtered.forEach(o=>{n[o.id]=checked;});return n;});
   const toggleOne=(id,checked)=>setSelected(p=>({...p,[id]:checked}));
 
-  const doPrint=()=>{
+  const [sendingA4,setSendingA4]=useState(false);
+  const doPrint=async()=>{
+    if(sendingA4)return;
     if(!selectedOrders.length){window.showToast('Chọn ít nhất 1 đơn để in!','warn');return;}
     const extractPart=(html,tag)=>{
       const m=String(html||'').match(new RegExp('<'+tag+'[^>]*>([\\s\\S]*?)<\\/'+tag+'>','i'));
       return m?m[1]:'';
     };
-    const docs=selectedOrders.map(o=>buildPrintHTML(tpl,o,company));
+    const htmlForOrders=items=>{
+    const docs=items.map(o=>buildPrintHTML(tpl,o,company));
     const style=extractPart(docs[0],'style');
     const bodyParts=docs.map((html,idx)=>{
       const body=extractPart(html,'body')||html;
       return idx<docs.length-1?body+'<div style="page-break-after:always"></div>':body;
     }).join('');
-    const printHtml='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Phieu giao hang</title><style>'+style+'<\/style><\/head><body>'+bodyParts+'<\/body><\/html>';
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Phieu giao hang</title><style>'+style+'<\/style><\/head><body>'+bodyParts+'<\/body><\/html>';
+    };
+    const printHtml=htmlForOrders(selectedOrders);
+    if(!tripOnlyId&&!simulate&&window.scfShouldUsePrintAgent?.()){
+      setSendingA4(true);try{await scfAccountingPrintA4({selectedOrders,trips,currentUser,getLatest:getLatest||(()=>({user:currentUser,orders})),htmlForOrders});window.showToast('Đã gửi đơn tới máy in A4.','success');}catch(error){window.showToast(error.message||'Chưa gửi được đơn.','error');}finally{setSendingA4(false);}return;
+    }
     if(simulate||window.scfShouldUsePrintAgent?.()){
       window.scfQueueA4Print(printHtml,{title:'Phiếu giao hàng · '+selectedOrders.length+' đơn',simulate,tripContext:tripOnlyId?{tripId:tripOnlyId,orderIds:selectedOrders.map(o=>String(o.id)),mode:'delivery'}:undefined})
         .then(()=>window.showToast('Đã gửi '+selectedOrders.length+' đơn tới Canon 2900.','success'))
@@ -1920,7 +1928,7 @@ function PrintByCustomerModal({orders,customers,products,company,trips=[],initia
       ),
       h(Row,null,
         h('button',{onClick:onClose},'Hủy'),
-        h('button',{className:'bp',onClick:doPrint,disabled:!selectedOrders.length,style:{padding:'8px 20px'}},h('i',{className:'ti ti-printer',style:{fontSize:15}}),' In '+selectedOrders.length+' phiếu')
+        h('button',{className:'bp',onClick:doPrint,disabled:sendingA4||!selectedOrders.length,style:{padding:'8px 20px'}},h('i',{className:'ti ti-printer',style:{fontSize:15}}),' In '+selectedOrders.length+' phiếu')
       )
     ):h('div',null,
       h('div',{style:{textAlign:'center',padding:'2rem',color:'var(--tx2)',fontSize:13}},'Không có đơn hàng. Chọn khách hàng hoặc điều chỉnh khoảng ngày.'),
@@ -4889,7 +4897,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       )),
       !isMobile&&h('div',{className:'delivery-persistent-toolbar'},renderDeliveryOrderActions())
     ),
-        modal==='print'&&h(PrintByCustomerModal,{orders,customers,products,company,trips,...deliveryPrintInitialDates(dateFilterMode,fDate,fDateTo,fWeek,fMonth),initialDateBasis:sortMode==='trip'?dateBasis:'order',initialGroup:fTripGroup,onClose:()=>sm(null)}),
+        modal==='print'&&h(PrintByCustomerModal,{orders,customers,products,company,trips,currentUser,getLatest:()=>deleteContext.current,...deliveryPrintInitialDates(dateFilterMode,fDate,fDateTo,fWeek,fMonth),initialDateBasis:sortMode==='trip'?dateBasis:'order',initialGroup:fTripGroup,onClose:()=>sm(null)}),
         modal==='printlabels'&&h(PrintLabelsMultiModal,{orders,customers,trips,...deliveryPrintInitialDates(dateFilterMode,fDate,fDateTo,fWeek,fMonth),initialDateBasis:sortMode==='trip'?dateBasis:'order',initialGroup:fTripGroup,onClose:()=>sm(null),onPrint:printLabelsForOrders}),
         modal==='importPreview'&&window._importData&&h(ImportPreviewModal,{data:window._importData,customers,setCustomers,orders,setOrders,products,prodCats,prodShifts,currentUser,onLocateExisting:locateExistingImportedOrder,onClose:()=>{sm(null);delete window._importData;}}),
         modal==='imageImport'&&h(ImageOrderImportModal,{customers,products,orders,setOrders,prodShifts,currentUser,onClose:()=>sm(null)}),

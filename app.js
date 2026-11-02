@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V787';
+const SCF_BUILD_VERSION='V788';
 const PTITLES = {
   driverprintlog:'Thông tin lái xe in đơn',
   kpi4p:'KPI & Lương 4P',
@@ -258,7 +258,7 @@ function scfLoadOptionalScript(name,url){
 // Kiểm tra thành phần trước khi render: một tệp tải lỗi không được làm trắng trang.
 const SCF_PAGE_COMPONENTS={
   driverprintlog:'DriverPrintHistoryTab',
-  'trip-settings':'DeliveryTripSettings',
+  'trip-settings':'DeliveryTripSettings AgentRegistrySettings',
   'driver-preview':'DriverMobilePreview DriverOrdersMobile DriverLabelPrintModal',
   kpi4p:'KPI4PTab',
   attp_claims:'ATTPDocumentsTab',attp_process:'ATTPDocumentsTab',attp_standards:'ATTPDocumentsTab',attp_daily:'ATTPDocumentsTab',attp_legal:'ATTPDocumentsTab',
