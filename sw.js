@@ -1,4 +1,4 @@
-const CACHE = 'scf-v783';
+const CACHE = 'scf-v784';
 const ASSETS = [
   './',
   './index.html',
@@ -11,7 +11,7 @@ const ASSETS = [
   './runtime.js?v=457',
   './storage.js?v=765',
   './print-agent.js?v=778',
-  './driver-print-history.js?v=782',
+  './driver-print-history.js?v=784',
   './helpers.js?v=775',
   './warehouse-orders.js?v=711',
   './defaults.js?v=602',
@@ -60,7 +60,7 @@ const ASSETS = [
   './production-assignments.js?v=644',
   './permissions.js?v=782',
   './permission-settings.js?v=783',
-  './app.js?v=783',
+  './app.js?v=784',
   './bootstrap.js?v=645',
   './manifest.json',
   './icon-192.png',
