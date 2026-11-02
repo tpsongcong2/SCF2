@@ -28,7 +28,7 @@ function DriverPrintHistoryTab({currentUser}){
     !busy&&!error&&rows.length===0&&h('p',null,'Chưa có lịch sử in.'),
     rows.length>0&&h('div',{style:{overflowX:'auto'}},h('table',null,h('thead',null,h('tr',null,['Người in','In gì','Ngày, giờ','Đơn nào','Chuyến nào','Trạng thái'].map(label=>h('th',{key:label},label)))),h('tbody',null,rows.map(row=>h('tr',{key:row.job_id},
       h('td',null,row.actor_name||row.actor_id),h('td',null,kind(row.print_mode)),h('td',null,new Date(row.created_at).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'})),
-      h('td',null,(row.orders||[]).length?(row.orders||[]).map((order,index)=>h('div',{key:order.id||index},scfPrintHistoryOrderLabel(order))):row.print_mode==='manual'?'In khác đơn · Không gắn đơn':'Chưa có thông tin đơn'),
+      h('td',null,(row.orders||[]).length?(row.orders||[]).map((order,index)=>h('div',{key:order.id||index},scfPrintHistoryOrderLabel(order),(order.printLabels||[]).length>0&&h('small',{style:{display:'block'}},[...new Set(order.printLabels.map(label=>[label.productName,label.shelfLifeHours+'H'].join(' · ')))].join('; ')+' · '+order.printLabels.length+' tem'))):row.print_mode==='manual'?'In khác đơn · Không gắn đơn':'Chưa có thông tin đơn'),
       h('td',null,row.trip_name||'Chưa có tên chuyến',h('br'),row.trip_date||''),h('td',null,state(row.status))
     ))))),
     h('div',{style:{display:'flex',gap:12,alignItems:'center',marginTop:16}},h('button',{type:'button','data-scf-action':'view',disabled:busy||offset===0,onClick:()=>setOffset(n=>Math.max(0,n-50))},'Trang trước'),h('span',null,'Trang '+(offset/50+1)),h('button',{type:'button','data-scf-action':'view',disabled:busy||!hasMore,onClick:()=>setOffset(n=>n+50)},'Trang sau')));

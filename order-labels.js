@@ -1,4 +1,5 @@
 /* Shared artwork used by desktop delivery orders and driver phone labels. */
+function scfLabelDetails(label,shelfLifeHours=24){const order=label.order||{};return {orderId:String(order.id||''),productName:String(label.line?.productName||''),deliveryDate:String(order.deliveryDate||''),deliveryTime:String(order.deliveryTime||''),productionDate:String(label.plan?.labelDate||order.deliveryDate||''),productionTime:String(label.manual?order.deliveryTime||'':label.plan?.labelTime||''),shelfLifeHours:shelfLifeHours===36?36:24,weightKg:Number(label.kg??label.qty??0)};}
 function scfOrderLabelItems(order,products=[],prodShifts=[],prodShiftRules=[]){
  const plans=prodShiftPlansForOrder(order,prodShifts,prodShiftRules),labels=[];
  (order.lines||[]).forEach((line,index)=>{
@@ -43,7 +44,8 @@ async function scfAccountingPrintOrderLabels({selectedOrders,products,customers,
   for(const pac of [false,true]){
    const list=labels.filter(label=>!!label.isPac===pac&&(mode==='auto'||(pac?mode==='pac':mode==='classic')));if(!list.length)continue;
    if(list.length>1000)throw Error('Tối đa 1.000 tem mỗi nhóm. Chọn ít đơn hơn để in.');
-   tasks.push({tripId,ids:orders.filter(order=>list.some(label=>String(label.order?.id)===String(order.id))).map(order=>String(order.id)),pac,svgs:list.map(label=>pac?scfBuildPacOrderLabelSvg(label,label.order,customers):scfBuildClassicOrderLabelSvg(label,label.order))});
+   const hours=settings.androidShelfLifeHours===36?36:24;
+   tasks.push({tripId,ids:orders.filter(order=>list.some(label=>String(label.order?.id)===String(order.id))).map(order=>String(order.id)),pac,labelDetails:list.map(label=>scfLabelDetails(label,hours)),svgs:list.map(label=>pac?scfBuildPacOrderLabelSvg(label,label.order,customers):scfBuildClassicOrderLabelSvg({...label,shelfLifeHours:hours},label.order))});
   }
  }
  if(!tasks.length)throw Error('Không có tem phù hợp để in.');
@@ -53,7 +55,7 @@ async function scfAccountingPrintOrderLabels({selectedOrders,products,customers,
  try{
   for(let index=0;index<tasks.length;index++){
    if(request.sent.has(index))continue;validate();const task=tasks[index];
-   await scfQueueLabelPrint({agentId:settings.agentId,printerRole:settings.printerRole||'x350',title:'Kế toán · Tem nhiều đơn',paperWidthMm:task.pac?100:58,paperHeightMm:task.pac?100:40,svgs:task.svgs,rotate180:!task.pac,beforeEnqueue:validate,tripContext:{tripId:task.tripId,orderIds:task.ids,mode:'orders',accountingLabels:true}});request.sent.add(index);
+   await scfQueueLabelPrint({agentId:settings.agentId,printerRole:settings.printerRole||'x350',title:'Kế toán · Tem nhiều đơn',paperWidthMm:task.pac?100:58,paperHeightMm:task.pac?100:40,svgs:task.svgs,labelDetails:task.labelDetails,rotate180:!task.pac,beforeEnqueue:validate,tripContext:{tripId:task.tripId,orderIds:task.ids,mode:'orders',accountingLabels:true}});request.sent.add(index);
   }
   scfAccountingLabelRequests.delete(actor);
  }catch(error){throw Error((request.sent.size?'Đã gửi '+request.sent.size+' nhóm tem. Bấm in lại để gửi tiếp phần còn lại. ':'')+error.message);}
@@ -86,7 +88,7 @@ function scfBuildClassicOrderLabelSvg(it,o){
         '<text x="132" y="322" font-family="Arial,sans-serif" font-size="26" font-weight="700">'+esc(nsx)+'</text>'+
         '<text x="342" y="322" font-family="Arial,sans-serif" font-size="26" font-weight="700">GIỜ SX:</text>'+
         '<text x="512" y="322" font-family="Arial,sans-serif" font-size="26" font-weight="700" text-anchor="end">'+esc(gioSx)+'</text>'+
-        '<text x="28" y="364" font-family="Arial,sans-serif" font-size="23">HSD: 24H</text>'+
+        '<text x="28" y="364" font-family="Arial,sans-serif" font-size="23">HSD: '+(it.shelfLifeHours===36?36:24)+'H</text>'+
         '<text x="170" y="364" font-family="Arial,sans-serif" font-size="23">FORMOL: 0</text>'+
         '<text x="302" y="364" font-family="Arial,sans-serif" font-size="23">HÀN THE: 0</text>'+
         '<text x="552" y="364" font-family="Arial,sans-serif" font-size="23" text-anchor="end">BQ: 0-10°C</text>'+

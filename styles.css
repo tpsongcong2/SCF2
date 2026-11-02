@@ -1919,3 +1919,5 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 .driver-mobile-page .dm-body{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}.driver-mobile-page .dm-body>*{grid-column:1 / -1}.driver-mobile-page .dm-body>label:nth-child(-n+2){grid-column:auto;min-width:0}.driver-mobile-page .dm-body>label:nth-child(-n+2) select,.driver-mobile-page .dm-body>label:nth-child(-n+2) input{min-width:0;padding:8px;font-size:14px}
 
 @media(max-width:768px){.driver-mobile-page{padding-bottom:calc(84px + env(safe-area-inset-bottom));}}
+
+.dm-steps button{flex:1;min-width:0;min-height:44px;border:0;border-bottom:3px solid var(--bd);border-radius:0;background:transparent;color:var(--tx2);padding:10px 4px;font:inherit;font-size:12px;font-weight:600}.dm-steps button.on{border-bottom-color:var(--pri);color:var(--pri)}

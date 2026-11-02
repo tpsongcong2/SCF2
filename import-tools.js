@@ -495,16 +495,16 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
   .title-wrap{text-align:center;margin:6px 0 2px}
   .title-cn{font-size:20px;font-weight:700}
   .title-vn{font-size:12px;color:#444;margin-bottom:8px}
-  .meta-row{display:flex;align-items:center;gap:0;border:1px solid #333;margin-bottom:0}
-  .meta-cell{padding:4px 10px;font-size:13px;border-right:1px solid #333;white-space:nowrap}
-  .meta-cell:last-child{border-right:none;flex:1}
+  .meta-row{display:table;width:100%;border:1px solid #333;margin-bottom:0}
+  .meta-cell{display:table-cell;width:1%;padding:4px 10px;font-size:13px;border-right:1px solid #333;white-space:nowrap}
+  .meta-cell:last-child{border-right:none;width:auto}
   .meta-label{font-size:11px;color:#666}
   .meta-val{font-weight:700;font-size:14px}
   thead tr th{background:#c6e0b4;border:1px solid #333;padding:5px 4px;font-size:11px;text-align:center;line-height:1.4;white-space:pre-line}
   tbody tr td{vertical-align:middle}
   .tong-row td{background:#e2efda;font-weight:700}
-  .foot{margin-top:20px;display:flex;justify-content:space-between;padding:0 20px}
-  .foot-col{text-align:center;width:40%}
+  .foot{margin-top:20px;display:table;width:100%;padding:0 20px;page-break-inside:avoid}
+  .foot-col{display:table-cell;vertical-align:top;text-align:center;width:50%}
   .foot-col .sign-space{height:44px}
   .foot-col .sub{font-size:11px;color:#555}
   @media print{body{padding:0}.print-sheet{width:100%;min-height:210mm;padding:15mm}@page{size:297mm 210mm;margin:0}}
@@ -568,17 +568,27 @@ function buildPrintHTML(template,order,company){
   return scfAttachOrderQr(buildPrintHTMLBody(template,order,company),order);
 }
 
+function scfA4OrientationHtml(html,portrait=false){return html.replace(/<head>/i,'<head><meta name="scf-page-orientation" content="'+(portrait?'portrait':'landscape')+'">').replace('</head>','<style>@media print{@page{size:A4 '+(portrait?'portrait':'landscape')+';margin:0}.print-sheet{box-sizing:border-box;width:100%;min-height:0}}</style></head>');}
+// One document builder for accounting, trip and driver invoices.
+function scfDeliveryInvoiceHtml(template,orders,company){
+ const docs=(orders||[]).map(order=>buildPrintHTML(template,order,company));
+ if(!docs.length)throw Error('Chọn ít nhất một phiếu để in.');
+ if(docs.length===1)return docs[0];
+ const bodies=docs.map(html=>{const match=html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);if(!match)throw Error('Mẫu phiếu không hợp lệ.');return match[1];});
+ return docs[0].replace(/(<body[^>]*>)[\s\S]*?(<\/body>)/i,(_,open,close)=>open+bodies.join('<div style="page-break-after:always"></div>')+close);
+}
+
 function PrintTemplateModal({order, company, initialTemplate, onClose}) {
   const defaultTemplate=PRINT_TEMPLATES.some(item=>item.id===initialTemplate)?initialTemplate:'welstory';
-  const [tpl, setTpl] = useState(defaultTemplate);
+  const [tpl, setTpl] = useState(defaultTemplate);const [portrait,setPortrait]=useState(false);
   const doPrint = () => {
-    const html = buildPrintHTML(tpl, order, company);
+    const html = scfA4OrientationHtml(scfDeliveryInvoiceHtml(tpl, [order], company),portrait);
     const w = window.open('','_blank','width='+Math.round(screen.availWidth*0.9)+',height='+Math.round(screen.availHeight*0.9)+',left='+Math.round(screen.availWidth*0.05)+',top='+Math.round(screen.availHeight*0.05)+',resizable=yes,scrollbars=yes');
     w.document.write(html);
     w.document.close();
     setTimeout(() => { w.print(); }, 500);
   };
-  return h(Modal,{title:'In phiếu giao hàng',onClose},
+  return h(Modal,{title:'In phiếu giao hàng',onClose},h('label',{style:{display:'flex',gap:8,alignItems:'center',padding:'10px 0'}},h('input',{type:'checkbox','aria-label':'In giấy dọc',checked:portrait,onChange:e=>setPortrait(e.target.checked)}),'In giấy dọc (bỏ tích: giấy ngang)'),
     h(F,{label:'Chọn mẫu in'},
       h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
         PRINT_TEMPLATES.map(t=>h('label',{key:t.id,style:{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:'var(--r)',border:'1.5px solid '+(tpl===t.id?'var(--pri)':'var(--bd)'),cursor:'pointer',background:tpl===t.id?'var(--bg2)':''},onClick:()=>setTpl(t.id)},

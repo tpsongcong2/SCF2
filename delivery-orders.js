@@ -1861,23 +1861,11 @@ function PrintByCustomerModal({orders,customers,products,company,trips=[],initia
   const toggleAll=checked=>setSelected(p=>{const n={...p};filtered.forEach(o=>{n[o.id]=checked;});return n;});
   const toggleOne=(id,checked)=>setSelected(p=>({...p,[id]:checked}));
 
-  const [sendingA4,setSendingA4]=useState(false);
+  const [sendingA4,setSendingA4]=useState(false);const [portrait,setPortrait]=useState(false);
   const doPrint=async()=>{
     if(sendingA4)return;
     if(!selectedOrders.length){window.showToast('Chọn ít nhất 1 đơn để in!','warn');return;}
-    const extractPart=(html,tag)=>{
-      const m=String(html||'').match(new RegExp('<'+tag+'[^>]*>([\\s\\S]*?)<\\/'+tag+'>','i'));
-      return m?m[1]:'';
-    };
-    const htmlForOrders=items=>{
-    const docs=items.map(o=>buildPrintHTML(tpl,o,company));
-    const style=extractPart(docs[0],'style');
-    const bodyParts=docs.map((html,idx)=>{
-      const body=extractPart(html,'body')||html;
-      return idx<docs.length-1?body+'<div style="page-break-after:always"></div>':body;
-    }).join('');
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Phieu giao hang</title><style>'+style+'<\/style><\/head><body>'+bodyParts+'<\/body><\/html>';
-    };
+    const htmlForOrders=items=>scfA4OrientationHtml(scfDeliveryInvoiceHtml(tpl,items,company),portrait);
     const printHtml=htmlForOrders(selectedOrders);
     if(!tripOnlyId&&!simulate&&window.scfShouldUsePrintAgent?.()){
       setSendingA4(true);try{await scfAccountingPrintA4({selectedOrders,trips,currentUser,getLatest:getLatest||(()=>({user:currentUser,orders})),htmlForOrders});window.showToast('Đã gửi đơn tới máy in A4.','success');}catch(error){window.showToast(error.message||'Chưa gửi được đơn.','error');}finally{setSendingA4(false);}return;
@@ -1898,6 +1886,7 @@ function PrintByCustomerModal({orders,customers,products,company,trips=[],initia
   return h(Modal,{title:tripOnlyId?'In phiếu giao hàng trong chuyến':'In phiếu giao hàng theo khách hàng',lg:true,onClose},
     tripOnlyId&&h('p',{className:'dm-hint'},'Máy in A4: '+(scfPrintAgentSettings({trip:true}).a4AgentId||scfPrintAgentSettings({trip:true}).agentId||'SCF-PC-01')),
     tripOnlyId?h('p',{className:'delivery-print-trip-scope'},h('b',null,selectedTrip?.shiftName||'Chuyến đã chọn'),' · '+(selectedTrip?.deliveryDate||'')+' · '+(selectedTrip?.driverName||'Chưa có lái xe')):fields(id=>{const customer=customers.find(c=>String(c.id)===id);if(customer)setTpl(resolveOrderPrintTemplate({},customer));}),
+    h('label',{style:{display:'flex',gap:8,alignItems:'center',padding:'10px 0'}},h('input',{type:'checkbox','aria-label':'In giấy dọc',checked:portrait,onChange:e=>setPortrait(e.target.checked)}),'In giấy dọc (bỏ tích: giấy ngang)'),
     h(F,{label:'Mẫu in'},h('select',{'aria-label':'Mẫu in',value:tpl,onChange:e=>setTpl(e.target.value)},PRINT_TEMPLATES.map(t=>h('option',{key:t.id,value:t.id},t.name)))),
     tripOnlyId&&h('p',{style:{fontSize:12,color:'var(--tx2)'}},'Mẫu in áp dụng cho các phiếu đã chọn bên dưới.'),
     tpl==='youngsun'&&h('div',{style:{fontSize:12,color:'var(--tx2)',margin:'0 0 10px'}},
