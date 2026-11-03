@@ -12,8 +12,9 @@ async function scfATTPRequest(pageKey,operation,params={}){
   return data;
 }
 function ATTPDocumentsTab({page,title,icon,currentUser}){
+  const isAudit=page==='attp_audit';
   const isClaim=page==='attp_claims';
-  const isDaily=page==='attp_daily'||isClaim;
+  const isDaily=page==='attp_daily'||isClaim||isAudit;
   const [query,setQuery]=useState('');
   const [range,setRange]=useState(()=>isDaily?scfATTPMonthRange():{from:'',to:''});
   const [pageNumber,setPageNumber]=useState(1);
@@ -67,7 +68,7 @@ function ATTPDocumentsTab({page,title,icon,currentUser}){
   const changeRange=(field,value)=>{setRange(prev=>({...prev,[field]:value}));setPageNumber(1);};
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti '+icon}),title),
-    h('div',{className:'card',style:{padding:16,marginBottom:14}},h('strong',null,title),h('p',{style:{margin:'6px 0 0'}},isClaim?'Ghi nhận claim theo ngày, địa điểm; tải tệp giải trình và theo dõi người xử lý.':isDaily?'Ghi nhận kiểm tra theo ngày, ca; theo dõi kết quả, sai lệch và khắc phục. Mặc định hiển thị tháng hiện tại.':'Quản lý tài liệu theo mã, phiên bản, người phụ trách và thời hạn. Mở tài liệu để xem nội dung, hình ảnh.')),
+    h('div',{className:'card',style:{padding:16,marginBottom:14}},h('strong',null,title),h('p',{style:{margin:'6px 0 0'}},isAudit?'Ghi nhận mỗi lần khách hàng AUDIT: ngày kiểm tra, hình ảnh, hạng mục cải tiến và người kiểm tra.':isClaim?'Ghi nhận claim theo ngày, địa điểm; tải tệp giải trình và theo dõi người xử lý.':isDaily?'Ghi nhận kiểm tra theo ngày, ca; theo dõi kết quả, sai lệch và khắc phục. Mặc định hiển thị tháng hiện tại.':'Quản lý tài liệu theo mã, phiên bản, người phụ trách và thời hạn. Mở tài liệu để xem nội dung, hình ảnh.')),
     h('div',{className:'attp-toolbar'},
       h(SearchBar,{value:query,onChange:value=>{setQuery(value);setPageNumber(1);},placeholder:isClaim?'Tìm địa điểm, claim, xưởng, người chịu trách nhiệm...':'Tìm mã, tiêu đề, nội dung, người phụ trách...'}),
       h('label',null,'Từ ngày',h('input',{type:'date',value:range.from,onChange:e=>changeRange('from',e.target.value)})),
@@ -75,12 +76,12 @@ function ATTPDocumentsTab({page,title,icon,currentUser}){
       isDaily&&h('button',{type:'button',onClick:()=>{setRange(scfATTPMonthRange());setPageNumber(1);}},'Tháng hiện tại'),
       h('button',{type:'button',onClick:()=>{setRange({from:'',to:''});setPageNumber(1);}},'Tất cả ngày'),
       h('button',{type:'button',disabled:loading,onClick:()=>setReload(x=>x+1)},'Tải lại'),
-      canEdit&&h('button',{type:'button',className:'bp','data-scf-action':'write',disabled:detailBusy||deleting,onClick:()=>{setSelected({id:'',category:page,publishDate:scfATTPToday(),images:[]});setEditing(true);}},isClaim?'+ Ghi claim':isDaily?'+ Ghi nhật ký':'+ Thêm tài liệu')
+      canEdit&&h('button',{type:'button',className:'bp','data-scf-action':'write',disabled:detailBusy||deleting,onClick:()=>{setSelected({id:'',category:page,publishDate:scfATTPToday(),images:[]});setEditing(true);}},isAudit?'+ Thêm lần AUDIT':isClaim?'+ Ghi claim':isDaily?'+ Ghi nhật ký':'+ Thêm tài liệu')
     ),
     loading?h('div',{role:'status',className:'empty'},'Đang tải tài liệu…'):error?h('div',{role:'alert',className:'card',style:{padding:16}},error,h('button',{type:'button',onClick:()=>setReload(x=>x+1),style:{marginLeft:12}},'Thử lại')):
     h(React.Fragment,null,
       h('div',{className:'attp-pagination'},h('span',null,result.total+' bản ghi · Trang '+result.page+'/'+result.pages),h('button',{type:'button',disabled:result.page<=1,onClick:()=>setPageNumber(result.page-1)},'Trước'),h('button',{type:'button',disabled:result.page>=result.pages,onClick:()=>setPageNumber(result.page+1)},'Sau')),
-      isClaim?h(QualityClaimList,{items:result.items,canEdit,busy:detailBusy||deleting,onOpen:openRecord}):result.items.length?h('div',{className:'delivery-rule-list'},result.items.map(item=>h('article',{key:item.id,className:'card delivery-rule-card'},
+      isAudit?h(CustomerAuditList,{items:result.items,canEdit,busy:detailBusy||deleting,onOpen:openRecord}):isClaim?h(QualityClaimList,{items:result.items,canEdit,busy:detailBusy||deleting,onOpen:openRecord}):result.items.length?h('div',{className:'delivery-rule-list'},result.items.map(item=>h('article',{key:item.id,className:'card delivery-rule-card'},
         h('h3',{style:{margin:'0 0 8px'}},item.title),
         h('div',{className:'attp-meta'},[item.documentCode&&'Mã: '+item.documentCode,item.revision&&'Phiên bản: '+item.revision,item.publishDate&&'Ngày: '+scfATTPDate(item.publishDate),item.responsible&&'Phụ trách: '+item.responsible,item.shift&&'Ca: '+item.shift,item.imageCount>0&&item.imageCount+' ảnh'].filter(Boolean).join(' · ')),
         h('p',{style:{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}},item.excerpt+(item.excerpt?.length===180?'…':'')),
@@ -88,9 +89,10 @@ function ATTPDocumentsTab({page,title,icon,currentUser}){
       ))):h('div',{className:'empty'},'Không có tài liệu trong khoảng ngày hoặc nội dung tìm kiếm này.')
     ),
     detailBusy&&h('div',{role:'status'},'Đang mở tài liệu…'),
-    selected&&editing&&h(isClaim?QualityClaimEditor:ATTPRecordEditor,{key:selected.id||'new',page,record:selected,isDaily,currentUser,onClose:()=>{setSelected(null);setEditing(false);},onSaved:()=>{setSelected(null);setEditing(false);setReload(x=>x+1);}}),
+    selected&&editing&&h(isAudit?CustomerAuditEditor:isClaim?QualityClaimEditor:ATTPRecordEditor,{key:selected.id||'new',page,record:selected,isDaily,currentUser,onClose:()=>{setSelected(null);setEditing(false);},onSaved:()=>{setSelected(null);setEditing(false);setReload(x=>x+1);}}),
     selected&&!editing&&h(Modal,{title:selected.title,lg:true,onClose:()=>{if(!deleting)setSelected(null);}},
-      h('div',{className:'attp-meta'},[['Mã',selected.documentCode],['Phiên bản',selected.revision],['Ngày',selected.publishDate&&scfATTPDate(selected.publishDate)],['Địa điểm',selected.location],['Xưởng',selected.workshop],['Người chịu trách nhiệm',selected.accountable],[isClaim?'Người xử lý':'Phụ trách',selected.responsible],['Ca',selected.shift],['Hiệu lực',selected.effectiveDate&&scfATTPDate(selected.effectiveDate)],['Hết hạn / rà soát',selected.expiryDate&&scfATTPDate(selected.expiryDate)],['Người đăng',selected.authorName]].filter(([,v])=>v).map(([label,value])=>h('div',{key:label},label+': '+value))),
+      h('div',{className:'attp-meta'},[['Mã',selected.documentCode],['Phiên bản',selected.revision],['Ngày',selected.publishDate&&scfATTPDate(selected.publishDate)],[isAudit?'Khách hàng':'Địa điểm',selected.location],['Xưởng',selected.workshop],['Người chịu trách nhiệm',selected.accountable],[isAudit?'Người kiểm tra':isClaim?'Người xử lý':'Phụ trách',selected.responsible],['Ca',selected.shift],['Hiệu lực',selected.effectiveDate&&scfATTPDate(selected.effectiveDate)],['Hết hạn / rà soát',selected.expiryDate&&scfATTPDate(selected.expiryDate)],['Người đăng',selected.authorName]].filter(([,v])=>v).map(([label,value])=>h('div',{key:label},label+': '+value))),
+      isAudit&&h('b',null,'Hạng mục cải tiến'),
       h('div',{className:'delivery-rule-content',style:{whiteSpace:'pre-wrap',overflowWrap:'anywhere',marginTop:16}},selected.content),
       isClaim&&h('div',null,h('b',null,'Tệp giải trình'),...(selected.attachments||[]).map((file,i)=>h('p',{key:i},file.url?h('a',{href:file.url,target:'_blank',rel:'noopener noreferrer',download:file.name},'Tải '+file.name):file.name+' · Chưa mở được tệp; thử mở lại claim.'))),
       !!selected.images?.length&&h('div',{className:'attp-detail-images'},selected.images.map((src,index)=>h('a',{key:index,href:src,target:'_blank',rel:'noopener noreferrer'},h('img',{src,loading:'lazy',decoding:'async',alt:'Ảnh tài liệu '+(index+1)})))),

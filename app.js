@@ -1,8 +1,9 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V792';
+const SCF_BUILD_VERSION='V794';
 const PTITLES = {
   driverprintlog:'Thông tin lái xe in đơn',
   kpi4p:'KPI & Lương 4P',
+  attp_audit:'Nhật ký AUDIT khách hàng',
   attp_claims:'Nhật ký claim chất lượng',
   attp_process:'Tài liệu ATTP · Quy trình',
   attp_standards:'Tài liệu ATTP · Tiêu chuẩn',
@@ -261,7 +262,7 @@ const SCF_PAGE_COMPONENTS={
   'trip-settings':'DeliveryTripSettings AgentRegistrySettings',
   'driver-preview':'DriverMobilePreview DriverOrdersMobile DriverLabelPrintModal',
   kpi4p:'KPI4PTab',
-  attp_claims:'ATTPDocumentsTab',attp_process:'ATTPDocumentsTab',attp_standards:'ATTPDocumentsTab',attp_daily:'ATTPDocumentsTab',attp_legal:'ATTPDocumentsTab',
+  attp_audit:'ATTPDocumentsTab',attp_claims:'ATTPDocumentsTab',attp_process:'ATTPDocumentsTab',attp_standards:'ATTPDocumentsTab',attp_daily:'ATTPDocumentsTab',attp_legal:'ATTPDocumentsTab',
   'mobile-home':'MobileRestrictedHome',welcome:'WelcomePage',company:'CompanySettings',appearance:'AppearanceSettingsTab',printtemplates:'PrintTemplateSettingsTab',
   personnel:'PersonnelInformationTab PersonnelProfileForm',employees:'EmployeeTab EmpForm CpwModal',permission_settings:'PermissionSettingsTab',
   attendance:'AttendanceTab',attendance_settings:'AttendanceTab',attendance_report:'AttendanceTab',workreport_total:'AttendanceTab',
@@ -298,7 +299,7 @@ async function scfEnsurePageTools(page){
 const PICONS = {
   driverprintlog:'ti-printer',
   kpi4p:'ti-chart-bar',
-  attp_claims:'ti-message-report',attp_process:'ti-list-check',
+  attp_audit:'ti-clipboard-check',attp_claims:'ti-message-report',attp_process:'ti-list-check',
   attp_standards:'ti-certificate',
   attp_daily:'ti-notebook',
   attp_legal:'ti-file-certificate',

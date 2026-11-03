@@ -648,6 +648,7 @@ const NAV=[
   {key:'attp_process',icon:'ti-list-check',label:'Quy trình'},
   {key:'attp_standards',icon:'ti-certificate',label:'Tiêu chuẩn'},
   {key:'attp_daily',icon:'ti-notebook',label:'Nhật ký hàng ngày'},
+  {key:'attp_audit',icon:'ti-clipboard-check',label:'Nhật ký AUDIT khách hàng'},
   {key:'attp_claims',icon:'ti-message-report',label:'Nhật ký claim chất lượng'},
   {key:'attp_legal',icon:'ti-file-certificate',label:'Tài liệu pháp lý'},
   {sec:'Danh mục'},
