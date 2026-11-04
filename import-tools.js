@@ -663,6 +663,7 @@ const NAV=[
   {sec:'Bán hàng'},
   {key:'deliveryrules',icon:'ti-clipboard-text',label:'Quy định giao hàng'},
   {key:'quotes',icon:'ti-file-invoice',label:'Báo giá'},
+  {key:'deliverymobile',icon:'ti-device-mobile',label:'Đơn hàng kế toán · Điện thoại'},
   {key:'delivery',icon:'ti-truck-delivery',label:'Đơn giao hàng'},
   {key:'intem',icon:'ti-printer',label:'Intem'},
   {key:'orderdetail',icon:'ti-list-details',label:'Chi tiết đơn hàng'},

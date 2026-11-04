@@ -14,6 +14,7 @@ function OrderNoticePermissionFields({employee,onChange,disabled=false}){
 }
 /* --- Phân quyền menu --- */
 const PAGE_ACCESS = {
+  deliverymobile:['admin'],
   kpi4p:['admin'],
   kpi4p_manage:['admin'],
   kpi4p_approve:['admin'],
@@ -179,7 +180,7 @@ function DeliveryQuantityTotalsPermissionField({employee,onChange,disabled=false
 // Quyền nút trên điện thoại bổ sung cho quyền trang/nghiệp vụ hiện có.
 // Tài khoản cũ chưa cấu hình giữ cách hiển thị hiện tại.
 const SCF_MOBILE_PERMISSION_GROUPS=[
-  {label:'Truy cập từ thanh dưới điện thoại',options:[['welcome','Thời tiết'],['delivery','Đơn giao hàng'],['trips','Chuyến giao hàng'],['attendance','Chấm công'],['prodsummary','SX · Tổng hợp sản xuất'],['quick-summary','Đơn tổng'],['workreport_lx','Công lái xe'],['fuelpurchases','Mua xăng dầu'],['notifications','Thông báo'],['leaves','Xin nghỉ'],['tasks','Giao việc'],['more','Thêm · Danh sách chức năng']]},
+  {label:'Truy cập từ thanh dưới điện thoại',options:[['welcome','Thời tiết'],['deliverymobile','Đơn hàng kế toán · Điện thoại'],['delivery','Đơn giao hàng'],['trips','Chuyến giao hàng'],['attendance','Chấm công'],['prodsummary','SX · Tổng hợp sản xuất'],['quick-summary','Đơn tổng'],['workreport_lx','Công lái xe'],['fuelpurchases','Mua xăng dầu'],['notifications','Thông báo'],['leaves','Xin nghỉ'],['tasks','Giao việc'],['more','Thêm · Danh sách chức năng']]},
   {label:'Tính năng chuyến giao trên điện thoại',options:[['tripSummary','Xem ảnh đơn tổng'],['tripUpdate','Cập nhật SL giao và HĐ'],['tripPrint','In đơn'],['tripInvoices','Hiện ảnh hóa đơn'],['tripImage','Tạo ảnh chuyến']]}
 ];
 function canMobileFeature(user,key){
@@ -259,7 +260,7 @@ function defaultTripPermissions(user={}){
     delete:pageDelete,
     dispatch:pageWrite&&(isAccounting||role==='manager'),
     actualQty:false,
-    orderActualQty:false,
+    orderActualQty:Array.isArray(user.permissions)&&user.permissions.includes('deliverymobile')&&canWrite(role,'deliverymobile',user.permLevels),
     invoiceQty:isAccounting,
     driverWorkflow:false,
     summaryInvoice:pageWrite&&isAccounting,
@@ -273,6 +274,7 @@ function normalizedTripPermissions(user={}){
 }
 function canTripAction(user,action){
   if(['admin','administrator'].includes(String(user?.role||'').trim().toLowerCase()))return true;
+  if(action==='orderActualQty'&&canAccess(user?.role,'deliverymobile',user?.permissions,user?.departments?.length?user.departments:user?.dept)&&canWrite(user?.role,'deliverymobile',user?.permLevels))return normalizedTripPermissions(user)[action]===true;
   if(!canAccess(user?.role,action==='orderActualQty'?'delivery':'trips',user?.permissions,user?.departments?.length?user.departments:user?.dept))return false;
   return normalizedTripPermissions(user)[action]===true;
 }

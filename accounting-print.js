@@ -1,6 +1,6 @@
 /* Scoped A4 printing for accounting on a phone: no queue read/edit permission required. */
 const scfAccountingA4Requests=new Map();
-async function scfAccountingPrintA4({selectedOrders,trips,currentUser,getLatest,htmlForOrders}){
+async function scfAccountingPrintA4({selectedOrders,trips,currentUser,getLatest,htmlForOrders,templateForOrder}){
  const actor=String(currentUser?.id||'');
  const validate=()=>{
   const live=getLatest(),access=window.__SCF_ACCESS_CONTEXT;
@@ -11,9 +11,9 @@ async function scfAccountingPrintA4({selectedOrders,trips,currentUser,getLatest,
  for(const order of selectedOrders){
   const trip=order.tripId?(trips||[]).find(t=>String(t.id)===String(order.tripId)):order.tripAssignMode==='manual'?null:(trips||[]).find(t=>(t.orderIds||[]).map(String).includes(String(order.id)));
   if(order.tripId&&!trip)throw Error('Chưa tải đủ chuyến. Tải lại danh sách trước khi in.');
-  const id=trip?.id||'__accounting_unassigned__';if(!groups.has(id))groups.set(id,[]);groups.get(id).push(order);
+  const tripId=trip?.id||'__accounting_unassigned__',id=templateForOrder?JSON.stringify([tripId,templateForOrder(order)]):tripId;if(!groups.has(id))groups.set(id,{tripId,orders:[]});groups.get(id).orders.push(order);
  }
- const tasks=[...groups].map(([tripId,orders])=>({tripId,ids:orders.map(o=>String(o.id)),html:htmlForOrders(orders)}));
+ const tasks=[...groups.values()].map(({tripId,orders})=>({tripId,ids:orders.map(o=>String(o.id)),html:htmlForOrders(orders)}));
  if(!tasks.length)throw Error('Chọn ít nhất một đơn để in.');
  const fingerprint=JSON.stringify(tasks),prior=scfAccountingA4Requests.get(actor);
  if(prior&&prior.fingerprint!==fingerprint&&prior.sent.size)throw Error('Lần trước đã gửi một phần đơn. Chọn lại đúng danh sách để gửi tiếp.');

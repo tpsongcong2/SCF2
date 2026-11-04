@@ -1921,3 +1921,25 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 @media(max-width:768px){.driver-mobile-page{padding-bottom:calc(84px + env(safe-area-inset-bottom));}}
 
 .dm-steps button{flex:1;min-width:0;min-height:44px;border:0;border-bottom:3px solid var(--bd);border-radius:0;background:transparent;color:var(--tx2);padding:10px 4px;font:inherit;font-size:12px;font-weight:600}.dm-steps button.on{border-bottom-color:var(--pri);color:var(--pri)}
+/* Compact accounting page shares the live order and print flows. */
+.accounting-mobile-page{max-width:620px;margin:0 auto;padding:14px 12px;display:grid;gap:14px}
+.accounting-page-heading,.accounting-result-head,.accounting-order-title,.accounting-row-actions{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.accounting-page-heading h2{margin:0;font-size:20px}.accounting-page-heading small{color:var(--tx2)}
+.accounting-filters,.accounting-schedule-form{display:grid;gap:12px}.accounting-filters label,.accounting-schedule-form label{display:grid;gap:5px;color:var(--tx2)}
+.accounting-filter-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.accounting-day-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.accounting-day-buttons [aria-pressed=true]{background:var(--pri);color:#fff}
+.accounting-mobile-page input:not([type=checkbox]),.accounting-mobile-page select,.accounting-schedule-form input:not([type=checkbox]),.accounting-schedule-form select{font-size:16px;min-width:0;width:100%;min-height:44px}
+.accounting-mobile-page button,.accounting-schedule-form button{min-height:44px}.accounting-mobile-page input[type=checkbox]{width:21px;height:21px;flex-shrink:0}
+.accounting-result-head label{display:flex;align-items:center;gap:6px}.accounting-order-list{display:grid}.accounting-order-row{padding:14px 0;border-top:1px solid var(--bd);display:grid;gap:8px}
+.accounting-order-title{justify-content:flex-start}.accounting-order-title>div{flex:1;min-width:0}.accounting-order-title b{font-size:16px}.accounting-order-title small{display:block;color:var(--tx2)}
+.accounting-trip-badge{color:var(--pri);background:var(--bg2);border-radius:5px;padding:4px 6px;font-size:12px;max-width:130px;overflow-wrap:anywhere}
+.accounting-product-lines{display:grid;gap:5px}.accounting-product-lines>div{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px}.accounting-product-lines>div>span:last-child{font-variant-numeric:tabular-nums}
+.accounting-order-row>small{color:var(--tx2)}.accounting-row-actions{justify-content:flex-start;flex-wrap:wrap}.accounting-row-actions button{flex:1;white-space:nowrap;font-size:13px;padding:8px}
+.accounting-bulk{padding:12px;background:var(--bg2);border:1px solid var(--bd);border-radius:10px;display:grid;gap:10px}.accounting-bulk>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.accounting-delivered-default{padding:5px 10px 10px;color:var(--tx2);font-size:13px}
+.accounting-editor .order-form-main-grid,.accounting-editor .order-form-shift-grid,.accounting-editor .order-form-timing-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.accounting-editor .order-detail-line-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;min-width:0}
+.accounting-editor .order-detail-line-grid>div:first-child{grid-column:1/-1}.accounting-editor input,.accounting-editor select{font-size:16px!important;min-height:44px;min-width:0}.accounting-editor button{min-height:44px}
+.accounting-editor .form-actions{display:flex;flex-wrap:wrap;gap:8px}.accounting-editor .form-actions button{flex:1;white-space:nowrap}
+.accounting-schedule-context{padding:10px;background:var(--bg2);border-radius:8px}.accounting-schedule-context p{margin:4px 0}.accounting-schedule-form label:has(input[type=checkbox]){display:flex;align-items:center;gap:8px}
+@media(max-width:360px){.accounting-mobile-page{padding:10px 6px}.accounting-filter-grid{gap:6px}.accounting-order-title b{font-size:15px}.accounting-trip-badge{max-width:92px}.accounting-row-actions button{padding:7px 5px;font-size:12px}}

@@ -20,7 +20,7 @@ function scfOrderLabelItems(order,products=[],prodShifts=[],prodShiftRules=[]){
 function scfCleanPacProductName(name){return String(name||'').replace(/\s+/g,' ').replace(/\s*,?\s*\d+(?:[.,]\d+)?\s*KG\s*\/\s*PAC\b/ig,'').replace(/\s*,\s*PAC\b/ig,'').trim().toUpperCase();}
 const scfAccountingLabelRequests=new Map();
 function scfCanAccountingPrintLabels(user){
- return !!user&&(['admin','administrator'].includes(String(user.role||'').toLowerCase())||employeeDepartmentIncludes(user,'Kế toán')&&canAccess(user.role,'delivery',user.permissions,employeeDepartments(user))&&canWrite(user.role,'delivery',user.permLevels))&&canMobileFeature(user,'tripPrint');
+ return !!user&&(['admin','administrator'].includes(String(user.role||'').toLowerCase())||(Array.isArray(user.permissions)&&user.permissions.includes('deliverymobile')&&canWrite(user.role,'deliverymobile',user.permLevels))||employeeDepartmentIncludes(user,'Kế toán')&&canAccess(user.role,'delivery',user.permissions,employeeDepartments(user))&&canWrite(user.role,'delivery',user.permLevels))&&canMobileFeature(user,'tripPrint');
 }
 async function scfAccountingPrintOrderLabels({selectedOrders,products,customers,trips,mode,currentUser,getLatest}){
  const actor=String(currentUser?.id||''),settings=scfPrintAgentSettings({trip:true});
