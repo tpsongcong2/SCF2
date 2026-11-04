@@ -569,7 +569,6 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
   const matchedPoint=(f.pointId?(selCust?.points||[]).find(x=>x.id===f.pointId):null)||findOrderPointMatch(f,customers||[])?.point||null;
   const matchedPointArea=matchedPoint?.area||f.area||'';
   const predictedTrip=f.tripAssignMode!=='manual'?resolveAutomaticTrip?.({...f,area:matchedPointArea,pointName:matchedPoint?.name||f.pointName||''}):null;
-  const accountingViewOrder=accountingCompact&&predictedTrip?{...f,tripId:predictedTrip.id}:f;
   const displayedTripDate=predictedTrip?manualTripDateToISO(predictedTrip.deliveryDate):tripDate;
   const displayedTripOptions=predictedTrip?filterManualTripOptions(trips.filter(t=>!['completion_pending','completed','cancelled'].includes(t.status)),displayedTripDate,''):formTripOptions;
   const resolvedPointName=matchedPoint?.name||f.pointName||f.address||'';
@@ -770,7 +769,7 @@ function OrderForm({order,copyMode=false,customers,products,quotes,employees,cur
         inheritedShift:hasLineOverrides?autoShift:effectiveShift,
         inheritedTiming:f.warehouseMerged||l.productionScheduleCopiedFromTripId?{prodTime:l.prodTime||'',prodDate:l.prodDate||'',labelTime:l.labelTime||'',labelDate:l.labelDate||'',prodWorkShiftId:l.prodWorkShiftId||''}:hasLineOverrides?timingForShift(autoShift):effectiveTiming,
         inheritedMode:hasLineOverrides?'auto':prodShiftMode,
-        onChange:data=>updLine(l.id,data),canRemove:!accountingCompact||!order?.lines?.some(old=>String(old.id)===String(l.id))||canDel(currentUser?.role,'delivery',currentUser?.permLevels),onRemove:()=>delLine(l.id)}),accountingCompact&&h('div',{className:'accounting-delivered-default'},h('label',null,'SL giao ('+(l.unit||'')+')',h('input',{'aria-label':'SL giao '+(l.productName||'sản phẩm'),type:'number',min:0,step:'any',value:scfAccountingDeparture(accountingViewOrder).before?l.qtyProd??0:scfAccountingDeliveredRecorded(f,l)?l.qtyDelivered??'':'',readOnly:scfAccountingDeparture(accountingViewOrder).before||!canTripAction(currentUser,'orderActualQty'),onChange:e=>updLine(l.id,{...l,qtyDelivered:e.target.value,qtyDeliveredDefault:false,deliveredAt:fmtDT(),deliveredBy:currentUser?.name||''})})),h('small',null,scfAccountingDeparture(accountingViewOrder).before?'Trước giờ chuyến: theo SL đặt.':scfAccountingDeparture(accountingViewOrder).at?'Đã đến giờ chuyến: lái xe / kế toán nhập thực giao.':'Chưa có giờ chuyến: cần kiểm tra và nhập thực giao.')))),
+        onChange:data=>updLine(l.id,data),canRemove:!accountingCompact||!order?.lines?.some(old=>String(old.id)===String(l.id))||canDel(currentUser?.role,'delivery',currentUser?.permLevels),onRemove:()=>delLine(l.id)}))),
     h('button',{onClick:addLine,style:{fontSize:12,padding:'5px 12px',marginBottom:8}},h('i',{className:'ti ti-plus',style:{fontSize:13,marginRight:4}}),'Thêm hàng hóa'),
     h('div',{className:'form-actions order-form-actions'},h('button',{onClick:onClose,disabled:saving},'Hủy'),accountingCompact&&h('button',{onClick:()=>submit(true),disabled:saving},'Lưu & in…'),h('button',{className:'bp',onClick:()=>submit(false),disabled:saving,style:{padding:'8px 20px'}},h('i',{className:'ti ti-device-floppy',style:{fontSize:14}}),saving?'Đang lưu…':'Lưu đơn hàng'))
   );
