@@ -1,4 +1,4 @@
-const CACHE = 'scf-v795';
+const CACHE = 'scf-v798';
 const ASSETS = [
   './',
   './index.html',
@@ -7,7 +7,7 @@ const ASSETS = [
   './vendor/supabase.min.js?v=358',
   './vendor/react.production.min.js?v=358',
   './vendor/react-dom.production.min.js?v=358',
-  './styles.css?v=795',
+  './styles.css?v=797',
   './runtime.js?v=457',
   './storage.js?v=765',
   './android-print.js?v=792',
@@ -30,9 +30,9 @@ const ASSETS = [
   './organization.js?v=568',
   './notifications.js?v=663',
   './user-guide.js?v=645',
-  './attp-audit.js?v=794',
+  './attp-audit.js?v=796',
   './attp-documents.js?v=794',
-  './operations.js?v=783',
+  './operations.js?v=796',
   './personnel.js?v=638',
   './goods-inventory.js?v=638',
   './navigation-reports.js?v=702',
@@ -41,14 +41,14 @@ const ASSETS = [
   './auth-workforce.js?v=551',
   './quotations.js',
   './finance.js?v=702',
-  './accounting-mobile.js?v=795',
-  './delivery-orders.js?v=795',
+  './accounting-mobile.js?v=797',
+  './delivery-orders.js?v=798',
   './delivery-fast-entry.js?v=751',
   './delivery-catalog-edit.js?v=733',
   './qrcode.min.js?v=357',
-  './import-tools.js?v=795',
+  './import-tools.js?v=796',
   './trips.js?v=795',
-  './order-labels.js?v=795',
+  './order-labels.js?v=796',
   './accounting-print.js?v=795',
   './driver-production-link.js?v=791',
   './agent-registry-ui.js?v=788',
@@ -64,9 +64,9 @@ const ASSETS = [
   './production.js?v=783',
   './production-recipes.js?v=590',
   './production-assignments.js?v=644',
-  './permissions.js?v=795',
-  './permission-settings.js?v=795',
-  './app.js?v=795',
+  './permissions.js?v=796',
+  './permission-settings.js?v=796',
+  './app.js?v=798',
   './bootstrap.js?v=645',
   './manifest.json',
   './icon-192.png',
@@ -79,7 +79,7 @@ const ASSETS = [
 // thật sự cần tới; tránh tải lặp toàn bộ ứng dụng và ba bản font ngay lần mở đầu.
 const PRECACHE_ASSETS = [
   './index.html',
-  './styles.css?v=795',
+  './styles.css?v=797',
   './vendor/tabler-icons.min.css?v=394'
 ];
 

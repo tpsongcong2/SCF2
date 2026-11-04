@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V795';
+const SCF_BUILD_VERSION='V798';
 const PTITLES = {
   driverprintlog:'Thông tin lái xe in đơn',
   kpi4p:'KPI & Lương 4P',
@@ -543,6 +543,7 @@ function App(){
   const[loading,setLoading]=useState(true);
   const[col,setCol]=useState(false);
   const[page,setPage]=useLS(isFaceMask?'facemask_last_page':'scf_last_page',homePage);
+  useEffect(()=>{if(page==='deliverymobile')setPage('delivery');},[page]);
   const[authEmployee,setAuthEmployee]=useState(null);
   const[bootError,setBootError]=useState('');
   const[bootStatus,setBootStatus]=useState('');
@@ -1095,7 +1096,7 @@ function App(){
         canAccess(cu.role,'maint_machine',cu.permissions)&&page==='maint_machine'&&h(MaintenanceTab,{title:'Bảo dưỡng máy',icon:'ti-settings',assets,employees}),
         canAccess(cu.role,'shifts',cu.permissions)&&page==='shifts'&&h(ShiftsTab,{shifts,setShifts,employees,trips,setTrips,currentUser:cu}),
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
-        canAccess(cu.role,page,cu.permissions)&&['delivery','deliverymobile'].includes(page)&&h(DeliveryOrdersTab,{key:page,accountingCompact:page==='deliverymobile',highlightOrderOnHover:uiSettings.deliveryOrderHover!==false,orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify:addNotification,onViewOrderSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(true);}:undefined,onViewProduction:canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments)&&(!window.matchMedia?.('(max-width:768px)')?.matches||canMobileFeature(cu,'prodsummary'))?()=>setProductionPreviewOpen(true):undefined}),
+        canAccess(cu.role,page,cu.permissions)&&['delivery','deliverymobile'].includes(page)&&h(DeliveryOrdersTab,{key:page,highlightOrderOnHover:uiSettings.deliveryOrderHover!==false,orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify:addNotification,onViewOrderSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(true);}:undefined,onViewProduction:canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments)&&(!window.matchMedia?.('(max-width:768px)')?.matches||canMobileFeature(cu,'prodsummary'))?()=>setProductionPreviewOpen(true):undefined}),
         canAccess(cu.role,'intem',cu.permissions)&&page==='intem'&&h(IntemTab,{products,company}),
         page==='trip-settings'&&canAccess(cu.role,'trip-settings',cu.permissions,cuAccessDepartments)&&h(DeliveryTripSettings,{uiSettings,setUiSettings,currentUser:cu}),
         page==='driver-preview'&&canAccess(cu.role,'driver-preview',cu.permissions,cuAccessDepartments)&&h(DriverMobilePreview,{currentUser:cu}),

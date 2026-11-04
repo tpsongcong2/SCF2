@@ -1,3 +1,13 @@
+/* Merge the former phone-only entry into the shared order permission. */
+function scfUnifiedDeliveryPermissions(user={}){
+ user=user||{};
+ const had=Array.isArray(user.permissions)&&user.permissions.includes('deliverymobile');
+ const levels={...(user.permLevels||{})},mobile={...(user.mobilePermissions||{})};
+ if(had&&!Object.hasOwn(levels,'delivery')&&Object.hasOwn(levels,'deliverymobile'))levels.delivery=levels.deliverymobile;
+ if(!Object.hasOwn(mobile,'delivery')&&Object.hasOwn(mobile,'deliverymobile'))mobile.delivery=mobile.deliverymobile;
+ delete levels.deliverymobile;delete mobile.deliverymobile;
+ return {...user,permissions:Array.isArray(user.permissions)?[...new Set(user.permissions.map(p=>p==='deliverymobile'?'delivery':p))]:user.permissions,permLevels:levels,mobilePermissions:mobile,mobileStartPage:user.mobileStartPage==='deliverymobile'?'delivery':user.mobileStartPage};
+}
 const SCF_ORDER_NOTICE_OPTIONS=[['bun','Đơn xưởng bún'],['banh','Đơn xưởng bánh'],['qtyInvoice','SL HĐ'],['qtyProd','SL đặt'],['qtyDelivered','SL giao']];
 function normalizedOrderNoticePermissions(employee){
   const text=String([employee?.role,employee?.dept,...(employee?.departments||[])].join(' ')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -14,7 +24,6 @@ function OrderNoticePermissionFields({employee,onChange,disabled=false}){
 }
 /* --- Phân quyền menu --- */
 const PAGE_ACCESS = {
-  deliverymobile:['admin'],
   kpi4p:['admin'],
   kpi4p_manage:['admin'],
   kpi4p_approve:['admin'],
@@ -105,6 +114,8 @@ function roleDefaults(role) {
 }
 // canAccess checks employee's custom permissions first, else falls back to role
 function canAccess(role, page, perms, dept='') {
+  if(page==='deliverymobile')page='delivery';
+  if(Array.isArray(perms)&&perms.includes('deliverymobile'))perms=[...new Set(perms.map(p=>p==='deliverymobile'?'delivery':p))];
   if(['driver-preview','trip-settings'].includes(page))return ['admin','administrator'].includes(String(role||'').toLowerCase());
   if(['kpi4p','kpi4p_manage','kpi4p_approve','kpi4p_settings','payroll4p','payroll4p_approve'].includes(page))return ['admin','administrator'].includes(String(role||'').trim().toLowerCase());
   // Báo cáo sử dụng Supabase chứa thông tin hạ tầng và hạn mức của công ty.
@@ -152,6 +163,8 @@ function canAccess(role, page, perms, dept='') {
 }
 // Mức quyền: 'r'=chỉ xem, 'rw'=xem+sửa, 'rwd'=xem+sửa+xóa
 function getLvl(role, page, lvls) {
+  if(page==='deliverymobile')page='delivery';
+  if(page==='delivery'&&!lvls?.delivery&&lvls?.deliverymobile)return lvls.deliverymobile;
   // Giới thiệu công ty là mục chung; nhân viên và lái xe chỉ được xem.
   if (page === 'company' && !['admin','manager'].includes(role)) return 'r';
   // Lái xe được tạo và cập nhật đơn xăng dầu của chính mình, nhưng không được xóa.
@@ -180,10 +193,12 @@ function DeliveryQuantityTotalsPermissionField({employee,onChange,disabled=false
 // Quyền nút trên điện thoại bổ sung cho quyền trang/nghiệp vụ hiện có.
 // Tài khoản cũ chưa cấu hình giữ cách hiển thị hiện tại.
 const SCF_MOBILE_PERMISSION_GROUPS=[
-  {label:'Truy cập từ thanh dưới điện thoại',options:[['welcome','Thời tiết'],['deliverymobile','Đơn hàng kế toán · Điện thoại'],['delivery','Đơn giao hàng'],['trips','Chuyến giao hàng'],['attendance','Chấm công'],['prodsummary','SX · Tổng hợp sản xuất'],['quick-summary','Đơn tổng'],['workreport_lx','Công lái xe'],['fuelpurchases','Mua xăng dầu'],['notifications','Thông báo'],['leaves','Xin nghỉ'],['tasks','Giao việc'],['more','Thêm · Danh sách chức năng']]},
+  {label:'Truy cập từ thanh dưới điện thoại',options:[['welcome','Thời tiết'],['delivery','Đơn giao hàng'],['trips','Chuyến giao hàng'],['attendance','Chấm công'],['prodsummary','SX · Tổng hợp sản xuất'],['quick-summary','Đơn tổng'],['workreport_lx','Công lái xe'],['fuelpurchases','Mua xăng dầu'],['notifications','Thông báo'],['leaves','Xin nghỉ'],['tasks','Giao việc'],['more','Thêm · Danh sách chức năng']]},
   {label:'Tính năng chuyến giao trên điện thoại',options:[['tripSummary','Xem ảnh đơn tổng'],['tripUpdate','Cập nhật SL giao và HĐ'],['tripPrint','In đơn'],['tripInvoices','Hiện ảnh hóa đơn'],['tripImage','Tạo ảnh chuyến']]}
 ];
 function canMobileFeature(user,key){
+  if(key==='deliverymobile')key='delivery';
+  user=scfUnifiedDeliveryPermissions(user);
   if(['admin','administrator'].includes(String(user?.role||'').toLowerCase()))return true;
   return user?.mobilePermissions?.[key]!==false;
 }
@@ -209,7 +224,7 @@ function scfMobileFallbackPage(user={}){
 function scfMobileSummaryHost(user){return scfCanOpenUserPage(user,'welcome',{mobile:true})?'welcome':'mobile-home';}
 function MobileRestrictedHome(){return h('div',{className:'card'},h('h3',null,'Chức năng trên điện thoại'),h('p',null,'Chọn chức năng được cấp quyền từ thanh bên dưới. Nếu chưa có chức năng, hãy liên hệ quản trị viên.'));}
 function scfMobileStartTarget(user={}){
-  const requested=String(user?.mobileStartPage||'').trim();
+  const requested=String(user?.mobileStartPage==='deliverymobile'?'delivery':user?.mobileStartPage||'').trim();
   if(!requested)return '';
   return scfMobileStartOptions(user).some(([key])=>key===requested)?requested:scfMobileFallbackPage(user);
 }
@@ -249,6 +264,7 @@ const SCF_TRIP_PERMISSION_OPTIONS=[
   ['review','Duyệt hóa đơn và hoàn thành chuyến']
 ];
 function defaultTripPermissions(user={}){
+  user=scfUnifiedDeliveryPermissions(user);
   const role=String(user?.role||'').trim().toLowerCase();
   const isAdmin=['admin','administrator'].includes(role),isDriver=role==='driver'||employeeHasDepartment(user,'Lái xe'),isAccounting=employeeDepartmentIncludes(user,'Kế toán');
   if(isAdmin)return{manage:true,editOrders:true,delete:true,dispatch:true,actualQty:true,orderActualQty:true,invoiceQty:true,driverWorkflow:true,summaryInvoice:true,review:true};
@@ -260,7 +276,7 @@ function defaultTripPermissions(user={}){
     delete:pageDelete,
     dispatch:pageWrite&&(isAccounting||role==='manager'),
     actualQty:false,
-    orderActualQty:Array.isArray(user.permissions)&&user.permissions.includes('deliverymobile')&&canWrite(role,'deliverymobile',user.permLevels),
+    orderActualQty:Array.isArray(user.permissions)&&user.permissions.includes('delivery')&&canWrite(role,'delivery',user.permLevels),
     invoiceQty:isAccounting,
     driverWorkflow:false,
     summaryInvoice:pageWrite&&isAccounting,
@@ -273,8 +289,9 @@ function normalizedTripPermissions(user={}){
   return Object.fromEntries(SCF_TRIP_PERMISSION_OPTIONS.map(([key])=>[key,Object.prototype.hasOwnProperty.call(configured,key)?configured[key]===true:(key==='orderActualQty'&&Object.prototype.hasOwnProperty.call(configured,'actualQty')?configured.actualQty===true:defaults[key])]));
 }
 function canTripAction(user,action){
+  user=scfUnifiedDeliveryPermissions(user);
   if(['admin','administrator'].includes(String(user?.role||'').trim().toLowerCase()))return true;
-  if(action==='orderActualQty'&&canAccess(user?.role,'deliverymobile',user?.permissions,user?.departments?.length?user.departments:user?.dept)&&canWrite(user?.role,'deliverymobile',user?.permLevels))return normalizedTripPermissions(user)[action]===true;
+  if(action==='orderActualQty'&&canAccess(user?.role,'delivery',user?.permissions,user?.departments?.length?user.departments:user?.dept)&&canWrite(user?.role,'delivery',user?.permLevels))return normalizedTripPermissions(user)[action]===true;
   if(!canAccess(user?.role,action==='orderActualQty'?'delivery':'trips',user?.permissions,user?.departments?.length?user.departments:user?.dept))return false;
   return normalizedTripPermissions(user)[action]===true;
 }
@@ -364,10 +381,21 @@ function deliveryDeleteLimitDays(user={}){
   const raw=user.deliveryDeleteLimitDays;if(raw===undefined||raw===null||raw==='')return fallback;
   const days=Number(raw);return Number.isInteger(days)&&days>=0&&days<=3650?days:fallback;
 }
-function scfDeliveryDeleteIssue(user,order,trip,today){
+function scfDeliveryDeleteDeparture(trip,shifts=[]){
+ const shift=shifts.find(s=>trip?.shiftId&&String(s.id)===String(trip.shiftId)||trip?.shiftName&&String(s.name||'')===String(trip.shiftName));
+ const raw=String(trip?.deliveryDate||''),vn=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/),iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+ const time=String(trip?.deliveryTime||shift?.timeStart||shift?.startTime||'').trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+ if((!vn&&!iso)||!time||+time[1]>23||+time[2]>59||+(time[3]||0)>59)return NaN;
+ const y=+(vn?vn[3]:iso[1]),m=+(vn?vn[2]:iso[2]),d=+(vn?vn[1]:iso[3]),check=new Date(Date.UTC(y,m-1,d));
+ if(check.getUTCFullYear()!==y||check.getUTCMonth()!==m-1||check.getUTCDate()!==d)return NaN;
+ return Date.UTC(y,m-1,d,+time[1]-7,+time[2],+(time[3]||0));
+}
+function scfDeliveryDeleteIssue(user,order,trip,today,now=Date.now(),shifts=typeof window!=='undefined'?window.__SCF_SHIFTS||[]:[]){
   if(!order)return 'Đơn không còn tồn tại.';
   if(!['','pending','assigned','scheduled','planning'].includes(String(order.status||''))||trip&&(trip.driverDispatchedAt||!['','planning','planned','assigned','scheduled'].includes(String(trip.status||''))))return 'Chỉ được xóa đơn chưa giao lái xe.';
   if(order.tripId&&!trip)return 'Chưa xác định được trạng thái chuyến. Hãy tải lại dữ liệu.';
+  if(order.driverDeliveredAt||(order.lines||[]).some(l=>l.deliveredAt||l.deliveredBy))return 'Đơn đã ghi nhận giao hàng, không được xóa.';
+  if(trip){const departure=scfDeliveryDeleteDeparture(trip,shifts);if(!Number.isFinite(departure))return 'Chưa xác định được mốc giao của chuyến. Kiểm tra ngày, giờ chuyến trước khi xóa.';if(Number(now)>=departure)return 'Đã đến mốc giao của chuyến, không được xóa đơn.';}
   const raw=String(order.deliveryDate||''),vn=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/),iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if(!vn&&!iso)return 'Ngày giao không hợp lệ.';
   const y=Number(vn?vn[3]:iso[1]),m=Number(vn?vn[2]:iso[2]),d=Number(vn?vn[1]:iso[3]),stamp=Date.UTC(y,m-1,d),date=new Date(stamp);
