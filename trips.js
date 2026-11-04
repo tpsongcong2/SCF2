@@ -1006,6 +1006,7 @@ function tripImageRows(trip,orders,products,customers,prodCats=[]){
       const pointName=order.warehouseMerged?(line.warehouseSourcePointName||source?.pointName||source?.address||order.pointName||order.address):order.pointName||order.address;
       const row=[order.deliveryDate||trip.deliveryDate||'',pointName||'—',line.productName||product?.name||'—',numFmt(line.qtyProd),line.unit||product?.unit||'',normalizeTimeInput(order.deliveryTime||trip.deliveryTime||''),note];
       row[7]=orderIndex+1;
+      row.summaryPointKey=JSON.stringify([order.warehouseMerged?(line.warehouseSourceCustomerId||source?.customerId||order.customerId||''):(order.customerId||''),String(pointName||'—').trim().toLocaleLowerCase('vi')]);
       row.isGoods=isGoodsProduct(product||line,prodCats);
       return row;
     }));
@@ -1021,8 +1022,12 @@ function scfTripImageProductRank(value){
   return 5;
 }
 function scfSortTripImageRows(trip,rows){
-  // The order table and summary must keep the same whole-order delivery sequence.
-  return rows;
+  // Keep stop order; within a stop, retain whole orders and put earlier deliveries first.
+  const stops=new Map();
+  const day=value=>{const match=String(value||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);return match?Number(match[3])*10000+Number(match[2])*100+Number(match[1]):Number.MAX_SAFE_INTEGER;};
+  const time=value=>{const match=String(normalizeTimeInput(value)||'').match(/^(\d{1,2}):(\d{2})$/);return match&&Number(match[1])<24&&Number(match[2])<60?Number(match[1])*60+Number(match[2]):Number.MAX_SAFE_INTEGER;};
+  rows.forEach((row,index)=>{const key=row.summaryPointKey||String(row[1]||'').trim().toLocaleLowerCase('vi');if(!stops.has(key))stops.set(key,[]);stops.get(key).push({row,index});});
+  return [...stops.values()].flatMap(group=>group.sort((a,b)=>day(a.row[0]||trip.deliveryDate)-day(b.row[0]||trip.deliveryDate)||time(a.row[5])-time(b.row[5])||a.index-b.index).map(item=>item.row));
 }
 function tripImageDriverName(value){
   return String(value||'').trim()||'Chưa có lái xe';
@@ -1072,7 +1077,7 @@ function scfTripImageEarlyOrder(trip,row){
   if(hour>23||minute>59)return false;
   const name=scfTripImageShiftName(trip);
   if(name==='SST1')return [20,21,16,8].includes(hour);
-  if(name==='SSS1')return [8,7,6,9].includes(hour);
+  if(name==='SSS1')return [5,6,7,8,9].includes(hour);
   if(name==='VPDEM')return hour===13||hour===14;
   if(name==='VPNGAY')return hour===1;
   return false;
@@ -1142,7 +1147,7 @@ function renderTripImage(trips,orders,products,customers,title,prodCats=[],showD
     const shiftWidth=Math.round(canvas.width*.18),driverWidth=Math.round(canvas.width*.34);
     const totalLabel=totalWeight.toLocaleString('vi-VN',{maximumFractionDigits:2})+' kg';
     blocks.push(showDriverName
-      ?{cells:[shiftName,driverName,totalLabel],widths:[shiftWidth,driverWidth,canvas.width-shiftWidth-driverWidth],cellFills:[tripFill,'#ffff00',tripFill],fill:tripFill,bold:true,dispatchStar:scfTripImageDispatched(trip)}
+      ?{cells:[shiftName,driverName,totalLabel],widths:[shiftWidth,driverWidth,canvas.width-shiftWidth-driverWidth],cellFills:[tripFill,'#5b9bd5',tripFill],fill:tripFill,bold:true,dispatchStar:scfTripImageDispatched(trip)}
       :{cells:[shiftName,totalLabel],widths:[shiftWidth,canvas.width-shiftWidth],fill:tripFill,bold:true,dispatchStar:scfTripImageDispatched(trip)});
     blocks.push({cells:visibleColumns.map(index=>headers[index]),fill:tripFill,bold:true});
     rows.forEach(row=>{

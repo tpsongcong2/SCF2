@@ -72,7 +72,26 @@ async function scfUploadLabelPng(file,target){
   return url;
 }
 
-async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperWidthMm,paperHeightMm,svgs,labelDetails,rotate180=false,beforeEnqueue,tripContext,simulate=false}){
+function scfIsAppleMobilePrint(){return typeof navigator!=='undefined'&&(/iPhone|iPad|iPod/i.test(navigator.userAgent||'')||/Macintosh/i.test(navigator.userAgent||'')&&navigator.maxTouchPoints>1);}
+function scfSupportsX420App(){return typeof navigator!=='undefined'&&(/Android/i.test(navigator.userAgent||'')||scfIsAppleMobilePrint());}
+function scfIsPhonePrint(){return scfSupportsX420App()||/Mobile/i.test(typeof navigator==='undefined'?'':navigator.userAgent||'');}
+async function scfChooseMobileLabelRoute(settings){
+  if(!scfIsPhonePrint())return '';
+  return new Promise((resolve,reject)=>{
+    const overlay=document.createElement('div');overlay.className='overlay';overlay.style.zIndex='2000';
+    const panel=document.createElement('section');panel.className='modal';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Chọn cách in tem');panel.style.cssText='max-width:420px;width:calc(100% - 24px);padding:20px';
+    const title=document.createElement('h3');title.textContent='Chọn cách in tem';panel.append(title);
+    const wifi=!!settings.sharedManaged&&settings.androidEnabled===true&&scfSupportsX420App();
+    const finish=value=>{document.removeEventListener('keydown',escape);overlay.remove();if(value)resolve(value);else reject(Error('Đã hủy chọn cách in tem.'));};
+    const escape=e=>{if(e.key==='Escape')finish('');};document.addEventListener('keydown',escape);
+    for(const [value,label] of [['android','In theo Wi-Fi 420'],['cloud','In qua máy tính SCF10'],['','Hủy']]){
+      const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='display:block;width:100%;min-height:48px;margin-top:12px';button.disabled=value==='android'&&!wifi;button.onclick=()=>finish(value);panel.append(button);
+    }
+    if(!wifi){const hint=document.createElement('p');hint.textContent='Admin cần bật app XPRINTER 420 trong Cài đặt chuyến giao hàng. Điện thoại cần cài đúng bản app trước khi chọn Wi-Fi 420.';panel.append(hint);}
+    overlay.append(panel);document.body.append(overlay);panel.querySelector('button:not(:disabled)').focus();
+  });
+}
+async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperWidthMm,paperHeightMm,svgs,labelDetails,rotate180=false,beforeEnqueue,tripContext,simulate=false,mobilePrintRoute}){
   beforeEnqueue?.();
   if(simulate){window.showToast('Trải nghiệm: đã mô phỏng gửi '+svgs.length+' tem; không gửi máy in thật.','success');return {id:'PREVIEW'};}
   const sharedSettings=scfPrintAgentSettings({trip:!!tripContext});
@@ -80,8 +99,14 @@ async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperW
   const target=String(agentId||'SCF-PC-01').trim().toUpperCase();
   if(!target)throw new Error('Chưa nhập mã SCF Print Agent.');
   if(!Array.isArray(svgs)||!svgs.length)throw new Error('Chưa có tem để gửi in.');
-  const android=sharedSettings.sharedManaged&&sharedSettings.androidEnabled&&tripContext&&/Android/i.test(navigator.userAgent||'');
-  const route=!android&&sharedSettings.sharedManaged&&sharedSettings.lanEnabled&&tripContext?await scfSelectPrintRoute(sharedSettings,printerRole):{route:'cloud'};
+  const phone=scfIsPhonePrint();
+  const choice=phone?(mobilePrintRoute||await scfChooseMobileLabelRoute(sharedSettings)):'';
+  beforeEnqueue?.();
+  if(phone&&!['android','cloud'].includes(choice))throw Error('Chọn cách in tem trước khi gửi.');
+  if(choice==='cloud'&&target!=='SCF10')throw Error('Admin cần chọn mã máy in tem SCF10 trong Cài đặt chuyến giao hàng.');
+  if(choice==='android'&&!(sharedSettings.sharedManaged&&sharedSettings.androidEnabled&&tripContext&&scfSupportsX420App()))throw Error('Chưa bật in tem qua app XPRINTER 420 cho đơn này.');
+  const android=choice==='android';
+  const route=!phone&&!android&&sharedSettings.sharedManaged&&sharedSettings.lanEnabled&&tripContext?await scfSelectPrintRoute(sharedSettings,printerRole):{route:'cloud'};
   if(route.route==='lan'){
     const images=[];
     for(let index=0;index<svgs.length;index++){
@@ -122,7 +147,7 @@ async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperW
     attempts:0
   };
   beforeEnqueue?.();
-  if(scoped){const {data,error}=await invokeScfAuth({body:{action:'driver_print',transport:android?'android':undefined,job,tripContext}});if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Chưa gửi được lệnh in cho chuyến.'));if(android){if(!data.androidAccess)throw Error('Máy chủ chưa hỗ trợ app Android.');job.transport='android';window.scfQueueAndroidHandoff(data.androidAccess,job.title,svgs.length);}}
+  if(scoped){const {data,error}=await invokeScfAuth({body:{action:'driver_print',transport:android?'android':undefined,job,tripContext}});if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Chưa gửi được lệnh in cho chuyến.'));if(android){if(!data.androidAccess)throw Error('Máy chủ chưa hỗ trợ app XPRINTER 420.');job.transport='android';window.scfQueueAndroidHandoff(data.androidAccess,job.title,svgs.length);}}
   else await dbSet(SCF_PRINT_QUEUE_KEY,[...queue.filter(Boolean),job]);
   scfSavePrintAgentSettings({agentId:target});
   return job;
@@ -142,7 +167,9 @@ async function scfQueueA4Print(html,{agentId,title='Đơn hàng SCF',tripContext
   if(simulate){window.showToast('Trải nghiệm: đã mô phỏng in phiếu; không gửi máy in thật.','success');return {id:'PREVIEW'};}
   const settings=scfPrintAgentSettings({trip:!!tripContext});
   const target=String(settings.sharedManaged?settings.a4AgentId:agentId||settings.a4AgentId||settings.agentId||'SCF-PC-01').trim().toUpperCase();
-  const route=settings.sharedManaged&&settings.lanEnabled&&tripContext?await scfSelectPrintRoute(settings,'canon'):{route:'cloud'};
+  const phone=scfIsPhonePrint();
+  if(phone&&target!=='SCF10')throw Error('Admin cần chọn mã máy in A4 SCF10 trong Cài đặt chuyến giao hàng.');
+  const route=!phone&&settings.sharedManaged&&settings.lanEnabled&&tripContext?await scfSelectPrintRoute(settings,'canon'):{route:'cloud'};
   if(route.route==='lan')return window.scfSendLanPrint({agentId:target,printerRole:'canon',label:String(title),title:String(title),paperWidthMm:210,paperHeightMm:297,html:String(html||'')},tripContext,route.endpoint,beforeEnqueue);
   const scoped=tripContext&&typeof serverAuthEnabled==='function'&&serverAuthEnabled();
   const current=scoped?[]:await dbGet(SCF_PRINT_QUEUE_KEY,[]);
