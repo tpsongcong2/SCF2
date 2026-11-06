@@ -91,7 +91,16 @@ async function scfChooseMobileLabelRoute(settings){
     overlay.append(panel);document.body.append(overlay);panel.querySelector('button:not(:disabled)').focus();
   });
 }
-async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperWidthMm,paperHeightMm,svgs,labelDetails,rotate180=false,beforeEnqueue,tripContext,simulate=false,mobilePrintRoute}){
+function scfDefaultLabelRoute(){const settings=scfPrintAgentSettings({trip:true});return scfSupportsX420App()&&settings.sharedManaged&&settings.androidEnabled?'android':'cloud';}
+function ScfLabelRouteChoices({value,onChange,disabled=false}){
+  const name=React.useId(),settings=scfPrintAgentSettings({trip:true});
+  const nativeAllowed=scfSupportsX420App()&&settings.sharedManaged&&settings.androidEnabled===true;
+  return h('fieldset',{className:'scf-label-route-choices',disabled,style:{border:0,padding:0,margin:'12px 0 16px'}},
+    h('legend',{style:{fontWeight:700,marginBottom:8}},'Cách in'),
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8}},[['android','Wi-Fi XP420'],['cloud','In qua mạng SCF']].map(([id,label])=>h('label',{key:id,style:{display:'flex',alignItems:'center',gap:8,minHeight:48,padding:10,border:'1px solid var(--bd)',borderRadius:8,background:value===id?'var(--bg2)':'var(--bg)',fontWeight:600,opacity:(id==='android'&&!nativeAllowed)?0.5:1}},h('input',{type:'radio',name,value:id,checked:value===id,disabled:disabled||id==='android'&&!nativeAllowed,onChange:()=>onChange(id),style:{width:18,height:18,flexShrink:0}}),label))),
+    h('small',{style:{display:'block',marginTop:7,color:'var(--tx2)'}},value==='android'?'Mở app XP420 trên Android / iPhone. Điện thoại phải có app và cùng mạng máy in.':'Gửi tới máy tính SCF10 qua Internet.'));
+}
+async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperWidthMm,paperHeightMm,svgs,labelDetails,rotate180=false,beforeEnqueue,tripContext,simulate=false,mobilePrintRoute,deferNativeOpen=false}){
   beforeEnqueue?.();
   if(simulate){window.showToast('Trải nghiệm: đã mô phỏng gửi '+svgs.length+' tem; không gửi máy in thật.','success');return {id:'PREVIEW'};}
   const sharedSettings=scfPrintAgentSettings({trip:!!tripContext});
@@ -100,13 +109,13 @@ async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperW
   if(!target)throw new Error('Chưa nhập mã SCF Print Agent.');
   if(!Array.isArray(svgs)||!svgs.length)throw new Error('Chưa có tem để gửi in.');
   const phone=scfIsPhonePrint();
-  const choice=phone?(mobilePrintRoute||await scfChooseMobileLabelRoute(sharedSettings)):'';
+  const choice=mobilePrintRoute||(phone?await scfChooseMobileLabelRoute(sharedSettings):'');
   beforeEnqueue?.();
   if(phone&&!['android','cloud'].includes(choice))throw Error('Chọn cách in tem trước khi gửi.');
   if(choice==='cloud'&&target!=='SCF10')throw Error('Admin cần chọn mã máy in tem SCF10 trong Cài đặt chuyến giao hàng.');
   if(choice==='android'&&!(sharedSettings.sharedManaged&&sharedSettings.androidEnabled&&tripContext&&scfSupportsX420App()))throw Error('Chưa bật in tem qua app XPRINTER 420 cho đơn này.');
   const android=choice==='android';
-  const route=!phone&&!android&&sharedSettings.sharedManaged&&sharedSettings.lanEnabled&&tripContext?await scfSelectPrintRoute(sharedSettings,printerRole):{route:'cloud'};
+  const route=!choice&&!phone&&!android&&sharedSettings.sharedManaged&&sharedSettings.lanEnabled&&tripContext?await scfSelectPrintRoute(sharedSettings,printerRole):{route:'cloud'};
   if(route.route==='lan'){
     const images=[];
     for(let index=0;index<svgs.length;index++){
@@ -147,7 +156,7 @@ async function scfQueueLabelPrint({agentId,printerRole='x350',label,title,paperW
     attempts:0
   };
   beforeEnqueue?.();
-  if(scoped){const {data,error}=await invokeScfAuth({body:{action:'driver_print',transport:android?'android':undefined,job,tripContext}});if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Chưa gửi được lệnh in cho chuyến.'));if(android){if(!data.androidAccess)throw Error('Máy chủ chưa hỗ trợ app XPRINTER 420.');job.transport='android';window.scfQueueAndroidHandoff(data.androidAccess,job.title,svgs.length);}}
+  if(scoped){const {data,error}=await invokeScfAuth({body:{action:'driver_print',transport:android?'android':undefined,job,tripContext}});if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Chưa gửi được lệnh in cho chuyến.'));if(android){if(!data.androidAccess)throw Error('Máy chủ chưa hỗ trợ app XPRINTER 420.');job.transport='android';job.androidAccess=data.androidAccess;window.scfQueueAndroidHandoff(data.androidAccess,job.title,svgs.length,{deferOpen:deferNativeOpen});}}
   else await dbSet(SCF_PRINT_QUEUE_KEY,[...queue.filter(Boolean),job]);
   scfSavePrintAgentSettings({agentId:target});
   return job;

@@ -1934,6 +1934,7 @@ function PrintByCustomerModal({orders,customers,products,company,trips=[],initia
 function PrintLabelsMultiModal({orders,customers,trips=[],initialDate,initialDateTo,initialDateBasis,initialGroup,selectionOnly=false,onClose,onPrint}) {
   const [selected,setSelected]=useState({});
   const [labelMode,setLabelMode]=useState('auto');
+  const [mobilePrintRoute,setMobilePrintRoute]=useState(scfDefaultLabelRoute);
   const {filtered:filteredScope,fields,orderDate}=useDeliveryPrintFilters({orders,customers,trips,initialDate,initialDateTo,initialDateBasis,initialGroup});
   const filtered=selectionOnly?orders:filteredScope;
   const selectedOrders=filtered.filter(o=>selected[o.id]!==false);
@@ -1944,12 +1945,13 @@ function PrintLabelsMultiModal({orders,customers,trips=[],initialDate,initialDat
   const doPrint=async()=>{
     if(sending)return;
     if(!selectedOrders.length){window.showToast('Chọn ít nhất 1 đơn để in tem!','warn');return;}
-    setSending(true);try{await onPrint(selectedOrders,labelMode);}catch(error){window.showToast(error.message||'Chưa gửi được tem.','error');}finally{setSending(false);}
+    setSending(true);try{await onPrint(selectedOrders,labelMode,{mobilePrintRoute,autoOpenNative:true});}catch(error){window.showToast(error.message||'Chưa gửi được tem.','error');}finally{setSending(false);}
   };
   return h(Modal,{title:'In tem cho nhiều đơn hàng',lg:true,onClose},
     selectionOnly?h('p',null,'In tem của '+orders.length+' đơn đã chọn.'):fields(),
     h(F,{label:'Mẫu in'},h('select',{'aria-label':'Mẫu in',value:labelMode,onChange:e=>setLabelMode(e.target.value)},
       h('option',{value:'auto'},'Tự động theo sản phẩm (tem thường / PAC)'),h('option',{value:'classic'},'Tem thường'),h('option',{value:'pac'},'Tem PAC 10 × 10 cm'))),
+    h(ScfLabelRouteChoices,{value:mobilePrintRoute,onChange:setMobilePrintRoute,disabled:sending}),
     filtered.length>0?h('div',null,
       h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:'1rem',fontSize:13}},
         h('i',{className:'ti ti-tag',style:{color:'var(--pri)',marginRight:6}}),
@@ -4561,7 +4563,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     if(pacLabels.length)openLabelPrintWindow(pacLabels,[o],'pac');
     if(classicLabels.length)openLabelPrintWindow(classicLabels,[o],'classic');
   };
-  const printLabelsForOrders=async(ordersToPrint,mode='auto')=>{
+  const printLabelsForOrders=async(ordersToPrint,mode='auto',printOptions={})=>{
     const printOrders=(ordersToPrint||[]).filter(Boolean);
     if(!printOrders.length){window.showToast('Chọn ít nhất 1 đơn để in tem!','warn');return;}
     const labels=printOrders.flatMap(o=>labelLinesForOrder(o));
@@ -4570,7 +4572,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const classicLabels=labels.filter(it=>mode!=='pac'&&!isPacPackageLine(it?.line));
     if(!pacLabels.length&&!classicLabels.length){window.showToast('Không có sản phẩm phù hợp với mẫu tem đã chọn.','warn');return;}
     if(window.scfShouldUsePrintAgent?.()){
-      try{await scfAccountingPrintOrderLabels({selectedOrders:printOrders,products,customers,trips,mode,currentUser,getLatest:()=>deleteContext.current});window.showToast('Đã gửi tem tới máy in.','success');}catch(error){window.showToast(error.message||'Chưa gửi được tem.','error');}return;
+      try{await scfAccountingPrintOrderLabels({selectedOrders:printOrders,products,customers,trips,mode,currentUser,getLatest:()=>deleteContext.current,...printOptions});window.showToast('Đã gửi tem tới máy in.','success');}catch(error){window.showToast(error.message||'Chưa gửi được tem.','error');}return;
     }
     if(pacLabels.length&&classicLabels.length)window.showToast('Danh sách đang có cả tem PAC kho vận 10x10 và tem thường. Hệ thống sẽ mở 2 cửa sổ in riêng.','ok');
     if(pacLabels.length)openLabelPrintWindow(pacLabels,printOrders,'pac');
@@ -4693,7 +4695,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     h('button',{type:'button',disabled:visiblePage>=totalPages,onClick:()=>setCurrentPage(p=>Math.min(totalPages,p+1)),title:'Trang sau'},'›'),
     h('button',{type:'button',disabled:visiblePage>=totalPages,onClick:()=>setCurrentPage(totalPages),title:'Trang cuối'},'»')
   );
-  if(compactView)return h(AccountingOrdersCompact,{orders,customers,products,prodCats,quotes,employees,currentUser,trips,company,prodShifts,prodShiftRules,
+  if(compactView)return h(AccountingOrdersCompact,{orders,customers,products,prodCats,quotes,employees,currentUser,trips,company,prodShifts,prodShiftRules,shifts,canManageTripDriver:canChangeTripDriver,canDispatchTrip:canDispatchFromOrders,onSaveTripDriver:saveGroupDriver,onDispatchTrip:dispatchGroupTrip,
     canEdit:canEditMobileOrder,canEditOrder:canEditCatalogOrder,tripForOrder:orderTrip,plansForOrder:productionDisplayForOrder,
     onOpenNew:()=>{se(null);sm('f');},onOpenEdit:order=>{se(order);sm('f');},editing:modal==='f',editOrder:edit,onSave:save,onCloseEditor:()=>{sm(null);se(null);},
     resolveAutomaticTrip:autoTripForOrder,getLatest:()=>deleteContext.current,

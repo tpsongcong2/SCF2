@@ -23,5 +23,13 @@ function scfAndroidBadge(){
  const actor=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');const sheet=document.getElementById('scf-android-sheet');if(sheet&&sheet.dataset.actor!==actor)sheet.remove();document.getElementById('scf-android-badge')?.remove();
  const stored=scfAndroidPrintRows();if(!actor||!stored.rows.length)return;const badge=document.createElement('button');badge.type='button';badge.id='scf-android-badge';badge.className='bp';badge.textContent='Lệnh XPRINTER ('+stored.rows.length+')';badge.style.cssText='position:fixed;right:12px;bottom:86px;z-index:1700;padding:10px 14px';badge.onclick=scfShowAndroidPrintJobs;document.body.append(badge);
 }
-function scfQueueAndroidHandoff(access,title,count){const stored=scfAndroidPrintRows();if(stored.rows.length>=50)throw Error('Còn nhiều lệnh Android chờ đối chiếu. Cập nhật kết quả trước khi gửi thêm.');stored.rows.push({...access,title,count});localStorage.setItem(stored.key,JSON.stringify(stored.rows));scfAndroidBadge();scfShowAndroidPrintJobs();}
+function scfQueueAndroidHandoff(access,title,count,{deferOpen=false}={}){const stored=scfAndroidPrintRows();if(stored.rows.length>=50)throw Error('Còn nhiều lệnh XP420 chờ đối chiếu. Cập nhật kết quả trước khi gửi thêm.');stored.rows.push({...access,title,count});localStorage.setItem(stored.key,JSON.stringify(stored.rows));scfAndroidBadge();if(!deferOpen)scfShowAndroidPrintJobs();}
+function scfOpenX420PrintJob(access){
+ const row=scfAndroidPrintRows().rows.find(item=>item.jobId===access?.jobId&&item.token===access?.token);
+ if(!row||Date.parse(row.expiresAt)<=Date.now())throw Error('Lệnh mở XP420 đã hết hạn. Kiểm tra lịch sử trước khi gửi lại.');
+ const href=scfAndroidIntent(row);
+ // Keep the existing ticket visible when a browser requires another user tap.
+ scfShowAndroidPrintJobs();
+ try{window.location.assign(href);}catch{window.showToast('Bấm Mở app XPRINTER 420 để tiếp tục lệnh đã tạo.','warn');}
+}
 setInterval(scfAndroidBadge,5000);
