@@ -1822,11 +1822,13 @@ function deliveryPrintScope({orders=[],customers=[],trips=[],from='',to='',dateB
 }
 function deliveryMissingOrderReport({customers=[],orders=[],trips=[],date,group=''}){
   const day=toIsoDate(date);
-  if(!day)return {rows:[],total:0,ordered:0};
+  if(!day)return {rows:[],allRows:[],stoppedRows:[],total:0,ordered:0};
   const norm=value=>normalizeLookupText(value||'');
   const tripById=new Map(trips.map(trip=>[String(trip.id),trip]));
   const history=orders.filter(order=>order.status!=='cancelled'&&toIsoDate(order.deliveryDate||order.date)<=day).sort((a,b)=>toIsoDate(b.deliveryDate||b.date).localeCompare(toIsoDate(a.deliveryDate||a.date)));
-  const rows=[];let total=0,ordered=0;
+  const weekStartDate=new Date(day+'T12:00:00');weekStartDate.setDate(weekStartDate.getDate()-7);
+  const weekStart=weekStartDate.getFullYear()+'-'+String(weekStartDate.getMonth()+1).padStart(2,'0')+'-'+String(weekStartDate.getDate()).padStart(2,'0');
+  const rows=[],allRows=[],stoppedRows=[];let total=0,ordered=0;
   customers.forEach(customer=>(customer.points||[]).forEach(point=>{
     if(!point.name||point.customerStoppedAt)return;
     const start=point.customerAddedAt?toIsoDate(point.customerAddedAt):'';
@@ -1842,22 +1844,60 @@ function deliveryMissingOrderReport({customers=[],orders=[],trips=[],date,group=
     const area=norm(point.area);
     const pointGroup=knownTrip?scfTripImageGroup(knownTrip):(/^(dt|diem thuy|chi hai)( |$)/.test(area)?'dt':'samsung');
     if(group&&group!=='all'&&pointGroup!==group)return;
+    const todayOrders=prior.filter(order=>toIsoDate(order.deliveryDate||order.date)===day);
+    const timesFor=items=>[...new Set(items.map(order=>mobileDeliveryTime(order.deliveryTime)).filter(Boolean))].sort();
+    const currentTimes=timesFor(todayOrders);
+    const expectedTimes=timesFor(prior.filter(order=>{const date=toIsoDate(order.deliveryDate||order.date);return date>=weekStart&&date<day;}));
+    const missingTimes=expectedTimes.filter(time=>!currentTimes.includes(time));
+    const times=[...new Set([...currentTimes,...expectedTimes])].sort().map(time=>({time,missing:missingTimes.includes(time)}));
+    const row={customerId:customer.id,pointId:point.id,customer:customer.name,point:point.name,area:point.area||'',group:pointGroup,times,missingTimes,hasOrder:todayOrders.length>0,asked:point.missingOrderFollowup?.asked?.[day]||null};
+    if(point.missingOrderFollowup?.stopped===true){stoppedRows.push(row);return;}
     total++;
-    if(prior.some(order=>toIsoDate(order.deliveryDate||order.date)===day)){ordered++;return;}
-    rows.push({customerId:customer.id,pointId:point.id,customer:customer.name,point:point.name,area:point.area||'',group:pointGroup});
+    if(row.hasOrder)ordered++;
+    allRows.push(row);
+    if(!row.hasOrder||missingTimes.length)rows.push(row);
   }));
   rows.sort((a,b)=>a.customer.localeCompare(b.customer,'vi')||a.point.localeCompare(b.point,'vi'));
-  return {rows,total,ordered};
+  allRows.sort((a,b)=>a.customer.localeCompare(b.customer,'vi')||a.point.localeCompare(b.point,'vi'));
+  stoppedRows.sort((a,b)=>a.customer.localeCompare(b.customer,'vi')||a.point.localeCompare(b.point,'vi'));
+  return {rows,allRows,stoppedRows,total,ordered,weekStart};
 }
-function DeliveryMissingOrdersModal({orders,customers,trips,initialDate,initialGroup,onClose}){
+function scfUpdateMissingOrderFollowup(customers,row,day,field,value,user){
+  return customers.map(customer=>String(customer.id)!==String(row.customerId)?customer:{...customer,points:(customer.points||[]).map(point=>{
+    if(row.pointId?String(point.id)!==String(row.pointId):point.name!==row.point)return point;
+    const followup={...(point.missingOrderFollowup||{})};
+    if(field==='stopped')followup.stopped=value===true;
+    if(field==='asked'){
+      followup.asked={...(followup.asked||{})};
+      if(value)followup.asked[day]={by:user?.name||'',byId:String(user?.id||''),at:new Date().toISOString()};
+      else delete followup.asked[day];
+    }
+    return {...point,missingOrderFollowup:followup};
+  })});
+}
+function DeliveryMissingOrdersModal({orders,customers,setCustomers,currentUser,trips,initialDate,initialGroup,onClose}){
   const[day,setDay]=useState(initialDate||toIsoDate(fmtDate())),[group,setGroup]=useState(initialGroup||'samsung');
+  const[missingOnly,setMissingOnly]=useState(true);
   const report=deliveryMissingOrderReport({orders,customers,trips,date:day,group});
+  const visibleRows=missingOnly?report.rows:report.allRows;
+  const canUpdate=typeof setCustomers==='function'&&!!currentUser&&canWrite(currentUser.role,'delivery',currentUser.permLevels)&&!window.__SCF_ACCESS_CONTEXT?.readOnly;
+  const update=(row,field,value)=>{
+    if(!canUpdate||window.__SCF_ACCESS_CONTEXT?.readOnly||!day)return;
+    setCustomers(previous=>scfUpdateMissingOrderFollowup(previous,row,day,field,value,currentUser));
+  };
+  const followupCell=row=>h('td',null,h('label',{style:{display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap'}},h('input',{type:'checkbox',checked:!!row.asked,disabled:!canUpdate||!day,'aria-label':'Đã hỏi bếp '+row.point,onChange:e=>update(row,'asked',e.target.checked)}),'Đã hỏi bếp'),row.asked&&h('small',{title:row.asked.at},row.asked.by||'Đã xác nhận'));
+  const trackingCell=(row,stopped)=>h('td',null,h('button',{type:'button','data-scf-action':'write',disabled:!canUpdate,onClick:()=>update(row,'stopped',!stopped)},stopped?'Theo dõi lại':'Ngừng theo dõi'));
   return h(Modal,{title:'Báo cáo thiếu đơn',lg:true,onClose},
     h('div',{style:{padding:'14px 18px'}},
       h('div',{style:{display:'flex',alignItems:'end',gap:12,flexWrap:'wrap'}},h(F,{label:'Ngày giao'},h('input',{type:'date','aria-label':'Ngày báo cáo thiếu đơn',value:day,onChange:e=>setDay(e.target.value)})),h(DeliveryTripGroupSwitch,{value:group,onChange:setGroup})),
-      h('p',null,'Bếp đang bán: ',h('b',null,report.total),' · Đã có đơn: ',h('b',null,report.ordered),' · Chưa có đơn: ',h('b',{style:{color:'#c62828'}},report.rows.length)),
+      h('p',null,'Bếp đang bán: ',h('b',null,report.total),' · Đã có đơn: ',h('b',null,report.ordered),' · Chưa có đơn: ',h('b',null,report.total-report.ordered),' · Bếp cần kiểm tra: ',h('b',{style:{color:'#c62828'}},report.rows.length)),
       h('p',{style:{fontSize:12,color:'var(--tx2)'}},'Theo ngày giao của đơn; không tính đơn hủy và địa điểm ngừng bán. Nhóm theo chuyến gần nhất của bếp; bếp chưa có chuyến dùng khu vực trong danh mục.'),
-      h('div',{className:'tw'},h('table',null,h('thead',null,h('tr',null,...['STT','Bếp / Địa điểm','Khách hàng','Khu vực','Nhóm'].map(label=>h('th',{key:label},label)))),h('tbody',null,report.rows.length?report.rows.map((row,index)=>h('tr',{key:JSON.stringify([row.customerId,row.pointId,row.point])},h('td',null,index+1),h('td',null,h('b',null,row.point)),h('td',null,row.customer),h('td',null,row.area||'—'),h('td',null,row.group==='dt'?'Điềm Thụy':'Samsung'))):h('tr',null,h('td',{colSpan:5,className:'empty-st'},day?'Không có bếp thiếu đơn theo bộ lọc.':'Hãy chọn ngày báo cáo.')))))
+      h('p',{style:{fontSize:12}},'Đối chiếu tất cả giờ giao trong 7 ngày trước ngày chọn. ',h('span',{style:{color:'#111'}},'Đen: đã có đơn'),' · ',h('span',{style:{color:'#c62828'}},'Đỏ: thiếu đơn theo giờ tuần trước')),
+      h('label',{style:{display:'flex',gap:6,alignItems:'center',marginBottom:10}},h('input',{type:'checkbox',checked:missingOnly,onChange:e=>setMissingOnly(e.target.checked)}),'Chỉ hiện bếp còn thiếu đơn / giờ giao'),
+      h('div',{className:'tw'},h('table',null,h('thead',null,h('tr',null,...['STT','Bếp / Địa điểm','Giờ giao','Khách hàng','Khu vực','Nhóm','Xác nhận','Theo dõi'].map(label=>h('th',{key:label},label)))),h('tbody',null,visibleRows.length?visibleRows.map((row,index)=>h('tr',{key:JSON.stringify([row.customerId,row.pointId,row.point])},h('td',null,index+1),h('td',null,h('b',null,row.point)),h('td',null,row.times.length?row.times.flatMap((item,index)=>[index?', ':'',h('span',{key:item.time,style:{color:item.missing?'#c62828':'#111',fontWeight:item.missing?700:400},title:item.missing?'Chưa có đơn giờ này · có giao trong 7 ngày trước':'Đã có đơn'},item.time)]):h('span',{style:{color:'var(--tx2)'}},row.hasOrder?'Chưa ghi giờ':'Chưa có lịch giờ trong 7 ngày trước')),h('td',null,row.customer),h('td',null,row.area||'—'),h('td',null,row.group==='dt'?'Điềm Thụy':'Samsung'),followupCell(row),trackingCell(row,false))):h('tr',null,h('td',{colSpan:8,className:'empty-st'},day?'Không có bếp theo bộ lọc.':'Hãy chọn ngày báo cáo.')))))
+      ,h('h3',{style:{marginTop:20}},'Địa điểm ngừng theo dõi đơn ('+report.stoppedRows.length+')'),
+      h('p',{style:{fontSize:12,color:'var(--tx2)'}},'Các bếp này được bỏ khỏi cảnh báo thiếu đơn; vẫn có thể tạo đơn bình thường. Danh sách theo bộ lọc nhóm ở trên.'),
+      h('div',{className:'tw'},h('table',null,h('thead',null,h('tr',null,...['Bếp / Địa điểm','Khách hàng','Khu vực','Theo dõi'].map(label=>h('th',{key:label},label)))),h('tbody',null,report.stoppedRows.length?report.stoppedRows.map(row=>h('tr',{key:JSON.stringify([row.customerId,row.pointId,row.point])},h('td',null,row.point),h('td',null,row.customer),h('td',null,row.area||'—'),trackingCell(row,true))):h('tr',null,h('td',{colSpan:4,className:'empty-st'},'Chưa có địa điểm ngừng theo dõi.')))))
     ),h(Row,null,h('button',{type:'button',onClick:onClose},'Đóng')));
 }
 function DeliveryTripGroupSwitch({value,onChange,exclusive=false}){
@@ -4969,7 +5009,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         modal==='print'&&h(PrintByCustomerModal,{orders,customers,products,company,trips,currentUser,getLatest:()=>deleteContext.current,...deliveryPrintInitialDates(dateFilterMode,fDate,fDateTo,fWeek,fMonth),initialDateBasis:sortMode==='trip'?dateBasis:'order',initialGroup:fTripGroup,onClose:()=>sm(null)}),
         modal==='printlabels'&&h(PrintLabelsMultiModal,{orders,customers,trips,...deliveryPrintInitialDates(dateFilterMode,fDate,fDateTo,fWeek,fMonth),initialDateBasis:sortMode==='trip'?dateBasis:'order',initialGroup:fTripGroup,onClose:()=>sm(null),onPrint:printLabelsForOrders}),
         modal==='importPreview'&&window._importData&&h(ImportPreviewModal,{data:window._importData,customers,setCustomers,orders,setOrders,products,prodCats,prodShifts,currentUser,onLocateExisting:locateExistingImportedOrder,onClose:()=>{sm(null);delete window._importData;}}),
-        modal==='missingOrders'&&h(DeliveryMissingOrdersModal,{orders,customers,trips,initialDate:deliveryPrintInitialDates(dateFilterMode,fDate,fDateTo,fWeek,fMonth).initialDate||_ti0,initialGroup:fTripGroup,onClose:()=>sm(null)}),
+        modal==='missingOrders'&&h(DeliveryMissingOrdersModal,{orders,customers,setCustomers,currentUser,trips,initialDate:deliveryPrintInitialDates(dateFilterMode,fDate,fDateTo,fWeek,fMonth).initialDate||_ti0,initialGroup:fTripGroup,onClose:()=>sm(null)}),
         modal==='imageImport'&&h(ImageOrderImportModal,{customers,products,orders,setOrders,prodShifts,currentUser,onClose:()=>sm(null)}),
     bulkDispatchDate&&h(DeliveryBulkDispatchModal,{key:bulkDispatchDate,date:bulkDispatchDate,rows:bulkDispatchRows,onConfirm:confirmBulkDispatch,onClose:()=>setBulkDispatchDate('')}),
     toolsHidden&&h('div',{className:'delivery-collapsed-filter-summary','aria-live':'polite'},[dateFilterMode==='day'?fDate:dateFilterMode==='range'?[fDate,fDateTo].filter(Boolean).join(' → '):dateFilterMode==='week'?fWeek:fMonth,fArea,fPoint,fCustomer,fProduct,fTime,fTripGroup,fNote,fTripId,fTripDate,fTripShift,fTripDriver,q].filter(Boolean).join(' · ')+' · '+list.length+' kết quả (giữ nguyên bộ lọc)'),

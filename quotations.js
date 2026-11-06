@@ -319,7 +319,7 @@ function QuoteForm({quote,quotes,customers,products,currentUser,onSave,onClose,p
   return h(Modal,{title:quote?'Sửa báo giá '+quote.id:'Tạo báo giá mới',onClose,lg:true},
     sampleQuotes.length>0&&h(F,{label:'Chọn báo giá mẫu'},h('select',{value:'',onChange:e=>applySample(e.target.value)},
       h('option',{value:''},'— Chọn báo giá cũ để lấy mẫu —'),
-      sampleQuotes.map(q=>h('option',{key:q.id,value:q.id},q.id+' - '+(q.customer||'')+' - '+(q.dateFrom||'')+(q.dateTo?' đến '+q.dateTo:'')))
+      sampleQuotes.map(q=>h('option',{key:q.id,value:q.id,title:q.note||''},q.id+' - '+(q.customer||'')+' - '+(q.dateFrom||'')+(q.dateTo?' đến '+q.dateTo:'')+(String(q.note||'').trim()?' - Chú ý: '+String(q.note).replace(/\s+/g,' ').trim():'')))
     )),
     h('div',{className:'g2'},
       h(F,{label:'Khách hàng *'},h('select',{value:f.customerId,onChange:e=>setCust(e.target.value)},
