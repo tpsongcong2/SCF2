@@ -2339,6 +2339,7 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
   const invoiceSize=['small','medium','large'].includes(inlineInvoiceSize)?inlineInvoiceSize:'medium';
   const customerOptions=scfSalesDebtCustomerOptions(customers,orders);
   const welstoryCustomerId=scfSalesDebtWelstoryCustomerId(customerOptions);
+  const debtExportUser=useRef(currentUser);debtExportUser.current=currentUser;
   const canSelectAllCustomers=canViewAllDebtCustomers(currentUser);
   const defaultCustomerId=welstoryCustomerId||customerOptions[0]?.id||'';
   const [fromDate,setFromDate]=useState(today.slice(0,7)+'-01');
@@ -2472,6 +2473,7 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
     if(debtExportBusy.current)return;
     debtExportBusy.current=true;
     try{
+    const exportActor=debtExportUser.current;
     const invoiceLinks=new Map();
     const imageUrls=[...new Set(filtered.map(order=>String(order.invoiceImage||'').trim()).filter(Boolean))];
     for(let offset=0;offset<imageUrls.length;offset+=8){
@@ -2482,6 +2484,8 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
         invoiceLinks.set(url,freshUrl);
       }));
     }
+    const showQuoteColumn=canViewDebtQuoteColumn(exportActor);
+    const productAmountColumn=showQuoteColumn?'F':'E',orderAmountColumn=showQuoteColumn?'H':'G',imageColumn=showQuoteColumn?'J':'H';
     const customerLabel=customerOptions.find(item=>item.id===customerId)?.label||(customerId?'WELSTORY':'Tất cả khách hàng');
     const pointLabel=pointOptions.find(item=>item.key===pointKey)?.label||'Tất cả địa điểm';
     const productLabel=productOptions.find(item=>item.id===productId)?.label||'Tất cả sản phẩm';
@@ -2497,7 +2501,7 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
     const pricedProducts=new Map();
     let totalAmount=0,missingPrices=0;
     filtered.forEach(order=>visibleLines(order).forEach(line=>{
-      const price=scfDebtSalePrice(order,line,products,quotes,customers),quantity=invoiceQty(line,order);
+      const price=showQuoteColumn?scfDebtSalePrice(order,line,products,quotes,customers):null,quantity=invoiceQty(line,order);
       const amount=price===null?null:quantity*price;
       if(price===null)missingPrices++;
       totalAmount+=amount||0;
@@ -2514,7 +2518,7 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
       const group=pointExports.get(key)||{name:order.pointName||order.address||'Chưa xác định',customer:customerFor(order)?.name||order.customer||'Chưa xác định',orders:0,quantity:0,amount:0,missingPrices:0,data:[ordersData[0]]};
       group.orders++;
       visibleLines(order).forEach(line=>{
-      const price=scfDebtSalePrice(order,line,products,quotes,customers),quantity=invoiceQty(line,order);
+      const price=showQuoteColumn?scfDebtSalePrice(order,line,products,quotes,customers):null,quantity=invoiceQty(line,order);
       const row=[
       driverFor(order),scfDebtFormatDate(order.deliveryDate||order.date)||'',order.pointName||order.address||'',line.productName||'',line.unit||'',
       quantity,price,price===null?null:quantity*price,order.deliveryTime||'',invoiceLinks.get(String(order.invoiceImage||'').trim())||'',String(line.note||''),order.status==='cancelled'?'Đã hủy':order.status||''
@@ -2543,23 +2547,25 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
     });
     const sheets=[['Tong quan',overview],['Tong hop san pham',productsData],['Hoa don da nhap',ordersData],...groups.map(group=>[group.sheetName,group.data,group])];
     sheets.forEach(([name,data,group])=>{
-      const ws=XLSX.utils.aoa_to_sheet(data);ws['!cols']=data[0].map((_,column)=>({wch:Math.min(45,Math.max(12,...data.map(row=>String(row[column]??'').length+2)))}));
+      const priceIndex=name==='Tong hop san pham'?4:name==='Hoa don da nhap'||group?6:-1;
+      const exportData=showQuoteColumn?data:priceIndex>=0?data.map(row=>row.filter((_,index)=>index!==priceIndex&&index!==priceIndex+1)):data.filter(row=>!['TỔNG THÀNH TIỀN','Dòng chưa có giá bán'].includes(row[0]));
+      const ws=XLSX.utils.aoa_to_sheet(exportData);ws['!cols']=exportData[0].map((_,column)=>({wch:Math.min(45,Math.max(12,...exportData.map(row=>String(row[column]??'').length+2)))}));
       if(name==='Tong quan')ws['!cols']=[{wch:32},{wch:80}];
       if(name==='Tong hop san pham')ws['D'+(productTotalRow+1)]={t:'n',v:totals.invoice,f:productTotalRow>1?'SUM(D2:D'+productTotalRow+')':'0'};
-      if(name==='Tong hop san pham')ws['F'+(productTotalRow+1)]={t:'n',v:totalAmount,f:productTotalRow>1?'SUM(F2:F'+productTotalRow+')':'0'};
-      if(name==='Tong hop san pham')for(let row=1;row<productTotalRow;row++){
+      if(showQuoteColumn&&name==='Tong hop san pham')ws[productAmountColumn+(productTotalRow+1)]={t:'n',v:totalAmount,f:productTotalRow>1?'SUM('+productAmountColumn+'2:'+productAmountColumn+productTotalRow+')':'0'};
+      if(showQuoteColumn&&name==='Tong hop san pham')for(let row=1;row<productTotalRow;row++){
         if(data[row][4]!==null)ws['F'+(row+1)]={t:'n',v:data[row][5],f:'D'+(row+1)+'*E'+(row+1),z:'#,##0.##'};
       }
       if(name==='Hoa don da nhap'||group){
         const lastDataRow=group?group.totalRow-1:orderTotalRow;
-        for(let row=1;row<lastDataRow;row++)if(data[row][6]!==null)ws['H'+(row+1)]={t:'n',v:data[row][7],f:'F'+(row+1)+'*G'+(row+1),z:'#,##0.##'};
+        for(let row=1;showQuoteColumn&&row<lastDataRow;row++)if(data[row][6]!==null)ws['H'+(row+1)]={t:'n',v:data[row][7],f:'F'+(row+1)+'*G'+(row+1),z:'#,##0.##'};
         ws['F'+(lastDataRow+1)]={t:'n',v:group?group.quantity:totals.invoice,f:lastDataRow>1?'SUM(F2:F'+lastDataRow+')':'0',z:'#,##0.##'};
-        ws['H'+(lastDataRow+1)]={t:'n',v:group?group.amount:totalAmount,f:lastDataRow>1?'SUM(H2:H'+lastDataRow+')':'0',z:'#,##0.##'};
-        ws['!cols'][9]={wch:24};
-        ws['!autofilter']={ref:'A1:L'+lastDataRow};
+        if(showQuoteColumn)ws[orderAmountColumn+(lastDataRow+1)]={t:'n',v:group?group.amount:totalAmount,f:lastDataRow>1?'SUM('+orderAmountColumn+'2:'+orderAmountColumn+lastDataRow+')':'0',z:'#,##0.##'};
+        ws['!cols'][showQuoteColumn?9:7]={wch:24};
+        ws['!autofilter']={ref:'A1:'+(showQuoteColumn?'L':'J')+lastDataRow};
         for(let row=1;row<lastDataRow;row++){
           const url=data[row][9];
-          if(url)ws['J'+(row+1)]={t:'s',v:'Xem ảnh hóa đơn',l:{Target:url,Tooltip:'Mở ảnh hóa đơn (liên kết bảo mật có hiệu lực 7 ngày)'},s:{font:{color:{rgb:'0563C1'},underline:true}}};
+          if(url)ws[imageColumn+(row+1)]={t:'s',v:'Xem ảnh hóa đơn',l:{Target:url,Tooltip:'Mở ảnh hóa đơn (liên kết bảo mật có hiệu lực 7 ngày)'},s:{font:{color:{rgb:'0563C1'},underline:true}}};
         }
       }
       XLSX.utils.book_append_sheet(wb,ws,name);
@@ -2567,24 +2573,25 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
     const summaryData=[['STT','Khách hàng','Địa điểm','Số đơn','SL hóa đơn','Thành tiền','Dòng chưa có giá bán'],
       ...groups.map((group,index)=>[index+1,group.customer,group.name,group.orders,group.quantity,group.amount,group.missingPrices]),
       ['','TỔNG','',filtered.length,totals.invoice,totalAmount,missingPrices]];
-    const summary=XLSX.utils.aoa_to_sheet(summaryData);
-    summary['!cols']=[{wch:6},{wch:25},{wch:32},{wch:12},{wch:18},{wch:22},{wch:23}];
+    const summary=XLSX.utils.aoa_to_sheet(showQuoteColumn?summaryData:summaryData.map(row=>row.slice(0,5)));
+    summary['!cols']=[{wch:6},{wch:25},{wch:32},{wch:12},{wch:18},...(showQuoteColumn?[{wch:22},{wch:23}]:[])];
     groups.forEach((group,index)=>{
       const row=index+2,ref="'"+group.sheetName.replace(/'/g,"''")+"'!";
       summary['C'+row]={t:'s',v:group.name,l:{Target:'#'+ref+'A1',Tooltip:'Mở công nợ địa điểm'}};
       summary['E'+row]={t:'n',v:group.quantity,f:ref+'F'+group.totalRow,z:'#,##0.##'};
-      summary['F'+row]={t:'n',v:group.amount,f:ref+'H'+group.totalRow,z:'#,##0.##'};
+      if(showQuoteColumn)summary['F'+row]={t:'n',v:group.amount,f:ref+orderAmountColumn+group.totalRow,z:'#,##0.##'};
     });
-    ['D','E','F','G'].forEach((column,index)=>{
+    (showQuoteColumn?['D','E','F','G']:['D','E']).forEach((column,index)=>{
       summary[column+summaryData.length]={t:'n',v:[filtered.length,totals.invoice,totalAmount,missingPrices][index],f:groups.length?'SUM('+column+'2:'+column+(groups.length+1)+')':'0',z:'#,##0.##'};
     });
-    summary['!autofilter']={ref:'A1:G'+(groups.length+1)};
+    summary['!autofilter']={ref:'A1:'+(showQuoteColumn?'G':'E')+(groups.length+1)};
     XLSX.utils.book_append_sheet(wb,summary,summaryName);
     const fileCustomer=customerLabel.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^a-zA-Z0-9 -]/g,' ').trim().replace(/\s+/g,'_').slice(0,80)||'Tat_ca_khach_hang';
     const monthEnd=selectedMonth?new Date(Number(selectedMonth.slice(0,4)),Number(selectedMonth.slice(5,7)),0).getDate():0;
     const fileFrom=dateMode==='day'?selectedDate:dateMode==='month'?selectedMonth+'-01':fromDate;
     const fileTo=dateMode==='day'?selectedDate:dateMode==='month'?selectedMonth+'-'+String(monthEnd).padStart(2,'0'):toDate;
     const fileDate=value=>{const key=scfDebtDateKey(value);return key?key.split('-').reverse().join('-'):'Khong_gioi_han';};
+    if(String(debtExportUser.current?.id||'')!==String(exportActor?.id||'')||canViewDebtQuoteColumn(debtExportUser.current)!==showQuoteColumn)throw Error('Quyền xuất báo giá đã thay đổi. Hãy xuất lại báo cáo.');
     XLSX.writeFile(wb,'Cong_no_'+fileCustomer+'_tu_'+fileDate(fileFrom)+'_den_'+fileDate(fileTo)+'.xlsx');
     }catch(error){window.showToast(error?.message||'Chưa xuất được Excel. Vui lòng thử lại.','error');}
     finally{debtExportBusy.current=false;}
@@ -2776,9 +2783,21 @@ function InvoiceUploadReportTab({orders,setOrders,currentUser,customers,products
   });
   const customerOptionLabel=name=>{
     const counts=customerCoverage.get(name);
-    return counts?.missing?name+' · Thiếu ảnh '+counts.missing.toLocaleString('vi-VN')+' đơn · '+(counts.missing/counts.total*100).toLocaleString('vi-VN',{maximumFractionDigits:1})+'%':name;
+    return counts?.missing?name+' · Thiếu ảnh '+counts.missing.toLocaleString('vi-VN')+' đơn':name;
   };
   const customerOptions=[...new Set(eligible.map(order=>String(order.customer||order.customerName||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+  // Point labels use the selected date/customer/area scope, independently of
+  // the currently selected point or photo subset. Count each invoice once per point.
+  const pointCoverage=new Map();
+  eligible.forEach(order=>{
+    const date=dateKey(order.deliveryDate||order.date);
+    if((fromDate&&(!date||date<fromDate))||(toDate&&(!date||date>toDate)))return;
+    if(customerName&&String(order.customer||order.customerName||'').trim()!==customerName)return;
+    if(area&&areaFor(order)!==area)return;
+    const names=new Set([order.pointName||order.address||'',...(order.lines||[]).map(line=>line.warehouseSourcePointName||'')].map(name=>String(name).trim()).filter(Boolean));
+    for(const name of names)pointCoverage.set(name,(pointCoverage.get(name)||0)+(hasUploadedInvoice(order)?0:1));
+  });
+  const pointOptionLabel=name=>pointCoverage.get(name)?name+' · Thiếu ảnh '+pointCoverage.get(name).toLocaleString('vi-VN')+' đơn':name;
   const pointOptions=[...new Set(eligible.filter(order=>(!customerName||String(order.customer||order.customerName||'').trim()===customerName)&&(!area||areaFor(order)===area)).flatMap(order=>[order.pointName||order.address||'',...(order.lines||[]).map(line=>line.warehouseSourcePointName||'')]).map(String).map(value=>value.trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
   const areaOptions=[...new Set(eligible.map(areaFor).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
   const productOptions=[...new Set(eligible.flatMap(o=>(o.lines||[]).map(productLabel)))].sort((a,b)=>a.localeCompare(b,'vi'));
@@ -2853,7 +2872,7 @@ function InvoiceUploadReportTab({orders,setOrders,currentUser,customers,products
       h('div',{hidden:activeFilter!=='point'},
         h(F,{label:'Khách hàng'},h('select',{value:customerName,onChange:e=>{setCustomerName(e.target.value);setPointName('');}},h('option',{value:''},'Khách hàng'),customerOptions.map(name=>h('option',{key:name,value:name},customerOptionLabel(name))))),
         h(F,{label:'Khu vực'},h('select',{value:area,onChange:e=>{setArea(e.target.value);setPointName('');}},h('option',{value:''},'Khu vực'),areaOptions.map(name=>h('option',{key:name,value:name},name)))),
-        h(F,{label:'Địa điểm'},h('select',{value:pointName,onChange:e=>setPointName(e.target.value)},h('option',{value:''},'Địa điểm'),pointOptions.map(name=>h('option',{key:name,value:name},name)))),
+        h(F,{label:'Địa điểm'},h('select',{value:pointName,onChange:e=>setPointName(e.target.value)},h('option',{value:''},'Địa điểm'),pointOptions.map(name=>h('option',{key:name,value:name},pointOptionLabel(name))))),
         h(F,{label:'Tìm đơn hàng'},h('input',{value:keyword,onChange:e=>setKeyword(e.target.value),placeholder:'Mã đơn, khách hàng, địa điểm...'}))
       ),
       h('div',{hidden:activeFilter!=='product'},h(F,{label:'Sản phẩm'},h('select',{value:selectedProduct,onChange:e=>setSelectedProduct(e.target.value)},h('option',{value:''},'Sản phẩm'),productOptions.map(name=>h('option',{key:name,value:name},name))))),

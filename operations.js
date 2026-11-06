@@ -1232,7 +1232,7 @@ function isPrivilegedEmployeeRecord(employee){
       h('hr',{className:'divider'}),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
         h('div',{style:{fontWeight:500,fontSize:13,color:'var(--pri3)'}},'Phân quyền chi tiết (có thể chỉnh riêng cho nhân viên này)'),
-        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,deliveryDeleteLimitDays:1,orderHistoryDays:60,salesDebtAllCustomers:false,driverReportMonthlyWeight:false,productionShiftWeight:false,productionSourceOrders:false,deliveryQuantityTotals:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
+        h('button',{type:'button',onClick:()=>sf(p=>p.permissionProfileId?applyPermissionProfile(p,normalizedProfiles,p.permissionProfileId):({...p,permissions:[],permLevels:{},mobilePermissions:undefined,mobileStartPage:'',tripPermissions:defaultTripPermissions(p),tripActualQtyLimitDays:2,deliveryDeleteLimitDays:1,orderHistoryDays:60,salesDebtQuoteColumn:false,salesDebtAllCustomers:false,driverReportMonthlyWeight:false,productionShiftWeight:false,productionSourceOrders:false,deliveryQuantityTotals:false})),style:{fontSize:11,padding:'3px 10px',color:'var(--pri)',borderColor:'var(--bd)'}},f.permissionProfileId?'Khôi phục theo chức vụ':'Xóa tùy chỉnh')
       ),
       h(OrderNoticePermissionFields,{employee:f,onChange:value=>s('orderNoticePermissions',value)}),
       h('div',{style:{fontSize:12,color:'var(--tx2)',marginBottom:8,background:'var(--bg2)',padding:'6px 10px',borderRadius:'var(--r)'}},'Không truy cập = ẩn menu | Chỉ xem = chỉ đọc dữ liệu | Thêm + Xem + Sửa = không được xóa | Thêm + Xem + Sửa + Xóa = toàn quyền'),
@@ -1304,6 +1304,8 @@ function isPrivilegedEmployeeRecord(employee){
           h('input',{type:'checkbox',checked:!!f.salesDebtAllCustomers,onChange:event=>s('salesDebtAllCustomers',event.target.checked)}),
           'Được xem tổng hợp Tất cả khách hàng'
         ),
+        h('label',{style:{display:'flex',alignItems:'center',gap:8,padding:'7px 8px',fontSize:12}},h('input',{type:'checkbox',disabled:f.role==='admin',checked:canViewDebtQuoteColumn(f),onChange:event=>s('salesDebtQuoteColumn',event.target.checked)}),'Xem cột báo giá khi xuất Excel công nợ'),
+        h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:5}},'Không cấp quyền báo giá: Excel bỏ cả Giá, Thành tiền và tổng tiền; vẫn giữ số lượng hóa đơn. Quyền này không thay đổi quyền vào mục Báo giá.'),
         h('div',{style:{fontSize:11,color:'var(--tx2)',marginTop:5}},'Không cấp quyền: vẫn chọn xem từng khách hàng, nhưng không được xem tổng hợp Tất cả khách hàng.')
       )
     ),
