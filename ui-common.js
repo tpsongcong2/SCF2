@@ -1,7 +1,7 @@
 /* ─── UI base ─── */
 function F({label,children}){return h('div',{className:'fl'},h('label',null,label),children)}
 function Row({children}){return h('div',{className:'form-actions'},children)}
-function ScfHeaderFilter({label,active,children}){
+function ScfHeaderFilter({label,active,children,onClear}){
   const [anchor,setAnchor]=useState(null),button=React.useRef(null),panel=React.useRef(null);
   const close=()=>{setAnchor(null);button.current?.focus();};
   useEffect(()=>{
@@ -13,7 +13,9 @@ function ScfHeaderFilter({label,active,children}){
     return()=>{document.removeEventListener('keydown',key,true);window.removeEventListener('resize',close);window.removeEventListener('scroll',scroll,true);};
   },[anchor]);
   return h(React.Fragment,null,
-    h('button',{ref:button,type:'button',className:'delivery-column-filter'+(active?' active':''),'aria-label':'Lọc '+label,'aria-expanded':!!anchor,title:'Lọc '+label,onClick:e=>{const r=e.currentTarget.getBoundingClientRect(),top=Math.max(8,Math.min(r.bottom+4,window.innerHeight-320));setAnchor({left:Math.max(8,Math.min(r.left,window.innerWidth-296)),top,maxHeight:window.innerHeight-top-8});}},h('span',null,label),h('i',{className:'ti ti-filter','aria-hidden':true})),
+    h('span',{className:'delivery-column-filter'+(active?' active':'')},
+      h('button',{ref:button,type:'button','aria-label':'Lọc '+label,'aria-expanded':!!anchor,title:'Lọc '+label,onClick:e=>{const r=e.currentTarget.getBoundingClientRect(),top=Math.max(8,Math.min(r.bottom+4,window.innerHeight-320));setAnchor({left:Math.max(8,Math.min(r.left,window.innerWidth-296)),top,maxHeight:window.innerHeight-top-8});}},label,!onClear&&h('i',{className:'ti ti-filter','aria-hidden':true})),
+      onClear&&h('button',{type:'button',disabled:!active,'aria-label':'Xóa lọc '+label,title:active?'Xóa lọc '+label:'Chưa lọc '+label,onClick:()=>{onClear();setAnchor(null);},style:{color:active?'#d32f2f':undefined}},h('i',{className:'ti ti-filter','aria-hidden':true}))),
     anchor&&ReactDOM.createPortal(h('div',{className:'delivery-column-filter-backdrop',onClick:close},h('div',{ref:panel,className:'delivery-column-filter-popup',tabIndex:-1,role:'dialog','aria-label':'Lọc '+label,style:anchor,onClick:e=>e.stopPropagation()},h('strong',null,'Lọc '+label),children,h('button',{type:'button',onClick:close},'Xong'))),document.body)
   );
 }

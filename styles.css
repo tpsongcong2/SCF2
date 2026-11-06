@@ -1708,6 +1708,9 @@ tbody tr:not(.delivery-order-row):hover td{background:var(--bg)}
 .invoice-report-filter-button{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:inherit;padding:4px 0;font:inherit;cursor:pointer;white-space:nowrap}
 .invoice-report-filter-button.is-filtered{color:var(--pri);font-weight:700}
 .invoice-report-filter-button i{font-size:14px}
+.invoice-report-filter-button>button{border:0;background:transparent;padding:2px 0;font:inherit;color:inherit;white-space:nowrap;cursor:pointer}
+.invoice-report-filter-button>button:disabled{opacity:.55;cursor:default}
+.invoice-report-filter-button.is-filtered>button:last-child i{color:#d32f2f;opacity:1}
 .invoice-report-filters{display:none;position:fixed;z-index:1201;top:15vh;left:50%;transform:translateX(-50%);width:min(380px,calc(100vw - 24px));max-height:75vh;overflow:auto;padding:16px;background:var(--card,#fff);border:1px solid var(--bd);border-radius:12px;box-shadow:0 12px 48px #0003}
 .invoice-report-filters.is-open{display:block}
 .invoice-report-filters [hidden]{display:none!important}
