@@ -2755,7 +2755,16 @@ function InvoiceUploadReportTab({orders,setOrders,currentUser,customers,products
   };
   const hasUploadedInvoice=order=>String(order?.invoiceImage||'').trim().length>0;
   const invoiceQty=order=>(order.lines||[]).reduce((sum,line)=>sum+(numFmt(line.qtyInvoice??line.qtyOrder??line.qty)||0),0);
-  const eligible=(orders||[]).filter(order=>!['cancelled','failed'].includes(order?.status)&&invoiceQty(order)>0);
+  // Market customers do not require invoice photos. Exclude them from every
+  // checklist, export and coverage denominator, including full-trip checks.
+  const isMarketOrder=order=>{
+    const id=String(order.customerId||order.custId||'').trim(),name=String(order.customer||order.customerName||'').trim(),pointId=String(order.pointId||order.ptId||'').trim();
+    const customer=(id&&(customers||[]).find(c=>String(c.id)===id))||
+      (name&&(customers||[]).find(c=>String(c.name||'').trim()===name))||
+      (pointId&&(customers||[]).find(c=>(c.points||[]).some(p=>String(p.id)===pointId)));
+    return String(customer?.group||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()==='CHO';
+  };
+  const eligible=(orders||[]).filter(order=>!['cancelled','failed'].includes(order?.status)&&invoiceQty(order)>0&&!isMarketOrder(order));
   // Customer completion covers the selected dates, independently of the selected customer,
   // point, keyword and photo subset so the customer selector remains a stable overview.
   const customerCoverage=new Map();

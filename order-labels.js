@@ -54,12 +54,12 @@ async function scfAccountingPrintOrderLabels({selectedOrders,products,customers,
  if(prior&&prior.fingerprint!==fingerprint&&prior.sent.size)throw Error('Lần trước đã gửi một phần tem. Chọn lại đúng danh sách để gửi tiếp phần còn lại.');
  const request=prior?.fingerprint===fingerprint?prior:{fingerprint,sent:new Set()};scfAccountingLabelRequests.set(actor,request);
  try{
-  if(mobilePrintRoute&&request.mobilePrintRoute&&mobilePrintRoute!==request.mobilePrintRoute&&request.sent.size)throw Error('Đã gửi một phần tem theo cách in trước. Giữ nguyên cách in để gửi tiếp.');
+  if(mobilePrintRoute&&request.mobilePrintRoute&&mobilePrintRoute!==request.mobilePrintRoute&&request.started)throw Error('Đã gửi một phần tem theo cách in trước. Giữ nguyên cách in để gửi tiếp.');
   if(mobilePrintRoute)request.mobilePrintRoute=mobilePrintRoute;
   if(!request.mobilePrintRoute)request.mobilePrintRoute=await scfChooseMobileLabelRoute(settings);
   validate();
   for(let index=0;index<tasks.length;index++){
-   if(request.sent.has(index))continue;validate();const task=tasks[index];
+   if(request.sent.has(index))continue;validate();const task=tasks[index];request.started=true;
    const queued=await scfQueueLabelPrint({agentId:settings.agentId,printerRole:settings.printerRole||'x350',mobilePrintRoute:request.mobilePrintRoute,deferNativeOpen:autoOpenNative,title:'Kế toán · Tem nhiều đơn',paperWidthMm:task.pac?100:58,paperHeightMm:task.pac?100:40,svgs:task.svgs,labelDetails:task.labelDetails,rotate180:!task.pac,beforeEnqueue:validate,tripContext:{tripId:task.tripId,orderIds:task.ids,mode:'orders',accountingLabels:true}});request.sent.add(index);if(queued?.androidAccess){request.nativeAccess=request.nativeAccess||[];request.nativeAccess.push(queued.androidAccess);}
   }
   scfAccountingLabelRequests.delete(actor);

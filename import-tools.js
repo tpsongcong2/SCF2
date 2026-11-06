@@ -252,7 +252,7 @@ function buildPrintHTMLBody(template, order, company) {
   const totalQty = lines.reduce((s,l) => s + scfOrderPrintInvoiceQty(l), 0);
   if(order.warehouseMerged){
     const rows=lines.map((line,index)=>'<tr><td>'+(index+1)+'</td><td>'+(line.warehouseSourcePointName||order.pointName||'')+'</td><td>'+(line.warehouseSourceDeliveryTime||order.deliveryTime||'')+'</td><td>'+line.productName+'</td><td>'+(line.unit||'')+'</td><td>'+scfOrderPrintInvoiceQty(line)+'</td><td></td><td>'+(line.note||'')+'</td></tr>').join('');
-    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Đơn PAC kho vận</title><style>body{font:13px Arial;padding:20px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #333;padding:7px}th{background:#eee}@media print{@page{size:A4 landscape;margin:8mm}}</style></head><body><h2>ĐƠN PAC GIAO TẠI KHO VẬN</h2><p>Mã: '+order.id+' · Ngày chuyến: '+(order.deliveryDate||'')+'</p><table><thead><tr><th>STT</th><th>Địa điểm theo đơn</th><th>Giờ giao</th><th>Sản phẩm</th><th>ĐVT</th><th>SL HĐ</th><th>SL giao</th><th>Chú ý</th></tr></thead><tbody>'+rows+'</tbody></table><p>Tổng SL HĐ: '+totalQty+'</p><p>Giao tập trung tại kho vận; các địa điểm và giờ trên từng dòng được giữ để đối chiếu.</p><p>Người giao ____________________ Người nhận ____________________</p></body></html>';
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Đơn PAC kho vận</title><style>body{font:13px Arial;padding:20px}table{width:100%;border-collapse:collapse}td,th{border:1px solid #333;padding:7px}th{background:#fff}@media print{@page{size:A4 landscape;margin:8mm}}</style></head><body><h2>ĐƠN PAC GIAO TẠI KHO VẬN</h2><p>Mã: '+order.id+' · Ngày chuyến: '+(order.deliveryDate||'')+'</p><table><thead><tr><th>STT</th><th>Địa điểm theo đơn</th><th>Giờ giao</th><th>Sản phẩm</th><th>ĐVT</th><th>SL HĐ</th><th>SL giao</th><th>Chú ý</th></tr></thead><tbody>'+rows+'</tbody></table><p>Tổng SL HĐ: '+totalQty+'</p><p>Giao tập trung tại kho vận; các địa điểm và giờ trên từng dòng được giữ để đối chiếu.</p><p>Người giao ____________________ Người nhận ____________________</p></body></html>';
   }
 
   if (template === 'welstory' || template === 'songcong') {
@@ -284,9 +284,9 @@ body{font-family:Arial,sans-serif;font-size:13px;padding:8mm 8mm 5mm 8mm}
 .lbl{white-space:nowrap;font-style:italic}
 .val{font-weight:700}
 table{width:100%;border-collapse:collapse}
-th{background:#e8e8e8;font-weight:700;text-align:center;font-size:11px;padding:4px 3px;border:1px solid #333}
+th{background:#fff;font-weight:700;text-align:center;font-size:11px;padding:4px 3px;border:1px solid #333}
 td{border:1px solid #333;padding:2px 3px;font-size:11px}
-.tfoot-row td{font-weight:700;background:#f5f5f5;font-size:16px;height:42px}
+.tfoot-row td{font-weight:700;background:#fff;font-size:16px;height:42px}
 .signs{display:flex;justify-content:space-between;margin-top:24px;text-align:center}
 .sign-box{width:45%;font-size:13px;font-weight:700}
 .sign-sub{font-size:11px;font-weight:400;color:#666;margin-top:3px}
@@ -389,7 +389,7 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
       .meta-row{display:flex;gap:20px;margin:4px 0;font-size:11px}
       table{width:100%;border-collapse:collapse;margin-top:10px}
       th,td{border:1px solid #000;padding:4px 6px;font-size:11px}
-      th{background:#f0f0f0;text-align:center}
+      th{background:#fff;text-align:center}
       .total-row td{font-weight:bold}
       .sign-row{display:flex;justify-content:space-between;margin-top:40px;text-align:center}
       *{box-sizing:border-box}
@@ -500,9 +500,9 @@ td{border:1px solid #333;padding:2px 3px;font-size:11px}
   .meta-cell:last-child{border-right:none;width:auto}
   .meta-label{font-size:11px;color:#666}
   .meta-val{font-weight:700;font-size:14px}
-  thead tr th{background:#c6e0b4;border:1px solid #333;padding:5px 4px;font-size:11px;text-align:center;line-height:1.4;white-space:pre-line}
+  thead tr th{background:#fff;border:1px solid #333;padding:5px 4px;font-size:11px;text-align:center;line-height:1.4;white-space:pre-line}
   tbody tr td{vertical-align:middle}
-  .tong-row td{background:#e2efda;font-weight:700}
+  .tong-row td{background:#fff;font-weight:700}
   .foot{margin-top:20px;display:table;width:100%;padding:0 20px;page-break-inside:avoid}
   .foot-col{display:table-cell;vertical-align:top;text-align:center;width:50%}
   .foot-col .sign-space{height:44px}

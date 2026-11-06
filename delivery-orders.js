@@ -1865,7 +1865,7 @@ function PrintByCustomerModal({orders,customers,products,company,trips=[],initia
   const toggleAll=checked=>setSelected(p=>{const n={...p};filtered.forEach(o=>{n[o.id]=checked;});return n;});
   const toggleOne=(id,checked)=>setSelected(p=>({...p,[id]:checked}));
 
-  const [sendingA4,setSendingA4]=useState(false);const [portrait,setPortrait]=useState(false);
+  const [sendingA4,setSendingA4]=useState(false);const [portrait,setPortrait]=useState(false);const [mobilePrintRoute,setMobilePrintRoute]=useState(()=>scfIsPhonePrint()?'cloud':'');
   const doPrint=async()=>{
     if(sendingA4)return;
     if(!selectedOrders.length){window.showToast('Chọn ít nhất 1 đơn để in!','warn');return;}
@@ -1873,10 +1873,10 @@ function PrintByCustomerModal({orders,customers,products,company,trips=[],initia
     const htmlForOrders=items=>scfA4OrientationHtml(scfDeliveryInvoiceHtml(templateForOrder(items[0]),items,company),portrait);
     const printHtml=htmlForOrders(selectedOrders);
     if(!tripOnlyId&&!simulate&&(selectionOnly||window.scfShouldUsePrintAgent?.())){
-      setSendingA4(true);try{await scfAccountingPrintA4({selectedOrders,trips,currentUser,getLatest:getLatest||(()=>({user:currentUser,orders})),htmlForOrders,templateForOrder:selectionOnly?templateForOrder:undefined});window.showToast('Đã gửi đơn tới máy in A4.','success');}catch(error){window.showToast(error.message||'Chưa gửi được đơn.','error');}finally{setSendingA4(false);}return;
+      setSendingA4(true);try{await scfAccountingPrintA4({selectedOrders,trips,currentUser,getLatest:getLatest||(()=>({user:currentUser,orders})),htmlForOrders,templateForOrder:selectionOnly?templateForOrder:undefined,mobilePrintRoute});window.showToast('Đã gửi đơn tới máy in A4.','success');}catch(error){window.showToast(error.message||'Chưa gửi được đơn.','error');}finally{setSendingA4(false);}return;
     }
     if(simulate||window.scfShouldUsePrintAgent?.()){
-      window.scfQueueA4Print(printHtml,{title:'Phiếu giao hàng · '+selectedOrders.length+' đơn',simulate,tripContext:tripOnlyId?{tripId:tripOnlyId,orderIds:selectedOrders.map(o=>String(o.id)),mode:'delivery'}:undefined})
+      window.scfQueueA4Print(printHtml,{mobilePrintRoute,title:'Phiếu giao hàng · '+selectedOrders.length+' đơn',simulate,tripContext:tripOnlyId?{tripId:tripOnlyId,orderIds:selectedOrders.map(o=>String(o.id)),mode:'delivery'}:undefined})
         .then(()=>window.showToast('Đã gửi '+selectedOrders.length+' đơn tới Canon 2900.','success'))
         .catch(error=>window.showToast(error?.message||'Chưa gửi được lệnh in tới Canon 2900.','error'));
       return;
@@ -1891,6 +1891,7 @@ function PrintByCustomerModal({orders,customers,products,company,trips=[],initia
   return h(Modal,{title:tripOnlyId?'In phiếu giao hàng trong chuyến':'In phiếu giao hàng theo khách hàng',lg:true,onClose},
     tripOnlyId&&h('p',{className:'dm-hint'},'Máy in A4: '+(scfPrintAgentSettings({trip:true}).a4AgentId||scfPrintAgentSettings({trip:true}).agentId||'SCF-PC-01')),
     selectionOnly?h('p',null,'Chỉ in '+orders.length+' đơn đã chọn từ danh sách kế toán.'):tripOnlyId?h('p',{className:'delivery-print-trip-scope'},h('b',null,selectedTrip?.shiftName||'Chuyến đã chọn'),' · '+(selectedTrip?.deliveryDate||'')+' · '+(selectedTrip?.driverName||'Chưa có lái xe')):fields(id=>{const customer=customers.find(c=>String(c.id)===id);if(customer)setTpl(resolveOrderPrintTemplate({},customer));}),
+    h(ScfA4RouteChoices,{value:mobilePrintRoute,onChange:setMobilePrintRoute,disabled:sendingA4}),
     h('label',{style:{display:'flex',gap:8,alignItems:'center',padding:'10px 0'}},h('input',{type:'checkbox','aria-label':'In giấy dọc',checked:portrait,onChange:e=>setPortrait(e.target.checked)}),'In giấy dọc (bỏ tích: giấy ngang)'),
     h(F,{label:'Mẫu in'},h('select',{'aria-label':'Mẫu in',value:tpl,onChange:e=>setTpl(e.target.value)},selectionOnly&&h('option',{value:'auto'},'Tự động theo khách hàng'),PRINT_TEMPLATES.map(t=>h('option',{key:t.id,value:t.id},t.name)))),
     tripOnlyId&&h('p',{style:{fontSize:12,color:'var(--tx2)'}},'Mẫu in áp dụng cho các phiếu đã chọn bên dưới.'),
@@ -5053,7 +5054,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         (auditActive||hasDateFilter||fPoint||fCustomer||fProduct||fTime||fArea||fTripGroup||fNote||fTripId||fTripDate||fTripShift||fTripDriver||filter!=='all')&&h('button',{type:'button',onClick:resetDeliveryFilters},h('i',{className:'ti ti-filter-x'}),' Xóa bộ lọc')
       )
     ),
-    summaryPrintTrip&&h(TripSummaryPrintOptions,{trip:summaryPrintTrip,onClose:()=>setSummaryPrintTrip(null),onPrint:include=>{scfPrintTripSummary(summaryPrintTrip,orders,products,customers,shifts,include);setSummaryPrintTrip(null);}}),
+    summaryPrintTrip&&h(TripSummaryPrintOptions,{trip:summaryPrintTrip,onClose:()=>setSummaryPrintTrip(null),onPrint:(include,portrait,mobilePrintRoute)=>{scfPrintTripSummary(summaryPrintTrip,orders,products,customers,shifts,include,portrait,mobilePrintRoute);setSummaryPrintTrip(null);}}),
     driverEditTripId&&tripById.get(String(driverEditTripId))&&h(DeliveryTripDriverModal,{key:driverEditTripId,trip:tripById.get(String(driverEditTripId)),employees,onSave:saveGroupDriver,onClose:()=>setDriverEditTripId('')}),
     mobileEdit&&h(DeliveryMobileOrderEditor,{key:mobileEdit.id,order:mobileEdit,customers,canEditDelivered:canMobileEditDelivered(mobileEdit),onSave:saveMobileOrder,onClose:()=>setMobileEdit(null)}),
     isMobile&&totalPages>1&&renderPagination('bottom'),

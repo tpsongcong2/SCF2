@@ -46,13 +46,13 @@ function AccountingOrdersCompact({orders,customers,products,prodCats,quotes,empl
    onDispatchTrip(id);
   }catch(error){window.showToast(error.message,'warn');}finally{dispatchInFlight.current=false;setDispatching(false);}
  };
- const printSummary=async(includeReport,portrait)=>{
+ const printSummary=async(includeReport,portrait,mobilePrintRoute)=>{
   if(summaryInFlight.current)return;summaryInFlight.current=true;
   try{
    const snapshot=()=>{guard();const live=getLatest();if(!scfCanAccountingPrintLabels(live.user))throw Error('Bạn chưa được cấp quyền in.');const trip=live.trips.find(t=>String(t.id)===String(summaryTripId));if(!trip||trip.status==='cancelled')throw Error('Chuyến không còn hợp lệ.');const known=new Set(live.orders.map(o=>String(o.id)));if((trip.orderIds||[]).some(id=>!known.has(String(id))))throw Error('Chưa tải đủ đơn trong chuyến. Tải lại trước khi in tổng.');const members=tripMembers(trip,live.orders);if(!members.length)throw Error('Chuyến chưa có đơn để in.');return {trip,members,products:live.products||products};};
    const data=snapshot(),stamp=JSON.stringify(data),validate=()=>{if(JSON.stringify(snapshot())!==stamp)throw Error('Đơn hoặc chuyến vừa thay đổi. Mở lại để in đúng dữ liệu.');};
    const html=scfA4OrientationHtml(scfTripSummaryPrintHtml(data.trip,data.members,data.products,customers,shifts,includeReport),portrait);
-   await scfQueueA4Print(html,{title:'Đơn tổng chuyến · '+data.trip.deliveryDate+' · '+(data.trip.shiftName||''),beforeEnqueue:validate,tripContext:{tripId:data.trip.id,orderIds:data.members.map(o=>String(o.id)),mode:'summary',accountingPrint:true}});
+   await scfQueueA4Print(html,{mobilePrintRoute,title:'Đơn tổng chuyến · '+data.trip.deliveryDate+' · '+(data.trip.shiftName||''),beforeEnqueue:validate,tripContext:{tripId:data.trip.id,orderIds:data.members.map(o=>String(o.id)),mode:'summary',accountingPrint:true}});
    setSummaryTripId('');window.showToast('Đã gửi đơn tổng chuyến tới SCF10.','success');
   }catch(error){window.showToast(error.message||'Chưa in được đơn tổng chuyến.','error');}finally{summaryInFlight.current=false;}
  };
@@ -74,7 +74,7 @@ function AccountingOrdersCompact({orders,customers,products,prodCats,quotes,empl
    h('div',{className:'accounting-trip-control'},h('span',{className:'accounting-trip-label'},'Chuyến giao'),
     h('div',{className:'accounting-trip-action-row'},
      h('div',{className:'accounting-trip-identity'},button(h(React.Fragment,null,h('span',null,h('b',null,selectedTrip?.shiftName||selectedTrip?.id||(tripId==='__none'?'Chưa xếp chuyến':'Tất cả chuyến')),selectedTrip&&h('small',null,'– '+(driverName||'Chưa có lái xe'))),h('i',{className:'ti ti-chevron-down','aria-hidden':true})),()=>setTripPicker(true),{'aria-label':'Chọn chuyến giao',className:'accounting-trip-picker','data-scf-action':'view'}),
-      selectedTrip&&!driverName&&button(h('i',{className:'ti ti-pencil','aria-hidden':true}),()=>{try{guard();setDriverTripId(String(selectedTrip.id));}catch(error){window.showToast(error.message,'warn');}},{className:'accounting-trip-driver-edit','aria-label':'Chọn lái xe chuyến '+(selectedTrip.shiftName||selectedTrip.id),title:'Chọn lái xe',disabled:!canManageTripDriver||!deliveryTripDriverEditable(selectedTrip)||!!window.__SCF_ACCESS_CONTEXT?.readOnly,'data-scf-action':'write'})),
+      selectedTrip&&button(h('i',{className:'ti ti-pencil','aria-hidden':true}),()=>{try{guard();if(!canManageTripDriver||!deliveryTripDriverEditable(selectedTrip))throw Error('Chỉ được đổi lái xe khi chuyến chưa giao lái xe.');setDriverTripId(String(selectedTrip.id));}catch(error){window.showToast(error.message,'warn');}},{className:'accounting-trip-driver-edit','aria-label':(driverName?'Đổi lái xe chuyến ':'Chọn lái xe chuyến ')+(selectedTrip.shiftName||selectedTrip.id),title:driverName?'Đổi lái xe':'Chọn lái xe',disabled:!canManageTripDriver||!deliveryTripDriverEditable(selectedTrip)||!!window.__SCF_ACCESS_CONTEXT?.readOnly,'data-scf-action':'write'})),
      button(recalled?'Hủy giao':'Giao LX',changeDispatch,{className:'bp accounting-trip-dispatch',disabled:dispatchDisabled,'data-scf-action':'write','aria-label':recalled?'Hủy giao lái xe':'Giao LX',title:!driverName?'Chọn lái xe trước khi giao chuyến':!canDispatchTrip?'Chưa có quyền giao chuyến':recalled&&selectedTrip?.startTime?'Chuyến đã bắt đầu giao':''}),
      button(h('i',{className:'ti ti-printer','aria-hidden':true}),()=>{try{guard();if(!selectedTrip||!printAllowed)throw Error('Chọn chuyến có quyền in trước.');setSummaryTripId(String(selectedTrip.id));}catch(error){window.showToast(error.message,'warn');}},{className:'accounting-trip-print','aria-label':'In đơn tổng chuyến',title:'In đơn tổng chuyến',disabled:!selectedTrip||!printAllowed,'data-scf-action':'write'})),
     selectedTrip&&h('small',{className:'accounting-trip-state',role:'status'},recalled?'Đã giao lái xe':driverName?'Chưa giao lái xe':'Chọn lái xe bằng nút bút chì để giao chuyến.'))),
