@@ -1970,3 +1970,12 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 .production-odd-items{flex:1;min-width:0;columns:2 95px;column-gap:12px;padding-top:4px}
 .production-odd-items>span{display:block;break-inside:avoid;white-space:nowrap;font-size:15px;padding:2px 0}
 @media(max-width:380px){.production-mobile-code-grid{grid-template-columns:1fr}.production-odd-items{columns:2 90px}}
+/* V823: code details open directly with the selected subshift. */
+.production-code-detail .production-mobile-code-grid>div{font-size:15px}
+.production-code-detail .production-mobile-code-grid strong{font-size:21px}
+.production-code-detail .production-mobile-code-grid small{font-size:15px}
+.production-code-detail .production-odd-items>span{font-size:17px}
+/* V824: enlarge production quantities on mobile subshift headers by two sizes. */
+@media(max-width:600px){.production-subshift-inventory>b{font-size:14px}}
+/* V825: same quantity size for night/afternoon totals and early/late subshifts. */
+@media(max-width:600px){.production-inventory-row>b,.production-subshift-inventory>b{font-size:14px}}
