@@ -440,10 +440,12 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
             h('details',{className:'production-source-section'},
               h('summary',null,h('span',null,'Xem mã lẻ'),h('i',{className:'ti ti-chevron-down','aria-hidden':true})),
               h('div',{className:'production-code-detail'},
-                h('small',null,(row.rule.start||'')+' – '+(row.rule.end||'')),
-                row.stockMetrics?.field&&h('small',null,'Tồn sử dụng '+(row.stockMetrics.field==='stockEvening'?'1h':row.stockMetrics.field==='stockAfternoon'?'13h':'9h')+': '+stockQtyText(row.display.stock)+' '+(row.display.unit||'')),
-                h('div',{className:'production-mobile-code-grid'},h('div',null,'Mã chẵn',h('strong',null,row.fullCodes+' mã'),h('small',null,row.pack?row.pack+' kg / mã':'Chưa có quy cách')),h('div',null,'Mã lẻ',h('strong',null,Object.values(row.oddCodes).reduce((a,b)=>a+b,0)+' mã'))),
-                h('div',{className:'production-source-odd'},scfProductionOddText(row)),
+                h('div',{className:'production-mobile-code-grid'},
+                  h('div',null,'Mã chẵn',h('strong',null,row.fullCodes+' mã'),h('small',null,row.pack?row.pack+' kg / mã':'Chưa có quy cách')),
+                  h('div',{className:'production-odd-compact'},
+                    h('strong',null,Object.values(row.oddCodes||{}).reduce((a,b)=>a+b,0)+' mã lẻ :'),
+                    h('div',{className:'production-odd-items'},Object.entries(row.oddCodes||{}).sort((a,b)=>Number(a[0])-Number(b[0])).map(([kg,count])=>h('span',{key:kg},count+' mã '+Number(kg).toLocaleString('vi-VN')+' kg')),!Object.keys(row.oddCodes||{}).length&&h('span',null,'Không có mã lẻ')))
+                ),
                 row.unknownCodes>0&&h('div',{className:'production-mobile-error'},row.unknownCodes+' dòng chưa có quy cách/khối lượng, chưa tính mã.')
               )
             ),
