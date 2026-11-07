@@ -1004,6 +1004,17 @@ const MemoImportProductSearch=React.memo(ImportProductSearch,(prev,next)=>
 );
 
 /* ─── IMPORT PREVIEW MODAL ─── */
+function scfStoppedImportPointIssue(order,customers){
+  const norm=value=>normalizeLookupText(value||'');
+  const matches=(customers||[]).flatMap(customer=>(customer.points||[]).filter(point=>{
+    const cid=String(order.customerId||order.custId||''),pid=String(order.pointId||order.ptId||'');
+    if(cid&&cid!==String(customer.id))return false;
+    return pid?String(point.id)===pid:[point.name,...(point.nameAliases||[])].some(name=>norm(name)===norm(order.pointName));
+  }).map(point=>({customer,point})));
+  if(matches.some(({point})=>!point.customerStoppedAt&&scfPointCoversOrder(point,order)))return '';
+  const stopped=matches.filter(({point})=>point.customerStoppedAt&&!scfPointCoversOrder(point,order));
+  return stopped.length?'Địa điểm '+(order.pointName||'')+' đã ngừng bán: '+stopped.map(({customer,point})=>customer.name+' (từ '+new Date(point.customerStoppedAt).toLocaleString('vi-VN')+')').join(', '):'';
+}
 function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, products=[], prodCats=[], prodShifts, currentUser, onLocateExisting, onClose}) {
   const {newOrders=[], dupOrders:rawDupOrders=[], unknownPts=[], incompleteOrders=[], suspiciousDateRows=[], columnOffset=0} = data||{};
   const dupOrders=rawDupOrders.filter(order=>typeof scfWarehouseOrders==='undefined'||!(order.lines||[]).some(line=>scfWarehouseOrders.pac(line,products)));
@@ -1087,7 +1098,8 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
   const lineCheck=typeof scfWarehouseOrders!=='undefined'?scfWarehouseOrders.importRows(orders,candidateOrders,products):{orders:candidateOrders,skipped:[],conflicts:[]};
   const toImport = lineCheck.orders.filter(o=>o.warehouseImportLineChecked||!findExistingDeliveryOrder(orders,o));
   const resolvedProductForLine=line=>productById(line?.productId)||productById(productAssign[productGroupKeyForLine(line)]);
-  const importableOrders=toImport.filter(order=>!skipPoint[order.pointName]).map(order=>({
+  const stoppedImportOrders=toImport.map(order=>({order,issue:scfStoppedImportPointIssue(order,customers)})).filter(item=>item.issue);
+  const importableOrders=toImport.filter(order=>!skipPoint[order.pointName]&&!scfStoppedImportPointIssue(order,customers)).map(order=>({
     ...order,
     lines:(order.lines||[]).filter(line=>!!resolvedProductForLine(line))
   })).filter(order=>order.lines.length>0);
@@ -1162,6 +1174,8 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
         return {...line,productId:mapped.id,productName:mapped.name,unit:mapped.unit||line.unit,weightPerUnit:mapped.weightPerUnit||0};
       })},currentUser,'File Excel khách hàng');
     });
+    const blockedStopped=preparedDrafts.map(order=>scfStoppedImportPointIssue(order,customers)).filter(Boolean);
+    if(blockedStopped.length){window.showToast(blockedStopped.join(' · ')+'; chưa lưu đơn.','error',12000);return;}
     // Mã trong file xem trước chỉ là mã tạm. Khi nhập thật, tạo mã có ngày
     // và mã nhân viên để hai kế toán hoặc hai lần import không đụng nhau.
     const finalLineCheck=typeof scfWarehouseOrders!=='undefined'?scfWarehouseOrders.importRows(orders,preparedDrafts,products):{orders:preparedDrafts,skipped:[],conflicts:[]};
@@ -1229,6 +1243,7 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
       )
     ),
 
+    stoppedImportOrders.length>0&&h('div',{role:'alert',style:{background:'#FDECEC',border:'1px solid #c62828',padding:12,marginBottom:12,color:'#a32020'}},h('b',null,'Cảnh báo: '+stoppedImportOrders.length+' đơn có địa điểm đã ngừng bán — không được import'),stoppedImportOrders.map(({order,issue})=>h('div',{key:order.id},'Dòng '+(order._importRow||'?')+' · '+order.deliveryDate+' · '+issue)),h('small',null,'Sửa địa điểm trong Excel rồi nhập lại. Các đơn hợp lệ khác vẫn có thể import.')),
     suspiciousDateRows.length>0&&h('div',{style:{background:'#FDECEC',border:'2px solid #D9534F',borderRadius:'var(--r)',padding:'12px',marginBottom:'1rem',color:'#8B1E1E'}},
       h('div',{style:{fontWeight:700,marginBottom:6}},'⛔ Chưa thể import: năm giao bất thường'),
       h('div',{style:{fontSize:12,lineHeight:1.5}},'Các dòng '+suspiciousDateRows.slice(0,20).map(item=>item.row+' ('+item.date+')').join(', ')+(suspiciousDateRows.length>20?'…':'')+'. Năm giao chỉ được nằm trong khoảng '+(new Date().getFullYear()-1)+'–'+(new Date().getFullYear()+1)+'. Hãy sửa năm trong file Excel rồi chọn import lại.'),
@@ -4970,7 +4985,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
                     };
                     // Find matching point in customers
                     customers.forEach(c=>(c.points||[]).forEach(pt=>{
-                      if(pt.name.trim().toUpperCase()===point.toUpperCase()){
+                      if(pt.name.trim().toUpperCase()===point.toUpperCase()&&scfPointCoversOrder(pt,{deliveryDate:dStr,deliveryTime:time})){
                         orderMap[key].pointId=pt.id;
                         orderMap[key].pointName=pt.name;
                         orderMap[key].customer=c.name;
