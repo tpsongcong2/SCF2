@@ -601,9 +601,13 @@ function scfDriverReportDrivers(trips,employees){
   const counts=new Map();options.forEach(item=>counts.set(item.name,(counts.get(item.name)||0)+1));
   return {tripKey,options:options.map(item=>({...item,label:item.name+(counts.get(item.name)>1?' ('+item.key.replace(/^id:|^name:/,'')+')':'')}))};
 }
+function scfDriverReportDeliveredQty(line){
+ if(line?.qtyDeliveredDefault===true&&!line.deliveredAt&&!line.deliveredBy&&Number.isFinite(Date.parse(line.qtyDeliveredDefaultUntil))&&Date.now()>=Date.parse(line.qtyDeliveredDefaultUntil))return 0;
+ return line?.qtyDelivered!==undefined&&line.qtyDelivered!==null&&line.qtyDelivered!==''?numFmt(line.qtyDelivered):numFmt(line?.qtyProd??line?.qty??line?.quantity??line?.qtyInvoice??0);
+}
 function scfDriverDeliveredWeight(orders,products){
  const byId=new Map((products||[]).map(p=>[String(p.id),p]));
- return orders.reduce((sum,o)=>sum+(o.lines||[]).reduce((n,l)=>{const p=byId.get(String(l.productId))||{},q=Math.max(0,numFmt(l.qtyDelivered)||0),unit=String(l.unit||p.unit||'').toLowerCase();return n+q*(['kg','kgs','kilogram','kilograms'].includes(unit)?1:Math.max(0,numFmt(p.weightPerUnit||l.weightPerUnit)||0));},0),0);
+ return orders.reduce((sum,o)=>sum+(o.lines||[]).reduce((n,l)=>{const p=byId.get(String(l.productId))||{},q=Math.max(0,scfDriverReportDeliveredQty(l)||0),unit=String(l.unit||p.unit||'').toLowerCase();return n+q*(['kg','kgs','kilogram','kilograms'].includes(unit)?1:Math.max(0,numFmt(p.weightPerUnit||l.weightPerUnit)||0));},0),0);
 }
 function scfDriverTripPay(trip,weight,orders){
  if(!(weight>0))return 0;
@@ -693,6 +697,15 @@ function scfDriverReportExcelWorkbook(ExcelJS,{report,month,driverName,activeShi
   return workbook;
 }
 
+function scfDriverPayByType(rows){
+ const groups=new Map();
+ for(const row of rows||[]){
+  const type=row.deliveryShift||'Chưa có ca';
+  const item=groups.get(type)||{type,trips:0,weight:0,pay:0};
+  item.trips++;item.weight+=Number(row.weight)||0;item.pay+=Number(row.totalPay)||0;groups.set(type,item);
+ }
+ return [...groups.values()].sort((a,b)=>a.type.localeCompare(b.type,'vi',{numeric:true}));
+}
 function DriverTripWorkReportTab({trips,orders,products,customers,employees,currentUser,onOpenTrips}){
   const[month,setMonth]=useLS('scf_driver_report_month_'+currentUser.id,isoDate().slice(0,7));
   const[driverFilter,setDriverFilter]=useLS('scf_driver_report_driver_'+currentUser.id,'');
@@ -770,6 +783,10 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
         h('h3',null,'Tóm tắt tháng '+month.slice(5,7)+'/'+month.slice(0,4)+' · '+(selectedName||'Lái xe')),
         h('div',{className:'driver-report-metrics'+(canViewMonthWeight?'':' without-weight')},metric('Tổng chuyến',report.total.trips),metric('Ngày có chuyến',report.workDays),metric('Ngày nghỉ',report.restDays,report.elapsedDays+' ngày đã tính'),canViewMonthWeight&&metric('Khối lượng tháng',fmt(report.total.weight)+' kg')),
         h('p',{className:'driver-report-note'},'Ngày nghỉ = ngày không có chuyến có hàng. '+(month===today.slice(0,7)?'Tính từ đầu tháng đến hôm nay ('+today.slice(8,10)+'/'+today.slice(5,7)+').':month>today.slice(0,7)?'Tháng chưa bắt đầu nên chưa tính ngày nghỉ.':'Tính toàn bộ '+report.daysInMonth+' ngày trong tháng.')+' Tổng chuyến gồm các chuyến có hàng trong cả tháng.'),
+        isAdmin&&h('div',{className:'driver-pay-by-type'},h('h4',null,'Bảng chuyến và tiền công · '+(selectedName||'Lái xe')),
+          h('div',{className:'tw'},h('table',null,
+            h('thead',null,h('tr',null,...['Loại chuyến','Số chuyến','Tiền công'].map(label=>h('th',{key:label},label)))),
+            h('tbody',null,scfDriverPayByType(report.rows).map(item=>h('tr',{key:item.type},h('td',null,item.type),h('td',null,item.trips),h('td',null,fmt(item.pay)+' đ'))),h('tr',{style:{fontWeight:700}},h('td',null,'Tổng tháng'),h('td',null,report.total.trips),h('td',null,fmt(report.total.pay)+' đ')))))),
         h('h4',null,'Số chuyến theo ca giao'),
         report.shifts.length?h('div',{className:'driver-report-shifts'},report.shifts.map(item=>h('button',{key:item.name,type:'button',className:'driver-report-shift'+(activeShifts.includes(item.name)?' active':''),'aria-pressed':activeShifts.includes(item.name),onClick:()=>toggleShift(item.name)},h('span',null,item.name),h('b',null,item.trips+' chuyến'),canViewMonthWeight&&h('small',null,fmt(item.weight)+' kg')))):h('p',{className:'driver-report-note'},'Chưa có chuyến có hàng trong tháng này.'),
         h('div',{className:'driver-report-totals'},h('span',null,report.total.orders+' đơn'),h('span',null,report.total.completed+' chuyến đã hoàn thành'),isAdmin&&h('span',null,'Công: '+fmt(report.total.work)),isAdmin&&h('span',null,'Tiền công: '+fmt(report.total.pay)+' đ'))
