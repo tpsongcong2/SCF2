@@ -431,12 +431,12 @@ function OrderDetailLine({line,products,prodCats,prodShifts,deliveryDate,deliver
     // SL Dat
     h('div',null,
       h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:3}},'SL Đặt'),
-      h('input',{type:'number','aria-label':'SL đặt '+(line.productName||'sản phẩm'),min:0,value:line.qtyProd,onChange:e=>onChange({...line,qtyProd:numFmt(e.target.value)}),style:{fontSize:13}})
+      h('input',{type:'number','aria-label':'SL đặt '+(line.productName||'sản phẩm'),min:0,value:line.qtyProd,onChange:e=>onChange({...line,qtyProd:e.target.value===''?'':numFmt(e.target.value)}),style:{fontSize:13}})
     ),
     // SL HĐ
     h('div',null,
       h('div',{style:{fontSize:11,color:'var(--tx2)',marginBottom:3}},'SL HĐ'),
-      h('input',{type:'number','aria-label':'SL HĐ '+(line.productName||'sản phẩm'),min:0,value:line.qtyInvoice,onChange:e=>onChange({...line,qtyInvoice:numFmt(e.target.value)}),style:{fontSize:13}})
+      h('input',{type:'number','aria-label':'SL HĐ '+(line.productName||'sản phẩm'),min:0,value:line.qtyInvoice,onChange:e=>onChange({...line,qtyInvoice:e.target.value===''?'':numFmt(e.target.value)}),style:{fontSize:13}})
     ),
     // Giá mua
     showPurchasePrice&&h('div',null,

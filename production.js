@@ -120,6 +120,7 @@ function scfProductionLineCodes(line,product={}){
   const unit=String(line.unit||product.unit||'').trim().toLowerCase();
   const weight=['kg','kgs','kilogram','kilograms'].includes(unit)?qty:qty*(numFmt(product.weightPerUnit||line.weightPerUnit)||0);
   if(!pack||!(weight>0))return {pack,full:0,remainder:0,unknown:qty>0};
+  if(/\bpac\b/i.test(name))return {pack,full:Math.floor(weight/pack),remainder:0,unknown:false};
   const {full,remainder}=scfLabelPackParts(weight,pack,true);
   return {pack,full,remainder,unknown:false};
 }
@@ -437,12 +438,11 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
         h('div',{className:'production-product-expanded'},product.rows.map(row=>h('details',{key:actualKey(row.prodDate,row.shift,row.productId),className:'production-source-shift'},
           h('summary',{className:'production-shift-toggle production-subshift-inventory '+(scfClosingGroupSafe(row.shiftGroup)==='night'?'night':scfClosingGroupSafe(row.shiftGroup)==='afternoon'?'afternoon':'')},h('span',null,scfProductionShortShiftName(row.shiftName),row.display.pac&&h('small',{className:'production-pac-count'},' ('+stockQtyText(row.qtyProd)+' '+row.unit+')')),h('b',{'aria-label':'SL đặt thực tế',className:'production-subshift-demand'},row.display.qty===null?'Chưa quy đổi':stockQtyText(row.display.qty)+' '+(row.display.unit||'')),h('b',{'aria-label':'Tồn sử dụng',className:'production-subshift-stock',title:'Phần tồn được phân bổ cho ca này'},stockQtyText(row.display.stock)),h('b',{'aria-label':'SL cần SX',className:'production-subshift-needed'},stockQtyText(row.display.needed)),h('i',{className:'ti ti-chevron-down','aria-hidden':true})),
           h('div',{className:'production-shift-sections'},
-            h('details',{className:'production-source-section'},
-              h('summary',null,h('span',null,'Xem mã lẻ'),h('i',{className:'ti ti-chevron-down','aria-hidden':true})),
+            h('div',{className:'production-codes-visible'},
               h('div',{className:'production-code-detail'},
                 h('div',{className:'production-mobile-code-grid'},
                   h('div',null,'Mã chẵn',h('strong',null,row.fullCodes+' mã'),h('small',null,row.pack?row.pack+' kg / mã':'Chưa có quy cách')),
-                  h('div',{className:'production-odd-compact'},
+                  !/\bpac\b/i.test(row.productName||'')&&h('div',{className:'production-odd-compact'},
                     h('strong',null,Object.values(row.oddCodes||{}).reduce((a,b)=>a+b,0)+' mã lẻ :'),
                     h('div',{className:'production-odd-items'},Object.entries(row.oddCodes||{}).sort((a,b)=>Number(a[0])-Number(b[0])).map(([kg,count])=>h('span',{key:kg},count+' mã '+Number(kg).toLocaleString('vi-VN')+' kg')),!Object.keys(row.oddCodes||{}).length&&h('span',null,'Không có mã lẻ')))
                 ),
