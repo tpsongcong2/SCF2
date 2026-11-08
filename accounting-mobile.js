@@ -1,3 +1,6 @@
+function scfAccountingFilterDate(raw,trip,basis){
+ return toIsoDate(basis==='trip'?(trip?.deliveryDate||raw.deliveryDate):raw.deliveryDate);
+}
 /* Compact accounting entry uses existing order, trip, production and scoped print operations. */
 function scfAccountingDeliveredRecorded(order,line){
  const value=line?.qtyDelivered;
@@ -27,11 +30,12 @@ function AccountingOrdersCompact({orders,customers,products,prodCats,quotes,empl
  const dispatchInFlight=useRef(false),summaryInFlight=useRef(false);
  const fmt=value=>Number(value||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
  const [date,setDate]=useState(isoDate()),[area,setArea]=useState(''),[tripId,setTrip]=useState(''),[query,setQuery]=useState(''),[limit,setLimit]=useState(20),[selected,setSelected]=useState([]),[print,setPrint]=useState(null),[schedule,setSchedule]=useState(null),[pendingPrint,setPendingPrint]=useState(null);
+ const[dateBasis,setDateBasis]=useState('trip');
  const actorId=String(currentUser?.id||''),guard=()=>{const ctx=window.__SCF_ACCESS_CONTEXT;if(String(ctx?.employeeId||actorId)!==actorId||ctx?.readOnly||!canEdit)throw Error('Tài khoản hoặc quyền đã thay đổi.');};
  const rows=React.useMemo(()=>orders.map(raw=>({raw,ctx:contextForOrder(raw),trip:tripForOrder(raw)})),[orders,customers,trips,prodShifts]);
- const matching=React.useMemo(()=>rows.filter(({raw,ctx,trip})=>raw.status!=='cancelled'&&toIsoDate(raw.deliveryDate)===date&&(!area||String(ctx.area||'').trim()===area)&&(!tripId||(tripId==='__none'?!trip:String(trip?.id)===tripId))&&(!query||normalizeLookupText([ctx.pointName,ctx.customer,trip?.shiftName,...(raw.lines||[]).map(l=>l.productName)].join(' ')).includes(normalizeLookupText(query)))),[rows,date,area,tripId,query]);
+ const matching=React.useMemo(()=>rows.filter(({raw,ctx,trip})=>raw.status!=='cancelled'&&scfAccountingFilterDate(raw,trip,dateBasis)===date&&(!area||String(ctx.area||'').trim()===area)&&(!tripId||(tripId==='__none'?!trip:String(trip?.id)===tripId))&&(!query||normalizeLookupText([ctx.pointName,ctx.customer,trip?.shiftName,...(raw.lines||[]).flatMap(l=>[l.productName,l.warehouseSourcePointName])].join(' ')).includes(normalizeLookupText(query)))),[rows,date,dateBasis,area,tripId,query]);
  const areas=[...new Set(rows.map(r=>String(r.ctx.area||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
- const tripOptions=[...new Map(rows.filter(r=>toIsoDate(r.raw.deliveryDate)===date&&r.trip).map(r=>[String(r.trip.id),r.trip])).values()];
+ const tripOptions=[...new Map(rows.filter(r=>scfAccountingFilterDate(r.raw,r.trip,dateBasis)===date&&r.trip).map(r=>[String(r.trip.id),r.trip])).values()];
  const selectedTrip=tripOptions.find(t=>String(t.id)===tripId)||null;
  const driverName=selectedTrip?.driverName||employees.find(e=>String(e.id)===String(selectedTrip?.driverId||''))?.name||'';
  const recalled=!!selectedTrip?.driverDispatchedAt;
@@ -58,7 +62,7 @@ function AccountingOrdersCompact({orders,customers,products,prodCats,quotes,empl
  };
  const visible=matching.slice(0,limit),ids=matching.map(r=>String(r.raw.id)),chosen=orders.filter(o=>selected.includes(String(o.id))&&o.status!=='cancelled');
  const printAllowed=canEdit&&scfCanAccountingPrintLabels(currentUser),closed=o=>!canEditOrder(o);
- useEffect(()=>{setSelected([]);setLimit(20);},[date,area,tripId,query]);
+ useEffect(()=>{setSelected([]);setLimit(20);},[date,dateBasis,area,tripId,query]);
  useEffect(()=>{setSelected(prev=>prev.filter(id=>orders.some(o=>String(o.id)===id&&o.status!=='cancelled')));},[orders]);
  useEffect(()=>{if(!pendingPrint)return;const found=orders.find(o=>pendingPrint.id?String(o.id)===pendingPrint.id:!pendingPrint.ids.includes(String(o.id))&&String(o.customerId)===String(pendingPrint.customerId)&&o.deliveryDate===pendingPrint.deliveryDate&&o.deliveryTime===pendingPrint.deliveryTime&&String(o.pointId)===String(pendingPrint.pointId));if(found){setPendingPrint(null);setPrint({ids:[String(found.id)],kind:'invoice'});}},[orders,pendingPrint]);
  const button=(label,fn,extra={})=>h('button',{type:'button',onClick:fn,...extra},label);
@@ -70,7 +74,8 @@ function AccountingOrdersCompact({orders,customers,products,prodCats,quotes,empl
   h('div',{className:'accounting-page-heading'},h('div',null,h('h2',null,'Đơn hàng kế toán'),h('small',null,'Danh sách gọn · Ngày giao')),canEdit&&button('+ Tạo đơn',()=>{try{guard();onOpenNew();}catch(e){window.showToast(e.message,'warn');}},{className:'bp','data-scf-action':'write'})),
   h('div',{className:'accounting-filters'},h('div',{className:'accounting-day-buttons'},[-1,0,1].map((offset,i)=>{const d=new Date(isoDate()+'T00:00:00');d.setDate(d.getDate()+offset);const value=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');return button(['Hôm qua','Hôm nay','Ngày mai'][i],()=>{setTrip('');setDate(value);},{key:offset,'aria-pressed':date===value});})),
    h('input',{'aria-label':'Tìm đơn kế toán',type:'search',placeholder:'Tìm địa điểm, khách hàng, sản phẩm…',value:query,onChange:e=>setQuery(e.target.value)}),
-   h('div',{className:'accounting-filter-grid'},h('label',null,'Ngày giao',h('input',{'aria-label':'Ngày giao kế toán',type:'date',value:date,onChange:e=>{setTrip('');setDate(e.target.value);}})),select('Khu vực',area,setArea,[['','Tất cả khu vực'],...areas.map(a=>[a,a])])),
+   h('div',{className:'accounting-date-basis',role:'group','aria-label':'Lọc theo loại ngày'},...[["trip","Ngày chuyến"],["order","Ngày đơn"]].map(([value,label])=>button(label,()=>{setDateBasis(value);setTrip('');},{key:value,'aria-pressed':dateBasis===value,'data-scf-action':'view'}))),
+   h('div',{className:'accounting-filter-grid'},h('label',null,dateBasis==='trip'?'Ngày chuyến':'Ngày giao trên đơn',h('input',{'aria-label':dateBasis==='trip'?'Ngày chuyến kế toán':'Ngày đơn kế toán',type:'date',value:date,onChange:e=>{setTrip('');setDate(e.target.value);}})),select('Khu vực',area,setArea,[['','Tất cả khu vực'],...areas.map(a=>[a,a])])),
    h('div',{className:'accounting-trip-control'},h('span',{className:'accounting-trip-label'},'Chuyến giao'),
     h('div',{className:'accounting-trip-action-row'},
      h('div',{className:'accounting-trip-identity'},button(h(React.Fragment,null,h('span',null,h('b',null,selectedTrip?.shiftName||selectedTrip?.id||(tripId==='__none'?'Chưa xếp chuyến':'Tất cả chuyến')),selectedTrip&&h('small',null,'– '+(driverName||'Chưa có lái xe'))),h('i',{className:'ti ti-chevron-down','aria-hidden':true})),()=>setTripPicker(true),{'aria-label':'Chọn chuyến giao',className:'accounting-trip-picker','data-scf-action':'view'}),

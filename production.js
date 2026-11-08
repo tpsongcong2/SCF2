@@ -416,7 +416,7 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
     if(!popup){window.showToast('Cho phép cửa sổ in để in đơn sản xuất tổng.','warn');return;}
     popup.document.write(html);popup.document.close();popup.onload=()=>popup.print();
   };
-  return h('div',null,
+  return h('div',{className:'production-summary-screen'},
     h('div',{className:'ptitle production-summary-title'},h('span',null,h('i',{className:'ti ti-clipboard-list',style:{fontSize:20}}),'Tổng hợp sản xuất'),onOpenClosing&&h('button',{type:'button',className:'bp','data-scf-action':'view',onClick:()=>onOpenClosing({workshop:['banh','bot'].includes(workshop)?workshop:'bun'})},'Chốt cuối ca')),
     h('div',{className:'card production-summary-filters',style:{marginBottom:'1.25rem'}},
       h('div',{className:'g3'},
@@ -440,7 +440,7 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
           h('div',{className:'production-shift-sections'},
             h('div',{className:'production-codes-visible'},
               h('div',{className:'production-code-detail'},
-                /\bpac\b/i.test(row.productName||'')?h('div',{className:'production-pac-codes'},h('strong',null,stockQtyText(row.qtyProd)+' mã PAC'),h('span',null,(row.pack?stockQtyText(row.pack)+' kg / mã':'Theo quy cách PAC'))):h('div',{className:'production-mobile-code-grid'},
+                !/\bpac\b/i.test(row.productName||'')&&h('div',{className:'production-mobile-code-grid'},
                   h('div',null,'Mã chẵn',h('strong',null,row.fullCodes+' mã'),h('small',null,row.pack?row.pack+' kg / mã':'Chưa có quy cách')),
                   !/\bpac\b/i.test(row.productName||'')&&h('div',{className:'production-odd-compact'},
                     h('strong',null,Object.values(row.oddCodes||{}).reduce((a,b)=>a+b,0)+' mã lẻ :'),

@@ -2051,3 +2051,12 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 .production-summary-screen .production-pac-codes strong{font-size:25px}
 .production-summary-screen .production-summary-filters label{font-size:17px}
 .production-summary-screen .production-summary-filters input,.production-summary-screen .production-summary-filters select{font-size:19px}
+/* V829: shared controls and labels follow the enlarged production summary. */
+.production-summary-screen .production-summary-filters .fl>label{font-size:17px}
+.production-summary-screen .production-summary-title{font-size:24px}
+.production-summary-screen .production-summary-title button{font-size:18px}
+.production-summary-screen .production-shift-sections button{font-size:18px}
+.accounting-date-basis{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
+.accounting-date-basis button{min-height:46px;font-size:16px}
+.accounting-date-basis button[aria-pressed="true"]{background:var(--pri);color:#fff;border-color:var(--pri)}
+.accounting-warehouse-point{display:block;margin-top:3px;font-size:13px;color:var(--tx2)}
