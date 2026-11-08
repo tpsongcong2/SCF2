@@ -48,12 +48,18 @@ function scfOrderAwaitingDelivery(order,trips=[]){
   if(!order||!['','pending','assigned','scheduled','planning'].includes(String(order.status||'')))return false;
   const trip=(trips||[]).find(t=>String(t.id)===String(order.tripId||''))||(!order.tripId?(trips||[]).find(t=>(t.orderIds||[]).some(id=>String(id)===String(order.id))):null);
   if(order.tripId&&!trip)return false;
-  return !trip||!trip.driverDispatchedAt&&!['active','completion_pending','completed','cancelled'].includes(trip.status);
+  if(!trip)return true;
+  if(['active','completion_pending','completed','cancelled'].includes(trip.status)||order.driverDeliveredAt)return false;
+  if(!trip.driverDispatchedAt)return true;
+  // Sending the plan to the driver does not mean physical delivery has begun.
+  return typeof scfAccountingDeparture==='function'&&scfAccountingDeparture(order,trips).before===true;
+
 }
 function scfSyncPendingDeliveryQty(order,trips=[],previousOrder){
   if(!scfOrderAwaitingDelivery(order,trips))return order;
   const previousLines=new Map((previousOrder?.lines||[]).filter(l=>l.id).map(l=>[String(l.id),l]));
   let changed=false;const lines=(order.lines||[]).map((line,index)=>{
+    if(line.deliveredAt||line.deliveredBy||line.qtyDeliveredDefault===false)return line;
     const qty=numFmt(line.qtyProd??line.qty??line.quantity??line.qtyInvoice??0);
     const old=previousOrder&&(line.id?previousLines.get(String(line.id)):previousOrder.lines?.[index]);
     if(old&&String(old.productId||'')===String(line.productId||'')&&numFmt(old.qtyProd??old.qty??old.quantity??old.qtyInvoice??0)===qty)return line;
