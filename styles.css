@@ -1979,3 +1979,6 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 @media(max-width:600px){.production-subshift-inventory>b{font-size:14px}}
 /* V825: same quantity size for night/afternoon totals and early/late subshifts. */
 @media(max-width:600px){.production-inventory-row>b,.production-subshift-inventory>b{font-size:14px}}
+/* V827: enlarge product-family totals by two font sizes. */
+.production-family-weights{font-size:15px}
+@media(max-width:600px){.production-family-weights{font-size:14px}}
