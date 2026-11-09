@@ -236,7 +236,7 @@ function TripForm({trip,orders,employees,shifts,customers,products,currentUser,i
     const allChecked=ids.every(id=>(f.orderIds||[]).includes(id));
     sf(p=>({...p,orderIds:allChecked?p.orderIds.filter(id=>!ids.includes(id)):[...new Set([...p.orderIds,...ids])]}));
   };
-  const lineQty=l=>numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||numFmt(l.qty)||numFmt(l.quantity)||0;
+  const lineQty=l=>numFmt(l.qtyProd??l.qty??l.quantity??l.qtyInvoice??0);
   const lineWeight=l=>{const prod=products?.find(p=>p.id===l.productId);const unit=String(l.unit||prod?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');const qty=lineQty(l);if(unit==='kg'||unit==='kgs'||unit==='kilogram'||unit==='kilograms')return qty;const wpu=prod?.weightPerUnit||numFmt(l.weightPerUnit)||0;return wpu*qty;};
   const orderWeight=o=>(o.lines||[]).reduce((s,l)=>s+lineWeight(l),0);
   const totalW=(f.orderIds||[]).reduce((sum,oid)=>{const o=orders.find(x=>x.id===oid);return sum+(o?orderWeight(o):0);},0);
@@ -437,7 +437,7 @@ function BulkTripModal({orders,employees,shifts,prodShifts,customers,products,tr
   const allShifts=shifts||[];
 
   const toggleShift=id=>setSelShifts(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
-  const lineQty=l=>numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||numFmt(l.qty)||numFmt(l.quantity)||0;
+  const lineQty=l=>numFmt(l.qtyProd??l.qty??l.quantity??l.qtyInvoice??0);
   const lineWeight=l=>{const prod=products?.find(p=>p.id===l.productId);const unit=String(l.unit||prod?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');const qty=lineQty(l);if(unit==='kg'||unit==='kgs'||unit==='kilogram'||unit==='kilograms')return qty;const wpu=prod?.weightPerUnit||numFmt(l.weightPerUnit)||0;return wpu*qty;};
   const orderWeight=o=>(o.lines||[]).reduce((s,l)=>s+lineWeight(l),0);
   const ordersWeight=rows=>(rows||[]).reduce((s,o)=>s+orderWeight(o),0);
@@ -940,7 +940,7 @@ function scfCreateTripOrderReader(orders,customers,products){
     weight(trip){
       const result=entry(trip);if(result.weight!==undefined)return result.weight;
       const calculated=result.orders.reduce((total,order)=>total+(order.lines||[]).reduce((sum,line)=>{
-        const product=productById.get(line.productId),qty=numFmt(line.qtyInvoice)||numFmt(line.qtyProd)||numFmt(line.qty)||numFmt(line.quantity)||0;
+        const product=productById.get(line.productId),qty=numFmt(line.qtyProd??line.qty??line.quantity??line.qtyInvoice??0);
         const unit=String(line.unit||product?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');
         return sum+(['kg','kgs','kilogram','kilograms'].includes(unit)?qty:(product?.weightPerUnit||numFmt(line.weightPerUnit)||0)*qty);
       },0),0);
@@ -2077,7 +2077,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
     setOrders(prev=>prev.map(o=>(trip.orderIds||[]).includes(o.id)?{...o,status:'assigned'}:o));
     window.showToast('Đã hủy giao lái xe. Chuyến vẫn được giữ ở danh sách đã xếp.','success');
   };
-  const lineQty=l=>numFmt(l.qtyInvoice)||numFmt(l.qtyProd)||numFmt(l.qty)||numFmt(l.quantity)||0;
+  const lineQty=l=>numFmt(l.qtyProd??l.qty??l.quantity??l.qtyInvoice??0);
   const lineWeight=l=>{const prod=products?.find(p=>p.id===l.productId);const unit=String(l.unit||prod?.unit||'').trim().toLowerCase().replace(/[^a-z]/g,'');const qty=lineQty(l);if(unit==='kg'||unit==='kgs'||unit==='kilogram'||unit==='kilograms')return qty;const wpu=prod?.weightPerUnit||numFmt(l.weightPerUnit)||0;return wpu*qty;};
   const orderWeight=o=>(o.lines||[]).reduce((s,l)=>s+lineWeight(l),0);
   const tripMatchKey=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]+/g,'');
