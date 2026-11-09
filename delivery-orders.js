@@ -174,7 +174,8 @@ function scfDeliveryReorderTrip({trip,orders,customers,sourceId,targetId,current
   const sorted=sortTripOrdersByDeliveryOrder(trip,members,customers||[]);
   const from=sorted.findIndex(o=>String(o.id)===String(sourceId)),to=sorted.findIndex(o=>String(o.id)===String(targetId));
   if(from<0||to<0)throw Error('Chỉ kéo thả giữa các đơn trong cùng chuyến.');
-  [sorted[from],sorted[to]]=[sorted[to],sorted[from]];
+  const [moved]=sorted.splice(from,1);
+  sorted.splice(from<to?to-1:to,0,moved);
   const ranks=new Map(sorted.map((o,i)=>[String(o.id),i+1])),stamp=fmtDT();
   return {trip:{...trip,deliveryOrderMode:'manual',updatedAt:stamp,updatedBy:currentUser?.name||''},orders:(orders||[]).map(o=>ranks.has(String(o.id))?{...o,deliveryOrder:ranks.get(String(o.id)),deliverySeq:ranks.get(String(o.id)),updatedAt:stamp,updatedBy:currentUser?.name||''}:o)};
 }
@@ -4364,7 +4365,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     if(!canReorderDelivery(trip)||String(trip.id)!==drag.tripId)return;
     try{const result=scfDeliveryReorderTrip({trip,orders,customers,sourceId:drag.orderId,targetId:order.id,currentUser});if(!result)return;
       setOrders(previous=>scfDeliveryReorderTrip({trip,orders:previous,customers,sourceId:drag.orderId,targetId:order.id,currentUser}).orders);setTrips(previous=>previous.map(t=>String(t.id)===String(trip.id)?{...t,deliveryOrderMode:'manual',updatedAt:result.trip.updatedAt,updatedBy:result.trip.updatedBy}:t));
-      window.showToast('Đã đổi vị trí hai đơn trong chuyến.','success');
+      window.showToast('Đã chuyển đơn vào vị trí mới và dồn thứ tự các đơn trong chuyến.','success');
     }catch(error){window.showToast(error.message,'warn');}
   };
   const printGroupSummary=group=>{const trip=tripById.get(String(group.tripId));if(trip)setSummaryPrintTrip(trip);};
