@@ -90,7 +90,7 @@ function scfBuildClassicOrderLabelSvg(it,o){
       '<svg xmlns="http://www.w3.org/2000/svg" width="580" height="400" viewBox="0 0 580 400">'+
         '<rect width="580" height="400" fill="white"/>'+
         '<rect x="10" y="10" width="560" height="380" fill="white" stroke="#111" stroke-width="2"/>'+
-        '<text x="160" y="68" font-family="Arial,sans-serif" font-size="54" font-weight="700" text-anchor="middle" lengthAdjust="spacingAndGlyphs" textLength="270">'+esc(product)+'</text>'+
+        '<text x="160" y="68" font-family="Arial,sans-serif" font-size="52" font-weight="700" text-anchor="middle" lengthAdjust="spacingAndGlyphs" textLength="270">'+esc(product)+'</text>'+
         '<text x="425" y="68" font-family="Arial,sans-serif" font-size="52" font-weight="700" text-anchor="middle">'+kgNum+'</text>'+
         '<text x="520" y="68" font-family="Arial,sans-serif" font-size="38" font-weight="700" text-anchor="middle">KG</text>'+
         '<text x="22" y="112" font-family="Arial,sans-serif"><tspan font-size="22">SP CỦA: C.TY TNHH </tspan><tspan font-size="23" font-weight="700">THỰC PHẨM SÔNG CÔNG</tspan></text>'+
@@ -155,7 +155,7 @@ function scfBuildPacOrderLabelSvg(it,o,customers=[]){
   };
 
 function scfBuildCongLabelSvg(it,order){
- const esc=scfEscapePrintHtml,date=it.plan?.prodDate||it.plan?.labelDate||order.deliveryDate||'',rawTime=it.plan?.prodTime||it.plan?.labelTime||'';
+ const esc=scfEscapePrintHtml,date=it.plan?.prodDate||it.plan?.labelDate||order.deliveryDate||'',rawTime=it.plan?.labelTime||'';
  const match=String(date).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/),iso=String(date).match(/^(\d{4})-(\d{2})-(\d{2})$/);
  const d=match?new Date(+match[3],+match[2]-1,+match[1]):iso?new Date(+iso[1],+iso[2]-1,+iso[3]):null;
  const format=value=>String(value.getDate()).padStart(2,'0')+'/'+String(value.getMonth()+1).padStart(2,'0')+'/'+value.getFullYear();
@@ -165,5 +165,5 @@ function scfBuildCongLabelSvg(it,order){
  const driver=trip?.driverName||order.driverName||order.assignedDriverName||'';
  const time=String(rawTime).replace(/^(\d{1,2}):00$/,'$1H').replace(/^(\d{1,2}):(\d{2})$/,'$1H$2');
  const rows=[['NGÀY SX:',production],['GIỜ SX',time],['HSD:',expiry],['NGƯỜI GIAO',driver.toUpperCase()]];
- return '<svg xmlns="http://www.w3.org/2000/svg" width="580" height="400" viewBox="0 0 580 400"><rect width="580" height="400" fill="white"/><rect x="12" y="12" width="556" height="376" fill="none" stroke="black" stroke-width="2"/><path d="M12 88H568 M275 88V388 M12 163H568 M12 238H568 M12 313H568" fill="none" stroke="black" stroke-width="2"/><text x="290" y="64" text-anchor="middle" font-family="Arial,sans-serif" font-size="40" font-weight="700" textLength="500" lengthAdjust="spacingAndGlyphs">'+esc(it.line.productName)+'</text>'+rows.map(([label,value],i)=>'<text x="143" y="'+(136+i*75)+'" text-anchor="middle" font-family="Arial,sans-serif" font-size="27">'+esc(label)+'</text><text x="421" y="'+(136+i*75)+'" text-anchor="middle" font-family="Arial,sans-serif" font-size="29" font-weight="700"'+(String(value).length>16?' textLength="274" lengthAdjust="spacingAndGlyphs"':'')+'>'+esc(value)+'</text>').join('')+'</svg>';
+ return '<svg xmlns="http://www.w3.org/2000/svg" width="580" height="400" viewBox="0 0 580 400"><rect width="580" height="400" fill="white"/><rect x="12" y="12" width="556" height="376" fill="none" stroke="black" stroke-width="2"/><path d="M12 88H568 M275 88V388 M12 163H568 M12 238H568 M12 313H568" fill="none" stroke="black" stroke-width="2"/><text x="290" y="64" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="700" textLength="500" lengthAdjust="spacingAndGlyphs">'+esc(it.line.productName)+'</text>'+rows.map(([label,value],i)=>'<text x="143" y="'+(136+i*75)+'" text-anchor="middle" font-family="Arial,sans-serif" font-size="27">'+esc(label)+'</text><text x="421" y="'+(136+i*75)+'" text-anchor="middle" font-family="Arial,sans-serif" font-size="29" font-weight="700"'+(String(value).length>16?' textLength="274" lengthAdjust="spacingAndGlyphs"':'')+'>'+esc(value)+'</text>').join('')+'</svg>';
 }
