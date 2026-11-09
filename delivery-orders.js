@@ -2954,12 +2954,12 @@ function DeliveryInlineCopyRows({draft:initial,customers,products=[],prodCats=[]
     document.addEventListener('keydown',key,true);
     return()=>document.removeEventListener('keydown',key,true);
   },[saving,onClose]);
-  const detach=previous=>{const next={...previous};delete next._appendToId;return next;};
+  const detach=previous=>{const next={...previous};if(!previous._warehouseAppend)delete next._appendToId;return next;};
   const set=(field,value)=>setDraft(previous=>({...detach(previous),[field]:value}));
   const submit=async()=>{
     if(disabled)return;
     setError('');setSaving(true);
-    try{const order=draft._appendToId?{...draft,lines:scfValidateInlineLines(draft.lines,products)}:scfValidateInlineCopy(draft,points,pointKey,products);if(await onSave(order)===false)setError('Chưa lưu được đơn. Kiểm tra thông báo và sửa lại thông tin.');}
+    try{const validated=draft._warehouseAppend?scfValidateInlineCopy(draft,points,pointKey,products):null;const order=validated|| (draft._appendToId?{...draft,lines:scfValidateInlineLines(draft.lines,products)}:scfValidateInlineCopy(draft,points,pointKey,products));if(await onSave(order)===false)setError('Chưa lưu được đơn. Kiểm tra thông báo và sửa lại thông tin.');}
     catch(error){setError(error.message||'Chưa lưu được đơn.');}finally{setSaving(false);}
   };
   const columns=layoutColumns||DELIVERY_ORDER_COLUMNS.filter(([key])=>!['status'].includes(key));
@@ -3495,11 +3495,11 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const trip=orderTrip(source);
     if(closedTrip(trip)||['done','cancelled'].includes(source.status)){window.showToast('Đơn đã đóng, không thể thêm sản phẩm.','warn');return;}
     if((dispatchedTrip(trip)||source.status==='delivering')&&!canWithdrawStartedOrder){window.showToast('Đơn đang giao, cần Admin hoặc kế toán cập nhật.','warn');return;}
-    setCopyDraft({...scfInlineCopyDraft(source),_inlineSourceKey:order._rowKey,_appendToId:source.id,lines:[{id:uid(),productId:'',productName:'',qtyInvoice:'',qtyProd:'',qtyDelivered:''}]});se(null);sm(null);
+    setCopyDraft({...scfInlineCopyDraft(source),_inlineSourceKey:order._rowKey,_appendToId:source.id,_warehouseAppend:!!source.warehouseMerged,lines:[{id:uid(),productId:'',productName:'',qtyInvoice:'',qtyProd:'',qtyDelivered:''}]});se(null);sm(null);
   };
   const saveAddedProducts=draft=>{
     if(!canEditMobileOrder||window.__SCF_ACCESS_CONTEXT?.readOnly)throw new Error('Tài khoản chỉ có quyền xem đơn hàng.');
-    const lines=scfValidateInlineLines(draft.lines,products);
+    let lines=scfValidateInlineLines(draft.lines,products);
     let saved=null,failure=null;
     ReactDOM.flushSync(()=>applyOrdersAndTripSync(previous=>{
       try{
@@ -3508,6 +3508,12 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         const trip=orderTrip(live);
         if(closedTrip(trip)||['done','cancelled'].includes(live.status))throw new Error('Đơn đã đóng, không thể thêm sản phẩm.');
         if((dispatchedTrip(trip)||live.status==='delivering')&&!canWithdrawStartedOrder)throw new Error('Đơn đang giao, cần Admin hoặc kế toán cập nhật.');
+        if(live.warehouseMerged){
+          const customer=customers.find(c=>String(c.id)===String(draft.customerId));
+          const point=(customer?.points||[]).find(p=>String(p.id)===String(draft.pointId)&&!p.customerStoppedAt);
+          if(!point||!scfPointCoversOrder(point,draft))throw Error('Chọn địa điểm đang bán và ngày giờ giao hợp lệ cho dòng kho vận.');
+          lines=lines.map(line=>({...line,warehouseSourcePointId:point.id,warehouseSourcePointName:point.name,warehouseSourceCustomerId:customer.id,warehouseSourceCustomer:customer.name,warehouseSourceArea:point.area||'',warehouseSourceDeliveryDate:draft.deliveryDate,warehouseSourceDeliveryTime:draft.deliveryTime}));
+        }
         const merged=scfAppendDeliveryLines(live,lines);
         if(merged===live)return previous;
         const addedLines=scfFastEntryInheritSchedule(live,lines);
