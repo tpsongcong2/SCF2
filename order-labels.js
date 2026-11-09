@@ -155,6 +155,15 @@ function scfBuildPacOrderLabelSvg(it,o,customers=[]){
   };
 
 function scfBuildCongLabelSvg(it,order){
- const esc=scfEscapePrintHtml,date=it.plan?.prodDate||it.plan?.labelDate||order.deliveryDate||'',time=it.plan?.prodTime||it.plan?.labelTime||'';
- return '<svg xmlns="http://www.w3.org/2000/svg" width="580" height="400" viewBox="0 0 580 400"><rect width="580" height="400" fill="white"/><g fill="black" font-family="Arial,sans-serif" text-anchor="middle"><text x="290" y="52" font-size="30" font-weight="700">SEVT4 · TEM CÔNG</text><text x="290" y="115" font-size="36" font-weight="700" textLength="530" lengthAdjust="spacingAndGlyphs">'+esc(it.line.productName)+'</text><text x="290" y="183" font-size="46" font-weight="700">'+esc(Number(it.kg).toLocaleString('vi-VN'))+' kg</text><text x="290" y="243" font-size="30">Ngày SX: '+esc(date)+'</text><text x="290" y="297" font-size="30">Giờ SX: '+esc(time)+'</text><text x="290" y="357" font-size="34" font-weight="700">Hạn sử dụng: 24 giờ</text></g></svg>';
+ const esc=scfEscapePrintHtml,date=it.plan?.prodDate||it.plan?.labelDate||order.deliveryDate||'',rawTime=it.plan?.prodTime||it.plan?.labelTime||'';
+ const match=String(date).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/),iso=String(date).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+ const d=match?new Date(+match[3],+match[2]-1,+match[1]):iso?new Date(+iso[1],+iso[2]-1,+iso[3]):null;
+ const format=value=>String(value.getDate()).padStart(2,'0')+'/'+String(value.getMonth()+1).padStart(2,'0')+'/'+value.getFullYear();
+ const production=d?format(d):date;if(d)d.setDate(d.getDate()+1);const expiry=d?format(d):'';
+ const trips=globalThis.window?.__SCF_TRIPS||[];
+ const trip=trips.find(t=>String(t.id)===String(order.tripId||''))||(!order.tripId?trips.find(t=>(t.orderIds||[]).some(id=>String(id)===String(order.id))):null);
+ const driver=trip?.driverName||order.driverName||order.assignedDriverName||'';
+ const time=String(rawTime).replace(/^(\d{1,2}):00$/,'$1H').replace(/^(\d{1,2}):(\d{2})$/,'$1H$2');
+ const rows=[['NGÀY SX:',production],['GIỜ SX',time],['HSD:',expiry],['NGƯỜI GIAO',driver.toUpperCase()]];
+ return '<svg xmlns="http://www.w3.org/2000/svg" width="580" height="400" viewBox="0 0 580 400"><rect width="580" height="400" fill="white"/><rect x="12" y="12" width="556" height="376" fill="none" stroke="black" stroke-width="2"/><path d="M12 88H568 M275 88V388 M12 163H568 M12 238H568 M12 313H568" fill="none" stroke="black" stroke-width="2"/><text x="290" y="64" text-anchor="middle" font-family="Arial,sans-serif" font-size="40" font-weight="700" textLength="500" lengthAdjust="spacingAndGlyphs">'+esc(it.line.productName)+'</text>'+rows.map(([label,value],i)=>'<text x="143" y="'+(136+i*75)+'" text-anchor="middle" font-family="Arial,sans-serif" font-size="27">'+esc(label)+'</text><text x="421" y="'+(136+i*75)+'" text-anchor="middle" font-family="Arial,sans-serif" font-size="29" font-weight="700"'+(String(value).length>16?' textLength="274" lengthAdjust="spacingAndGlyphs"':'')+'>'+esc(value)+'</text>').join('')+'</svg>';
 }
