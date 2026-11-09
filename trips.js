@@ -602,12 +602,11 @@ function scfDriverReportDrivers(trips,employees){
   return {tripKey,options:options.map(item=>({...item,label:item.name+(counts.get(item.name)>1?' ('+item.key.replace(/^id:|^name:/,'')+')':'')}))};
 }
 function scfDriverReportDeliveredQty(line){
- if(line?.qtyDeliveredDefault===true&&!line.deliveredAt&&!line.deliveredBy&&Number.isFinite(Date.parse(line.qtyDeliveredDefaultUntil))&&Date.now()>=Date.parse(line.qtyDeliveredDefaultUntil))return 0;
  return line?.qtyDelivered!==undefined&&line.qtyDelivered!==null&&line.qtyDelivered!==''?numFmt(line.qtyDelivered):numFmt(line?.qtyProd??line?.qty??line?.quantity??line?.qtyInvoice??0);
 }
 function scfDriverDeliveredWeight(orders,products){
  const byId=new Map((products||[]).map(p=>[String(p.id),p]));
- return orders.reduce((sum,o)=>sum+(o.lines||[]).reduce((n,l)=>{const p=byId.get(String(l.productId))||{},q=Math.max(0,scfDriverReportDeliveredQty(l)||0),unit=String(l.unit||p.unit||'').toLowerCase();return n+q*(['kg','kgs','kilogram','kilograms'].includes(unit)?1:Math.max(0,numFmt(p.weightPerUnit||l.weightPerUnit)||0));},0),0);
+ return orders.reduce((sum,o)=>sum+(o.lines||[]).reduce((n,l)=>{const p=byId.get(String(l.productId))||{},q=Math.max(0,scfDriverReportDeliveredQty(l)||0),unit=String(l.unit||p.unit||'kg').trim().toLowerCase();return n+q*(['kg','kgs','kilogram','kilograms'].includes(unit)?1:Math.max(0,numFmt(p.weightPerUnit||l.weightPerUnit)||0));},0),0);
 }
 function scfDriverTripPay(trip,weight,orders){
  if(!(weight>0))return 0;
