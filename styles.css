@@ -2066,3 +2066,10 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 .production-summary-screen .production-product-toggle>i,.production-summary-screen .production-shift-toggle>i{display:none}
 .production-summary-screen .production-inventory-columns,.production-summary-screen .production-product-toggle.production-inventory-row,.production-summary-screen .production-source-shift>.production-shift-toggle.production-subshift-inventory{grid-template-columns:minmax(0,1fr) minmax(100px,150px) minmax(80px,120px) minmax(90px,130px)}
 @media(max-width:600px){.production-summary-screen .production-inventory-columns,.production-summary-screen .production-product-toggle.production-inventory-row,.production-summary-screen .production-source-shift>.production-shift-toggle.production-subshift-inventory{grid-template-columns:minmax(0,1fr) 72px 52px 68px}}
+.label-order-product-summary{display:grid;gap:6px;margin-top:7px;min-width:130px}
+.label-order-product-summary>div{display:grid;gap:2px;font-size:13px;white-space:normal}
+.label-order-product-summary b{color:var(--pri3);font-variant-numeric:tabular-nums}
+.accounting-count-print{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.accounting-count-print .accounting-bulk-print-button{display:inline-flex;align-items:center;justify-content:center;width:44px;min-height:44px;padding:8px}
+.accounting-bulk-print-button i{font-size:20px}
+.accounting-result-head{gap:8px;flex-wrap:wrap}

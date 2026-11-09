@@ -94,11 +94,11 @@ async function scfChooseMobilePrintRoute(settings,{labels=true}={}){
 }
 function scfChooseMobileLabelRoute(settings){return scfChooseMobilePrintRoute(settings);}
 function scfDefaultLabelRoute(){const settings=scfPrintAgentSettings({trip:true});return scfSupportsX420App()&&settings.sharedManaged&&settings.androidEnabled?'android':'cloud';}
-function ScfPrintRouteChoices({value,onChange,disabled=false,labels=true}){
+function ScfPrintRouteChoices({value,onChange,disabled=false,labels=true,allowLocal=false}){
   const name=React.useId(),settings=scfPrintAgentSettings({trip:true});
   const available=id=>id==='android'?scfSupportsX420App()&&settings.sharedManaged&&settings.androidEnabled===true:id==='lan'?settings.sharedManaged&&settings.lanEnabled===true:true;
-  const options=[...(labels?[['android','Wi-Fi trực tiếp XP420']]:[]),['lan','In qua Wi-Fi SCF10'],['cloud','In từ xa SCF10']];
-  return h('fieldset',{className:'scf-print-route-choices',disabled},h('legend',null,'Cách in'),h('div',{className:'scf-print-route-options'},options.map(([id,label])=>h('label',{key:id,'data-selected':value===id,'data-unavailable':!available(id)},h('input',{type:'radio',name,value:id,checked:value===id,disabled:disabled||!available(id),onChange:()=>onChange(id)}),label))),h('small',null,value==='android'?'Mở app XP420. Điện thoại và máy in phải cùng mạng.':value==='lan'?'Gửi trực tiếp tới Agent SCF10 trong cùng mạng. Không tự chuyển sang in từ xa khi lỗi.':'Gửi qua Internet tới máy tính SCF10. Không cần cùng Wi-Fi.'));
+  const options=[...(labels?[['android','Wi-Fi trực tiếp XP420']]:[]),['lan','In qua Wi-Fi SCF10'],['cloud','In từ xa SCF10'],...(allowLocal?[['local','In trực tiếp máy này']]:[])];
+  return h('fieldset',{className:'scf-print-route-choices',disabled},h('legend',null,'Cách in'),h('div',{className:'scf-print-route-options'},options.map(([id,label])=>h('label',{key:id,'data-selected':value===id,'data-unavailable':!available(id)},h('input',{type:'radio',name,value:id,checked:value===id,disabled:disabled||!available(id),onChange:()=>onChange(id)}),label))),h('small',null,value==='local'?'Mở cửa sổ in của trình duyệt trên thiết bị này.':value==='android'?'Mở app XP420. Điện thoại và máy in phải cùng mạng.':value==='lan'?'Gửi trực tiếp tới Agent SCF10 trong cùng mạng. Không tự chuyển sang in từ xa khi lỗi.':'Gửi qua Internet tới máy tính SCF10. Không cần cùng Wi-Fi.'));
 }
 function ScfLabelRouteChoices(props){return h(ScfPrintRouteChoices,{...props,labels:true});}
 function ScfA4RouteChoices(props){return scfIsPhonePrint()?h(ScfPrintRouteChoices,{...props,labels:false}):null;}

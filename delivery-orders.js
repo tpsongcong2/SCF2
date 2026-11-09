@@ -2028,7 +2028,7 @@ function PrintByCustomerModal({orders,customers,products,company,trips=[],initia
   );
 }
 
-function PrintLabelsMultiModal({orders,customers,trips=[],initialDate,initialDateTo,initialDateBasis,initialGroup,selectionOnly=false,onClose,onPrint}) {
+function PrintLabelsMultiModal({orders,customers,products=[],trips=[],initialDate,initialDateTo,initialDateBasis,initialGroup,selectionOnly=false,onClose,onPrint}) {
   const [selected,setSelected]=useState({});
   const [labelMode,setLabelMode]=useState('auto');
   const [mobilePrintRoute,setMobilePrintRoute]=useState(scfDefaultLabelRoute);
@@ -2048,7 +2048,7 @@ function PrintLabelsMultiModal({orders,customers,trips=[],initialDate,initialDat
     selectionOnly?h('p',null,'In tem của '+orders.length+' đơn đã chọn.'):fields(),
     h(F,{label:'Mẫu in'},h('select',{'aria-label':'Mẫu in',value:labelMode,onChange:e=>setLabelMode(e.target.value)},
       h('option',{value:'auto'},'Tự động theo sản phẩm (tem thường / PAC)'),h('option',{value:'classic'},'Tem thường'),h('option',{value:'pac'},'Tem PAC 10 × 10 cm'))),
-    h(ScfLabelRouteChoices,{value:mobilePrintRoute,onChange:setMobilePrintRoute,disabled:sending}),
+    h(ScfLabelRouteChoices,{value:mobilePrintRoute,onChange:setMobilePrintRoute,disabled:sending,allowLocal:true}),
     filtered.length>0?h('div',null,
       h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:'1rem',fontSize:13}},
         h('i',{className:'ti ti-tag',style:{color:'var(--pri)',marginRight:6}}),
@@ -2066,7 +2066,11 @@ function PrintLabelsMultiModal({orders,customers,trips=[],initialDate,initialDat
           h('tbody',null,filtered.map(o=>h('tr',{key:o.id},
             h('td',{style:{padding:'4px 8px'}},h('input',{type:'checkbox',checked:selected[o.id]!==false,onChange:e=>toggleOne(o.id,e.target.checked),style:{width:'auto'}})),
             h('td',{style:{padding:'4px 8px'}},orderDate(o)),
-            h('td',{style:{padding:'4px 8px',fontWeight:500}},o.pointName||'—'),
+            h('td',{style:{padding:'4px 8px',fontWeight:500}},o.pointName||'—',String(o.pointName||'').toUpperCase().replace(/\s+/g,'')==='SEVT4'&&h('div',{className:'label-order-product-summary'},(o.lines||[]).map((line,index)=>{
+              const product=products.find(p=>String(p.id)===String(line.productId)),qty=numFmt(line.qtyProd??line.qty??line.quantity??line.qtyInvoice??0),unit=String(line.unit||product?.unit||'kg');
+              const kg=/^(kg|kgs|kilogram|kilograms)$/i.test(unit.trim())?qty:qty*numFmt(product?.weightPerUnit||line.weightPerUnit||0);
+              return h('div',{key:line.id||index},h('span',null,line.productName||product?.name||'Sản phẩm'),h('b',null,kg>0||qty===0?kg.toLocaleString('vi-VN',{maximumFractionDigits:2})+' kg':qty.toLocaleString('vi-VN')+' '+unit));
+            }))),
             h('td',{style:{padding:'4px 8px'}},o.deliveryTime||'—'),
             h('td',{style:{padding:'4px 8px'}},(o.lines||[]).length)
           )))
@@ -4704,7 +4708,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const pacLabels=labels.filter(it=>mode!=='classic'&&isPacPackageLine(it?.line));
     const classicLabels=labels.filter(it=>mode!=='pac'&&!isPacPackageLine(it?.line));
     if(!pacLabels.length&&!classicLabels.length){window.showToast('Không có sản phẩm phù hợp với mẫu tem đã chọn.','warn');return;}
-    if(window.scfShouldUsePrintAgent?.()){
+    if(printOptions.mobilePrintRoute!=='local'){
       try{await scfAccountingPrintOrderLabels({selectedOrders:printOrders,products,customers,trips,mode,currentUser,getLatest:()=>deleteContext.current,...printOptions});window.showToast('Đã gửi tem tới máy in.','success');}catch(error){window.showToast(error.message||'Chưa gửi được tem.','error');}return;
     }
     if(pacLabels.length&&classicLabels.length)window.showToast('Danh sách đang có cả tem PAC kho vận 10x10 và tem thường. Hệ thống sẽ mở 2 cửa sổ in riêng.','ok');
@@ -5044,7 +5048,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       !isMobile&&h('div',{className:'delivery-persistent-toolbar'},renderDeliveryOrderActions())
     ),
         modal==='print'&&h(PrintByCustomerModal,{orders,customers,products,company,trips,currentUser,getLatest:()=>deleteContext.current,...deliveryPrintInitialDates(dateFilterMode,fDate,fDateTo,fWeek,fMonth),initialDateBasis:sortMode==='trip'?dateBasis:'order',initialGroup:fTripGroup,onClose:()=>sm(null)}),
-        modal==='printlabels'&&h(PrintLabelsMultiModal,{orders,customers,trips,...deliveryPrintInitialDates(dateFilterMode,fDate,fDateTo,fWeek,fMonth),initialDateBasis:sortMode==='trip'?dateBasis:'order',initialGroup:fTripGroup,onClose:()=>sm(null),onPrint:printLabelsForOrders}),
+        modal==='printlabels'&&h(PrintLabelsMultiModal,{orders,customers,products,trips,...deliveryPrintInitialDates(dateFilterMode,fDate,fDateTo,fWeek,fMonth),initialDateBasis:sortMode==='trip'?dateBasis:'order',initialGroup:fTripGroup,onClose:()=>sm(null),onPrint:printLabelsForOrders}),
         modal==='importPreview'&&window._importData&&h(ImportPreviewModal,{data:window._importData,customers,setCustomers,orders,setOrders,products,prodCats,prodShifts,currentUser,onLocateExisting:locateExistingImportedOrder,onClose:()=>{sm(null);delete window._importData;}}),
         modal==='missingOrders'&&h(DeliveryMissingOrdersModal,{orders,customers,setCustomers,currentUser,trips,initialDate:deliveryPrintInitialDates(dateFilterMode,fDate,fDateTo,fWeek,fMonth).initialDate||_ti0,initialGroup:fTripGroup,onClose:()=>sm(null)}),
         modal==='imageImport'&&h(ImageOrderImportModal,{customers,products,orders,setOrders,prodShifts,currentUser,onClose:()=>sm(null)}),

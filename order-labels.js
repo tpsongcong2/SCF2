@@ -33,6 +33,7 @@ function scfCanAccountingPrintLabels(user){
  return !!user&&(['admin','administrator'].includes(String(user.role||'').toLowerCase())||(Array.isArray(user.permissions)&&user.permissions.includes('delivery')&&canWrite(user.role,'delivery',user.permLevels))||employeeDepartmentIncludes(user,'Kế toán')&&canAccess(user.role,'delivery',user.permissions,employeeDepartments(user))&&canWrite(user.role,'delivery',user.permLevels))&&canMobileFeature(user,'tripPrint');
 }
 async function scfAccountingPrintOrderLabels({selectedOrders,products,customers,trips,mode,currentUser,getLatest,mobilePrintRoute,autoOpenNative=false}){
+
  const actor=String(currentUser?.id||''),settings=scfPrintAgentSettings({trip:true});
  const validate=()=>{
   const live=getLatest(),access=window.__SCF_ACCESS_CONTEXT;
@@ -42,6 +43,7 @@ async function scfAccountingPrintOrderLabels({selectedOrders,products,customers,
   return live;
  };
  validate();
+ if(mobilePrintRoute==='local')return scfPrintLocalOrderLabels(selectedOrders,products,customers,mode);
  const grouped=new Map();
  for(const order of selectedOrders){
   const trip=order.tripId?(trips||[]).find(t=>String(t.id)===String(order.tripId)):order.tripAssignMode==='manual'?null:(trips||[]).find(t=>(t.orderIds||[]).map(String).includes(String(order.id)));
@@ -166,4 +168,12 @@ function scfBuildCongLabelSvg(it,order){
  const time=String(rawTime).replace(/^(\d{1,2}):00$/,'$1H').replace(/^(\d{1,2}):(\d{2})$/,'$1H$2');
  const rows=[['NGÀY SX:',production],['GIỜ SX',time],['HSD:',expiry],['NGƯỜI GIAO',driver.toUpperCase()]];
  return '<svg xmlns="http://www.w3.org/2000/svg" width="580" height="400" viewBox="0 0 580 400"><rect width="580" height="400" fill="white"/><rect x="12" y="12" width="556" height="376" fill="none" stroke="black" stroke-width="2"/><path d="M12 88H568 M275 88V388 M12 163H568 M12 238H568 M12 313H568" fill="none" stroke="black" stroke-width="2"/><text x="290" y="64" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="700" textLength="500" lengthAdjust="spacingAndGlyphs">'+esc(it.line.productName)+'</text>'+rows.map(([label,value],i)=>'<text x="143" y="'+(136+i*75)+'" text-anchor="middle" font-family="Arial,sans-serif" font-size="27">'+esc(label)+'</text><text x="421" y="'+(136+i*75)+'" text-anchor="middle" font-family="Arial,sans-serif" font-size="29" font-weight="700"'+(String(value).length>16?' textLength="274" lengthAdjust="spacingAndGlyphs"':'')+'>'+esc(value)+'</text>').join('')+'</svg>';
+}
+
+function scfPrintLocalOrderLabels(orders,products,customers,mode){
+ const labels=orders.flatMap(order=>scfOrderLabelItems(order,products,window.__SCF_PROD_SHIFTS||[],window.__SCF_PROD_SHIFT_RULES||[])).filter(label=>mode==='auto'||(label.isPac?mode==='pac':mode==='classic'));
+ if(!labels.length)throw Error('Không có tem phù hợp.');
+ const popup=window.open('','_blank');if(!popup)throw Error('Cho phép mở cửa sổ in trên trình duyệt.');
+ const pages=labels.map(label=>'<section style="width:'+(label.isPac?100:58)+'mm;height:'+(label.isPac?100:40)+'mm;break-after:page">'+(label.isPac?scfBuildPacOrderLabelSvg(label,label.order,customers):scfBuildClassicOrderLabelSvg(label,label.order))+'</section>').join('');
+ popup.document.write('<!doctype html><html><head><title>In tem trực tiếp</title><style>@page{margin:0}body{margin:0}section:last-child{break-after:auto}svg{width:100%;height:100%;display:block}</style></head><body>'+pages+'</body></html>');popup.document.close();setTimeout(()=>popup.print(),300);
 }
