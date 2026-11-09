@@ -1,5 +1,10 @@
 /* Shared artwork used by desktop delivery orders and driver phone labels. */
-function scfLabelDetails(label,shelfLifeHours=24){const order=label.order||{};return {orderId:String(order.id||''),productName:String(label.line?.productName||''),deliveryDate:String(order.deliveryDate||''),deliveryTime:String(order.deliveryTime||''),productionDate:String(label.plan?.labelDate||order.deliveryDate||''),productionTime:String(label.manual?order.deliveryTime||'':label.plan?.labelTime||''),shelfLifeHours:shelfLifeHours===36?36:24,weightKg:Number(label.kg??label.qty??0)};}
+function scfLabelDetails(label,shelfLifeHours=24){const order=label.order||{};return {orderId:String(order.id||''),productName:String(label.line?.productName||''),deliveryDate:String(order.deliveryDate||''),deliveryTime:String(order.deliveryTime||''),productionDate:String((label.isCong?label.plan?.prodDate:null)||label.plan?.labelDate||order.deliveryDate||''),productionTime:String(label.isCong?label.plan?.prodTime||'':label.manual?order.deliveryTime||'':label.plan?.labelTime||''),shelfLifeHours:label.isCong?24:shelfLifeHours===36?36:24,weightKg:Number(label.kg??label.qty??0)};}
+function scfSevt4CongWeights(kg){
+ const full=Math.floor((Number(kg)+1e-8)/20),rest=Math.round((Number(kg)-full*20)*1000)/1000;
+ if(full>1000)throw Error('Tối đa 1.000 tem mỗi lần.');
+ return [...Array.from({length:Math.max(0,full)},()=>20),...(rest>=7?[rest]:[])];
+}
 function scfOrderLabelItems(order,products=[],prodShifts=[],prodShiftRules=[]){
  const plans=prodShiftPlansForOrder(order,prodShifts,prodShiftRules),labels=[];
  (order.lines||[]).forEach((line,index)=>{
@@ -13,6 +18,10 @@ function scfOrderLabelItems(order,products=[],prodShifts=[],prodShiftRules=[]){
   let weights;
   if(isPac){if(!Number.isSafeInteger(qty)||!(weight>0))throw Error('Kiểm tra quy cách PAC của '+name+'.');if(qty>1000)throw Error('Tối đa 1.000 tem mỗi lần.');weights=Array.from({length:qty},()=>weight);}
   else{const kg=/^(kg|kgs|kilogram|kilograms)$/.test(unit)?qty:qty*weight;if(!(kg>0))return;weights=scfLabelPackWeights(kg,rule.pack,rule.mergeSmallRemainder);}
+  if(String(order.pointName||'').toUpperCase().replace(/\s+/g,'')==='SEVT4'){
+   const kg=/^(kg|kgs|kilogram|kilograms)$/.test(unit)?qty:qty*weight;
+   scfSevt4CongWeights(kg).forEach(kg=>labels.push({line:{...line,productName:name},kg,plan,order,isPac:false,isCong:true,shelfLifeHours:24}));
+  }
   weights.forEach(kg=>labels.push({line:{...line,productName:name},kg,plan,order,isPac}));
   if(labels.length>1000)throw Error('Tối đa 1.000 tem mỗi lần.');
  });return labels;
@@ -67,6 +76,7 @@ async function scfAccountingPrintOrderLabels({selectedOrders,products,customers,
  }catch(error){throw Error((request.sent.size?'Đã gửi '+request.sent.size+' nhóm tem. Bấm in lại để gửi tiếp phần còn lại. ':'')+error.message);}
 }
 function scfBuildClassicOrderLabelSvg(it,o){
+ if(it.isCong)return scfBuildCongLabelSvg(it,o);
  const esc=scfEscapePrintHtml;
     const l=it.line;
     const product=l.productName||'';
@@ -143,3 +153,8 @@ function scfBuildPacOrderLabelSvg(it,o,customers=[]){
       '</svg>'
     );
   };
+
+function scfBuildCongLabelSvg(it,order){
+ const esc=scfEscapePrintHtml,date=it.plan?.prodDate||it.plan?.labelDate||order.deliveryDate||'',time=it.plan?.prodTime||it.plan?.labelTime||'';
+ return '<svg xmlns="http://www.w3.org/2000/svg" width="580" height="400" viewBox="0 0 580 400"><rect width="580" height="400" fill="white"/><g fill="black" font-family="Arial,sans-serif" text-anchor="middle"><text x="290" y="52" font-size="30" font-weight="700">SEVT4 · TEM CÔNG</text><text x="290" y="115" font-size="36" font-weight="700" textLength="530" lengthAdjust="spacingAndGlyphs">'+esc(it.line.productName)+'</text><text x="290" y="183" font-size="46" font-weight="700">'+esc(Number(it.kg).toLocaleString('vi-VN'))+' kg</text><text x="290" y="243" font-size="30">Ngày SX: '+esc(date)+'</text><text x="290" y="297" font-size="30">Giờ SX: '+esc(time)+'</text><text x="290" y="357" font-size="34" font-weight="700">Hạn sử dụng: 24 giờ</text></g></svg>';
+}
