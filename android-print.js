@@ -7,13 +7,13 @@ function scfAndroidIntent(row){
 }
 function scfShowAndroidPrintJobs(){
  document.getElementById('scf-android-sheet')?.remove();const actor=String(window.__SCF_ACCESS_CONTEXT?.employeeId||''),stored=scfAndroidPrintRows();if(!actor||!stored.rows.length)return;
- const overlay=document.createElement('div');overlay.id='scf-android-sheet';overlay.className='overlay';overlay.dataset.actor=actor;
+ const overlay=document.createElement('div');overlay.id='scf-android-sheet';overlay.className='overlay';overlay.style.zIndex='5000';overlay.dataset.actor=actor;
  const panel=document.createElement('section');panel.className='modal';panel.style.cssText='max-width:560px;width:calc(100% - 24px);padding:20px;max-height:85vh;overflow:auto';overlay.append(panel);
  const heading=document.createElement('h3');heading.textContent='Gửi tem sang app XPRINTER 420';panel.append(heading);
- const hint=document.createElement('p');hint.textContent='Bấm mở từng lệnh, kiểm tra rồi xác nhận in trong app. Người in và lịch sử được giữ trên SCFOOD.';panel.append(hint);
+ const hint=document.createElement('p');hint.textContent='Lệnh tem đã sẵn sàng. Nếu XP420 chưa tự mở, bấm Mở XP420 bên dưới. App tự quét IP máy in; không tạo lệnh mới khi bấm mở lại.';panel.append(hint);
  for(const row of stored.rows){
   const card=document.createElement('div');card.style.cssText='padding:12px 0;border-bottom:1px solid var(--bd)';const text=document.createElement('p');text.textContent=row.title+' · '+row.count+' tem';card.append(text);
-  if(Date.parse(row.expiresAt)>Date.now()){const link=document.createElement('a');link.className='bp';link.textContent='Mở app XPRINTER 420 để in';link.href=scfAndroidIntent(row);link.style.cssText='display:inline-block;padding:10px 14px;text-decoration:none;border-radius:8px';card.append(link);}
+  if(Date.parse(row.expiresAt)>Date.now()){const link=document.createElement('a');link.className='bp';link.textContent='Mở XP420 để in';link.href='scftembridge://print?job='+encodeURIComponent(row.jobId)+'&token='+row.token;link.style.cssText='display:inline-block;padding:10px 14px;text-decoration:none;border-radius:8px';card.append(link);if(!(typeof scfIsAppleMobilePrint==='function'&&scfIsAppleMobilePrint())){const fallback=document.createElement('a');fallback.href=scfAndroidIntent(row);fallback.textContent='Không mở được? Thử cách Android';fallback.style.cssText='display:block;margin-top:12px;padding:10px 0';card.append(fallback);}}
   else {const expired=document.createElement('p');expired.textContent='Đã hết hạn mở lệnh. Kiểm tra lịch sử trước khi tạo lệnh khác.';card.append(expired);}panel.append(card);
  }
  const sync=document.createElement('button');sync.type='button';sync.textContent='Cập nhật kết quả';sync.onclick=async()=>{sync.disabled=true;try{const {data,error}=await invokeScfAuth({body:{action:'driver_android_status',jobIds:stored.rows.map(r=>r.jobId)}});if(error||!data?.ok)throw Error('Chưa cập nhật được trạng thái.');if(actor!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||''))return;const ended=new Set((data.rows||[]).filter(r=>['done','error','uncertain','fallback'].includes(r.status)).map(r=>r.id));localStorage.setItem(stored.key,JSON.stringify(stored.rows.filter(r=>!ended.has(r.jobId))));scfShowAndroidPrintJobs();scfAndroidBadge();}catch(error){window.showToast(error.message,'warn');}finally{sync.disabled=false;}};
