@@ -86,6 +86,9 @@ async function scfChooseMobilePrintRoute(settings,{labels=true}={}){
     for(const [value,label] of [...(labels?[['android','Wi-Fi trực tiếp XP420']]:[]),['lan','In qua Wi-Fi SCF10'],['cloud','In từ xa SCF10'],['','Hủy']]){
       const button=document.createElement('button');button.type='button';button.textContent=label;button.style.cssText='display:block;width:100%;min-height:48px;margin-top:12px';button.disabled=value==='android'&&!(settings.sharedManaged&&settings.androidEnabled&&scfSupportsX420App())||value==='lan'&&!(settings.sharedManaged&&settings.lanEnabled);button.onclick=()=>finish(value);panel.append(button);
     }
+    const hint=document.createElement('p');hint.style.cssText='font-size:13px;margin-top:12px';
+    hint.textContent=[labels&&!(settings.sharedManaged&&settings.androidEnabled)?'XP420 chưa bật trong Cài đặt chuyến giao hàng.':labels&&!scfSupportsX420App()?'Mở trên Android hoặc iPhone có app XP420.':'',!(settings.sharedManaged&&settings.lanEnabled)?'Wi-Fi SCF10 chưa bật trong Cài đặt chuyến giao hàng.':''].filter(Boolean).join(' ');
+    if(hint.textContent)panel.append(hint);
     overlay.append(panel);document.body.append(overlay);panel.querySelector('button:not(:disabled)').focus();
   });
 }

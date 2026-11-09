@@ -16,7 +16,7 @@ async function scfLanRequest(endpoint,path,body,timeoutMs=12000){
 async function scfSelectPrintRoute(settings,printerRole,strictLan=false){
   const manual=printerRole==='canon'?settings.a4LanUrl:settings.labelLanUrl;
   if(!settings.autoRoute)return {route:'lan',endpoint:strictLan?scfLanPrintUrl(manual):manual};
-  const {data,error}=await invokeScfAuth({body:{action:'driver_print_route',agentId:printerRole==='canon'?settings.a4AgentId:settings.agentId,printerRole}});
+  const {data,error}=await invokeScfAuth({body:{action:'driver_print_route',agentId:printerRole==='canon'?settings.a4AgentId:settings.agentId,printerRole}},15000);
   if(error||!data?.ok)throw Error(await serverFunctionErrorMessage(error,data,'Chưa kiểm tra được máy in.'));
   if(data.route!=='lan'){if(strictLan)throw Error('SCF10 chưa sẵn sàng qua Wi-Fi. Kiểm tra Agent và cùng mạng; chưa gửi in từ xa.');return {route:'cloud'};}
   try{const endpoints=(data.endpoints?.length?data.endpoints:[data.endpoint]).slice(0,3);const endpoint=await Promise.any(endpoints.map(async endpoint=>{await scfLanRequest(endpoint,'/health',{authorization:data.lanAuthorization},2000);return endpoint;}));return {route:'lan',endpoint};}
