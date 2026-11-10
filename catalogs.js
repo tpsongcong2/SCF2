@@ -73,8 +73,18 @@ function MaterialsTab({materials,setMaterials,purchases}){
 }
 
 /* ─── ASSETS ─── */
+const SCF_ASSET_GROUPS=['Xe ô tô','Máy móc xưởng bún','Máy móc xưởng bánh','Máy móc xưởng bột'];
+function scfAssetGroup(asset){
+  if([...SCF_ASSET_GROUPS,'Chưa phân nhóm'].includes(asset.assetGroup))return asset.assetGroup;
+  const name=String(asset.name||'').toLocaleLowerCase('vi').trim();
+  if(asset.assetType==='vehicle'||/^\d{5}$/.test(name)||/\b(?:ô tô|oto)\b/.test(name))return SCF_ASSET_GROUPS[0];
+  if(/bún/.test(name))return SCF_ASSET_GROUPS[1];
+  if(/bánh/.test(name))return SCF_ASSET_GROUPS[2];
+  if(/bột/.test(name))return SCF_ASSET_GROUPS[3];
+  return 'Chưa phân nhóm';
+}
 function AssetForm({asset,onSave,onClose}){
-  const[f,sf]=useState(()=>({name:'',assetType:'other',purchaseValue:0,currentValue:0,replacementMaterial:'',attachments:{},...asset,id:asset?.id||'TS'+uid()}));
+  const[f,sf]=useState(()=>({name:'',assetType:'other',purchaseValue:0,currentValue:0,replacementMaterial:'',attachments:{},...asset,assetGroup:scfAssetGroup(asset||{}),id:asset?.id||'TS'+uid()}));
   const[uploads,setUploads]=useState({});
   const busy=Object.values(uploads).some(Boolean);
   const close=()=>{if(!busy)onClose();};
@@ -88,6 +98,7 @@ function AssetForm({asset,onSave,onClose}){
   const picker=(kind,label)=>h(AssetFilePicker,{key:kind,label,assetId:f.id,kind,files:f.attachments?.[kind]||[],onChange:files=>sf(p=>({...p,attachments:{...(p.attachments||{}),[kind]:files}})),onBusy:(key,value)=>setUploads(p=>({...p,[key]:value}))});
   return h(Modal,{title:asset?'Sửa tài sản':'Thêm tài sản',onClose:close,lg:true},
     h(F,{label:'Tên tài sản *'},h('input',{value:f.name,onChange:e=>s('name',e.target.value),placeholder:'Tên tài sản...'})),
+    h(F,{label:'Nhóm tài sản'},h('select',{value:f.assetGroup,disabled:busy,onChange:e=>sf(p=>({...p,assetGroup:e.target.value,...(e.target.value===SCF_ASSET_GROUPS[0]?{assetType:'vehicle'}:{})}))},['Chưa phân nhóm',...SCF_ASSET_GROUPS].map(group=>h('option',{key:group,value:group},group)))),
     h(F,{label:'Loại tài sản'},h('select',{'aria-label':'Loại tài sản',value:f.assetType||'other',disabled:busy,onChange:e=>s('assetType',e.target.value)},h('option',{value:'other'},'Máy móc / tài sản khác'),h('option',{value:'vehicle'},'Xe'))),
     f.assetType!=='vehicle'&&h('p',{className:'asset-type-help'},'Nếu là xe, chọn loại “Xe” để nhập riêng đăng ký, đăng kiểm, bảo hiểm và ngày hết hạn.'),
     h('div',{className:'g2'},
@@ -123,9 +134,10 @@ function AssetsTab({assets,setAssets,currentUser}){
   useEffect(()=>{let target;try{target=JSON.parse(sessionStorage.getItem('scf_notification_target')||'null');}catch{}if(target?.targetPage!=='assets'||!target.sourceId)return;const asset=(assets||[]).find(item=>String(item.id)===String(target.sourceId));if(asset){sessionStorage.removeItem('scf_notification_target');se(asset);sm('view');}},[assets]);
   const save=d=>{if(!writable)return;if(edit)setAssets(p=>p.map(x=>x.id===edit.id?{...x,...d}:x));else setAssets(p=>[...p,d]);sm(null);se(null);};
   const del=id=>{if(!deletable)return;window.scfConfirm('Bạn có chắc muốn xóa tài sản này?','Xóa tài sản',true).then(ok=>{if(ok){setAssets(p=>p.filter(x=>x.id!==id));window.showToast('Đã xóa tài sản','success');}});};
-  const cols=[['stt','Số TT'],['name','Tên tài sản'],['assetType','Loại tài sản'],['purchaseValue','Giá trị mua'],['currentValue','Giá trị hiện tại'],['replacementMaterial','Vật tư thay thế'],...SCF_ASSET_DOCUMENT_TYPES.filter(t=>t.expiry).map(t=>[t.expiry,'Hết hạn '+t.label])];
-  const list=(assets||[]).filter(x=>!q||String(x.name||'').toLowerCase().includes(q.toLowerCase())||String(x.replacementMaterial||'').toLowerCase().includes(q.toLowerCase()));
-  const exportRows=list.map((x,i)=>({...x,stt:i+1}));
+  const cols=[['stt','Số TT'],['name','Tên tài sản'],['assetGroup','Nhóm tài sản'],['assetType','Loại tài sản'],['purchaseValue','Giá trị mua'],['currentValue','Giá trị hiện tại'],['replacementMaterial','Vật tư thay thế'],...SCF_ASSET_DOCUMENT_TYPES.filter(t=>t.expiry).map(t=>[t.expiry,'Hết hạn '+t.label])];
+  const groupOrder=[...SCF_ASSET_GROUPS,'Chưa phân nhóm'];
+  const list=(assets||[]).filter(x=>!q||[x.name,x.replacementMaterial,scfAssetGroup(x)].some(value=>String(value||'').toLowerCase().includes(q.toLowerCase()))).sort((a,b)=>groupOrder.indexOf(scfAssetGroup(a))-groupOrder.indexOf(scfAssetGroup(b)));
+  const exportRows=list.map((x,i)=>({...x,assetGroup:scfAssetGroup(x),stt:i+1}));
   return h('div',null,
     h('div',{className:'ptitle'},h('i',{className:'ti ti-building-warehouse',style:{fontSize:20}}),'Danh mục tài sản'),
     h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:8}},
@@ -133,7 +145,8 @@ function AssetsTab({assets,setAssets,currentUser}){
       h('div',{style:{display:'flex',gap:6}},
         h(ExportBtn,{onClick:()=>xlsxExport(exportRows,cols,'Danh_muc_tai_san')}),
         writable&&h(ImportBtn,{onFile:rows=>{
-          const added=rows.map(r=>({id:'TS'+uid(),name:r['Tên tài sản']||'',assetType:r['Loại tài sản']==='vehicle'||r['Loại tài sản']==='Xe'?'vehicle':'other',purchaseValue:numFmt(r['Giá trị mua']),currentValue:numFmt(r['Giá trị hiện tại']),replacementMaterial:r['Vật tư thay thế']||'',...Object.fromEntries(SCF_ASSET_DOCUMENT_TYPES.filter(t=>t.expiry).map(t=>{const value=r['Hết hạn '+t.label];const day=scfAssetDay(value);return[t.expiry,day===null?'':new Date(day).toISOString().slice(0,10)];}))})).filter(r=>r.name);
+          const added=rows.map(r=>({id:'TS'+uid(),name:r['Tên tài sản']||'',assetGroup:String(r['Nhóm tài sản']||'').trim(),assetType:r['Loại tài sản']==='vehicle'||r['Loại tài sản']==='Xe'?'vehicle':'other',purchaseValue:numFmt(r['Giá trị mua']),currentValue:numFmt(r['Giá trị hiện tại']),replacementMaterial:r['Vật tư thay thế']||'',...Object.fromEntries(SCF_ASSET_DOCUMENT_TYPES.filter(t=>t.expiry).map(t=>{const value=r['Hết hạn '+t.label];const day=scfAssetDay(value);return[t.expiry,day===null?'':new Date(day).toISOString().slice(0,10)];}))})).filter(r=>r.name);
+          added.forEach(asset=>{asset.assetGroup=scfAssetGroup(asset);});
           setAssets(p=>[...p,...added]);
           window.showToast('Đã nhập '+added.length+' tài sản','success');
         }}),
@@ -141,7 +154,7 @@ function AssetsTab({assets,setAssets,currentUser}){
       )
     ),
     h(TableWrap,{cols:['Số TT','Tên tài sản','Giá trị mua','Giá trị hiện tại','Vật tư thay thế','Hồ sơ / hạn giấy tờ',''],empty:'Chưa có tài sản nào.',
-      rows:list.map((x,i)=>h('tr',{key:x.id},
+      rows:list.flatMap((x,i)=>[...(i===0||scfAssetGroup(list[i-1])!==scfAssetGroup(x)?[h('tr',{key:'group-'+scfAssetGroup(x)},h('td',{colSpan:7,style:{background:'var(--bg2)',color:'var(--pri)',fontWeight:700}},scfAssetGroup(x)))]:[]),h('tr',{key:x.id},
         h('td',null,i+1),
         h('td',null,h('div',{style:{fontWeight:500}},x.name)),
         h('td',null,moneyFmt(x.purchaseValue)),
@@ -152,7 +165,7 @@ function AssetsTab({assets,setAssets,currentUser}){
           writable&&h('button',{className:'bi','aria-label':'Sửa tài sản '+x.name,onClick:()=>{se(x);sm('f')}},h('i',{className:'ti ti-edit',style:{fontSize:15}})),
           deletable&&h('button',{className:'bi',onClick:()=>del(x.id),style:{color:'#A32D2D'}},h('i',{className:'ti ti-trash',style:{fontSize:15}}))
         ))
-      ))
+      )])
     }),
     writable&&modal==='f'&&h(AssetForm,{asset:edit,onSave:save,onClose:()=>{sm(null);se(null);}}),
     modal==='view'&&edit&&h(AssetDetails,{asset:edit,onClose:()=>{sm(null);se(null);},onEdit:writable?asset=>{se(asset);sm('f');}:undefined})

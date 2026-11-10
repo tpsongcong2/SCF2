@@ -81,16 +81,19 @@ function AssetFileLink({file,onRemove}){
   return h('div',{className:'asset-file-row'},h('button',{type:'button',className:'asset-file-link','data-scf-action':'view',onClick:open,disabled:busy},h('i',{className:file.mime?.startsWith('image/')?'ti ti-photo':'ti ti-file-description'}),busy?'Đang mở…':file.name),onRemove&&h('button',{type:'button',className:'bi','aria-label':'Bỏ tệp '+file.name,onClick:onRemove},h('i',{className:'ti ti-x'})));
 }
 function AssetFilePicker({label,files=[],assetId,kind,onChange,onBusy}){
-  const [busy,setBusy]=useState(false),[error,setError]=useState('');
-  const alive=React.useRef(true);useEffect(()=>()=>{alive.current=false;},[]);
-  const pick=async event=>{
-    const selected=Array.from(event.target.files||[]);event.target.value='';if(!selected.length||busy)return;
+  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[dragging,setDragging]=useState(false);
+  const alive=React.useRef(true),uploading=React.useRef(false);useEffect(()=>()=>{alive.current=false;},[]);
+  const upload=async fileList=>{
+    const selected=Array.from(fileList||[]);if(!selected.length||uploading.current)return;
+    uploading.current=true;
     setBusy(true);setError('');onBusy(kind,true);
     const uploaded=[];
     try{selected.forEach(scfAssetFileType);for(const file of selected)uploaded.push(await scfUploadAssetFile(file,assetId,kind));}
     catch(err){if(alive.current)setError(err.message);}
-    finally{if(alive.current){if(uploaded.length)onChange([...files,...uploaded]);setBusy(false);onBusy(kind,false);}}
+    finally{uploading.current=false;if(alive.current){if(uploaded.length)onChange([...files,...uploaded]);setBusy(false);onBusy(kind,false);}}
   };
+  const pick=event=>{const selected=Array.from(event.target.files||[]);event.target.value='';return upload(selected);};
   return h('section',{className:'asset-document-group'},h('strong',null,label),files.map(file=>h(AssetFileLink,{key:file.id||file.path,file,onRemove:busy?null:()=>onChange(files.filter(item=>item!==file))})),
+    h('div',{className:'asset-upload-dropzone',style:{border:'2px dashed '+(dragging?'var(--pri)':'var(--bd,#b9cec4)'),borderRadius:8,padding:16,margin:'10px 0',textAlign:'center',background:dragging?'var(--bg2)':'transparent'},onDragOver:event=>{event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect=uploading.current?'none':'copy';if(!uploading.current)setDragging(true);},onDragLeave:event=>{if(!event.currentTarget.contains(event.relatedTarget))setDragging(false);},onDrop:event=>{event.preventDefault();event.stopPropagation();setDragging(false);return upload(event.dataTransfer.files);}},h('i',{className:'ti ti-cloud-upload',style:{fontSize:24}}),h('div',null,busy?'Đang tải…':'Kéo thả ảnh / tài liệu vào đây'),h('small',null,'Có thể thả nhiều tệp · Tối đa 15 MB / tệp')),
     h('label',{className:'asset-upload-button'},h('i',{className:'ti ti-upload'}),busy?'Đang tải…':'Tải ảnh / tài liệu',h('input',{type:'file',multiple:true,accept:'.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx',disabled:busy,onChange:pick})),error&&h('div',{role:'alert',className:'asset-upload-error'},error));
 }
