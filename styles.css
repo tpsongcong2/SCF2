@@ -2073,3 +2073,23 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 .accounting-count-print .accounting-bulk-print-button{display:inline-flex;align-items:center;justify-content:center;width:44px;min-height:44px;padding:8px}
 .accounting-bulk-print-button i{font-size:20px}
 .accounting-result-head{gap:8px;flex-wrap:wrap}
+
+/* Compact desktop batch-label dialog: filters in two rows, routes alongside template. */
+@media(min-width:901px){
+ .modal.xl.multi-label-print-modal{width:1440px;max-width:98vw;max-height:96vh;padding:16px 20px}
+ .multi-label-print-modal .mh{margin-bottom:12px}
+ .multi-label-print-modal .delivery-print-filters{grid-template-columns:repeat(20,minmax(0,1fr))!important;gap:8px 12px!important}
+ .multi-label-print-modal .delivery-print-filters>*{grid-column:span 4;min-width:0;margin-bottom:0}
+ .multi-label-print-modal .delivery-print-filters>:nth-child(-n+4){grid-column:span 5}
+ .multi-label-print-modal .delivery-print-filters label{margin-bottom:3px}
+ .multi-label-print-modal .delivery-print-filters input,.multi-label-print-modal .delivery-print-filters select{min-height:34px;padding:6px 8px}
+ .multi-label-print-options{display:grid;grid-template-columns:minmax(220px,1fr) minmax(0,3fr);gap:16px;align-items:start;margin:12px 0}
+ .multi-label-print-options>.fl{margin-bottom:0}
+ .multi-label-print-options .scf-print-route-choices{margin:0}
+ .multi-label-print-options .scf-print-route-choices legend{margin-bottom:5px}
+ .multi-label-print-options .scf-print-route-options{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+ .multi-label-print-options .scf-print-route-options>label{min-height:36px;padding:6px 8px;font-size:12px;gap:6px}
+ .multi-label-print-options .scf-print-route-choices>small{margin-top:4px;font-size:12px}
+ .multi-label-print-modal .multi-label-order-table{max-height:calc(96vh - 365px)!important;min-height:180px}
+ .multi-label-order-table th{position:sticky;top:0;background:var(--bg2);z-index:1}
+}
