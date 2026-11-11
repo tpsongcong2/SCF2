@@ -2044,7 +2044,7 @@ function PrintLabelsMultiModal({orders,customers,products=[],trips=[],initialDat
     if(!selectedOrders.length){window.showToast('Chọn ít nhất 1 đơn để in tem!','warn');return;}
     setSending(true);try{await onPrint(selectedOrders,labelMode,{mobilePrintRoute,autoOpenNative:true});}catch(error){window.showToast(error.message||'Chưa gửi được tem.','error');}finally{setSending(false);}
   };
-  return h(Modal,{title:'In tem cho nhiều đơn hàng',lg:true,onClose},
+  return h(Modal,{title:'In tem cho nhiều đơn hàng',lg:'xl',className:'multi-label-print-modal',onClose},
     selectionOnly?h('p',null,'In tem của '+orders.length+' đơn đã chọn.'):fields(),
     h(F,{label:'Mẫu in'},h('select',{'aria-label':'Mẫu in',value:labelMode,onChange:e=>setLabelMode(e.target.value)},
       h('option',{value:'auto'},'Tự động theo sản phẩm (tem thường / PAC)'),h('option',{value:'classic'},'Tem thường'),h('option',{value:'pac'},'Tem PAC 10 × 10 cm'))),
@@ -2055,25 +2055,36 @@ function PrintLabelsMultiModal({orders,customers,products=[],trips=[],initialDat
         h('strong',null,selectedOrders.length+'/'+filtered.length+' đơn đã chọn'),
         ' — '+selectedOrders.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng sản phẩm'
       ),
-      h('div',{style:{maxHeight:200,overflowY:'auto',marginBottom:'1rem'}},
+      h('div',{style:{maxHeight:320,overflow:'auto',marginBottom:'1rem'}},
         h('table',{style:{width:'100%',fontSize:12,borderCollapse:'collapse'}},
           h('thead',null,h('tr',{style:{background:'var(--bg2)'}},
             h('th',{style:{padding:'5px 8px',textAlign:'left',borderBottom:'1px solid var(--bd)',width:34}},
               h('input',{type:'checkbox',checked:allChecked,onChange:e=>toggleAll(e.target.checked),style:{width:'auto'}})
             ),
-            ['Ngày','Địa điểm','Giờ','SP'].map(c=>h('th',{key:c,style:{padding:'5px 8px',textAlign:'left',borderBottom:'1px solid var(--bd)'}},c))
+            ['Ngày giao','Địa điểm','Giờ giao','Sản phẩm','Khối lượng (kg)','Giờ in tem','Ngày in tem'].map(c=>h('th',{key:c,style:{padding:'5px 8px',textAlign:'left',borderBottom:'1px solid var(--bd)'}},c))
           )),
-          h('tbody',null,filtered.map(o=>h('tr',{key:o.id},
-            h('td',{style:{padding:'4px 8px'}},h('input',{type:'checkbox',checked:selected[o.id]!==false,onChange:e=>toggleOne(o.id,e.target.checked),style:{width:'auto'}})),
-            h('td',{style:{padding:'4px 8px'}},orderDate(o)),
-            h('td',{style:{padding:'4px 8px',fontWeight:500}},o.pointName||'—',String(o.pointName||'').toUpperCase().replace(/\s+/g,'')==='SEVT4'&&h('div',{className:'label-order-product-summary'},(o.lines||[]).map((line,index)=>{
-              const product=products.find(p=>String(p.id)===String(line.productId)),qty=numFmt(line.qtyProd??line.qty??line.quantity??line.qtyInvoice??0),unit=String(line.unit||product?.unit||'kg');
-              const kg=/^(kg|kgs|kilogram|kilograms)$/i.test(unit.trim())?qty:qty*numFmt(product?.weightPerUnit||line.weightPerUnit||0);
-              return h('div',{key:line.id||index},h('span',null,line.productName||product?.name||'Sản phẩm'),h('b',null,kg>0||qty===0?kg.toLocaleString('vi-VN',{maximumFractionDigits:2})+' kg':qty.toLocaleString('vi-VN')+' '+unit));
-            }))),
-            h('td',{style:{padding:'4px 8px'}},o.deliveryTime||'—'),
-            h('td',{style:{padding:'4px 8px'}},(o.lines||[]).length)
-          )))
+          h('tbody',null,filtered.flatMap(o=>{
+            const plans=prodShiftPlansForOrder(o,window.__SCF_PROD_SHIFTS||[],window.__SCF_PROD_SHIFT_RULES||[]);
+            const lines=o.lines?.length?o.lines:[null];
+            return lines.map((line,index)=>{
+              const product=products.find(p=>String(p.id)===String(line?.productId));
+              const quantity=numFmt(line?.qtyProd??line?.qty??line?.quantity??line?.qtyInvoice??0);
+              const unit=String(line?.unit||product?.unit||'kg').trim();
+              const weight=numFmt(product?.weightPerUnit||line?.weightPerUnit||String(line?.productName||product?.name||'').match(/(\d+(?:[.,]\d+)?)\s*kg\s*\/\s*pac/i)?.[1]||0);
+              const kg=/^(kg|kgs|kilogram|kilograms)$/i.test(unit)?quantity:weight>0?quantity*weight:null;
+              const plan=plans.find(p=>p.line===line||p.index===index);
+              return h('tr',{key:String(o.id)+'-'+index},
+                index===0&&h('td',{rowSpan:lines.length,style:{padding:'6px 8px'}},h('input',{type:'checkbox',checked:selected[o.id]!==false,onChange:e=>toggleOne(o.id,e.target.checked),style:{width:'auto'}})),
+                index===0&&h('td',{rowSpan:lines.length,style:{padding:'6px 8px',whiteSpace:'nowrap'}},orderDate(o)),
+                index===0&&h('td',{rowSpan:lines.length,style:{padding:'6px 8px',fontWeight:500}},o.pointName||'—'),
+                index===0&&h('td',{rowSpan:lines.length,style:{padding:'6px 8px'}},o.deliveryTime||'—'),
+                h('td',{style:{padding:'6px 8px'}},line?.productName||product?.name||'—'),
+                h('td',{style:{padding:'6px 8px',fontWeight:700}},kg===null?'—':kg.toLocaleString('vi-VN',{maximumFractionDigits:3})),
+                h('td',{style:{padding:'6px 8px',whiteSpace:'nowrap'}},plan?.labelTime||'—'),
+                h('td',{style:{padding:'6px 8px',whiteSpace:'nowrap'}},plan?.labelDate?String(plan.labelDate).replace(/^(\d{4})-(\d{2})-(\d{2})$/,'$3/$2/$1'):'—')
+              );
+            });
+          }))
         )
       ),
       h(Row,null,

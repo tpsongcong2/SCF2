@@ -59,7 +59,10 @@ async function scfUploadAssetFile(file,assetId,kind){
   const name=String(file.name).replace(/[^a-zA-Z0-9._-]/g,'_');
   const path=safe+'/'+kind+'/'+(crypto.randomUUID?.()||uid())+'-'+name;
   const {error}=await withRemoteTimeout(sb.storage.from(SCF_ASSET_FILE_BUCKET).upload(path,file,{contentType:mime,upsert:false}),30000);
-  if(error)throw new Error('Không tải được tệp: '+error.message);
+  if(error){
+    if(/bucket.*not found/i.test(error.message||''))throw new Error('Kho tài liệu tài sản chưa được thiết lập trên máy chủ. Admin cần chạy tệp SQL thiết lập kho asset-documents rồi tải lại.');
+    throw new Error('Không tải được tệp: '+error.message);
+  }
   return {id:uid(),name:file.name,path,mime,size:file.size,uploadedAt:new Date().toISOString()};
 }
 async function scfAssetFileUrl(file){
@@ -95,5 +98,6 @@ function AssetFilePicker({label,files=[],assetId,kind,onChange,onBusy}){
   const pick=event=>{const selected=Array.from(event.target.files||[]);event.target.value='';return upload(selected);};
   return h('section',{className:'asset-document-group'},h('strong',null,label),files.map(file=>h(AssetFileLink,{key:file.id||file.path,file,onRemove:busy?null:()=>onChange(files.filter(item=>item!==file))})),
     h('div',{className:'asset-upload-dropzone',style:{border:'2px dashed '+(dragging?'var(--pri)':'var(--bd,#b9cec4)'),borderRadius:8,padding:16,margin:'10px 0',textAlign:'center',background:dragging?'var(--bg2)':'transparent'},onDragOver:event=>{event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect=uploading.current?'none':'copy';if(!uploading.current)setDragging(true);},onDragLeave:event=>{if(!event.currentTarget.contains(event.relatedTarget))setDragging(false);},onDrop:event=>{event.preventDefault();event.stopPropagation();setDragging(false);return upload(event.dataTransfer.files);}},h('i',{className:'ti ti-cloud-upload',style:{fontSize:24}}),h('div',null,busy?'Đang tải…':'Kéo thả ảnh / tài liệu vào đây'),h('small',null,'Có thể thả nhiều tệp · Tối đa 15 MB / tệp')),
-    h('label',{className:'asset-upload-button'},h('i',{className:'ti ti-upload'}),busy?'Đang tải…':'Tải ảnh / tài liệu',h('input',{type:'file',multiple:true,accept:'.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx',disabled:busy,onChange:pick})),error&&h('div',{role:'alert',className:'asset-upload-error'},error));
+    h('small',{style:{display:'block',marginBottom:8}},'PDF · Excel (.xls, .xlsx) · Word (.doc, .docx) · Ảnh JPG, PNG, WebP'),
+    h('label',{className:'asset-upload-button'},h('i',{className:'ti ti-upload'}),busy?'Đang tải…':'Chọn ảnh / PDF / Excel / Word',h('input',{type:'file',multiple:true,accept:'.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx',disabled:busy,onChange:pick})),error&&h('div',{role:'alert',className:'asset-upload-error'},error));
 }
