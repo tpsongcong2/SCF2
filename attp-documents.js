@@ -16,7 +16,7 @@ function ATTPDocumentsTab({page,title,icon,currentUser}){
   const isClaim=page==='attp_claims';
   const isDaily=page==='attp_daily'||isClaim||isAudit;
   const [query,setQuery]=useState('');
-  const [range,setRange]=useState(()=>isDaily?scfATTPMonthRange():{from:'',to:''});
+  const [range,setRange]=useState(()=>isDaily&&!isAudit?scfATTPMonthRange():{from:'',to:''});
   const [pageNumber,setPageNumber]=useState(1);
   const [result,setResult]=useState({items:[],total:0,page:1,pages:1});
   const [loading,setLoading]=useState(true);
