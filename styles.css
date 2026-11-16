@@ -2093,3 +2093,5 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
  .multi-label-print-modal .multi-label-order-table{max-height:calc(96vh - 365px)!important;min-height:180px}
  .multi-label-order-table th{position:sticky;top:0;background:var(--bg2);z-index:1}
 }
+/* V862: bảng tổng theo mã ở bước Kiểm & xếp của lái xe */
+.dm-load-summary h3{margin:0 0 8px}.dm-sum-table{width:100%;border-collapse:collapse;font-size:14px}.dm-sum-table th,.dm-sum-table td{padding:6px 4px;border-bottom:1px solid var(--bd,#dfe7e2);text-align:right;white-space:nowrap}.dm-sum-table th:first-child,.dm-sum-table td:first-child{text-align:left;white-space:normal}.dm-sum-table thead th{font-size:12px;color:var(--tx2,#5b6b63);font-weight:600}.dm-sum-table tfoot td{font-weight:700;border-bottom:0;border-top:2px solid var(--pri,#2d6a4f)}

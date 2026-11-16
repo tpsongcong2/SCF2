@@ -1079,6 +1079,21 @@ function tripImageOrderWeight(order,products){
     return sum+qty*(numFmt(product?.weightPerUnit)||numFmt(line.weightPerUnit)||0);
   },0);
 }
+// Chuyến KV: tổng số gói hàng đóng PAC theo loại, thứ tự B (bún) - ST (bún sợi to) - P (phở) - BC (bánh cuốn).
+// Hàng không đóng PAC (tính kg) không ghi vào đây.
+function scfTripKvPacSummary(trip,orders){
+  const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toUpperCase();
+  const shift=norm(trip?.shiftName||trip?.shiftId).replace(/[^A-Z0-9]+/g,' ').trim();
+  if(!/^(KV|KHO VAN)( |$)/.test(shift))return '';
+  const totals={B:0,ST:0,P:0,BC:0};
+  for(const order of orders||[])for(const line of order?.lines||[]){
+    const name=norm(line?.productName).replace(/[^A-Z0-9]+/g,' ').trim();
+    if(!/\bPAC\b/.test(name))continue;
+    const code=/BANH CUON/.test(name)?'BC':/PHO/.test(name)?'P':/BUN.*SOI TO/.test(name)?'ST':/BUN/.test(name)?'B':'';
+    if(code)totals[code]+=numFmt(line.qtyProd??line.qty??line.quantity??line.qtyInvoice??0);
+  }
+  return Object.entries(totals).filter(([,qty])=>qty>0).map(([code,qty])=>code+qty.toLocaleString('vi-VN',{maximumFractionDigits:2})).join(' - ');
+}
 function isDtTrip(trip){
   const value=[trip?.shiftName,trip?.shiftCode,trip?.id].filter(Boolean).join(' ').toUpperCase();
   return /(^|[^A-ZÀ-Ỹ])ĐT(?=$|[^A-ZÀ-Ỹ])/.test(value);
@@ -1183,7 +1198,8 @@ function renderTripImage(trips,orders,products,customers,title,prodCats=[],showD
     const weightOrders=orders.filter(order=>order.status!=='cancelled'&&(order.tripId?String(order.tripId)===String(trip.id):ids.has(String(order.id))));
     const totalWeight=weightOrders.length?weightOrders.reduce((sum,order)=>sum+tripImageOrderWeight(order,products),0):numFmt(trip.totalWeight);
     const shiftWidth=Math.round(canvas.width*.18),driverWidth=Math.round(canvas.width*.34);
-    const totalLabel=totalWeight.toLocaleString('vi-VN',{maximumFractionDigits:2})+' kg';
+    const pacSummary=scfTripKvPacSummary(trip,weightOrders);
+    const totalLabel=totalWeight.toLocaleString('vi-VN',{maximumFractionDigits:2})+' kg'+(pacSummary?'  '+pacSummary:'');
     blocks.push(showDriverName
       ?{cells:[shiftName,driverName,totalLabel],widths:[shiftWidth,driverWidth,canvas.width-shiftWidth-driverWidth],cellFills:[tripFill,'#5b9bd5',tripFill],fill:tripFill,bold:true,dispatchStar:scfTripImageDispatched(trip)}
       :{cells:[shiftName,totalLabel],widths:[shiftWidth,canvas.width-shiftWidth],fill:tripFill,bold:true,dispatchStar:scfTripImageDispatched(trip)});

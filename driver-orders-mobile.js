@@ -22,8 +22,32 @@ function scfDriverMobileStartIssues(trip,orders){
   if(!trip.cargoBeforeImage)issues.push('chưa chụp thùng xe trước giao');
   return issues;
 }
+// Bảng đồng kiểm khi xếp xe: cộng SL đặt theo từng mã hàng và đơn vị.
+function scfDriverLoadSummary(orders,products){
+  const rows=new Map();
+  for(const order of orders||[])for(const line of order.lines||[]){
+    const product=(products||[]).find(p=>String(p.id)===String(line.productId))||{};
+    const name=line.productName||product.name||'Sản phẩm',unit=String(line.unit||product.unit||'').trim();
+    const key=(line.productId||name)+'|'+unit.toLowerCase();
+    const qty=tripOrderedQty(line),kgUnit=/^(kg|kgs|kilogram)$/i.test(unit);
+    const kg=qty*(kgUnit?1:numFmt(line.weightPerUnit||product.weightPerUnit||0));
+    const row=rows.get(key)||{name,unit,qty:0,kg:0,orders:new Set(),kgUnit};
+    row.qty+=qty;row.kg+=kg;row.orders.add(String(order.id));rows.set(key,row);
+  }
+  const list=[...rows.values()].map(row=>({...row,orders:row.orders.size})).sort((a,b)=>a.name.localeCompare(b.name,'vi',{numeric:true})||a.unit.localeCompare(b.unit,'vi'));
+  return {rows:list,codes:list.length,packs:list.filter(row=>!row.kgUnit).reduce((sum,row)=>sum+row.qty,0),kg:list.reduce((sum,row)=>sum+row.kg,0)};
+}
 function scfDriverMobileCompletionIssues(trip,orders){
-  if(!scfDriverWorkflowRequired()||trip?.driverMobileWorkflowVersion!==1)return [];
+  // Không bắt buộc tuần tự: phần Giao & về vẫn phải theo thứ tự và đủ tối thiểu trước khi hoàn thành.
+  if(!scfDriverWorkflowRequired()){
+    const issues=[];
+    if(!trip?.driverReturnedAt)issues.push('chưa bấm Đã về — Nộp hóa đơn');
+    if(!scfDriverPhotoList(trip,'summary').length)issues.push('chưa chụp hóa đơn tổng');
+    if(!Number.isInteger(trip?.workReturnTotal)||trip.workReturnTotal<0)issues.push('chưa nhập công rổ mang về');
+    if(!trip?.cargoAfterImage)issues.push('chưa chụp thùng xe khi về');
+    return issues;
+  }
+  if(trip?.driverMobileWorkflowVersion!==1)return [];
   const members=scfDriverWorkflowMembers(trip,orders),issues=[];
   if((trip.orderIds||[]).some(id=>!(orders||[]).some(order=>String(order.id)===String(id))))issues.push('chưa tải đủ đơn trong chuyến');
   if(members.some(order=>!order.driverDeliveredAt))issues.push('chưa tích đủ đơn đã giao');
@@ -52,7 +76,7 @@ function scfDriverMobileChange({trip,orders,user,command,orderId,value,base,stam
   else if(command==='load'){requirePhase('assigned');if(required&&!trip.driverAcceptedAt)throw Error('Hãy nhận đơn trước.');const production=scfDriverLoadProductionSnapshot(order,value,window.__SCF_UI_SETTINGS);patchOrder({driverLoadedAt:value?stamp:'',driverLoadedBy:user.name||'',...production});}
   else if(command==='basketOut'||command==='basketReturn'){
     requirePhase(command==='basketOut'?'assigned':'active');
-    if(required&&command==='basketReturn'&&!trip.driverReturnedAt)throw Error('Hãy xác nhận đã về trước.');
+    if(command==='basketReturn'&&!trip.driverReturnedAt)throw Error('Hãy xác nhận đã về trước.');
     const raw=String(value??'').trim();if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw Error('Công rổ phải là số nguyên từ 0 trở lên.');
     patchTrip({[command==='basketOut'?'workOutTotal':'workReturnTotal']:Number(raw)});
   }
@@ -70,7 +94,7 @@ function scfDriverMobileChange({trip,orders,user,command,orderId,value,base,stam
   else if(command==='noInvoice'){requirePhase('active');if(!order||scfDriverPhotoList(order,'driver').length)throw Error('Đơn đã có hóa đơn hoặc không còn trong chuyến.');const marked=value!==false;if(!!order.driverNoInvoiceAt!==marked)patchOrder({driverNoInvoiceAt:marked?stamp:'',driverNoInvoiceBy:marked?user.name||'':''});}
   else if(command==='cargoBefore'||command==='cargoAfter'){
     requirePhase(command==='cargoBefore'?'assigned':'active');
-    if(required&&command==='cargoAfter'&&!trip.driverReturnedAt)throw Error('Ảnh thùng xe khi về chỉ chụp sau khi xác nhận đã về.');remoteImage(value);
+    if(command==='cargoAfter'&&!trip.driverReturnedAt)throw Error('Ảnh thùng xe khi về chỉ chụp sau khi xác nhận đã về.');remoteImage(value);
     patchTrip(command==='cargoBefore'?{cargoBeforeImage:value,cargoBeforeUploadedAt:stamp,cargoBeforeUploadedBy:user.name||''}:{cargoAfterImage:value,cargoAfterUploadedAt:stamp,cargoAfterUploadedBy:user.name||''});
   }
   else if(command==='invoice'){
@@ -183,12 +207,17 @@ function DriverOrdersMobile({trips,orders,products,prodCats=[],customers,shifts,
         phase===0&&h(React.Fragment,null,members.map(order=>h('section',{key:order.id,className:'dm-panel'},h('b',null,order.pointName||order.id),h('p',null,(order.deliveryTime||'')+' · '+fmt(weight(order))+' kg'))),h('button',{className:'bp',disabled:!canWrite||!members.length,onClick:()=>act('receive')},'Nhận đơn chuyến này')),
         phase===1&&h(React.Fragment,null,h('h3',null,'Kiểm hàng trước khi giao · '+loaded.length+'/'+members.length),
           [...loaded,...members.filter(order=>!order.driverLoadedAt)].map(order=>orderCard(order,true)),
+          members.length>0&&(()=>{const sum=scfDriverLoadSummary(members,products);return h('section',{className:'dm-panel dm-load-summary'},
+            h('h3',null,'Tổng theo mã để đồng kiểm'),
+            h('table',{className:'dm-sum-table'},h('thead',null,h('tr',null,h('th',null,'Mã hàng'),h('th',null,'Số lượng'),h('th',null,'Kg'))),
+              h('tbody',null,sum.rows.map(row=>h('tr',{key:row.name+'|'+row.unit},h('td',null,row.name),h('td',null,fmt(row.qty)+' '+row.unit),h('td',null,fmt(row.kg))))),
+              h('tfoot',null,h('tr',null,h('td',null,'Tổng '+sum.codes+' mã'),h('td',null,fmt(sum.packs)+' gói'),h('td',null,fmt(sum.kg))))));})(),
           (!workflowRequired||loaded.length===members.length)&&members.length>0&&h('section',{className:'dm-panel dm-form'},h(DriverBasketField,{tripId:trip.id,label:'Tổng công rổ mang đi',value:trip.workOutTotal,disabled:!canWrite,onSave:value=>act('basketOut',value)}),photoControl('cargoBefore','Thùng xe trước giao',trip.cargoBeforeImage)),
           readyStart.length>0&&h('p',{className:'dm-hint'},readyStart.join('; ')),h('button',{className:'bp',disabled:!canWrite||!!readyStart.length,onClick:start},'Bắt đầu giao')),
         (phase===2||phase===3)&&h(React.Fragment,null,invoiceTotal(),h('h3',null,'Giao từng đơn · '+delivered.length+'/'+members.length),h('p',{className:'dm-hint'},'Tích đơn đã giao; bấm tên đơn để thay đổi SL giao.'),[...delivered,...members.filter(order=>!order.driverDeliveredAt)].map(order=>orderCard(order,false)),
           phase===2&&h('button',{className:'bp',disabled:!canWrite,onClick:()=>act('return')},'Đã về — Nộp hóa đơn'),
-          (phase===3||!workflowRequired)&&h('section',{className:'dm-panel dm-form'},h(DriverBasketField,{tripId:trip.id,label:'Tổng công rổ mang về',value:trip.workReturnTotal,disabled:!canWrite,onSave:value=>act('basketReturn',value)}),h('p',null,'Mang đi '+(trip.workOutTotal??'—')+' · Mang về '+(trip.workReturnTotal??'—')),photoControl('cargoAfter','Thùng xe khi về',trip.cargoAfterImage)),
-          (phase===3||!workflowRequired)&&completeMissing.length>0&&h('p',{className:'dm-hint'},completeMissing.join('; ')),(phase===3||!workflowRequired)&&h('button',{className:'bp',disabled:!canWrite||!!completeMissing.length,onClick:finish},'Hoàn thành chuyến')),
+          phase===3&&h('section',{className:'dm-panel dm-form'},h(DriverBasketField,{tripId:trip.id,label:'Tổng công rổ mang về',value:trip.workReturnTotal,disabled:!canWrite,onSave:value=>act('basketReturn',value)}),h('p',null,'Mang đi '+(trip.workOutTotal??'—')+' · Mang về '+(trip.workReturnTotal??'—')),photoControl('cargoAfter','Thùng xe khi về',trip.cargoAfterImage)),
+          phase===3&&completeMissing.length>0&&h('p',{className:'dm-hint'},completeMissing.join('; ')),phase===3&&h('button',{className:'bp',disabled:!canWrite||!!completeMissing.length,onClick:finish},'Hoàn thành chuyến')),
         phase===4&&h('section',{className:'dm-panel'},h('h3',null,trip.status==='completed'?'Đã được kế toán duyệt':'Đã báo hoàn thành · Chờ kế toán'),h(DriverTripEvidence,{trip,orders,showInvoices:canMobileFeature(user,'tripInvoices')})),
         !canTripAction(user,'driverWorkflow')&&h('p',{className:'dm-hint'},'Tài khoản chưa có quyền nhận và hoàn thành chuyến.'),busy&&h('p',{role:'status'},'Đang tải ảnh…'),error&&h('p',{role:'alert',className:'dm-error'},error)
       )
