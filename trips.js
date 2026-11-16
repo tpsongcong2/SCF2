@@ -1,6 +1,7 @@
 /* ─── DELIVERY TRIPS ─── */
 const tripOrderedQty=line=>numFmt(line?.qtyProd??line?.qty??line?.quantity??line?.qtyInvoice??0);
-const tripDeliveredQty=line=>line?.qtyDeliveredDefault===true&&!line.deliveredAt&&!line.deliveredBy&&Number.isFinite(Date.parse(line.qtyDeliveredDefaultUntil))&&Date.now()>=Date.parse(line.qtyDeliveredDefaultUntil)?0:line?.qtyDelivered!==undefined&&line?.qtyDelivered!==null&&line?.qtyDelivered!==''?numFmt(line.qtyDelivered):tripOrderedQty(line);
+// SL giao chưa ai sửa (giá trị điền sẵn) luôn bằng SL đặt, kể cả sau giờ xuất phát. Kế toán/lái xe sửa thì ghi đè và lưu lịch sử đơn.
+const tripDeliveredQty=line=>line?.qtyDeliveredDefault===true&&!line.deliveredAt&&!line.deliveredBy?tripOrderedQty(line):line?.qtyDelivered!==undefined&&line?.qtyDelivered!==null&&line?.qtyDelivered!==''?numFmt(line.qtyDelivered):tripOrderedQty(line);
 function scfTripBelongsToDriver(trip,user){
   const driverId=String(trip?.driverId||'').trim(),userId=String(user?.id||'').trim();
   if(driverId)return !!userId&&driverId===userId;
@@ -602,6 +603,8 @@ function scfDriverReportDrivers(trips,employees){
   return {tripKey,options:options.map(item=>({...item,label:item.name+(counts.get(item.name)>1?' ('+item.key.replace(/^id:|^name:/,'')+')':'')}))};
 }
 function scfDriverReportDeliveredQty(line){
+ // Công lái xe dùng SL giao cuối cùng: chưa ai sửa thì = SL đặt; kế toán/lái xe đã sửa thì lấy số đã sửa.
+ if(line?.qtyDeliveredDefault===true&&!line.deliveredAt&&!line.deliveredBy)return numFmt(line?.qtyProd??line?.qty??line?.quantity??line?.qtyInvoice??0);
  return line?.qtyDelivered!==undefined&&line.qtyDelivered!==null&&line.qtyDelivered!==''?numFmt(line.qtyDelivered):numFmt(line?.qtyProd??line?.qty??line?.quantity??line?.qtyInvoice??0);
 }
 function scfDriverDeliveredWeight(orders,products){
@@ -2472,7 +2475,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
     if(!currentLine)return;
     const previous=currentLine.qtyDelivered===undefined||currentLine.qtyDelivered===null||currentLine.qtyDelivered===''?'':numFmt(currentLine.qtyDelivered);
     if(previous===qty&&currentLine.deliveredBy)return;
-    const oldQty=previous===''?tripOrderedQty(currentLine):previous;
+    const oldQty=tripDeliveredQty(currentLine);
     const stamp=fmtDT();
     const actor=currentUser?.name||'Người dùng';
     const action=oldQty===qty?'Xác nhận số lượng đã giao':'Sửa số lượng đã giao';
