@@ -82,7 +82,7 @@ function scfDriverMobileChange({trip,orders,user,command,orderId,value,base,stam
   else if(command==='load'){requirePhase('assigned');if(required&&!trip.driverAcceptedAt)throw Error('Hãy nhận đơn trước.');const production=scfDriverLoadProductionSnapshot(order,value,window.__SCF_UI_SETTINGS);patchOrder({driverLoadedAt:value?stamp:'',driverLoadedBy:user.name||'',...production});}
   else if(command==='basketOut'||command==='basketReturn'){
     requirePhase(command==='basketOut'?'assigned':'active');
-    if(command==='basketReturn'&&!trip.driverReturnedAt)throw Error('Hãy xác nhận đã về trước.');
+    if(required&&command==='basketReturn'&&!trip.driverReturnedAt)throw Error('Hãy xác nhận đã về trước.');
     const raw=String(value??'').trim();if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw)))throw Error('Công rổ phải là số nguyên từ 0 trở lên.');
     patchTrip({[command==='basketOut'?'workOutTotal':'workReturnTotal']:Number(raw)});
   }
@@ -100,7 +100,7 @@ function scfDriverMobileChange({trip,orders,user,command,orderId,value,base,stam
   else if(command==='noInvoice'){requirePhase('active');if(!order||scfDriverPhotoList(order,'driver').length)throw Error('Đơn đã có hóa đơn hoặc không còn trong chuyến.');const marked=value!==false;if(!!order.driverNoInvoiceAt!==marked)patchOrder({driverNoInvoiceAt:marked?stamp:'',driverNoInvoiceBy:marked?user.name||'':''});}
   else if(command==='cargoBefore'||command==='cargoAfter'){
     requirePhase(command==='cargoBefore'?'assigned':'active');
-    if(command==='cargoAfter'&&!trip.driverReturnedAt)throw Error('Ảnh thùng xe khi về chỉ chụp sau khi xác nhận đã về.');remoteImage(value);
+    if(required&&command==='cargoAfter'&&!trip.driverReturnedAt)throw Error('Ảnh thùng xe khi về chỉ chụp sau khi xác nhận đã về.');remoteImage(value);
     patchTrip(command==='cargoBefore'?{cargoBeforeImage:value,cargoBeforeUploadedAt:stamp,cargoBeforeUploadedBy:user.name||''}:{cargoAfterImage:value,cargoAfterUploadedAt:stamp,cargoAfterUploadedBy:user.name||''});
   }
   else if(command==='invoice'){
@@ -222,8 +222,8 @@ function DriverOrdersMobile({trips,orders,products,prodCats=[],customers,shifts,
           (!workflowRequired||loaded.length===members.length)&&members.length>0&&h('section',{className:'dm-panel dm-form'},h(DriverBasketField,{tripId:trip.id,label:'Tổng công rổ mang đi',value:trip.workOutTotal,disabled:!canWrite,onSave:value=>act('basketOut',value)}),photoControl('cargoBefore','Thùng xe trước giao',trip.cargoBeforeImage)),
           readyStart.length>0&&h('p',{className:'dm-hint'},readyStart.join('; ')),h('button',{className:'bp',disabled:!canWrite||!!readyStart.length,onClick:start},'Bắt đầu giao')),
         (phase===2||phase===3)&&h(React.Fragment,null,invoiceTotal(),h('h3',null,'Giao từng đơn · '+delivered.length+'/'+members.length),h('p',{className:'dm-hint'},'Tích đơn đã giao; bấm tên đơn để thay đổi SL giao.'),[...delivered,...members.filter(order=>!order.driverDeliveredAt)].map(order=>orderCard(order,false)),
+          (phase===3||phase===2&&!workflowRequired)&&h('section',{className:'dm-panel dm-form'},h(DriverBasketField,{tripId:trip.id,label:'Tổng công rổ mang về',value:trip.workReturnTotal,disabled:!canWrite,onSave:value=>act('basketReturn',value)}),h('p',null,'Mang đi '+(trip.workOutTotal??'—')+' · Mang về '+(trip.workReturnTotal??'—')),photoControl('cargoAfter','Thùng xe khi về',trip.cargoAfterImage)),
           phase===2&&h('button',{className:'bp',disabled:!canWrite,onClick:()=>act('return')},'Đã về — Nộp hóa đơn'),
-          phase===3&&h('section',{className:'dm-panel dm-form'},h(DriverBasketField,{tripId:trip.id,label:'Tổng công rổ mang về',value:trip.workReturnTotal,disabled:!canWrite,onSave:value=>act('basketReturn',value)}),h('p',null,'Mang đi '+(trip.workOutTotal??'—')+' · Mang về '+(trip.workReturnTotal??'—')),photoControl('cargoAfter','Thùng xe khi về',trip.cargoAfterImage)),
           pendingEditable&&h('p',{className:'dm-hint'},'Đã báo hoàn thành · Chờ kế toán duyệt. Vẫn bổ sung được hóa đơn, SL giao, công rổ về và ảnh thùng xe đến khi kế toán duyệt.'),phase===3&&!pendingEditable&&completeMissing.length>0&&h('p',{className:'dm-hint'},completeMissing.join('; ')),phase===3&&!pendingEditable&&h('button',{className:'bp',disabled:!canWrite||!!completeMissing.length,onClick:finish},'Hoàn thành chuyến')),
         phase===4&&h('section',{className:'dm-panel'},h('h3',null,trip.status==='completed'?'Đã được kế toán duyệt':'Đã báo hoàn thành · Chờ kế toán'),h(DriverTripEvidence,{trip,orders,showInvoices:canMobileFeature(user,'tripInvoices')})),
         !canTripAction(user,'driverWorkflow')&&h('p',{className:'dm-hint'},'Tài khoản chưa có quyền nhận và hoàn thành chuyến.'),busy&&h('p',{role:'status'},'Đang tải ảnh…'),error&&h('p',{role:'alert',className:'dm-error'},error)

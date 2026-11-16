@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V866';
+const SCF_BUILD_VERSION='V869';
 const PTITLES = {
   driverprintlog:'Thông tin lái xe in đơn',
   kpi4p:'KPI & Lương 4P',
@@ -245,19 +245,37 @@ function createScfDataLoader(read,apply){
   };
 }
 const scfScriptLoads=new Map();
-function scfLoadOptionalScript(name,url){
+function scfLoadOptionalScript(name,url,failMessage='Chưa tải được công cụ Excel. Kiểm tra kết nối rồi thử tải lại.'){
   if(window[name])return Promise.resolve();
   if(scfScriptLoads.has(name))return scfScriptLoads.get(name);
   const task=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
     const timer=setTimeout(()=>fail(),20000);
-    function fail(){clearTimeout(timer);script.remove();reject(new Error('Chưa tải được công cụ Excel. Kiểm tra kết nối rồi thử tải lại.'));}
+    function fail(){clearTimeout(timer);script.remove();reject(new Error(failMessage));}
     script.src=url;script.async=true;script.crossOrigin='anonymous';
     script.onload=()=>{clearTimeout(timer);if(window[name])resolve();else fail();};
     script.onerror=fail;document.head.appendChild(script);
   }).catch(error=>{scfScriptLoads.delete(name);throw error;});
   scfScriptLoads.set(name,task);return task;
 }
+// V868: các tệp chỉ dùng cho một số trang được nạp khi mở trang đó (không nạp lúc khởi động) để mở app nhanh hơn.
+// Sửa một tệp dưới đây thì tăng ?v= tại đây (không còn trong index.html; sw.js vẫn lưu sẵn để dùng khi mất mạng).
+const SCF_LAZY_SCRIPT_FILES={'navigation-reports.js':['SalesReportTab','./navigation-reports.js?v=863'],'organization.js':['CustomersTab','./organization.js?v=568'],'order-detail.js':['OrderDetailListTab','./order-detail.js?v=643'],'production-closing.js':['ProductionReportTab','./production-closing.js?v=593'],'production-recipes.js':['ProductionRecipesTab','./production-recipes.js?v=590'],'attp-audit.js':['CustomerAuditList','./attp-audit.js?v=860'],'attp-documents.js':['ATTPDocumentsTab','./attp-documents.js?v=860'],'personnel.js':['PersonnelInformationTab','./personnel.js?v=638'],'user-guide.js':['UserGuideTab','./user-guide.js?v=645'],'notifications.js':['NotificationsTab','./notifications.js?v=663'],'driver-print-history.js':['DriverPrintHistoryTab','./driver-print-history.js?v=789']};
+const SCF_LAZY_PAGE_SCRIPTS={driverprintlog:['driver-print-history.js'],attp_audit:['attp-audit.js','attp-documents.js'],attp_claims:['attp-audit.js','attp-documents.js'],attp_process:['attp-audit.js','attp-documents.js'],attp_standards:['attp-audit.js','attp-documents.js'],attp_daily:['attp-audit.js','attp-documents.js'],attp_legal:['attp-audit.js','attp-documents.js'],personnel:['personnel.js'],depts:['organization.js'],customers:['organization.js'],areas:['organization.js'],workcats:['organization.js'],tasks:['organization.js'],notifications:['notifications.js'],userguide:['user-guide.js'],nccs:['navigation-reports.js'],nccgoods:['navigation-reports.js'],purchaseorders:['navigation-reports.js'],purchasegoods:['navigation-reports.js'],fuelpurchases:['navigation-reports.js'],fuelreport:['navigation-reports.js'],purchasereport:['navigation-reports.js'],maintreport:['navigation-reports.js'],materialusage:['navigation-reports.js'],powderdebtreport:['navigation-reports.js'],orderdetail:['order-detail.js'],salesreport:['navigation-reports.js'],marketsales:['navigation-reports.js'],invoicereport:['navigation-reports.js'],prodreport:['production-closing.js'],prodbom:['production-recipes.js'],prodsummary:['production-closing.js'],syncreport:['navigation-reports.js'],dbusage:['navigation-reports.js']};
+async function scfLoadPageScripts(page){
+  // Nạp tuần tự theo thứ tự cũ trong index.html (attp-audit trước attp-documents).
+  for(const file of SCF_LAZY_PAGE_SCRIPTS[page]||[]){
+    const [probe,url]=SCF_LAZY_SCRIPT_FILES[file];
+    if(typeof globalThis[probe]==='function')continue;
+    await scfLoadOptionalScript(probe,url,'Chưa tải được giao diện '+(PTITLES[page]||'màn hình này')+'. Kiểm tra kết nối rồi bấm Thử tải lại.');
+  }
+}
+// Tải trước (không chạy) các tệp nạp sau khi máy rảnh, để service worker lưu lại: trang vẫn mở được khi mất mạng.
+function scfPrefetchLazyScripts(){
+  if(typeof fetch!=='function'||typeof navigator==='undefined'||navigator.onLine===false)return;
+  Object.values(SCF_LAZY_SCRIPT_FILES).forEach(([probe,url])=>{if(typeof globalThis[probe]!=='function')fetch(url,{credentials:'same-origin'}).catch(()=>{});});
+}
+if(typeof window!=='undefined'&&typeof window.addEventListener==='function')window.addEventListener('load',()=>setTimeout(scfPrefetchLazyScripts,20000),{once:true});
 // Kiểm tra thành phần trước khi render: một tệp tải lỗi không được làm trắng trang.
 const SCF_PAGE_COMPONENTS={
   driverprintlog:'DriverPrintHistoryTab',
@@ -284,6 +302,7 @@ function scfMissingPageComponents(page){
 }
 async function scfEnsurePageTools(page){
   if(page==='kpi4p'){await scfLoadOptionalScript('KPI4PTab','./kpi-4p.js?v=596');return;}
+  if(SCF_LAZY_PAGE_SCRIPTS[page])await scfLoadPageScripts(page);
   const missing=scfMissingPageComponents(page);
   if(missing.length){
     console.warn('Chưa nạp được thành phần giao diện:',page,missing.join(', '));
@@ -1047,7 +1066,7 @@ function App(){
       },
         !pageReady&&page==='prodsummary'&&canOpenCurrentPage(cu)&&preparedProductionPage?.ownerKey===scfQuickSummaryAccessKey(cu)?h('div',null,h('p',{className:'summary-cache-updated',role:'status'},'Bản đã lưu · Cập nhật lúc '+scfSummaryUpdatedLabel(preparedProductionPage.updatedAt)+' · Đang đối chiếu dữ liệu mới…'),pageError&&h('p',{role:'alert'},pageError),h(ProductionSummaryTab,{...preparedProductionPage.payload.data,currentUser:cu,preparedRows:preparedProductionPage.payload.rows,preparedDate:preparedProductionPage.payload.date,snapshotReadOnly:true})):!pageReady?h('div',{className:'card',role:pageError?'alert':'status',style:{padding:24}},
           h('p',null,pageError||'Đang tải dữ liệu '+(PTITLES[page]||'màn hình')+'…'),
-          pageError&&h('button',{className:'bp',onClick:()=>{if(scfMissingPageComponents(page).length)location.reload();else setPageAttempt(v=>v+1);}},'Thử tải lại')
+          pageError&&h('button',{className:'bp',onClick:()=>{if(scfMissingPageComponents(page).length&&!SCF_LAZY_PAGE_SCRIPTS[page])location.reload();else setPageAttempt(v=>v+1);}},'Thử tải lại')
         ):h(React.Fragment,null,
         page==='mobile-home'&&h(MobileRestrictedHome),
         canOpenCurrentPage(cu)&&page==='welcome'&&h(WelcomePage,{emp:cu,employees,company,uiSettings,news:companyNews,setNews:setCompanyNews,messages:internalMessages,setMessages:setInternalMessages,notifications,onRefresh:refreshCommunityData}),

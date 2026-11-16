@@ -1,4 +1,4 @@
-const CACHE = 'scf-v866';
+const CACHE = 'scf-v869';
 const ASSETS = [
   './',
   './index.html',
@@ -24,6 +24,7 @@ const ASSETS = [
   './invoice-orientation.js?v=737',
   './invoice-orientation-store.js?v=723',
   './invoice-orientation-background.js?v=722',
+  './invoice-inbox.js?v=722',
   './asset-documents.js?v=860',
   './catalogs.js?v=860',
   './production-shifts.js?v=860',
@@ -52,7 +53,7 @@ const ASSETS = [
   './accounting-print.js?v=860',
   './driver-production-link.js?v=860',
   './agent-registry-ui.js?v=788',
-  './driver-orders-mobile.js?v=866',
+  './driver-orders-mobile.js?v=867',
   './driver-label-print.js?v=865',
   './driver-mobile-preview.js?v=776',
   './delivery-excel.js?v=718',
@@ -66,7 +67,7 @@ const ASSETS = [
   './production-assignments.js?v=644',
   './permissions.js?v=860',
   './permission-settings.js?v=860',
-  './app.js?v=866',
+  './app.js?v=869',
   './bootstrap.js?v=645',
   './manifest.json',
   './icon-192.png',
