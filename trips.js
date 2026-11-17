@@ -1798,7 +1798,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
   const[hideTripOptionalColumns,setHideTripOptionalColumns]=useLS('scf_trip_hide_optional_columns_v2',true);
   const[inlineInvoicePreference,setInlineInvoicePreference]=useLS('scf_trip_inline_invoices_'+String(currentUser?.id||''),false);
   const[inlineInvoiceSize,setInlineInvoiceSize]=useLS('scf_inline_invoice_size_'+String(currentUser?.id||''),'medium');
-  const[driverInvoiceColumnPreference,setDriverInvoiceColumnPreference]=useLS('scf_trip_driver_invoice_column_'+String(currentUser?.id||''),false);
+  const[driverInvoiceColumnPreference,setDriverInvoiceColumnPreference]=useLS('scf_trip_driver_invoice_column_v875_'+String(currentUser?.id||''),true);
   const invoiceSize=['small','medium','large'].includes(inlineInvoiceSize)?inlineInvoiceSize:'medium';
   const _td1=fmtDate();const _ti1=_td1.split('/').reverse().join('-');const[fPeriod,sfPeriod]=useState('day');const[fDate,sfDate]=useState(_ti1);const[fMonth,sfMonth]=useState(_ti1.slice(0,7));const[fTrip,sfTrip]=useState('');const[fTripGroup,sfTripGroup]=useState('');const[fShift,sfShift]=useState('');const[fDriver,sfDriver]=useState('');const[fOrderState,sfOrderState]=useState('with');
   const[fCustomer,sfCustomer]=useState('');const[fPoint,sfPoint]=useState('');
@@ -1821,7 +1821,8 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
   const [summaryInvoiceTripId,setSummaryInvoiceTripId]=useState('');
   const [summaryInvoiceSide,setSummaryInvoiceSide]=useState(0);
   const [invoiceInboxTripId,setInvoiceInboxTripId]=useState('');
-  const showDriverInvoiceColumn=!showInlineInvoices||driverInvoiceColumnPreference===true;
+  // V875: chế độ Hiện ảnh hóa đơn mặc định vẫn hiện cột HĐ LX (kèm ảnh) để kế toán duyệt; có thể bấm Ẩn HĐ LX.
+  const showDriverInvoiceColumn=!showInlineInvoices||driverInvoiceColumnPreference!==false;
   const canCreatePastTrip=isAdmin||isAccounting;
   const canCreateTripImages=canOpenTrips;
   const canUseMobileQuickUpdate=canOpenTrips&&canMobileFeature(currentUser,'tripUpdate')&&(canTripAction(currentUser,'invoiceQty')||canEnterActualQty||canUseDriverWorkflow||canManageTrips||isAccounting);
@@ -2759,7 +2760,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
             // Bảng đơn hàng
             tripOrders.length?h('div',{className:'desktop-only tw'},
               h('table',{className:'trip-detail-table'+(showInlineInvoices?' trip-invoice-review-table':'')},
-                showInlineInvoices&&h('colgroup',null,...[76,110,150,122,122,64,...(hideTripOptionalColumns?[]:[200,80,80]),null,...(showDriverInvoiceColumn?[120]:[]),48].map((width,index)=>h('col',{key:index,style:width?{width}:undefined}))),
+                showInlineInvoices&&h('colgroup',null,...[76,110,150,122,122,64,...(hideTripOptionalColumns?[]:[200,80,80]),null,...(showDriverInvoiceColumn?[null]:[]),48].map((width,index)=>h('col',{key:index,style:width?{width}:undefined}))),
                 h('thead',null,h('tr',null,...['STT','Địa điểm','Hàng hóa','SL HĐ','SL đã giao','Giờ',...(hideTripOptionalColumns?[]:['Chú ý','Rổ đi','Rổ về']),'Ảnh HĐ',...(showDriverInvoiceColumn?['HĐ LX']:[]),'In đơn'].map(c=>h('th',{key:c},c)))),
                 h('tbody',null,tripOrders.map((o,orderIndex)=>{
                   return h('tr',{key:o.id},
@@ -2791,6 +2792,7 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
                     ),
                     showDriverInvoiceColumn&&h('td',{className:'trip-driver-invoice-cell'},
                       h('div',{style:{display:'grid',gap:4}},
+                        showInlineInvoices&&o.driverInvoiceImage&&h(TripInvoicePreview,{key:'driver-'+o.driverInvoiceImage,src:o.driverInvoiceImage,orderId:o.id,kind:'driver',size:invoiceSize,landscape:true,label:'HĐ LX '+(o.pointName||o.customer||'')}),
                         o.driverInvoiceImage?h('button',{className:'bi',title:'Xem HĐ LX',onClick:()=>setOrderInvoiceView({id:o.id,src:o.driverInvoiceImage,label:'HĐ lái xe · '+(o.pointName||o.customer||o.id),kind:'driver'})},h('i',{className:'ti ti-photo-check',style:{fontSize:15,color:'var(--pri)'}}),' Xem HĐ LX'):null,
                         o.driverInvoiceReviewStatus==='approved'&&h('span',{className:'badge',style:{background:'#E1F5EE',color:'#0F6E56'}},'Đã duyệt'),
                         o.driverInvoiceImage&&(!o.driverInvoiceReviewStatus||o.driverInvoiceReviewStatus==='pending')&&h('span',{className:'badge',style:{background:'#FFF3CD',color:'#8A5A00'}},'Chờ duyệt'),
