@@ -2295,10 +2295,15 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
     if(!canReviewTrips)return;
     if(trip.status!=='completion_pending'){window.showToast('Chuyến chưa chờ kế toán duyệt.','warn');return;}
     const check=approvalIssues(trip);
-    if(check.issues.length){window.showToast('Chưa thể duyệt: '+check.issues.join('; ')+'.','warn');return;}
+    const pendingSummary=(trip.summaryInvoiceImage||trip.summaryInvoiceBackImage)&&trip.summaryInvoiceReviewStatus!=='approved';
+    const onlyInvoiceReview=!check.issues.length?false:!completionIssues(trip).issues.length&&trip.summaryInvoiceReviewStatus!=='rejected'&&!check.unapprovedInvoices.some(o=>o.driverInvoiceReviewStatus==='rejected')&&(check.issues.length===(check.unapprovedInvoices.length?1:0)+(pendingSummary?1:0));
+    if(check.issues.length&&!onlyInvoiceReview){window.showToast('Chưa thể duyệt: '+check.issues.join('; ')+'.','warn');return;}
+    if(onlyInvoiceReview&&!window.confirm('Chuyến còn '+[check.unapprovedInvoices.length?check.unapprovedInvoices.length+' HĐ LX':'',pendingSummary?'hóa đơn tổng':''].filter(Boolean).join(' và ')+' chưa duyệt.\nDuyệt luôn các hóa đơn này và duyệt hoàn thành chuyến?'))return;
     const stamp=fmtDT();
-    const approved={...trip,status:'completed',completedAt:stamp,accountingConfirmedAt:stamp,accountingConfirmedBy:currentUser?.name||'',attendanceStatus:'confirmed'};
-    const nextOrders=orders.map(o=>(trip.orderIds||[]).includes(o.id)?{...o,status:'done',accountingConfirmedAt:stamp}:o);
+    const reviewer=currentUser?.name||'';
+    const invoiceIds=new Set((onlyInvoiceReview?check.unapprovedInvoices:[]).map(o=>String(o.id)));
+    const approved={...trip,...(onlyInvoiceReview&&pendingSummary?{summaryInvoiceReviewStatus:'approved',summaryInvoiceReviewReason:'',summaryInvoiceReviewedAt:stamp,summaryInvoiceReviewedBy:reviewer}:{}),status:'completed',completedAt:stamp,accountingConfirmedAt:stamp,accountingConfirmedBy:currentUser?.name||'',attendanceStatus:'confirmed'};
+    const nextOrders=orders.map(o=>{const reviewed=invoiceIds.has(String(o.id))?{...o,driverInvoiceReviewStatus:'approved',driverInvoiceReviewReason:'',driverInvoiceReviewedAt:stamp,driverInvoiceReviewedBy:reviewer}:o;return (trip.orderIds||[]).includes(o.id)?{...reviewed,status:'done',accountingConfirmedAt:stamp}:reviewed;});
     setTrips(prev=>prev.map(t=>t.id===trip.id?approved:t));
     setOrders(nextOrders);
     syncTripReceivables(approved,nextOrders,true);
@@ -2671,7 +2676,13 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
                   h('button',{type:'button',className:'bi trip-mobile-resend',onClick:()=>resendTripNotification(trip),title:trip.driverNotificationSentAt?'Đã gửi gần nhất: '+trip.driverNotificationSentAt:'Gửi lại thông báo cho lái xe','aria-label':'Gửi lại thông báo cho lái xe'},h('i',{className:'ti ti-bell-ringing'}))
                 ),
                 showInlineInvoices&&(trip.summaryInvoiceImage||trip.summaryInvoiceBackImage)&&h('div',{className:canMobileFeature(currentUser,'tripInvoices')?'trip-summary-inline-invoices':'trip-summary-inline-invoices desktop-only',style:{display:'flex',flexWrap:'wrap',gap:12,marginLeft:'auto',maxWidth:'100%'},onClick:event=>event.stopPropagation()},
-                  [trip.summaryInvoiceImage,trip.summaryInvoiceBackImage].map((src,index)=>src&&h(TripInvoicePreview,{key:'summary-'+index+'-'+src,src,size:invoiceSize,landscape:true,label:'Hóa đơn tổng · '+(index===0?'Mặt trước':'Mặt sau')}))
+                  [trip.summaryInvoiceImage,trip.summaryInvoiceBackImage].map((src,index)=>src&&h(TripInvoicePreview,{key:'summary-'+index+'-'+src,src,size:invoiceSize,landscape:true,label:'Hóa đơn tổng · '+(index===0?'Mặt trước':'Mặt sau')})),
+                  (trip.status==='completion_pending'||trip.summaryInvoiceReviewStatus)&&h('div',{className:'trip-summary-invoice-review',style:{display:'grid',gap:4,alignContent:'center'}},
+                    trip.summaryInvoiceReviewStatus==='approved'?h('span',{className:'badge',style:{background:'#E1F5EE',color:'#0F6E56'}},'HĐ tổng đã duyệt'):trip.summaryInvoiceReviewStatus==='rejected'?h('span',{className:'badge',style:{background:'#FCEBEB',color:'#A32D2D'},title:trip.summaryInvoiceReviewReason||''},'HĐ tổng cần tải lại'):h('span',{className:'badge',style:{background:'#FFF3CD',color:'#8A5A00'}},'HĐ tổng chờ duyệt'),
+                    canReviewTrips&&trip.status==='completion_pending'&&trip.summaryInvoiceImage&&trip.summaryInvoiceReviewStatus!=='approved'&&h('div',{style:{display:'flex',gap:4}},
+                      h('button',{type:'button',className:'bi','data-scf-action':'write',onClick:()=>reviewTripSummaryInvoice(trip,true),style:{color:'#0F6E56'}},'Duyệt HĐ tổng'),
+                      h('button',{type:'button',className:'bi','data-scf-action':'write',onClick:()=>reviewTripSummaryInvoice(trip,false),style:{color:'#A32D2D'}},'Chưa duyệt'))
+                  )
                 )
               ),
               h('div',{className:'trip-card-meta-line',style:{display:'flex',gap:16,fontSize:12,color:'var(--tx2)',flexWrap:'wrap'}},

@@ -700,8 +700,8 @@ function PointRow({pt,allAreas,onAreaChange,onNameChange,onPeriodChange,onDelete
     ),
     h('small',{style:{paddingLeft:22,color:'var(--tx2)'}},'Bắt đầu bán: '+(pt.customerAddedAt?new Date(pt.customerAddedAt).toLocaleString('vi-VN'):'Chưa biết thời điểm bắt đầu giao')),
     onPeriodChange&&h('div',{style:{display:'flex',gap:10,flexWrap:'wrap',paddingLeft:22}},
-      h('label',{style:{fontSize:11}},'Bắt đầu bán ',h('input',{type:'datetime-local',value:scfPointLocalDateTime(pt.customerAddedAt),'aria-label':'Bắt đầu bán '+pt.name,onChange:e=>onPeriodChange(pt.id,'customerAddedAt',e.target.value),style:{fontSize:12,padding:3}})),
-      h('label',{style:{fontSize:11}},'Ngừng bán ',h('input',{type:'datetime-local',value:scfPointLocalDateTime(pt.customerStoppedAt),'aria-label':'Ngừng bán '+pt.name,onChange:e=>onPeriodChange(pt.id,'customerStoppedAt',e.target.value),style:{fontSize:12,padding:3}}))
+      h(ScfPointPeriodInput,{label:'Bắt đầu bán',name:pt.name,value:pt.customerAddedAt,defaultTime:'00:00',onChange:value=>onPeriodChange(pt.id,'customerAddedAt',value)}),
+      h(ScfPointPeriodInput,{label:'Ngừng bán',name:pt.name,value:pt.customerStoppedAt,defaultTime:'23:59',onChange:value=>onPeriodChange(pt.id,'customerStoppedAt',value)})
     ),
     pt.customerStoppedAt&&h('small',{style:{paddingLeft:22,color:'#A32D2D'}},'Ngừng bán: '+new Date(pt.customerStoppedAt).toLocaleString('vi-VN')),
     pt.address&&h('div',{style:{fontSize:11,color:'var(--tx2)',paddingLeft:22}},
@@ -727,6 +727,20 @@ function scfPointLocalDateTime(value){
   const d=new Date(value);if(!Number.isFinite(d.getTime()))return '';
   const pad=v=>String(v).padStart(2,'0');
   return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+// V871: ô ngày và ô giờ tách riêng. Ô datetime-local thiếu giờ bị trình duyệt coi là trống nên trước đây chỉ nhập ngày
+// thì không lưu được (địa điểm thành "bán mãi mãi" và báo trùng với khách khác). Chỉ chọn ngày thì dùng giờ mặc định.
+function scfPointPeriodValue(date,time,defaultTime){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||'')))return '';
+  const clock=/^([01]\d|2[0-3]):[0-5]\d$/.test(String(time||''))?time:defaultTime;
+  return date+'T'+clock;
+}
+function ScfPointPeriodInput({label,name,value,defaultTime,onChange}){
+  const local=scfPointLocalDateTime(value),date=local.slice(0,10),time=local.slice(11,16);
+  return h('label',{style:{fontSize:11,display:'flex',flexDirection:'column',gap:2}},label,
+    h('span',{style:{display:'flex',gap:4}},
+      h('input',{type:'date',value:date,'aria-label':label+' '+name,onChange:e=>onChange(scfPointPeriodValue(e.target.value,time,defaultTime)),style:{fontSize:12,padding:3}}),
+      h('input',{type:'time',value:time,disabled:!date,'aria-label':'Giờ '+label.toLowerCase()+' '+name,title:date?'Để trống dùng '+defaultTime:'Chọn ngày trước',onChange:e=>{if(e.target.value)onChange(scfPointPeriodValue(date,e.target.value,defaultTime));},style:{fontSize:12,padding:3,width:96}})));
 }
 function scfPointPeriodConflicts(point,ownerId,customers){
   const start=point.customerAddedAt?Date.parse(point.customerAddedAt):-Infinity,end=point.customerStoppedAt?Date.parse(point.customerStoppedAt):Infinity;
@@ -860,7 +874,7 @@ function CustomerForm({cust,shifts,customers,orders,areas,onSave,onClose}){
   const AddPtForm=()=>h('div',{style:{background:'var(--bg2)',borderRadius:'var(--r)',padding:10,marginTop:4}},
     h('div',{style:{fontSize:12,color:'var(--tx2)',fontWeight:500,marginBottom:6}},'Thêm địa điểm mới'),
     h('div',{className:'g2'},
-      h(F,{label:'Bắt đầu bán *'},h('input',{type:'datetime-local',value:np.customerAddedAt||'',onChange:e=>snp(p=>({...p,customerAddedAt:e.target.value}))})),
+      h(ScfPointPeriodInput,{label:'Bắt đầu bán *',name:'địa điểm mới',value:np.customerAddedAt,defaultTime:'00:00',onChange:value=>snp(p=>({...p,customerAddedAt:value}))}),
       h(F,{label:'Tên địa điểm *'},h('input',{value:np.name,onChange:e=>snp(p=>({...p,name:e.target.value})),placeholder:'Kho, Văn phòng, Cửa hàng...'})),
       h(F,{label:'Khu vực'},np.area==='__new__'
         ?h('div',{style:{display:'flex',gap:4}},

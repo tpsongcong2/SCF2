@@ -44,7 +44,13 @@ function GoodsInventoryTab({currentUser,onTracking}){
  const localNow=()=>new Date(Date.now()+7*3600000).toISOString().slice(0,16);
  const change=(key,value)=>setForm(f=>({...f,[key]:value}));
  const mutate=async(operation,data={})=>{
-  if(!editable)return;setBusy(true);setError('');
+  if(!editable)return;
+  if(operation==='opening'){
+   const ids=data.productIds||[],missing=ids.filter(id=>!/^\d+(?:[.,]\d+)?$/.test(String(data.quantities?.[id]??'').trim()));
+   if(!ids.length){setError('Chọn ít nhất một hàng hóa cần theo dõi.');return;}
+   if(missing.length){setError('Nhập số tồn (cả số 0) cho: '+missing.map(id=>report.rows.find(r=>r.id===id)?.name||id).join(', ')+'.');return;}
+  }
+  setBusy(true);setError('');
   try{await scfGoodsInventoryRequest(operation,{date,version:loaded.version,requestId:crypto.randomUUID(),...data});setReload(n=>n+1);}
   catch(e){setError(e.message);setBusy(false);}
  };
@@ -56,7 +62,8 @@ function GoodsInventoryTab({currentUser,onTracking}){
  const field=(label,value,onChange,props={})=>h(F,{label},h('input',{'aria-label':label,value,onChange:e=>onChange(e.target.value),...props}));
  const tableDetails=r=>setDetails(r);
  const editCount=(r,key,value)=>setCounts(c=>({...c,[r.productId]:{...c[r.productId],[key]:value}}));
- const countInput=r=>h('input',{'aria-label':'Kiểm kê '+r.name,type:'text',inputMode:'decimal',value:actual(r),disabled:!editable||closed||!report.initialized,onChange:e=>editCount(r,'actual',e.target.value),style:{minWidth:82,width:'100%'}});
+ // V870: chưa khởi tạo tồn đầu thì ô kiểm kê là nút mở hộp khởi tạo (trước đây là ô bị khóa, bấm không nhập được).
+ const countInput=r=>!report.initialized?h('button',{type:'button','aria-label':'Khởi tạo tồn đầu để kiểm kê '+r.name,disabled:!editable||!report.rows.length,title:'Cần khởi tạo tồn đầu trước khi nhập số kiểm kê',onClick:()=>start('opening'),style:{width:'100%',whiteSpace:'nowrap'}},'Khởi tạo tồn đầu trước'):h('input',{'aria-label':'Kiểm kê '+r.name,type:'text',inputMode:'decimal',value:actual(r),disabled:!editable||closed||!report.initialized,onChange:e=>editCount(r,'actual',e.target.value),style:{minWidth:82,width:'100%'}});
  const qualityInput=r=>h('input',{'aria-label':'Chất lượng '+r.name,value:counts[r.productId]?.quality||'',disabled:!editable||closed||!report.initialized,placeholder:'Ghi nhận chất lượng…',maxLength:500,onChange:e=>editCount(r,'quality',e.target.value),style:{minWidth:150}});
  const reasonInput=r=>h('input',{'aria-label':'Lý do lệch '+r.name,value:counts[r.productId]?.reason||'',disabled:!editable||closed||!report.initialized,placeholder:'Lý do thừa / thiếu',onChange:e=>editCount(r,'reason',e.target.value),style:{minWidth:150}});
  const diffLabel=r=>{const n=difference(r);return h('b',{style:{color:n<0?'#b45309':n>0?'#166534':'var(--tx2)'}},n===null?'Chưa kiểm':number(n));};
