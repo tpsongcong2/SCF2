@@ -274,6 +274,7 @@ function OrderDetailListTab({orders,setOrders,products,customers,shifts,trips,cu
   };
   const syncTripReceivables=(trip,nextOrders)=>{
     if(!trip||!['completion_pending','completed'].includes(trip.status)||typeof financeTripReceivableDrafts!=='function'||!setFinanceDebts)return;
+    if(typeof scfCanWriteTripDebts==='function'&&!scfCanWriteTripDebts(currentUser))return;
     const result=financeTripReceivableDrafts(trip,nextOrders,products||[],quotes||[],customers||[],currentUser);
     setFinanceDebts(prev=>{
       const oldByCustomer=new Map((prev||[]).filter(d=>String(d.sourceTripId||'')===String(trip.id)).map(d=>[String(d.partnerId||d.partnerName||''),d]));

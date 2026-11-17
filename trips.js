@@ -1777,6 +1777,15 @@ function TripSummaryPrintOptions({trip,onPrint,onClose}){
   return h(Modal,{title:'In tổng chuyến · '+(trip.shiftName||trip.id),onClose},h(ScfA4RouteChoices,{value:mobilePrintRoute,onChange:setMobilePrintRoute}),h('label',{style:{display:'flex',gap:8,alignItems:'center',padding:'10px 0'}},h('input',{type:'checkbox','aria-label':'In giấy dọc',checked:portrait,onChange:e=>setPortrait(e.target.checked)}),'In giấy dọc (bỏ tích: giấy ngang)'),h('p',null,trip.deliveryDate+' · '+(trip.driverName||'Chưa có lái')),h('label',{style:{display:'flex',alignItems:'center',gap:8,padding:'12px 0'}},h('input',{type:'checkbox','aria-label':'In kèm báo cáo chia mã và mã lẻ',checked:includeReport,onChange:e=>setIncludeReport(e.target.checked)}),'In kèm báo cáo chia mã / mã lẻ'),h(Row,null,h('button',{type:'button',onClick:onClose},'Đóng'),h('button',{type:'button',className:'bp','aria-label':'In tổng chuyến',onClick:()=>onPrint(includeReport,portrait,mobilePrintRoute)},h('i',{className:'ti ti-printer','aria-hidden':true}),' In tổng chuyến')));
 }
 
+// V874: giống máy chủ (scf-auth): ghi Công nợ cần Admin, hoặc có trang Báo cáo dòng tiền với quyền ghi.
+function scfCanWriteTripDebts(user){
+  const role=String(user?.role||'staff').trim().toLowerCase();
+  if(['admin','administrator'].includes(role))return true;
+  const perms=Array.isArray(user?.permissions)?user.permissions.map(String):[];
+  if(!perms.includes('cashflowreport'))return false;
+  const level=String(user?.permLevels?.cashflowreport||(role==='manager'?'rwd':role==='staff'?'rw':'r'));
+  return ['rw','rwd'].includes(level);
+}
 function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,prodCats,quotes,financeDebts,setFinanceDebts,company,currentUser,notify,onWarehouseMerge,onBackToDriverReport}){
   const trips=React.useMemo(()=>scfTripMembershipView(storedTrips,orders),[storedTrips,orders]);
   const tripOrderReader=React.useMemo(()=>scfCreateTripOrderReader(orders,customers,products),[orders,customers,products]);
@@ -2247,9 +2256,12 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
     if((scfDriverWorkflowRequired()||trip.summaryInvoiceImage||trip.summaryInvoiceBackImage)&&trip.summaryInvoiceReviewStatus!=='approved')issues.push('hóa đơn tổng chưa được duyệt');
     return{...base,issues,unapprovedInvoices};
   };
+  const canWriteTripDebts=typeof scfCanWriteTripDebts!=='function'||scfCanWriteTripDebts(currentUser);
   const syncTripReceivables=(trip,sourceOrders,notify=false)=>{
     if(typeof setFinanceDebts!=='function'||typeof financeTripReceivableDrafts!=='function')return{rows:[],missingPrice:0};
     const draft=financeTripReceivableDrafts(trip,sourceOrders,products,quotes,customers,currentUser);
+    // V874: tài khoản không có quyền Công nợ (vd. lái xe) chỉ tính doanh thu; công nợ do kế toán tạo khi duyệt chuyến.
+    if(!canWriteTripDebts)return{...draft,debtsSkipped:true};
     setFinanceDebts(prev=>{
       const old=(prev||[]).filter(x=>x.sourceTripId===trip.id);
       const generated=draft.rows.map(row=>{
@@ -2288,8 +2300,8 @@ function TripsTab({trips:storedTrips,setTrips,orders,setOrders,employees,shifts,
     const completedTrip={...trip,status:'completion_pending',driverConfirmedAt:stamp,endTime:stamp,attendanceStatus:'pending',actualRevenueAmount:revenueDraft.actualRevenue||0,invoiceDebtAmount:revenueDraft.invoiceRevenue||0,revenueCalculatedAt:stamp};
     setTrips(prev=>prev.map(t=>t.id===trip.id?completedTrip:t));
     setOrders(nextOrders);
-    syncTripReceivables(completedTrip,nextOrders,true);
-    window.showToast('Đã tạo doanh thu theo SL thực giao, công nợ theo SL HĐ và gửi chuyến sang kế toán duyệt.','success');
+    const debtDraft=syncTripReceivables(completedTrip,nextOrders,true);
+    window.showToast(debtDraft?.debtsSkipped?'Đã hoàn thành chuyến và gửi sang kế toán duyệt.':'Đã tạo doanh thu theo SL thực giao, công nợ theo SL HĐ và gửi chuyến sang kế toán duyệt.','success');
   };
   const approveTripCompletion=trip=>{
     if(!canReviewTrips)return;

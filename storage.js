@@ -156,6 +156,14 @@ function syncErrorMessage(key,error,value){
   const ids=groups.map(group=>group.id);
   return syncCollectionLabel(key)+': '+(ids.length?'trùng mã '+ids.slice(0,5).join(', ')+(ids.length>5?'…':''):reason);
 }
+// V874: Công nợ là dữ liệu tính lại được (kế toán duyệt chuyến sẽ tạo lại). Máy chủ từ chối
+// vì tài khoản không có quyền thì bỏ khỏi hàng chờ, không giữ lại làm kẹt các thay đổi khác.
+function scfDropForbiddenRebuildableWrite(key,error,queuedAt){
+  if(key!=='scf_finance_debts'||Number(error?.status)!==403)return false;
+  removeQueuedWrite(key,queuedAt||'');window.__SCF_COLLECTION_SYNC_RESULTS=window.__SCF_COLLECTION_SYNC_RESULTS||{};
+  window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'rejected',updatedAt:queuedAt||'',message:error?.message||''};
+  console.warn('Bỏ thay đổi công nợ không có quyền ghi:',error?.message||error);return true;
+}
 function reportSyncError(key,error,value){
   const message=syncErrorMessage(key,error,value);setSyncState('error',message);
   const noticeKey=message.replace(/(?:Mã kiểm tra:|— mã)\s*[a-zA-Z0-9_-]+/gi,'Mã kiểm tra');
@@ -758,6 +766,7 @@ async function performDbSet(key,val,queuedAt='',mode=''){
         removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'rejected',updatedAt:queuedAt,message:e.message||''};
         return false;
       }
+      if(scfDropForbiddenRebuildableWrite(key,e,queuedAt)){setSyncState(readSyncQueue()&&Object.keys(readSyncQueue()).length?'syncing':'synced');return false;}
       reportSyncError(key,e,val);scheduleSyncRetry();return false;
     }
   }
@@ -831,6 +840,7 @@ async function runPendingWrites(){
   const queue=readSyncQueue();const entries=Object.entries(queue);
   if(!entries.length){setSyncState('synced');return true;}
   setSyncState('syncing','Đang gửi '+entries.length+' thay đổi');
+  const forbiddenKeys=[];
   for(const[key]of entries){
     let waitingResolvers=[],item=null;
     try{
@@ -899,9 +909,13 @@ async function runPendingWrites(){
         removeQueuedWrite(key,item?.updatedAt||'');
         return false;
       }
+      if(scfDropForbiddenRebuildableWrite(key,e,item?.updatedAt))continue;
+      // Thiếu quyền ở một dữ liệu không được chặn các dữ liệu khác phía sau trong hàng chờ.
+      if(Number(e?.status)===403){reportSyncError(key,e,item?.value);forbiddenKeys.push(key);continue;}
       reportSyncError(key,e,item?.value);scheduleSyncRetry();return false;
     }
   }
+  if(forbiddenKeys.length){scheduleSyncRetry();return false;}
   scfRetryAttempt=0;setSyncState('synced');return true;
 }
 function flushPendingWrites(){

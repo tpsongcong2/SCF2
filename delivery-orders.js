@@ -3113,6 +3113,12 @@ function DeliveryViewControls({menuHidden,setMenuHidden,toolsHidden,setToolsHidd
     onViewProduction&&h(DeliveryToolbarButton,{'data-scf-action':'view',onClick:onViewProduction,icon:'ti-clipboard-list',label:'KL SX'})
   );
 }
+// V873: Giá mua, Thành tiền, SL Bún QĐ ẩn/hiện cùng nhau theo ô Giá mua.
+const SCF_DELIVERY_GOODS_COLUMNS=['purchasePrice','purchaseAmount','bunQty'];
+function scfDeliveryHiddenWithGoodsGroup(hidden){
+  const list=(hidden||[]).filter(key=>!SCF_DELIVERY_GOODS_COLUMNS.includes(key));
+  return (hidden||[]).includes(SCF_DELIVERY_GOODS_COLUMNS[0])?[...list,...SCF_DELIVERY_GOODS_COLUMNS]:list;
+}
 function DeliveryVisibilityMenu({menuHidden,setMenuHidden,ordersHidden,setOrdersHidden,hiddenColumns,setHiddenColumns,canSelectOrders=false,selectionHidden=false,onSelectionHiddenChange}){
   const menuRef=useRef(null);
   useEffect(()=>{const outside=event=>{if(menuRef.current?.open&&!menuRef.current.contains(event.target))menuRef.current.open=false;};const escape=event=>{if(event.key==='Escape'&&menuRef.current)menuRef.current.open=false;};document.addEventListener('pointerdown',outside,true);document.addEventListener('keydown',escape,true);return()=>{document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',escape,true);};},[]);
@@ -3121,7 +3127,7 @@ function DeliveryVisibilityMenu({menuHidden,setMenuHidden,ordersHidden,setOrders
       h('label',null,h('input',{type:'checkbox',checked:!!menuHidden,onChange:e=>setMenuHidden(e.target.checked)}),'Ẩn menu'),
       canSelectOrders&&h('label',null,h('input',{type:'checkbox','aria-label':'Hiện ô chọn đơn',checked:!selectionHidden,onChange:e=>onSelectionHiddenChange(!e.target.checked)}),'Ô chọn đơn'),
       h('label',null,h('input',{type:'checkbox',checked:!!ordersHidden,onChange:e=>setOrdersHidden(e.target.checked)}),'Ẩn đơn chi tiết'),h('hr'),h('span',{className:'delivery-visibility-caption'},'Hiện các cột'),
-      DELIVERY_ORDER_COLUMNS.map(([key,label])=>{const optionLabel=key==='actions'?'Cụm nút thao tác đơn hàng (Tạo-sửa)':label;return h('label',{key},h('input',{type:'checkbox','aria-label':key==='actions'?'Hiện cụm nút thao tác đơn hàng':'Hiện cột '+label,checked:!hiddenColumns.includes(key),disabled:DELIVERY_ORDER_COLUMNS.filter(([id])=>!hiddenColumns.includes(id)).length<=1&&!hiddenColumns.includes(key),onChange:e=>{const checked=e.target.checked;setHiddenColumns(previous=>checked?previous.filter(item=>item!==key):[...new Set([...previous,key])]);}}),optionLabel);})));
+      DELIVERY_ORDER_COLUMNS.filter(([key])=>!SCF_DELIVERY_GOODS_COLUMNS.slice(1).includes(key)).map(([key,label])=>{const group=key===SCF_DELIVERY_GOODS_COLUMNS[0]?SCF_DELIVERY_GOODS_COLUMNS:[key];const optionLabel=key==='actions'?'Cụm nút thao tác đơn hàng (Tạo-sửa)':group.length>1?'Giá mua · Thành tiền · SL Bún QĐ':label;return h('label',{key},h('input',{type:'checkbox','aria-label':key==='actions'?'Hiện cụm nút thao tác đơn hàng':'Hiện cột '+optionLabel,checked:!hiddenColumns.includes(key),disabled:DELIVERY_ORDER_COLUMNS.filter(([id])=>!hiddenColumns.includes(id)).length<=1&&!hiddenColumns.includes(key),onChange:e=>{const checked=e.target.checked;setHiddenColumns(previous=>checked?previous.filter(item=>!group.includes(item)):[...new Set([...previous,...group])]);}}),optionLabel);})));
 }
 function deliveryAuditTime(value){
   const raw=String(value||'').trim();if(!raw)return null;
@@ -3271,7 +3277,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const[invoiceFilter,setInvoiceFilter]=useState('');
   const detailColumnsHidden=false;
   const [compactEntry,setCompactEntry]=useLS('scf_delivery_compact_entry_'+(currentUser?.id||''),false);
-  const effectiveHiddenColumns=compactEntry?[...new Set([...hiddenColumns,'label'])]:hiddenColumns;
+  const effectiveHiddenColumns=scfDeliveryHiddenWithGoodsGroup(compactEntry?[...new Set([...hiddenColumns,'label'])]:hiddenColumns);
   const changeColumnVisibility=change=>{const next=typeof change==='function'?change(effectiveHiddenColumns):change;setHiddenColumns(next);setCompactEntry(next.includes('label'));};
   const visibleColumns=DELIVERY_ORDER_COLUMNS.filter(([key])=>!effectiveHiddenColumns.includes(key));
   const columnCount=Math.max(1,visibleColumns.length);
