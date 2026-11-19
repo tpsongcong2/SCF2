@@ -1,4 +1,4 @@
-const CACHE = 'scf-v875';
+const CACHE = 'scf-v876';
 const ASSETS = [
   './',
   './index.html',
@@ -9,7 +9,7 @@ const ASSETS = [
   './vendor/react-dom.production.min.js?v=358',
   './styles.css?v=862',
   './runtime.js?v=457',
-  './storage.js?v=874',
+  './storage.js?v=876',
   './android-print.js?v=860',
   './print-agent.js?v=860',
   './print-lan.js?v=860',
@@ -18,7 +18,7 @@ const ASSETS = [
   './warehouse-orders.js?v=711',
   './defaults.js?v=602',
   './auth.js',
-  './server-auth.js?v=874',
+  './server-auth.js?v=876',
   './templates.js?v=860',
   './ui-common.js?v=860',
   './invoice-orientation.js?v=737',
@@ -67,7 +67,7 @@ const ASSETS = [
   './production-assignments.js?v=644',
   './permissions.js?v=860',
   './permission-settings.js?v=860',
-  './app.js?v=875',
+  './app.js?v=876',
   './bootstrap.js?v=645',
   './manifest.json',
   './icon-192.png',

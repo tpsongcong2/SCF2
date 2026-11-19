@@ -260,6 +260,20 @@ async function serverSaveAutoTrips(trips,requestTimeoutMs=SCF_AUTH_REQUEST_TIMEO
   return data.trips||trips;
 }
 
+// V876: chỉ gửi các chuyến tự động thay đổi. Máy chủ cũ không có lệnh này -> {unsupported:true}
+// để app quay về cách gửi toàn bộ (không bao giờ gửi danh sách thiếu cho lệnh cũ).
+async function serverSaveAutoTripsPartial(trips,removedIds,requestTimeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
+  if(!sb)throw new Error('Chưa kết nối được máy chủ chuyến tự động.');
+  const{data,error}=await invokeScfAuth({
+    body:{action:'save_auto_trips_partial',trips:Array.isArray(trips)?trips:[],removedIds:Array.isArray(removedIds)?removedIds.map(String):[]}
+  },requestTimeoutMs);
+  if(!error&&data?.ok&&data.partial===true)return{trips:Array.isArray(data.trips)?data.trips:[],removedIds:Array.isArray(data.removedIds)?data.removedIds.map(String):[],updatedAt:String(data.updatedAt||''),previousUpdatedAt:String(data.previousUpdatedAt||'')};
+  const failure=await scfServerSaveError(error,data,'Không lưu được chuyến tự động.');
+  if(!error&&data?.ok)return{unsupported:true};
+  if(failure.status===400&&/^Yêu cầu không hợp lệ\.?$/.test(String(failure.message||'').trim()))return{unsupported:true};
+  throw failure;
+}
+
 async function serverSavePermittedCollection(key,value,expectedUpdatedAt='',baseValue,requestTimeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
   const{data,error}=await invokeScfAuth({

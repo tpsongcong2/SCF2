@@ -354,6 +354,43 @@ window.scfAcceptWarehouseMergeReceipt=function(receipt){
   scfRemoteSnapshots.set('scf_trips',update(scfRemoteSnapshots.get('scf_trips'),[receipt.trip]));
   for(const key of ['scf_orders','scf_trips'])scfRemoteVersions.set(key,String(receipt.updatedAt||''));
 };
+// V876: lưu chuyến tự động chỉ gửi phần thay đổi so với bản máy chủ đã biết.
+let scfAutoTripsPartialSupported=true;
+function scfStableJson(value){
+  if(Array.isArray(value))return '['+value.map(item=>item===undefined?'null':scfStableJson(item)).join(',')+']';
+  if(value&&typeof value==='object')return '{'+Object.keys(value).filter(key=>value[key]!==undefined).sort().map(key=>JSON.stringify(key)+':'+scfStableJson(value[key])).join(',')+'}';
+  return JSON.stringify(value)??'null';
+}
+function scfAutoTripDiff(base,next){
+  const baseById=new Map((base||[]).map(trip=>[String(trip?.id||''),trip])),nextIds=new Set(),changed=[];
+  for(const trip of next||[]){const id=String(trip?.id||'');nextIds.add(id);const old=baseById.get(id);if(!old||scfStableJson(old)!==scfStableJson(trip))changed.push(trip);}
+  const removedIds=[...baseById.entries()].filter(([id,trip])=>id&&!nextIds.has(id)&&trip?.autoCreated).map(([id])=>id);
+  return{changed,removedIds};
+}
+function scfApplyTripChanges(base,changes,removedIds){
+  const removed=new Set((removedIds||[]).map(String)),byId=new Map((changes||[]).map(trip=>[String(trip?.id||''),trip]));
+  return (base||[]).filter(trip=>!removed.has(String(trip?.id||''))).map(trip=>{const id=String(trip?.id||''),next=byId.get(id);byId.delete(id);return next||trip;}).concat([...byId.values()]);
+}
+async function scfSaveAutoTrips(val){
+  const base=scfRemoteSnapshots.get('scf_trips'),baseVersion=String(scfRemoteVersions.get('scf_trips')||'');
+  if(scfAutoTripsPartialSupported&&Array.isArray(base)&&base.length&&typeof serverSaveAutoTripsPartial==='function'){
+    const diff=scfAutoTripDiff(base,val);
+    if(!diff.changed.length&&!diff.removedIds.length)return{value:base,updatedAt:baseVersion};
+    // Gửi ít nhưng máy chủ vẫn phải ghi cả danh sách chuyến: giữ đủ 30 giây.
+    const timeoutMs=DB_REMOTE_MAX_TIMEOUT_MS;
+    const result=await withRemoteTimeout(serverSaveAutoTripsPartial(diff.changed,diff.removedIds,timeoutMs),timeoutMs);
+    if(!result?.unsupported){
+      const value=scfApplyTripChanges(base,result.trips,result.removedIds);
+      // Chỉ tin là bản đầy đủ khi máy chủ xác nhận không ai sửa xen giữa; nếu không, để trống phiên bản cho app tải lại.
+      return{value,updatedAt:baseVersion&&result.previousUpdatedAt===baseVersion?result.updatedAt:''};
+    }
+    scfAutoTripsPartialSupported=false;
+  }
+  const timeoutMs=remoteTimeoutFor(val);
+  const saved=await withRemoteTimeout(serverSaveAutoTrips(val,timeoutMs),timeoutMs);
+  if(!Array.isArray(saved))throw new Error('Máy chủ chưa trả lại danh sách chuyến đã lưu.');
+  return{value:saved,updatedAt:''};
+}
 function syncSnapshot(value){try{return JSON.parse(JSON.stringify(value))}catch{return value}}
 function scfPublishMergedCollection(key,value,requested,writeToken){
   if((!Array.isArray(value)&&!(key==='scf_prod_actuals'&&value&&typeof value==='object'))||readSyncQueue()[key]?.updatedAt!==writeToken)return;
@@ -364,7 +401,10 @@ function scfPublishMergedCollection(key,value,requested,writeToken){
 async function dbGetRequired(key,def){
   if(!serverAuthEnabled())return dbGet(key,def);
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
-  const pending=readSyncQueue()[key];
+  let pending=readSyncQueue()[key];
+  // V876: bản gom chuyến tự động đang chờ gửi được tính lại từ đơn hàng sau khi tải; bỏ nó để tải bản máy chủ
+  // (có bản gốc thì lần lưu sau chỉ gửi phần thay đổi, không gửi lại cả danh sách).
+  if(pending&&key==='scf_trips'&&pending.mode==='auto-trips'&&!scfRemoteSnapshots.has(key)){removeQueuedWrite(key,pending.updatedAt||'');pending=null;}
   if(pending)return pending.value;
   if(SCF_EDGE_WRITE_KEYS.has(key)){
     const before=scfLocalWrites.get(key);
@@ -697,11 +737,10 @@ async function performDbSet(key,val,queuedAt='',mode=''){
   }
   if(serverAuthEnabled()&&key==='scf_trips'&&mode==='auto-trips'){
     try{
-      const timeoutMs=remoteTimeoutFor(val);setSyncState('syncing','Đang lưu chuyến tự động');
-      const saved=await withRemoteTimeout(serverSaveAutoTrips(val,timeoutMs),timeoutMs);
+      setSyncState('syncing','Đang lưu chuyến tự động');
+      const result=await scfSaveAutoTrips(val),saved=result.value;
       if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
-      if(!Array.isArray(saved))throw new Error('Máy chủ chưa trả lại danh sách chuyến đã lưu.');
-      scfRemoteSnapshots.set(key,syncSnapshot(saved));scfRemoteVersions.set(key,'');
+      scfRemoteSnapshots.set(key,syncSnapshot(saved));scfRemoteVersions.set(key,result.updatedAt);
       scfPublishMergedCollection(key,saved,val,queuedAt);
       removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:queuedAt};setSyncState('synced');return true;
     }
@@ -852,10 +891,9 @@ async function runPendingWrites(){
       // Manual trip writes must keep their permission/duplicate validation on
       // retry, even when the collection also contains automatically made trips.
       else if(serverAuthEnabled()&&key==='scf_trips'&&item.mode==='auto-trips'){
-        const timeoutMs=remoteTimeoutFor(item.value),saved=await withRemoteTimeout(serverSaveAutoTrips(item.value,timeoutMs),timeoutMs);
+        const result=await scfSaveAutoTrips(item.value),saved=result.value;
         if(readSyncQueue()[key]?.updatedAt!==item.updatedAt)return false;
-        if(!Array.isArray(saved))throw new Error('Máy chủ chưa trả lại danh sách chuyến đã lưu.');
-        scfRemoteSnapshots.set(key,syncSnapshot(saved));scfRemoteVersions.set(key,'');
+        scfRemoteSnapshots.set(key,syncSnapshot(saved));scfRemoteVersions.set(key,result.updatedAt);
         scfPublishMergedCollection(key,saved,item.value,item.updatedAt);
       }
       else if(serverAuthEnabled()&&SCF_EDGE_WRITE_KEYS.has(key)){

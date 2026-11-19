@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V875';
+const SCF_BUILD_VERSION='V876';
 const PTITLES = {
   driverprintlog:'Thông tin lái xe in đơn',
   kpi4p:'KPI & Lương 4P',
