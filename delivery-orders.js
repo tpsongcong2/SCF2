@@ -3234,7 +3234,7 @@ function deliveryDefaultTripGroup(user){
   const name=normalizeLookupText(user?.name||'').replace(/\s+/g,' ');
   return name==='nguyen ky huong'?'dt':'samsung';
 }
-function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify,onViewOrderSummary,onViewProduction,highlightOrderOnHover=true,accountingCompact=false}){
+function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,prodCats,quotes,employees,currentUser,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify,onViewOrderSummary,onViewProduction,highlightOrderOnHover=true,accountingCompact=false,financeDebts,setFinanceDebts}){
   const[modal,sm]=useState(null);const[edit,se]=useState(null);const[copyDraft,setCopyDraft]=useState(null);const[print,spr]=useState(null);const[invoiceView,setInvoiceView]=useState(null);const[historyView,setHistoryView]=useState(null);const[q,sq]=useState('');const[filter,sf]=useState('all');const[sortMode,setSortMode]=useState('trip');const _td0=fmtDate();const _ti0=_td0.split('/').reverse().join('-');
   const[dateFilterMode,setDateFilterMode]=useState('day');
   const[dateBasis,setDateBasis]=useState('trip');
@@ -3796,6 +3796,39 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     if(!confirmed){window.showToast('Thông tin SX đang chờ máy chủ xác nhận.','warn');return false;}
     return true;
   };
+  // V878: hỏi trước khi Admin sửa ngày/địa điểm của đơn lái xe đã giao / chuyến đã xác nhận hoàn thành.
+  const openIdentityEdit=async order=>{
+    const live=cleanDeliveryOrderRecord(orders.find(item=>String(item.id)===String(order.id))||order),trip=orderTrip(live);
+    const delivered=closedTrip(trip)||live.status==='done';
+    if(delivered||dispatchedTrip(trip)||live.status==='delivering'){
+      const label=trip?(trip.deliveryDate||'')+' · '+(trip.shiftName||trip.id):'';
+      const message=delivered
+        ?'Chuyến '+label+' lái xe đã giao và xác nhận hoàn thành'+(trip?.status==='completed'?' (kế toán đã duyệt)':'')+'. Bạn có muốn thay đổi ngày/địa điểm của đơn này không?'+(trip&&closedTrip(trip)?' Công nợ của chuyến sẽ được tính lại theo khách hàng mới.':'')
+        :'Đơn đã giao cho lái xe'+(label?' (chuyến '+label+')':'')+'. Bạn có muốn thay đổi ngày/địa điểm của đơn này không?';
+      if(!await window.scfConfirm(message,'Sửa đơn đã giao'))return;
+    }
+    setIdentityEdit(live);
+  };
+  // Công nợ của chuyến đã chờ duyệt/hoàn thành tính lại sau khi đổi địa điểm; công nợ cũ đã thu tiền thì giữ lại để kế toán xử lý.
+  const scfResyncClosedTripDebts=async(trip,nextOrders)=>{
+    if(!trip||typeof setFinanceDebts!=='function'||typeof financeTripReceivableDrafts!=='function')return;
+    if(typeof scfCanWriteTripDebts==='function'&&!scfCanWriteTripDebts(currentUser))return;
+    // Trang Đơn hàng không tải sẵn Công nợ: tải bản máy chủ trước, không bao giờ ghi đè bằng danh sách rỗng.
+    let loaded=null;
+    if(!(financeDebts||[]).length){try{loaded=await dbGetRequired('scf_finance_debts',[]);}catch(error){window.showToast('Chưa tải được công nợ để tính lại: '+(error.message||error)+'. Hãy mở Chuyến giao hàng để kiểm tra công nợ chuyến này.','warn',10000);return;}}
+    const key=debt=>String(debt.partnerId||debt.partnerName||''),ofTrip=list=>(list||[]).filter(debt=>String(debt.sourceTripId||'')===String(trip.id));
+    if(!ofTrip(loaded||financeDebts).length)return;
+    const draft=financeTripReceivableDrafts(trip,nextOrders,products||[],quotes||[],customers||[],currentUser);
+    const rebuild=list=>{
+      const old=ofTrip(list);
+      const rows=draft.rows.map(row=>{const existed=old.find(debt=>key(debt)===key(row));if(!existed)return row;const paid=Number(existed.paidAmount)||0;return{...row,id:existed.id,paidAmount:paid,dueDate:existed.dueDate||row.dueDate,createdBy:existed.createdBy||row.createdBy,createdAt:existed.createdAt||row.createdAt,status:paid>=row.amount?'paid':paid>0?'partial':'unpaid'};});
+      const paidLeft=old.filter(debt=>(Number(debt.paidAmount)||0)>0&&!rows.some(row=>key(row)===key(debt)));
+      return{list:[...(list||[]).filter(debt=>String(debt.sourceTripId||'')!==String(trip.id)),...rows,...paidLeft],kept:paidLeft.length};
+    };
+    const keptPaid=rebuild(loaded||financeDebts).kept;
+    setFinanceDebts(current=>rebuild((current||[]).length?current:(loaded||[])).list);
+    window.showToast(keptPaid?'Đã tính lại công nợ chuyến. Còn '+keptPaid+' công nợ cũ đã thu tiền được giữ lại, kế toán cần kiểm tra.':'Đã tính lại công nợ của chuyến theo địa điểm mới.',keptPaid?'warn':'info',9000);
+  };
   const saveMobileOrder=async(base,draft,editIdentity=false)=>{
     if(!canEditMobileOrder||window.__SCF_ACCESS_CONTEXT?.readOnly)throw new Error('Tài khoản chỉ có quyền xem đơn hàng.');
     const live=(orders||[]).find(order=>String(order.id)===String(base.id));
@@ -3803,7 +3836,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       if(!live)throw Error('Đơn không còn tồn tại.');
       if(live.warehouseMerged)throw Error('Hãy sửa ngày và địa điểm tại đơn nguồn kho vận.');
       const trip=orderTrip(live);
-      if(closedTrip(trip)||['done','cancelled'].includes(live.status))throw Error('Đơn đã đóng, không thể sửa ngày và địa điểm.');
+      // V878: Admin được sửa ngày/địa điểm cả đơn đã giao, chuyến chờ duyệt/hoàn thành (đã hỏi xác nhận khi mở).
+      if(live.status==='cancelled'||(!isAdmin&&(closedTrip(trip)||live.status==='done')))throw Error('Đơn đã đóng, không thể sửa ngày và địa điểm.');
       if((dispatchedTrip(trip)||live.status==='delivering')&&!canWithdrawStartedOrder)throw Error('Đơn đang giao, cần Admin hoặc kế toán cập nhật.');
       const changedPoint=['pointId','pointName','customerId','customer','address','area'].some(key=>String(base[key]||'')!==String(draft[key]||''));
       const changedDate=String(base.deliveryDate||'')!==String(draft.deliveryDate||'');
@@ -3823,6 +3857,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     const stamp=fmtDT(),actor=currentUser?.name||'';
     updated={...updated,lines:updated.lines.map((line,index)=>line.qtyDelivered!==live.lines?.[index]?.qtyDelivered?{...line,deliveredAt:stamp,deliveredBy:actor}:line),orderHistory:[...(live.orderHistory||[]),historyEntry(editIdentity?'Sửa ngày và địa điểm giao':'Sửa đơn trên điện thoại',result.changes)],updatedAt:stamp,updatedBy:actor};
     applyOrdersAndTripSync(previous=>previous.map(order=>String(order.id)===String(live.id)?updated:order));
+    if(editIdentity&&closedTrip(currentTrip))scfResyncClosedTripDebts(currentTrip,(orders||[]).map(order=>String(order.id)===String(live.id)?updated:order));
     notifyDriverOrderChange(updated,'Đơn hàng trong chuyến đã được cập nhật');
     await new Promise(resolve=>setTimeout(resolve,0));
     const confirmed=await(window.scfWaitForCollectionSync?.('scf_orders',15000)??Promise.resolve(false));
@@ -5185,7 +5220,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
               actions:h('td',{key:'actions',className:'delivery-order-actions'},h('div',{style:{display:'flex',gap:2,justifyContent:'center',alignItems:'center'}},
                 pi===0&&h('button',{className:'bi',onClick:()=>spr(o),title:'In hóa đơn'},h('i',{className:'ti ti-printer',style:{fontSize:14}})),
                 pi===0&&h('button',{className:'bi',onClick:()=>printLabels(o),title:'In tem'},h('i',{className:'ti ti-tag',style:{fontSize:14}})),
-                pi===0&&h('button',{type:'button',className:'bi','data-scf-action':'write','aria-label':'Sửa ngày và địa điểm giao '+o.id,title:'Sửa ngày và địa điểm giao',disabled:!canEditMobileOrder||!!window.__SCF_ACCESS_CONTEXT?.readOnly||assignmentClosed||['done','cancelled'].includes(ctx.status)||!!ctx.warehouseMerged,onClick:()=>setIdentityEdit(cleanDeliveryOrderRecord(orders.find(item=>String(item.id)===String(o.id))||o))},h('i',{className:'ti ti-pencil',style:{fontSize:15}})),
+                pi===0&&h('button',{type:'button',className:'bi','data-scf-action':'write','aria-label':'Sửa ngày và địa điểm giao '+o.id,title:'Sửa ngày và địa điểm giao',disabled:!canEditMobileOrder||!!window.__SCF_ACCESS_CONTEXT?.readOnly||(!isAdmin&&(assignmentClosed||ctx.status==='done'))||ctx.status==='cancelled'||!!ctx.warehouseMerged,onClick:()=>openIdentityEdit(o)},h('i',{className:'ti ti-pencil',style:{fontSize:15}})),
                 pi===0&&h('button',{className:'bi',onClick:()=>setHistoryView(o),title:'Lịch sử đơn hàng'},h('i',{className:'ti ti-history',style:{fontSize:15}})),
                 pi===0&&h('button',{className:'bi',disabled:!canEditMobileOrder||window.__SCF_ACCESS_CONTEXT?.readOnly||assignmentClosed||['done','cancelled'].includes(ctx.status),onClick:()=>addProductsToOrder(o),title:'Thêm sản phẩm vào đơn này'},h('i',{className:'ti ti-plus',style:{fontSize:15}})),
                 pi===0&&h('button',{className:'bi',onClick:()=>copyOrder(o),title:'Nhân bản thành đơn mới'},h('i',{className:'ti ti-copy',style:{fontSize:15}})),
