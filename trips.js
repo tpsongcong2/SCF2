@@ -1304,11 +1304,12 @@ function renderTripImage(trips,orders,products,customers,title,prodCats=[],showD
     block.lines=Array.isArray(block.cells)?block.cells.map((cell,i)=>wrap(cellText(cell,i),(block.widths||widths)[i]-(i===0&&'dispatchStar' in block?36:0))):[wrap(block.cells,canvas.width)];
     block.height=Math.max(48,Math.max(...block.lines.map(lines=>lines.length))*28+20);
   });
-  const height=70+blocks.reduce((sum,block)=>sum+block.height,0);
+  // V887: title rỗng = ảnh không có dòng tiêu đề (màn Đơn tổng hiện tiêu đề + giờ cập nhật bằng HTML phía trên ảnh).
+  const top=title?70:0,height=top+blocks.reduce((sum,block)=>sum+block.height,0);
   if(height>24000)throw Error('Quá nhiều dòng cho một ảnh. Hãy chia chuyến sang ảnh khác hoặc chọn ít chuyến hơn.');
   canvas.height=height;ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,height);
-  ctx.fillStyle='#000000';ctx.font='bold 28px Arial';ctx.fillText(title,16,44);
-  let y=70;
+  if(title){ctx.fillStyle='#000000';ctx.font='bold 28px Arial';ctx.fillText(title,16,44);}
+  let y=top;
   blocks.forEach(block=>{
     ctx.fillStyle=block.fill;ctx.fillRect(0,y,canvas.width,block.height);ctx.font=(block.bold?'bold ':'')+'22px Arial';let x=0;
     block.lines.forEach((lines,index)=>{
@@ -1388,12 +1389,12 @@ async function scfSummaryPng(key,create){
   }
   return blob;
 }
-function TripSummaryImage({trips,orders,products,customers,prodCats=scfSummaryEmptyCategories,title,filename,showDriverName=true,accessKey='',leadingAction,onExit,preparedPreview=null,updating=false,bare=false,keepPrevious=false}){
+function TripSummaryImage({trips,orders,products,customers,prodCats=scfSummaryEmptyCategories,title,filename,showDriverName=true,accessKey='',leadingAction,onExit,preparedPreview=null,updating=false,bare=false,keepPrevious=false,drawTitle=true}){
   // V886: bare=true (màn Đơn tổng) bỏ Thoát / Tải ảnh / In cho mọi tài khoản.
   // keepPrevious=true giữ ảnh đang xem tới khi ảnh mới tạo xong, không nháy trắng / treo màn hình.
   const[image,setImage]=useState(''),[error,setError]=useState('');
   const actor=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
-  const imageKey=React.useMemo(()=>JSON.stringify([actor,accessKey,title,showDriverName,preparedPreview?.svg,trips,orders,products,customers,prodCats]),[actor,accessKey,title,showDriverName,preparedPreview,trips,orders,products,customers,prodCats]);
+  const imageKey=React.useMemo(()=>JSON.stringify([actor,accessKey,title,drawTitle,showDriverName,preparedPreview?.svg,trips,orders,products,customers,prodCats]),[actor,accessKey,title,drawTitle,showDriverName,preparedPreview,trips,orders,products,customers,prodCats]);
   const[readyKey,setReadyKey]=useState('');
   const urlRef=React.useRef('');
   useEffect(()=>()=>{if(urlRef.current)URL.revokeObjectURL(urlRef.current);urlRef.current='';},[]);
@@ -1405,7 +1406,7 @@ function TripSummaryImage({trips,orders,products,customers,prodCats=scfSummaryEm
         await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
         if(!active)return;
         const svgBlob=()=>new Blob([preparedPreview.svg],{type:'image/svg+xml'});
-        const blob=preparedPreview?(typeof scfPreparedSummaryPngBlob==='function'?await scfSummaryPng(imageKey,()=>scfPreparedSummaryPngBlob(preparedPreview.svg).catch(svgBlob)):svgBlob()):await scfSummaryPng(imageKey,()=>renderTripImage(trips,orders,products,customers,title,prodCats,showDriverName));
+        const blob=preparedPreview?(typeof scfPreparedSummaryPngBlob==='function'?await scfSummaryPng(imageKey,()=>scfPreparedSummaryPngBlob(preparedPreview.svg).catch(svgBlob)):svgBlob()):await scfSummaryPng(imageKey,()=>renderTripImage(trips,orders,products,customers,drawTitle?title:'',prodCats,showDriverName));
         if(!active||actor!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||''))return;
         const url=URL.createObjectURL(blob),old=urlRef.current;urlRef.current=url;
         setImage(url);setReadyKey(imageKey);if(old)URL.revokeObjectURL(old);
@@ -1521,6 +1522,11 @@ function scfQuickSummaryShiftDate(value,offset){
   return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
 }
 function scfQuickSummaryRelativeDate(offset){return scfQuickSummaryShiftDate(isoDate(),offset);}
+function scfSummaryShortTime(value){
+  const date=new Date(value);if(!Number.isFinite(date.getTime()))return '';
+  const part=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit',hourCycle:'h23'}).formatToParts(date).map(x=>[x.type,x.value]));
+  return part.hour+':'+part.minute+' '+part.day+'/'+part.month;
+}
 function scfQuickSummaryDateLabel(value){return String(value||'').split('-').reverse().join('/');}
 function ScfQuickSummaryCalendar({value,onPick}){
   const[month,setMonth]=useState(()=>String(value||isoDate()).slice(0,7));
@@ -1578,7 +1584,7 @@ function TripQuickSummaryModal({currentUser,employees=[],loadData=scfLoadQuickTr
       const selectedOrders=scoped.orders.filter(order=>order.status!=='cancelled'&&(order.tripId?selectedIds.has(String(order.tripId)):legacyIds.has(String(order.id))));
       const dateVN=scfQuickSummaryDateLabel(selectedDate),label=selectedGroup==='samsung'?'Samsung':'Điềm Thụy';
       if(!chosen.length){setError('Không có chuyến có đơn thuộc '+label+' ngày '+dateVN+'.');return;}
-      setResult({data:{...scoped,orders:selectedOrders},trips:chosen,title:'ĐƠN TỔNG '+label.toUpperCase()+' — '+dateVN,date:selectedDate,dateVN,label,group:selectedGroup,count:chosen.length,accessKey,cacheStatus:prepared?.status||'unavailable',cacheWatching:prepared?.status==='updating',showDriverName:scfQuickSummaryFullAccess(viewerRef.current)?selectedDriverName:true});
+      setResult({localAt:new Date().toISOString(),data:{...scoped,orders:selectedOrders},trips:chosen,title:'ĐƠN TỔNG '+label.toUpperCase()+' — '+dateVN,date:selectedDate,dateVN,label,group:selectedGroup,count:chosen.length,accessKey,cacheStatus:prepared?.status||'unavailable',cacheWatching:prepared?.status==='updating',showDriverName:scfQuickSummaryFullAccess(viewerRef.current)?selectedDriverName:true});
     }catch(e){if(current())setError(e.message||'Chưa xem được ảnh đơn tổng. Hãy thử lại.');}
     finally{if(current())setBusy(false);}
   };
@@ -1599,28 +1605,30 @@ function TripQuickSummaryModal({currentUser,employees=[],loadData=scfLoadQuickTr
     return()=>{cancelled=true;clearInterval(timer);document.removeEventListener('visibilitychange',refresh);};
   },[result?.date,result?.group,result?.showDriverName,result?.preparedPreview?true:false,result?.cacheWatching,accessKey]);
   const shown=result&&result.accessKey===accessKey?result:null;
-  const status=!shown?null:shown.preparedPreview
-    ?(shown.updating?'Bản lúc '+scfSummaryUpdatedLabel(shown.updatedAt)+' · máy chủ đang tạo bản mới…':shown.livePreview?'Máy chủ vừa tạo ảnh lúc '+scfSummaryUpdatedLabel(shown.updatedAt):'Bản lúc '+scfSummaryUpdatedLabel(shown.updatedAt)+' · mới nhất')
-    :shown.cacheStatus==='unconfigured'?'Chưa cấu hình tạo sẵn trên máy chủ · Ảnh được tạo tại thiết bị.':shown.cacheStatus==='updating'?'Máy chủ đang tạo bản lưu · Ảnh tạm được tạo tại thiết bị.':'Chưa lấy được bản lưu từ máy chủ · Ảnh được tạo tại thiết bị.';
+  // V887: một dòng gọn phía trên ảnh — "ĐƠN SAMSUNG" bên trái, "Cập nhật 22:30 20/11" bên phải.
+  const status=!shown?null:shown.preparedPreview?'Cập nhật '+scfSummaryShortTime(shown.updatedAt):'Tạo tại máy '+scfSummaryShortTime(shown.localAt);
   const future=date>scfQuickSummaryRelativeDate(1);
   return h(Modal,{title:'',lg:true,className:'trip-summary-quick-modal image-screen trip-summary-compact'+(mobileFullscreen?' from-orders-fullscreen':''),overlayClassName:'trip-summary-quick-overlay'+(mobileFullscreen?' from-orders-fullscreen-overlay':''),onClose},
     h('div',{className:'trip-summary-compact-bar'},
       h('button',{type:'button',className:'trip-summary-back','data-scf-action':'view','aria-label':mobileFullscreen?'Quay lại đơn hàng':'Quay lại',onClick:onExit||onClose},h('i',{className:'ti ti-arrow-left','aria-hidden':true})),
       h('div',{className:'trip-summary-date'},
         h('button',{type:'button','data-scf-action':'view','aria-label':'Lùi 1 ngày',onClick:()=>go(scfQuickSummaryShiftDate(date,-1))},'«'),
-        h('button',{type:'button',className:'trip-summary-date-value','data-scf-action':'view','aria-label':'Chọn ngày theo lịch','aria-expanded':calendarOpen,onClick:()=>setCalendarOpen(open=>!open)},h('span',null,scfQuickSummaryDateLabel(date)),h('i',{className:'ti ti-calendar','aria-hidden':true})),
+        h('button',{type:'button',className:'trip-summary-date-value','data-scf-action':'view','aria-label':'Chọn ngày theo lịch','aria-expanded':calendarOpen,onClick:()=>setCalendarOpen(open=>!open)},h('span',null,scfQuickSummaryDateLabel(date))),
         h('button',{type:'button','data-scf-action':'view','aria-label':'Tiến 1 ngày',onClick:()=>go(scfQuickSummaryShiftDate(date,1))},'»')),
       h('button',{type:'button',className:'trip-summary-group-toggle '+(group==='dt'?'dt':'samsung'),'data-scf-action':'view','aria-label':'Đổi nhóm Samsung / Điềm Thụy','aria-pressed':group==='dt',onClick:()=>go(date,group==='dt'?'samsung':'dt')},
         group==='dt'?[h('span',{key:'t'},'Điềm Thụy'),h('span',{key:'k',className:'knob'})]:[h('span',{key:'k',className:'knob'}),h('span',{key:'t'},'Samsung')])),
+    // V889: bấm ra ngoài vùng lịch thì lịch tự thu lại.
+    calendarOpen&&h('div',{className:'trip-summary-calendar-backdrop','aria-hidden':true,onClick:()=>setCalendarOpen(false)}),
     calendarOpen&&h(ScfQuickSummaryCalendar,{key:date,value:date,onPick:day=>go(day)}),
-    h('div',{className:'trip-summary-status-row'},
-      h('p',{className:'summary-cache-updated',role:'status'},busy?h('span',null,h('i',{className:'ti ti-loader-2 spin','aria-hidden':true}),' Đang tải ảnh '+scfQuickSummaryDateLabel(date)+'…'):status||''),
-      future&&h('span',{className:'trip-summary-future'},'Đơn đặt trước'),
+    h('div',{className:'trip-summary-title-row'},
+      h('b',{className:'trip-summary-title'},'ĐƠN '+(group==='dt'?'ĐIỀM THỤY':'SAMSUNG')),
+      future&&h('span',{className:'trip-summary-future'},'Đặt trước'),
+      h('span',{className:'summary-cache-updated',role:'status'},busy?h('span',null,h('i',{className:'ti ti-loader-2 spin','aria-hidden':true}),' Đang tải…'):status||'',!busy&&shown?.updating?h('em',{className:'trip-summary-renewing'},' · đang tạo mới…'):null),
       scfQuickSummaryFullAccess(currentUser)&&h('label',{className:'trip-summary-driver-toggle'},h('input',{type:'checkbox',checked:showDriverName,onChange:e=>go(date,group,e.target.checked)}),'Tên lái xe')),
     !scfQuickSummaryFullAccess(currentUser)&&h('p',{className:'trip-summary-quick-scope'},'Chỉ hiện đơn thuộc các chuyến đã giao cho bạn.'),
     error&&h('p',{role:'alert',className:'trip-summary-quick-error'},error),
     shown&&h('div',{className:'trip-summary-quick-result'},
-      h(TripSummaryImage,{key:shown.accessKey+'-'+shown.date+'-'+shown.group,...shown.data,preparedPreview:shown.preparedPreview,updating:shown.updating,trips:shown.trips,title:shown.title,accessKey:shown.accessKey,showDriverName:shown.showDriverName,filename:'Don-tong-'+shown.group+'-'+shown.date+'.png',bare:true,keepPrevious:!!shown.preparedPreview})
+      h(TripSummaryImage,{key:shown.accessKey+'-'+shown.date+'-'+shown.group,...shown.data,preparedPreview:shown.preparedPreview,updating:shown.updating,trips:shown.trips,title:shown.title,accessKey:shown.accessKey,showDriverName:shown.showDriverName,drawTitle:false,filename:'Don-tong-'+shown.group+'-'+shown.date+'.png',bare:true,keepPrevious:!!shown.preparedPreview})
     )
   );
 }

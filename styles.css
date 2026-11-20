@@ -2139,3 +2139,25 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 /* V887: lề trái ảnh Đơn tổng thêm 3px */
 .trip-summary-compact .trip-summary-quick-result{padding-left:13px}
 @media(max-width:640px){.trip-summary-compact .trip-summary-quick-result{padding-left:3px}}
+/* V887: dòng "ĐƠN SAMSUNG · Cập nhật …" thay dòng trạng thái */
+.trip-summary-status-row{display:none}
+.trip-summary-title-row{flex-shrink:0;display:flex;align-items:baseline;gap:8px;padding:8px 10px 4px 13px;color:#000}
+.trip-summary-title-row .trip-summary-title{font-size:16px;font-weight:700;white-space:nowrap}
+.trip-summary-title-row .summary-cache-updated{margin-left:auto;font-size:13px;color:#444;white-space:nowrap;text-align:right}
+.trip-summary-renewing{font-style:normal;color:#B45309}
+.trip-summary-title-row .trip-summary-driver-toggle{align-self:center}
+@media(max-width:640px){.trip-summary-title-row{padding:7px 6px 3px 3px}.trip-summary-title-row .trip-summary-title{font-size:15px}.trip-summary-title-row .summary-cache-updated{font-size:12px}}
+/* V888: bỏ biểu tượng lịch, « » to hơn, lề trái thêm 3px nữa */
+.trip-summary-date>button{font-size:28px;line-height:1;padding:0 14px;min-width:46px}
+.trip-summary-date .trip-summary-date-value{font-size:16px;padding:0 2px}
+.trip-summary-compact .trip-summary-quick-result{padding-left:16px}
+.trip-summary-title-row{padding-left:16px}
+@media(max-width:640px){
+  .trip-summary-date>button{font-size:28px;padding:0 10px;min-width:40px}
+  .trip-summary-date .trip-summary-date-value{font-size:15px}
+  .trip-summary-compact .trip-summary-quick-result{padding-left:6px}
+  .trip-summary-title-row{padding-left:6px}
+}
+/* V889: lớp trong suốt phía sau lịch — bấm ra ngoài lịch thì lịch thu lại */
+.trip-summary-calendar-backdrop{position:fixed;inset:0;z-index:30;background:transparent}
+.trip-summary-calendar{position:relative;z-index:31}
