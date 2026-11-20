@@ -643,6 +643,7 @@ const NAV=[
   {key:'workreport_vp',icon:'ti-building',label:'Công kế toán'},
   {key:'workreport_sx',icon:'ti-building-factory',label:'Công sản xuất'},
   {key:'workreport_lx',icon:'ti-steering-wheel',label:'Công lái xe'},
+  {key:'workrules',icon:'ti-gavel',label:'Quy tắc chấm công'},
   {key:'workreport_total',icon:'ti-report-analytics',label:'Tổng công'},
   {sec:'Tài liệu ATTP'},
   {key:'attp_process',icon:'ti-list-check',label:'Quy trình'},

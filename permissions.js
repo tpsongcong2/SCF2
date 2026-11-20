@@ -68,6 +68,7 @@ const PAGE_ACCESS = {
   workreport_vp:['admin','manager','staff'],
   workreport_sx:['admin','manager','staff'],
   workreport_lx:['admin','manager','staff','driver'],
+  workrules:['admin'],
   workreport_total:['admin','manager','staff','driver'],
   process_accounting:['admin','manager','staff'],
   process_bun:['admin','manager','staff'],
@@ -130,6 +131,8 @@ function canAccess(role, page, perms, dept='') {
   if(page==='welcome')return ['admin','manager','staff','driver'].includes(role);
   if(page==='personnel'&&role==='admin')return true;
   if(page==='permission_settings')return role==='admin';
+  // V881: Quy tắc chấm công chỉ Admin; bộ quyền tùy chỉnh không mở được trang này.
+  if(page==='workrules')return ['admin','administrator'].includes(String(role||'').toLowerCase());
   const deptText=(Array.isArray(dept)?dept:[dept]).map(value=>String(value||'')).join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
   const isAccounting=deptText.includes('ke toan');
   const isDriverDepartment=deptText.includes('lai xe');

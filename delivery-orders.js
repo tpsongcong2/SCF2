@@ -2889,7 +2889,8 @@ function mergeMobileDeliveryOrder(live,base,draft,canEditDelivered,editIdentity=
 function DeliveryMobileOrderEditor({order,customers,canEditDelivered,onSave,onClose,identityOnly=false}){
   const[draft,setDraft]=useState(()=>mobileDeliveryOrderDraft(order));
   const[query,setQuery]=useState(order.pointName||'');const[searchOpen,setSearchOpen]=useState(false);const[saving,setSaving]=useState(false);const[error,setError]=useState('');
-  const points=React.useMemo(()=>(customers||[]).flatMap(customer=>(customer.points||[]).filter(point=>point.name&&!point.customerStoppedAt).map(point=>({...point,customerId:customer.id,customerName:customer.name}))),[customers]);
+  // V882: chỉ hiện địa điểm đang bán đúng ngày/giờ giao của đơn (khách hàng tại thời điểm bán), kể cả điểm nay đã ngừng bán.
+  const points=React.useMemo(()=>(customers||[]).flatMap(customer=>(customer.points||[]).filter(point=>point.name&&scfPointCoversOrder(point,draft)).map(point=>({...point,customerId:customer.id,customerName:customer.name}))),[customers,draft.deliveryDate,draft.deliveryTime]);
   const matches=points.filter(point=>normalizeLookupText(point.name+' '+point.customerName).includes(normalizeLookupText(query))).slice(0,25);
   const set=(key,value)=>setDraft(previous=>({...previous,[key]:value}));
   const choose=point=>{setDraft(previous=>({...previous,pointId:point.id||'',pointName:point.name,customerId:point.customerId,customer:point.customerName,address:point.address||'',area:point.area||''}));setQuery(point.name);setSearchOpen(false);};
@@ -3545,7 +3546,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         if((dispatchedTrip(trip)||live.status==='delivering')&&!canWithdrawStartedOrder)throw new Error('Đơn đang giao, cần Admin hoặc kế toán cập nhật.');
         if(live.warehouseMerged){
           const customer=customers.find(c=>String(c.id)===String(draft.customerId));
-          const point=(customer?.points||[]).find(p=>String(p.id)===String(draft.pointId)&&!p.customerStoppedAt);
+          const point=(customer?.points||[]).find(p=>String(p.id)===String(draft.pointId));
           if(!point||!scfPointCoversOrder(point,draft))throw Error('Chọn địa điểm đang bán và ngày giờ giao hợp lệ cho dòng kho vận.');
           lines=lines.map(line=>({...line,warehouseSourcePointId:point.id,warehouseSourcePointName:point.name,warehouseSourceCustomerId:customer.id,warehouseSourceCustomer:customer.name,warehouseSourceArea:point.area||'',warehouseSourceDeliveryDate:draft.deliveryDate,warehouseSourceDeliveryTime:draft.deliveryTime}));
         }
@@ -3843,7 +3844,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
       const changedDate=String(base.deliveryDate||'')!==String(draft.deliveryDate||'');
       if(changedPoint||changedDate){
         const customer=(customers||[]).find(item=>String(item.id)===String(draft.customerId));
-        const point=(customer?.points||[]).find(item=>String(item.id||'')===String(draft.pointId||'')&&item.name===draft.pointName&&(!changedPoint||!item.customerStoppedAt));
+        // V882: địa điểm phải đang bán đúng ngày giao của đơn; điểm nay đã ngừng bán vẫn chọn được cho đơn cũ trong thời gian bán.
+        const point=(customer?.points||[]).find(item=>String(item.id||'')===String(draft.pointId||'')&&item.name===draft.pointName);
         if(!point||!scfPointCoversOrder(point,draft))throw Error('Hãy chọn địa điểm đang bán hợp lệ cho ngày giao.');
         draft={...draft,customer:customer.name,pointId:point.id||'',pointName:point.name,address:point.address||'',area:point.area||''};
       }

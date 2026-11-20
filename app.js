@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V880';
+const SCF_BUILD_VERSION='V884';
 const PTITLES = {
   driverprintlog:'Thông tin lái xe in đơn',
   kpi4p:'KPI & Lương 4P',
@@ -13,7 +13,7 @@ const PTITLES = {
   welcome:'Thời tiết', company:'Giới thiệu công ty', appearance:'Cài đặt giao diện', printtemplates:'Mẫu in Excel & mapping biến', employees:'Nhân viên', personnel:'Thông tin nhân sự', permission_settings:'Cài đặt phân quyền', attendance:'Chấm công', attendance_settings:'Cài đặt chấm công', attendance_report:'Báo cáo chấm công', advances:'Ứng lương', rewards:'Thưởng phạt', employee_errors:'Ghi lỗi nhân viên', employee_uniforms:'Cấp đồng phục nhân viên', leaves:'Xin phép nghỉ', prodshifts:'Cài đặt ca SX + ca GH tự động', deliveryrules:'Quy định giao hàng',
   backup:'Backup dữ liệu', materials:'Nguyên vật liệu', assets:'Danh mục tài sản', products:'Sản phẩm', depts:'Bộ phận',
   customers:'Khách hàng', workcats:'Danh mục công việc', tasks:'Giao việc', notifications:'Thông báo', userguide:'HDSD SCFOOD', shifts:'Ca giao hàng',
-  workreport_vp:'Công kế toán', workreport_sx:'Công sản xuất', workreport_lx:'Công lái xe', workreport_total:'Tổng công',
+  workreport_vp:'Công kế toán', workreport_sx:'Công sản xuất', workreport_lx:'Công lái xe', workreport_total:'Tổng công', workrules:'Quy tắc chấm công',
   process_accounting:'QUY TRÌNH KẾ TOÁN', process_bun:'QT SẢN XUẤT BÚN', process_pho:'QT SX PHỞ', process_banhcuon:'QT SX BÁNH CUỐN',
   deliverymobile:'Đơn hàng kế toán · Điện thoại',
   quotes:'Báo giá', delivery:'Đơn giao hàng', intem:'Intem', orderdetail:'Chi tiết đơn hàng', trips:'Chuyến giao hàng', 'driver-preview':'Trải nghiệm giao diện lái xe', 'trip-settings':'Cài đặt chuyến giao hàng', deliverysequence:'Cài đặt thứ tự giao',
@@ -52,6 +52,7 @@ const SCF_PAGE_DATA={
   trips:['trips','orders','shifts','prod_shifts','prod_shift_rules','customers','products','prodcats','quotes','finance_debts'],
   orderdetail:['orders','products','customers','shifts','trips','prod_shifts','quotes','finance_debts'],
   workreport_lx:['trips','orders','products','customers'],
+  workrules:['trips'],
   salesreport:['orders','customers','products','prod_shifts','quotes','shifts','trips'],
   cashflowreport:['finance_entries','finance_debts','finance_openings','customers','nccs','orders','products','quotes','purchases','goods_purchases'],
   powdersales:['customers','trips'],prodsummary:['orders','products','customers','prodcats','prod_shifts','prod_shift_rules','prod_actuals','stock','shifts','trips'],prodreport:[],
@@ -260,8 +261,8 @@ function scfLoadOptionalScript(name,url,failMessage='Chưa tải được công 
 }
 // V868: các tệp chỉ dùng cho một số trang được nạp khi mở trang đó (không nạp lúc khởi động) để mở app nhanh hơn.
 // Sửa một tệp dưới đây thì tăng ?v= tại đây (không còn trong index.html; sw.js vẫn lưu sẵn để dùng khi mất mạng).
-const SCF_LAZY_SCRIPT_FILES={'navigation-reports.js':['SalesReportTab','./navigation-reports.js?v=877'],'organization.js':['CustomersTab','./organization.js?v=568'],'order-detail.js':['OrderDetailListTab','./order-detail.js?v=874'],'production-closing.js':['ProductionReportTab','./production-closing.js?v=593'],'production-recipes.js':['ProductionRecipesTab','./production-recipes.js?v=590'],'attp-audit.js':['CustomerAuditList','./attp-audit.js?v=860'],'attp-documents.js':['ATTPDocumentsTab','./attp-documents.js?v=860'],'personnel.js':['PersonnelInformationTab','./personnel.js?v=638'],'user-guide.js':['UserGuideTab','./user-guide.js?v=645'],'notifications.js':['NotificationsTab','./notifications.js?v=663'],'driver-print-history.js':['DriverPrintHistoryTab','./driver-print-history.js?v=789']};
-const SCF_LAZY_PAGE_SCRIPTS={driverprintlog:['driver-print-history.js'],attp_audit:['attp-audit.js','attp-documents.js'],attp_claims:['attp-audit.js','attp-documents.js'],attp_process:['attp-audit.js','attp-documents.js'],attp_standards:['attp-audit.js','attp-documents.js'],attp_daily:['attp-audit.js','attp-documents.js'],attp_legal:['attp-audit.js','attp-documents.js'],personnel:['personnel.js'],depts:['organization.js'],customers:['organization.js'],areas:['organization.js'],workcats:['organization.js'],tasks:['organization.js'],notifications:['notifications.js'],userguide:['user-guide.js'],nccs:['navigation-reports.js'],nccgoods:['navigation-reports.js'],purchaseorders:['navigation-reports.js'],purchasegoods:['navigation-reports.js'],fuelpurchases:['navigation-reports.js'],fuelreport:['navigation-reports.js'],purchasereport:['navigation-reports.js'],maintreport:['navigation-reports.js'],materialusage:['navigation-reports.js'],powderdebtreport:['navigation-reports.js'],orderdetail:['order-detail.js'],salesreport:['navigation-reports.js'],marketsales:['navigation-reports.js'],invoicereport:['navigation-reports.js'],prodreport:['production-closing.js'],prodbom:['production-recipes.js'],prodsummary:['production-closing.js'],syncreport:['navigation-reports.js'],dbusage:['navigation-reports.js']};
+const SCF_LAZY_SCRIPT_FILES={'work-rules.js':['WorkRulesTab','./work-rules.js?v=881'],'navigation-reports.js':['SalesReportTab','./navigation-reports.js?v=877'],'organization.js':['CustomersTab','./organization.js?v=568'],'order-detail.js':['OrderDetailListTab','./order-detail.js?v=874'],'production-closing.js':['ProductionReportTab','./production-closing.js?v=593'],'production-recipes.js':['ProductionRecipesTab','./production-recipes.js?v=590'],'attp-audit.js':['CustomerAuditList','./attp-audit.js?v=860'],'attp-documents.js':['ATTPDocumentsTab','./attp-documents.js?v=860'],'personnel.js':['PersonnelInformationTab','./personnel.js?v=638'],'user-guide.js':['UserGuideTab','./user-guide.js?v=645'],'notifications.js':['NotificationsTab','./notifications.js?v=663'],'driver-print-history.js':['DriverPrintHistoryTab','./driver-print-history.js?v=789']};
+const SCF_LAZY_PAGE_SCRIPTS={workrules:['work-rules.js'],driverprintlog:['driver-print-history.js'],attp_audit:['attp-audit.js','attp-documents.js'],attp_claims:['attp-audit.js','attp-documents.js'],attp_process:['attp-audit.js','attp-documents.js'],attp_standards:['attp-audit.js','attp-documents.js'],attp_daily:['attp-audit.js','attp-documents.js'],attp_legal:['attp-audit.js','attp-documents.js'],personnel:['personnel.js'],depts:['organization.js'],customers:['organization.js'],areas:['organization.js'],workcats:['organization.js'],tasks:['organization.js'],notifications:['notifications.js'],userguide:['user-guide.js'],nccs:['navigation-reports.js'],nccgoods:['navigation-reports.js'],purchaseorders:['navigation-reports.js'],purchasegoods:['navigation-reports.js'],fuelpurchases:['navigation-reports.js'],fuelreport:['navigation-reports.js'],purchasereport:['navigation-reports.js'],maintreport:['navigation-reports.js'],materialusage:['navigation-reports.js'],powderdebtreport:['navigation-reports.js'],orderdetail:['order-detail.js'],salesreport:['navigation-reports.js'],marketsales:['navigation-reports.js'],invoicereport:['navigation-reports.js'],prodreport:['production-closing.js'],prodbom:['production-recipes.js'],prodsummary:['production-closing.js'],syncreport:['navigation-reports.js'],dbusage:['navigation-reports.js']};
 async function scfLoadPageScripts(page){
   // Nạp tuần tự theo thứ tự cũ trong index.html (attp-audit trước attp-documents).
   for(const file of SCF_LAZY_PAGE_SCRIPTS[page]||[]){
@@ -278,6 +279,7 @@ function scfPrefetchLazyScripts(){
 if(typeof window!=='undefined'&&typeof window.addEventListener==='function')window.addEventListener('load',()=>setTimeout(scfPrefetchLazyScripts,20000),{once:true});
 // Kiểm tra thành phần trước khi render: một tệp tải lỗi không được làm trắng trang.
 const SCF_PAGE_COMPONENTS={
+  workrules:'WorkRulesTab',
   driverprintlog:'DriverPrintHistoryTab',
   'trip-settings':'DeliveryTripSettings AgentRegistrySettings',
   'driver-preview':'DriverMobilePreview DriverOrdersMobile DriverLabelPrintModal',
@@ -310,7 +312,7 @@ async function scfEnsurePageTools(page){
   }
   // Chuyến giao hàng không dùng thư viện Excel/ZIP. Không chặn giao diện bằng
   // hai gói CDN lớn chỉ để mở trang này.
-  if(['mobile-home','personnel','welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','driver-preview','trip-settings','deliverysequence','delivery','driverprintlog'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
+  if(['mobile-home','personnel','welcome','company','appearance','userguide','notifications','syncreport','permission_settings','trips','driver-preview','trip-settings','deliverysequence','delivery','driverprintlog','workrules'].includes(page)||PROCESS_POST_KEYS[page])return Promise.resolve();
   return Promise.all([
     scfLoadOptionalScript('JSZip','https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'),
     scfLoadOptionalScript('XLSX','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js')
@@ -328,7 +330,7 @@ const PICONS = {
   garages:'ti-building-store',
   purchase:'ti-shopping-cart', tasks:'ti-clipboard-check', notifications:'ti-bell', userguide:'ti-book-2', prodsummary:'ti-clipboard-list',
   prodreport:'ti-report-analytics',prodbom:'ti-adjustments',prodorders:'ti-building-factory', stock:'ti-package', attendance:'ti-face-id', attendance_settings:'ti-settings', attendance_report:'ti-report-analytics', advances:'ti-cash-banknote', rewards:'ti-scale', employee_errors:'ti-alert-triangle', employee_uniforms:'ti-shirt', personnel:'ti-id-badge',permission_settings:'ti-shield-lock', leaves:'ti-calendar-minus', assets:'ti-building-warehouse', appearance:'ti-typography', printtemplates:'ti-file-spreadsheet',
-  workreport_vp:'ti-building', workreport_sx:'ti-building-factory', workreport_lx:'ti-steering-wheel', workreport_total:'ti-report-analytics',
+  workreport_vp:'ti-building', workreport_sx:'ti-building-factory', workreport_lx:'ti-steering-wheel', workreport_total:'ti-report-analytics', workrules:'ti-gavel',
   process_accounting:'ti-file-invoice', process_bun:'ti-tools-kitchen-2', process_pho:'ti-bowl', process_banhcuon:'ti-cookie',
   marketsales:'ti-report-money', invoicereport:'ti-file-alert', powdersales:'ti-bowl', intem:'ti-printer', deliverysequence:'ti-list-numbers',
   cashflowreport:'ti-cash-banknote', powderdebtreport:'ti-report-money', syncreport:'ti-cloud-data-connection', dbusage:'ti-database', purchasegoods:'ti-packages', fuelpurchases:'ti-gas-station', utilityexpenses:'ti-bolt', fuelreport:'ti-gas-station', maintreport:'ti-tool', materialusage:'ti-chart-histogram',
@@ -1120,6 +1122,7 @@ function App(){
         page==='trip-settings'&&canAccess(cu.role,'trip-settings',cu.permissions,cuAccessDepartments)&&h(DeliveryTripSettings,{uiSettings,setUiSettings,currentUser:cu}),
         page==='driver-preview'&&canAccess(cu.role,'driver-preview',cu.permissions,cuAccessDepartments)&&h(DriverMobilePreview,{currentUser:cu}),
         canAccess(cu.role,'trips',cu.permissions,cuAccessDepartments)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,prodCats,quotes,financeDebts,setFinanceDebts,company,currentUser:cu,notify:addNotification,onWarehouseMerge:mergeWarehouseTrip,onBackToDriverReport:()=>setPage('workreport_lx')}),
+        canAccess(cu.role,'workrules',cu.permissions,cuAccessDepartments)&&page==='workrules'&&h(WorkRulesTab,{employees,trips,currentUser:cu}),
         canAccess(cu.role,'workreport_lx',cu.permissions,cuAccessDepartments)&&page==='workreport_lx'&&h(DriverTripWorkReportTab,{trips,setTrips,orders,products,customers,employees,currentUser:cu,onOpenTrips:()=>setPage('trips')}),
         canAccess(cu.role,'orderdetail',cu.permissions)&&page==='orderdetail'&&h(OrderDetailListTab,{orders,setOrders,products,customers,shifts,trips,currentUser:cu,prodShifts,quotes,financeDebts,setFinanceDebts,menuHidden,setMenuHidden}),
         canAccess(cu.role,'salesreport',cu.permissions)&&page==='salesreport'&&h(SalesReportTab,{orders,customers,products,shifts:prodShifts,quotes}),
