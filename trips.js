@@ -1404,7 +1404,8 @@ function TripSummaryImage({trips,orders,products,customers,prodCats=scfSummaryEm
       try{
         await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
         if(!active)return;
-        const blob=preparedPreview?new Blob([preparedPreview.svg],{type:'image/svg+xml'}):await scfSummaryPng(imageKey,()=>renderTripImage(trips,orders,products,customers,title,prodCats,showDriverName));
+        const svgBlob=()=>new Blob([preparedPreview.svg],{type:'image/svg+xml'});
+        const blob=preparedPreview?(typeof scfPreparedSummaryPngBlob==='function'?await scfSummaryPng(imageKey,()=>scfPreparedSummaryPngBlob(preparedPreview.svg).catch(svgBlob)):svgBlob()):await scfSummaryPng(imageKey,()=>renderTripImage(trips,orders,products,customers,title,prodCats,showDriverName));
         if(!active||actor!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||''))return;
         const url=URL.createObjectURL(blob),old=urlRef.current;urlRef.current=url;
         setImage(url);setReadyKey(imageKey);if(old)URL.revokeObjectURL(old);

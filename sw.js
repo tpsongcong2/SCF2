@@ -1,4 +1,4 @@
-const CACHE = 'scf-v886';
+const CACHE = 'scf-v887';
 const ASSETS = [
   './',
   './index.html',
@@ -7,7 +7,7 @@ const ASSETS = [
   './vendor/supabase.min.js?v=358',
   './vendor/react.production.min.js?v=358',
   './vendor/react-dom.production.min.js?v=358',
-  './styles.css?v=886',
+  './styles.css?v=887',
   './runtime.js?v=457',
   './storage.js?v=881',
   './android-print.js?v=860',
@@ -49,7 +49,7 @@ const ASSETS = [
   './delivery-catalog-edit.js?v=733',
   './qrcode.min.js?v=357',
   './import-tools.js?v=881',
-  './trips.js?v=886',
+  './trips.js?v=887',
   './order-labels.js?v=860',
   './accounting-print.js?v=860',
   './driver-production-link.js?v=860',
@@ -61,14 +61,14 @@ const ASSETS = [
   './vendor/exceljs-4.4.0.min.js',
   './production-closing-domain.js?v=644',
   './production-closing.js?v=593',
-  './summary-cache.js?v=774',
+  './summary-cache.js?v=887',
   './production-alerts.js?v=663',
   './production.js?v=860',
   './production-recipes.js?v=590',
   './production-assignments.js?v=644',
   './permissions.js?v=881',
   './permission-settings.js?v=860',
-  './app.js?v=886',
+  './app.js?v=887',
   './bootstrap.js?v=645',
   './manifest.json',
   './icon-192.png',
@@ -81,7 +81,7 @@ const ASSETS = [
 // thật sự cần tới; tránh tải lặp toàn bộ ứng dụng và ba bản font ngay lần mở đầu.
 const PRECACHE_ASSETS = [
   './index.html',
-  './styles.css?v=886',
+  './styles.css?v=887',
   './vendor/tabler-icons.min.css?v=394'
 ];
 

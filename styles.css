@@ -2126,7 +2126,7 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 .trip-summary-driver-toggle{display:inline-flex;align-items:center;gap:5px;font-size:13px}
 .trip-summary-compact .trip-summary-quick-scope,.trip-summary-compact .trip-summary-quick-error{margin:0 12px 6px}
 .trip-summary-compact .trip-summary-quick-result{flex:1;min-height:0;overflow:auto;width:100%;align-items:stretch;padding:0 10px calc(10px + env(safe-area-inset-bottom))}
-.trip-summary-compact .scf-summary-auto-image.is-updating img{opacity:.92}
+/* V887: không làm mờ ảnh khi máy chủ đang tạo bản mới */
 @media(max-width:640px){
   .trip-summary-compact .trip-summary-quick-image{width:100%!important;margin:0!important}
   .trip-summary-compact .trip-summary-quick-result{padding:0 0 calc(10px + env(safe-area-inset-bottom))}
@@ -2134,3 +2134,8 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
   .trip-summary-date .trip-summary-date-value{font-size:14px}
   .trip-summary-date>button{padding:0 8px}
 }
+/* V887: trên điện thoại bỏ ô "Tên lái xe" — đơn tổng luôn hiện tên lái xe. */
+@media(max-width:640px){.trip-summary-driver-toggle{display:none!important}}
+/* V887: lề trái ảnh Đơn tổng thêm 3px */
+.trip-summary-compact .trip-summary-quick-result{padding-left:13px}
+@media(max-width:640px){.trip-summary-compact .trip-summary-quick-result{padding-left:3px}}
