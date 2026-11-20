@@ -2095,3 +2095,42 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 }
 /* V862: bảng tổng theo mã ở bước Kiểm & xếp của lái xe */
 .dm-load-summary h3{margin:0 0 8px}.dm-sum-table{width:100%;border-collapse:collapse;font-size:14px}.dm-sum-table th,.dm-sum-table td{padding:6px 4px;border-bottom:1px solid var(--bd,#dfe7e2);text-align:right;white-space:nowrap}.dm-sum-table th:first-child,.dm-sum-table td:first-child{text-align:left;white-space:normal}.dm-sum-table thead th{font-size:12px;color:var(--tx2,#5b6b63);font-weight:600}.dm-sum-table tfoot td{font-weight:700;border-bottom:0;border-top:2px solid var(--pri,#2d6a4f)}
+/* V886: Đơn tổng gọn một dòng — ← « dd/mm/yyyy » [Samsung|Điềm Thụy] */
+.trip-summary-compact>.mh{display:none!important}
+.modal.trip-summary-compact{padding:0;display:flex;flex-direction:column;overflow:hidden}
+.trip-summary-compact-bar{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top));background:#1F4D3A;color:#fff;position:sticky;top:0;z-index:20}
+.trip-summary-compact-bar button{border:0;cursor:pointer;font:inherit}
+.trip-summary-back{width:40px;height:40px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:transparent;color:#fff!important;font-size:24px}
+.trip-summary-back i{color:#fff}
+.trip-summary-back:active{background:rgba(255,255,255,.15)}
+.trip-summary-date{display:flex;align-items:center;flex:0 1 50%;min-width:0;max-width:260px;height:40px;border-radius:8px;background:#fff;overflow:hidden}
+.trip-summary-date>button{height:40px;background:transparent;color:#1F4D3A;font-size:20px;font-weight:700;padding:0 10px;flex-shrink:0}
+.trip-summary-date>button:active{background:#E6F2EC}
+.trip-summary-date .trip-summary-date-value{flex:1;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:5px;font-size:15px;padding:0 4px;border-inline:1px solid #DDE7E1;white-space:nowrap}
+.trip-summary-date .trip-summary-date-value i{font-size:16px;opacity:.7}
+.trip-summary-group-toggle{margin-left:auto;height:40px;min-width:120px;display:inline-flex;align-items:center;justify-content:space-between;gap:8px;padding:0 6px 0 6px;border-radius:20px;color:#fff!important;font-weight:700;font-size:14px;white-space:nowrap;transition:background .2s}
+.trip-summary-group-toggle.samsung{background:#2E8B62;padding-right:14px}
+.trip-summary-group-toggle.dt{background:#378ADD;padding-left:14px}
+.trip-summary-group-toggle .knob{width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);flex-shrink:0}
+.trip-summary-calendar{flex-shrink:0;margin:8px 10px 0;padding:10px;border:1px solid var(--bd);border-radius:10px;background:#fff;max-width:340px;box-shadow:0 4px 14px rgba(0,0,0,.12)}
+.trip-summary-calendar-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.trip-summary-calendar-head button{width:36px;height:36px;border:0;border-radius:8px;background:#F1F5F3;font-size:20px;cursor:pointer}
+.trip-summary-calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}
+.trip-summary-calendar-grid>span{font-size:12px;color:var(--tx2,#667);padding:4px 0}
+.trip-summary-calendar-grid button{height:36px;border:1px solid transparent;border-radius:8px;background:transparent;font-size:14px;cursor:pointer}
+.trip-summary-calendar-grid button.today{border-color:#2E8B62}
+.trip-summary-calendar-grid button.selected{background:#2E8B62;color:#fff;font-weight:700}
+.trip-summary-status-row{flex-shrink:0;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:6px 12px}
+.trip-summary-status-row .summary-cache-updated{margin:0;font-size:13px;color:var(--tx2,#556);flex:1;min-width:0}
+.trip-summary-future{font-size:12px;font-weight:700;color:#8A5A00;background:#FFF1D6;border-radius:10px;padding:2px 8px}
+.trip-summary-driver-toggle{display:inline-flex;align-items:center;gap:5px;font-size:13px}
+.trip-summary-compact .trip-summary-quick-scope,.trip-summary-compact .trip-summary-quick-error{margin:0 12px 6px}
+.trip-summary-compact .trip-summary-quick-result{flex:1;min-height:0;overflow:auto;width:100%;align-items:stretch;padding:0 10px calc(10px + env(safe-area-inset-bottom))}
+.trip-summary-compact .scf-summary-auto-image.is-updating img{opacity:.92}
+@media(max-width:640px){
+  .trip-summary-compact .trip-summary-quick-image{width:100%!important;margin:0!important}
+  .trip-summary-compact .trip-summary-quick-result{padding:0 0 calc(10px + env(safe-area-inset-bottom))}
+  .trip-summary-group-toggle{min-width:108px;font-size:13px}
+  .trip-summary-date .trip-summary-date-value{font-size:14px}
+  .trip-summary-date>button{padding:0 8px}
+}
