@@ -1521,6 +1521,11 @@ function scfQuickSummaryShiftDate(value,offset){
   const date=new Date(String(value||isoDate())+'T12:00:00');date.setDate(date.getDate()+offset);
   return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
 }
+// V890: từ 19:00 (giờ Việt Nam) Đơn tổng mở mặc định ngày hôm sau.
+function scfQuickSummaryDefaultDate(now=new Date(),today=fmtDate().split('/').reverse().join('-')){
+  const hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',hourCycle:'h23'}).format(now));
+  return hour>=19?scfQuickSummaryShiftDate(today,1):today;
+}
 function scfQuickSummaryRelativeDate(offset){return scfQuickSummaryShiftDate(isoDate(),offset);}
 function scfSummaryShortTime(value){
   const date=new Date(value);if(!Number.isFinite(date.getTime()))return '';
@@ -1544,7 +1549,7 @@ function ScfQuickSummaryCalendar({value,onPick}){
       ...cells.map((day,i)=>day?h('button',{key:day,type:'button','data-scf-action':'view','aria-label':'Ngày '+scfQuickSummaryDateLabel(day),'aria-pressed':day===value,className:(day===value?'selected':'')+(day===today?' today':''),onClick:()=>onPick(day)},Number(day.slice(8))):h('span',{key:'e'+i}))));
 }
 function TripQuickSummaryModal({currentUser,employees=[],loadData=scfLoadQuickTripSummaryData,onClose,onExit=onClose,mobileFullscreen=false}){
-  const[date,setDate]=useState(()=>fmtDate().split('/').reverse().join('-'));
+  const[date,setDate]=useState(()=>scfQuickSummaryDefaultDate());
   const[group,setGroup]=useState('samsung');const[busy,setBusy]=useState(false);
   const[showDriverName,setShowDriverName]=useState(true);
   const[error,setError]=useState('');const[result,setResult]=useState(null);
