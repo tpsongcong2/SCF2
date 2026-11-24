@@ -274,11 +274,45 @@ async function serverSaveAutoTripsPartial(trips,removedIds,requestTimeoutMs=SCF_
   throw failure;
 }
 
+// V896: danh sách chuyến (~2000 chuyến, ~3MB) không gửi cả danh sách + bản gốc (~6MB) nữa:
+// chỉ gửi các chuyến thay đổi kèm bản gốc của chúng. Máy chủ cũ chưa hiểu thì tự gửi kiểu cũ.
+function scfCollectionDelta(value,baseValue){
+  if(!Array.isArray(value)||!Array.isArray(baseValue))return null;
+  const idOf=item=>String(item?.id||'').trim(),baseById=new Map(),seen=new Set(),changes=[];
+  for(const item of baseValue){const id=idOf(item);if(!id||baseById.has(id))return null;baseById.set(id,item);}
+  for(const item of value){
+    const id=idOf(item);if(!id||seen.has(id))return null;seen.add(id);
+    const base=baseById.get(id);if(!base||JSON.stringify(base)!==JSON.stringify(item))changes.push({id,base:base||null,value:item});
+  }
+  for(const [id,base] of baseById)if(!seen.has(id))changes.push({id,base,value:null});
+  return changes.length&&changes.length<=1500?changes:null;
+}
+let scfCollectionDeltaUnsupported=false;
 async function serverSavePermittedCollection(key,value,expectedUpdatedAt='',baseValue,requestTimeoutMs=SCF_AUTH_REQUEST_TIMEOUT_MS){
   if(!sb)throw new Error('Chưa kết nối được máy chủ dữ liệu.');
+  const changes=key==='scf_trips'&&!scfCollectionDeltaUnsupported?scfCollectionDelta(value,baseValue):null;
+  if(changes){
+    const{data,error}=await invokeScfAuth({body:{action:'save_permitted_collection',key,collectionDelta:{changes},enforceVersion:true,expectedUpdatedAt:String(expectedUpdatedAt||'')}},requestTimeoutMs);
+    if(!error&&data?.ok&&data.delta===true){
+      const saved=new Map((Array.isArray(data.items)?data.items:[]).map(item=>[String(item?.id||'').trim(),item]));
+      const removed=new Set(changes.filter(change=>!change.value).map(change=>change.id));
+      return{value:value.filter(item=>!removed.has(String(item?.id||'').trim())).map(item=>saved.get(String(item?.id||'').trim())||item),updatedAt:data.updatedAt||''};
+    }
+    if(!error&&data?.ok)return{value:data.value||value,updatedAt:data.updatedAt||''};
+    if(!data?.conflict&&!data?.duplicateCode&&!data?.duplicateOrder){
+      const failure=await scfServerSaveError(error,data,'Không đồng bộ được dữ liệu.');
+      // Máy chủ chưa cập nhật V896: báo "Dữ liệu đồng bộ không hợp lệ" → gửi lại kiểu cũ.
+      if(failure.status===400&&/Dữ liệu đồng bộ không hợp lệ/.test(String(failure.message||''))){scfCollectionDeltaUnsupported=true;return serverSavePermittedCollection(key,value,expectedUpdatedAt,baseValue,requestTimeoutMs);}
+      throw failure;
+    }
+    return scfHandleCollectionSaveReply(data,error,value);
+  }
   const{data,error}=await invokeScfAuth({
     body:{action:'save_permitted_collection',key:String(key||''),value:value===undefined?null:value,baseValue:baseValue===undefined?undefined:baseValue,enforceVersion:true,expectedUpdatedAt:String(expectedUpdatedAt||'')}
   },requestTimeoutMs);
+  return scfHandleCollectionSaveReply(data,error,value);
+}
+async function scfHandleCollectionSaveReply(data,error,value){
   if(data?.conflict){
     const ids=Array.isArray(data.conflictIds)&&data.conflictIds.length?' Các mã đang bị sửa đồng thời: '+data.conflictIds.join(', ')+'.':'';
     const conflict=new Error('Dữ liệu trên máy chủ vừa thay đổi'+(data.actorName?' bởi '+data.actorName:'')+'. Thay đổi trên máy này vẫn được giữ để kiểm tra.'+ids);
