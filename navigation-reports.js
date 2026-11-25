@@ -2348,6 +2348,8 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
   const [dateMode,setDateMode]=useState('range');
   const [selectedDate,setSelectedDate]=useState(today);
   const [selectedMonth,setSelectedMonth]=useState(today.slice(0,7));
+  // V904: ô Báo cáo công nợ – còn nợ tính đến hết ngày giao đang liên kết.
+  if(typeof useScfSplitDate==='function')useScfSplitDate('debt',dateMode==='day'?selectedDate:dateMode==='range'?toDate:'',iso=>{if(dateMode==='day'){setSelectedDate(iso);return;}setDateMode('range');setToDate(iso);if(!fromDate||fromDate>iso)setFromDate(iso.slice(0,7)+'-01');});
   const [invoiceImageFilter,setInvoiceImageFilter]=useState('all');
   const [customerId,setCustomerId]=useState(()=>defaultCustomerId||'__WELSTORY__');
   const [pointKey,setPointKey]=useState('');
@@ -2721,7 +2723,7 @@ function InvoiceUploadReportTab({orders,setOrders,currentUser,customers,products
   const live=React.useRef({}),busy=React.useRef(new Set());live.current={orders,currentUser,canUpload};
   const uploadInvoice=async(order,file)=>{
     const id=String(order.id||''),actor=String(currentUser?.id||'');
-    const allowed=()=>live.current.canUpload&&String(live.current.currentUser?.id||'')===actor&&String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')===actor&&window.__SCF_ACCESS_CONTEXT?.page==='invoicereport';
+    const allowed=()=>live.current.canUpload&&String(live.current.currentUser?.id||'')===actor&&String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')===actor&&(window.__SCF_ACCESS_CONTEXT?.page==='invoicereport'||(window.__SCF_ACCESS_CONTEXT?.page==='split'&&(window.__SCF_ACCESS_CONTEXT?.splitPages||[]).includes('invoicereport')));
     if(!file||!id||!allowed()||busy.current.has(id))return;
     if(String((live.current.orders||[]).find(item=>String(item.id)===id)?.invoiceImage||'').trim())return;
     busy.current.add(id);setUploading(prev=>({...prev,[id]:true}));setUploadNotice('Đang tải ảnh hóa đơn…');
@@ -2759,6 +2761,8 @@ function InvoiceUploadReportTab({orders,setOrders,currentUser,customers,products
   const [selectedProduct,setSelectedProduct]=useState('');
   const [dateMode,setDateMode]=useState('range');
   const [month,setMonth]=useState(today.slice(0,7));
+  // V904: ô Báo cáo hóa đơn – lọc một ngày giao theo liên kết.
+  if(typeof useScfSplitDate==='function')useScfSplitDate('invoice',fromDate&&fromDate===toDate?fromDate:'',iso=>{setDateMode('day');setFromDate(iso);setToDate(iso);});
   const productLabel=line=>line?.productName||(products||[]).find(p=>String(p.id)===String(line?.productId))?.name||'Sản phẩm';
   const areaFor=order=>{
     const customer=(customers||[]).find(c=>String(c.id)===String(order.customerId||order.custId)||c.name===(order.customer||order.customerName));

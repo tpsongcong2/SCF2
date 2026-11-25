@@ -1,6 +1,7 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V903';
+const SCF_BUILD_VERSION='V904';
 const PTITLES = {
+  split:'Chia màn hình',
   driverprintlog:'Thông tin lái xe in đơn',
   kpi4p:'KPI & Lương 4P',
   attp_audit:'Nhật ký AUDIT khách hàng',
@@ -59,6 +60,8 @@ const SCF_PAGE_DATA={
   prodbom:['production_recipes','products','prodcats','materials'],prodorders:['prodorders','products','orders','prod_shifts','prod_shift_rules','shifts','trips'],stock:['stock','products','prodcats'],
   syncreport:[],purchase:[],workreport_vp:[],workreport_sx:[]
 };
+// V904: chia màn hình tải đủ dữ liệu của cả 4 trang có thể đặt trong ô.
+SCF_PAGE_DATA.split=[...new Set(['delivery','prodsummary','invoicereport','marketsales'].flatMap(key=>SCF_PAGE_DATA[key]||[]))];
 function scfPageDataKeys(page,allKeys){
   const keys=['company','ui_settings','notifications'];
   if(page==='backup'||page==='dbusage')return [...new Set([...keys,...allKeys])];
@@ -261,8 +264,8 @@ function scfLoadOptionalScript(name,url,failMessage='Chưa tải được công 
 }
 // V868: các tệp chỉ dùng cho một số trang được nạp khi mở trang đó (không nạp lúc khởi động) để mở app nhanh hơn.
 // Sửa một tệp dưới đây thì tăng ?v= tại đây (không còn trong index.html; sw.js vẫn lưu sẵn để dùng khi mất mạng).
-const SCF_LAZY_SCRIPT_FILES={'work-rules.js':['WorkRulesTab','./work-rules.js?v=899'],'navigation-reports.js':['SalesReportTab','./navigation-reports.js?v=877'],'organization.js':['CustomersTab','./organization.js?v=568'],'order-detail.js':['OrderDetailListTab','./order-detail.js?v=874'],'production-closing.js':['ProductionReportTab','./production-closing.js?v=593'],'production-recipes.js':['ProductionRecipesTab','./production-recipes.js?v=590'],'attp-audit.js':['CustomerAuditList','./attp-audit.js?v=860'],'attp-documents.js':['ATTPDocumentsTab','./attp-documents.js?v=860'],'personnel.js':['PersonnelInformationTab','./personnel.js?v=638'],'user-guide.js':['UserGuideTab','./user-guide.js?v=645'],'notifications.js':['NotificationsTab','./notifications.js?v=663'],'driver-print-history.js':['DriverPrintHistoryTab','./driver-print-history.js?v=789']};
-const SCF_LAZY_PAGE_SCRIPTS={workrules:['work-rules.js'],driverprintlog:['driver-print-history.js'],attp_audit:['attp-audit.js','attp-documents.js'],attp_claims:['attp-audit.js','attp-documents.js'],attp_process:['attp-audit.js','attp-documents.js'],attp_standards:['attp-audit.js','attp-documents.js'],attp_daily:['attp-audit.js','attp-documents.js'],attp_legal:['attp-audit.js','attp-documents.js'],personnel:['personnel.js'],depts:['organization.js'],customers:['organization.js'],areas:['organization.js'],workcats:['organization.js'],tasks:['organization.js'],notifications:['notifications.js'],userguide:['user-guide.js'],nccs:['navigation-reports.js'],nccgoods:['navigation-reports.js'],purchaseorders:['navigation-reports.js'],purchasegoods:['navigation-reports.js'],fuelpurchases:['navigation-reports.js'],fuelreport:['navigation-reports.js'],purchasereport:['navigation-reports.js'],maintreport:['navigation-reports.js'],materialusage:['navigation-reports.js'],powderdebtreport:['navigation-reports.js'],orderdetail:['order-detail.js'],salesreport:['navigation-reports.js'],marketsales:['navigation-reports.js'],invoicereport:['navigation-reports.js'],prodreport:['production-closing.js'],prodbom:['production-recipes.js'],prodsummary:['production-closing.js'],syncreport:['navigation-reports.js'],dbusage:['navigation-reports.js']};
+const SCF_LAZY_SCRIPT_FILES={'work-rules.js':['WorkRulesTab','./work-rules.js?v=899'],'navigation-reports.js':['SalesReportTab','./navigation-reports.js?v=904'],'organization.js':['CustomersTab','./organization.js?v=568'],'order-detail.js':['OrderDetailListTab','./order-detail.js?v=874'],'production-closing.js':['ProductionReportTab','./production-closing.js?v=593'],'production-recipes.js':['ProductionRecipesTab','./production-recipes.js?v=590'],'attp-audit.js':['CustomerAuditList','./attp-audit.js?v=860'],'attp-documents.js':['ATTPDocumentsTab','./attp-documents.js?v=860'],'personnel.js':['PersonnelInformationTab','./personnel.js?v=638'],'user-guide.js':['UserGuideTab','./user-guide.js?v=645'],'notifications.js':['NotificationsTab','./notifications.js?v=663'],'driver-print-history.js':['DriverPrintHistoryTab','./driver-print-history.js?v=789']};
+const SCF_LAZY_PAGE_SCRIPTS={workrules:['work-rules.js'],driverprintlog:['driver-print-history.js'],attp_audit:['attp-audit.js','attp-documents.js'],attp_claims:['attp-audit.js','attp-documents.js'],attp_process:['attp-audit.js','attp-documents.js'],attp_standards:['attp-audit.js','attp-documents.js'],attp_daily:['attp-audit.js','attp-documents.js'],attp_legal:['attp-audit.js','attp-documents.js'],personnel:['personnel.js'],depts:['organization.js'],customers:['organization.js'],areas:['organization.js'],workcats:['organization.js'],tasks:['organization.js'],notifications:['notifications.js'],userguide:['user-guide.js'],nccs:['navigation-reports.js'],nccgoods:['navigation-reports.js'],purchaseorders:['navigation-reports.js'],purchasegoods:['navigation-reports.js'],fuelpurchases:['navigation-reports.js'],fuelreport:['navigation-reports.js'],purchasereport:['navigation-reports.js'],maintreport:['navigation-reports.js'],materialusage:['navigation-reports.js'],powderdebtreport:['navigation-reports.js'],orderdetail:['order-detail.js'],salesreport:['navigation-reports.js'],marketsales:['navigation-reports.js'],invoicereport:['navigation-reports.js'],prodreport:['production-closing.js'],prodbom:['production-recipes.js'],prodsummary:['production-closing.js'],syncreport:['navigation-reports.js'],dbusage:['navigation-reports.js'],split:['navigation-reports.js','production-closing.js']};
 async function scfLoadPageScripts(page){
   // Nạp tuần tự theo thứ tự cũ trong index.html (attp-audit trước attp-documents).
   for(const file of SCF_LAZY_PAGE_SCRIPTS[page]||[]){
@@ -296,7 +299,8 @@ const SCF_PAGE_COMPONENTS={
   maintreport:'MaintenanceReportTab',materialusage:'MaterialUsageReportTab',powderdebtreport:'PowderDebtReportTab',maint_vehicle:'MaintenanceTab',maint_machine:'MaintenanceTab',
   shifts:'ShiftsTab',quotes:'QuotesTab',deliverymobile:'DeliveryOrdersTab AccountingOrdersCompact',delivery:'DeliveryOrdersTab ProductionSummaryPreviewModal',intem:'IntemTab',trips:'TripsTab DriverOrdersMobile DriverLabelPrintModal',workreport_lx:'DriverTripWorkReportTab',
   orderdetail:'OrderDetailListTab',salesreport:'SalesReportTab',marketsales:'SalesDebtReportTab',invoicereport:'InvoiceUploadReportTab TripInvoicePreview',cashflowreport:'FinanceReportTab',
-  prodreport:'ProductionReportTab',prodbom:'ProductionRecipesTab',powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab ProductionClosingDialog scfClosingAutoScope scfClosingCalculate',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab'
+  prodreport:'ProductionReportTab',prodbom:'ProductionRecipesTab',powdersales:'PowderSalesTab',prodsummary:'ProductionSummaryTab ProductionClosingDialog scfClosingAutoScope scfClosingCalculate',prodorders:'ProdOrdersTab WorkshopAssignmentsTab',stock:'StockTab',syncreport:'SyncDataReportTab',dbusage:'SupabaseUsageReportTab',
+  split:'ScfSplitView DeliveryOrdersTab ProductionSummaryTab ProductionClosingDialog scfClosingAutoScope InvoiceUploadReportTab TripInvoicePreview SalesDebtReportTab'
 };
 function scfMissingPageComponents(page){
   const names=SCF_PAGE_COMPONENTS[page]||(PROCESS_POST_KEYS[page]?'ProcessPostsTab':'PlaceholderTab');
@@ -372,6 +376,7 @@ function App(){
   const[session,setSession]=useLS('scf_session',null);
   const[automaticPlanRevision,setAutomaticPlanRevision]=useState(0);
   const[warehouseMerging,setWarehouseMerging]=useState(false);
+  const[splitPanes,setSplitPanes]=useState([]);
   const warehouseMergeBusy=React.useRef(false),warehouseMergeAttempts=React.useRef(new Map()),warehouseImportMerging=React.useRef(false),warehouseLiveRef=React.useRef({});
   useEffect(()=>{
     let timer=null;
@@ -690,6 +695,8 @@ function App(){
     }
     history.pushState({...history.state,scfPage:page},'');
   },[page]);
+  // V904: rời chế độ chia màn hình về trang trước (hoặc Đơn hàng).
+  const exitSplitView=()=>{if(history.state?.scfPage==='split'&&history.length>1)history.back();else setPage('delivery');};
   const goBackPage=()=>{
     if(page===homePage)return;
     if(history.state?.scfPage===page)history.back();
@@ -815,7 +822,7 @@ function App(){
       busy=true;window.__SCF_TRIP_REFRESH_BUSY=true;
       try{
         const watchedKeys=[...keys];
-        if((productionPreviewOpen||page==='prodsummary')&&canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments))for(const key of SCF_PAGE_DATA.prodsummary)if(dataLoaderRef.current?.loaded.has(key)&&!watchedKeys.includes(key))watchedKeys.push(key);
+        if((productionPreviewOpen||page==='prodsummary'||page==='split')&&canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments))for(const key of SCF_PAGE_DATA.prodsummary)if(dataLoaderRef.current?.loaded.has(key)&&!watchedKeys.includes(key))watchedKeys.push(key);
         if(!isFaceMask&&canAccess(cu.role,'assets',cu.permissions,cuAccessDepartments)&&dataLoaderRef.current?.loaded.has('assets')&&!watchedKeys.includes('assets'))watchedKeys.push('assets');
         const changed=await dbGetChangedKeys(watchedKeys.map(key=>'scf_'+key));
         const changedKeys=changed.map(key=>key.replace(/^scf_/,''));
@@ -842,7 +849,7 @@ function App(){
   useEffect(()=>{
     const automationUser=cu;
     const tripInputsReady=['orders','trips','shifts','prod_shifts','customers'].every(key=>dataLoaderRef.current?.loaded.has(key));
-    if(loading||!pageReady||!autoSyncReady||!tripInputsReady||!['delivery','deliverymobile','trips','orderdetail','prodshifts'].includes(page)||isFaceMask||!automationUser||!canAccess(automationUser.role,page==='deliverymobile'?'deliverymobile':'delivery',automationUser.permissions,automationUser.dept)||!canWrite(automationUser.role,page==='deliverymobile'?'deliverymobile':'delivery',automationUser.permLevels)||!shifts?.length)return;
+    if(loading||!pageReady||!autoSyncReady||!tripInputsReady||!['delivery','deliverymobile','trips','orderdetail','prodshifts','split'].includes(page)||isFaceMask||!automationUser||!canAccess(automationUser.role,page==='deliverymobile'?'deliverymobile':'delivery',automationUser.permissions,automationUser.dept)||!canWrite(automationUser.role,page==='deliverymobile'?'deliverymobile':'delivery',automationUser.permLevels)||!shifts?.length)return;
     // Chờ lần lưu đơn/chuyến trước được xác nhận rồi mới sửa tối đa 25 đơn.
     // Như vậy các đợt không bị gộp thành một lần ghi toàn bộ danh sách lớn.
     if(!navigator.onLine||warehouseMergeBusy.current||window.scfOrderAutomationPending?.())return;
@@ -882,7 +889,7 @@ function App(){
     }finally{warehouseMergeBusy.current=false;setWarehouseMerging(false);}
   };
   useEffect(()=>{
-    if(loading||!pageReady||!autoSyncReady||isFaceMask||!cu||warehouseMerging||warehouseImportMerging.current||!['delivery','trips','orderdetail'].includes(page)||!navigator.onLine||window.scfOrderAutomationPending?.())return;
+    if(loading||!pageReady||!autoSyncReady||isFaceMask||!cu||warehouseMerging||warehouseImportMerging.current||!['delivery','trips','orderdetail','split'].includes(page)||!navigator.onLine||window.scfOrderAutomationPending?.())return;
     if(!['admin','administrator'].includes(cu.role)&&!employeeHasDepartment(cu,'Kế toán'))return;
     if(!canWrite(cu.role,'delivery',cu.permLevels)||!canWrite(cu.role,'trips',cu.permLevels)||!canTripAction(cu,'editOrders'))return;
     const editing=document.activeElement;if(editing&&(['INPUT','TEXTAREA','SELECT'].includes(editing.tagName)||editing.isContentEditable))return;
@@ -1051,9 +1058,12 @@ function App(){
     )
   );
   const isAccounting=employeeDepartmentIncludes(cu,'Kế toán');
-  const activeLevel=getLvl(cu.role,page,cu.permLevels);
+  // V904: ở chế độ chia màn hình, quyền chung lấy mức cao nhất của các trang trong ô;
+  // từng ô vẫn tự chặn nút theo quyền trang của ô đó.
+  const splitLevelRank={r:1,rw:2,rwd:3};
+  const activeLevel=page==='split'?((splitPanes.length?splitPanes:['delivery']).map(p=>getLvl(cu.role,p,cu.permLevels)).sort((a,b)=>(splitLevelRank[b]||0)-(splitLevelRank[a]||0))[0]||'r'):getLvl(cu.role,page,cu.permLevels);
   const readOnly=activeLevel==='r';
-  window.__SCF_ACCESS_CONTEXT={employeeId:String(cu.id||''),role:cu.role,page,level:activeLevel,readOnly,invoiceBackgroundProcessing:cu.role==='admin'||isAccounting,reportInvoiceUpload:page==='invoicereport'&&isAccounting&&canAccess(cu.role,'invoicereport',cu.permissions)};
+  window.__SCF_ACCESS_CONTEXT={employeeId:String(cu.id||''),role:cu.role,page,level:activeLevel,readOnly,invoiceBackgroundProcessing:cu.role==='admin'||isAccounting,reportInvoiceUpload:(page==='invoicereport'||(page==='split'&&splitPanes.includes('invoicereport')))&&isAccounting&&canAccess(cu.role,'invoicereport',cu.permissions),splitPages:page==='split'?[...splitPanes]:[]};
   const wips=['purchase','workreport_vp','workreport_sx'];
   const logout=async()=>{await serverLogout();window.scfClearSensitiveLocalData&&window.scfClearSensitiveLocalData();setSession(null);if(SCF_SERVER_AUTH_ENABLED)location.reload();};
   const saveAttendanceZones=async zones=>{
@@ -1068,51 +1078,8 @@ function App(){
     _sc({...DEF_COMPANY,...latest});
     return latest?.attendanceZones;
   };
-  return h('div',{className:'layout'},
-    h(InvoiceInboxWorker,{trips,orders,setTrips,setOrders,currentUser:cu}),
-    warehouseMerging&&h('div',{role:'alert',style:{position:'fixed',inset:0,zIndex:100000,background:'rgba(0,0,0,.25)',display:'grid',placeItems:'center'}},h('div',{style:{background:'#fff',padding:24,borderRadius:12}},'Đang gộp PAC và xác nhận trên máy chủ…')),
-    h(ProductionPushIdentity,{currentUser:cu,onOpen:()=>{setProductionPreviewOpen(false);setPage('notifications');window.scfSyncNow?.();}}),
-    h('div',{className:'main'},
-      !menuHidden&&h('div',{className:'topbar'+(page!=='welcome'?' mobile-subpage-topbar':'')},
-        h('div',{className:'topbar-main'},
-          h('div',{className:'topbar-brand'},
-            isFaceMask?h('span',{className:'face-mask-brand-icon'},h('i',{className:'ti ti-mask'})):h('img',{src:LOGO_SRC,className:'topbar-logo'}),
-            h('div',{className:'topbar-title'},
-              h('div',{className:'topbar-company'},isFaceMask?'FACE MASK':(company?.name||'SCF')),
-              h('div',{className:'topbar-meta'},
-                h('span',null,'Menu'),
-                h('span',{title:'Phiên bản ứng dụng đang chạy',style:{display:'inline-flex',alignItems:'center',padding:'1px 6px',borderRadius:999,background:'rgba(255,255,255,.16)',color:'#fff',fontSize:10,fontWeight:700,letterSpacing:'.3px'}},SCF_BUILD_VERSION),
-                sb&&h(SyncStatus)
-              )
-            )
-          ),
-          h('div',{className:'topbar-actions'},
-            !isFaceMask&&h('button',{className:'topbar-notification',onClick:()=>setPage('notifications'),title:'Thông báo','aria-label':'Thông báo'},
-              h('i',{className:'ti ti-bell'}),unreadNotificationCount>0&&h('span',{className:'notification-count'},unreadNotificationCount>99?'99+':unreadNotificationCount)
-            ),
-            h('div',{className:'topbar-user'},
-              h('div',{className:'topbar-user-name'},cu.name)
-            ),
-            h('button',{className:'topbar-logout',onClick:logout,style:{fontSize:12,padding:'5px 10px',color:'#A32D2D',borderColor:'#F7C1C1'},title:'Đăng xuất','aria-label':'Đăng xuất'},h('i',{className:'ti ti-logout',style:{fontSize:14}}),h('span',{className:'topbar-logout-label'},'Đăng xuất'))
-          )
-        ),
-        h(TopNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,currentUser:cu,mobile:isPhone&&!isFaceMask})
-      ),
-      page!=='welcome'&&page!=='mobile-home'&&h('div',{className:'mobile-page-backbar'},
-        h('button',{className:'mobile-page-back',onClick:goBackPage,'aria-label':'Quay lại trang trước'},
-          h('i',{className:'ti ti-arrow-left'}),h('span',null,'Quay lại')
-        ),
-        h('div',{className:'mobile-page-title'},page==='trips'&&(cu.role==='driver'||employeeHasDepartment(cu,'Lái xe'))?'Đơn hàng lái xe':PTITLES[page]||(isFaceMask?'FACE MASK':'SCF')),
-        page==='prodsummary'&&h('button',{type:'button',className:'mobile-production-closing',onClick:()=>setProductionClosingScope({...scfClosingAutoScope(),workshop:productionClosingWorkshop})},'Chốt cuối ca')
-      ),
-      h('div',{
-        className:'content'+(menuHidden?' compact-top':'')+(page!=='welcome'?' mobile-subpage-content':'')+(readOnly?' scf-readonly':'')+(activeLevel!=='rwd'?' scf-no-delete':''),
-        onClickCapture:e=>guardPermissionAction(e,cu.role,page,cu.permLevels)
-      },
-        !pageReady&&page==='prodsummary'&&canOpenCurrentPage(cu)&&preparedProductionPage?.ownerKey===scfQuickSummaryAccessKey(cu)?h('div',null,h('p',{className:'summary-cache-updated',role:'status'},'Bản đã lưu · Cập nhật lúc '+scfSummaryUpdatedLabel(preparedProductionPage.updatedAt)+' · Đang đối chiếu dữ liệu mới…'),pageError&&h('p',{role:'alert'},pageError),h(ProductionSummaryTab,{...preparedProductionPage.payload.data,currentUser:cu,preparedRows:preparedProductionPage.payload.rows,preparedDate:preparedProductionPage.payload.date,snapshotReadOnly:true})):!pageReady?h('div',{className:'card',role:pageError?'alert':'status',style:{padding:24}},
-          h('p',null,pageError||'Đang tải dữ liệu '+(PTITLES[page]||'màn hình')+'…'),
-          pageError&&h('button',{className:'bp',onClick:()=>{if(scfMissingPageComponents(page).length&&!SCF_LAZY_PAGE_SCRIPTS[page])location.reload();else setPageAttempt(v=>v+1);}},'Thử tải lại')
-        ):h(React.Fragment,null,
+  // V904: thân trang tách thành hàm để chế độ chia màn hình vẽ nhiều trang cùng lúc.
+  const renderScfPageBody=page=>h(React.Fragment,null,
         page==='mobile-home'&&h(MobileRestrictedHome),
         canOpenCurrentPage(cu)&&page==='welcome'&&h(WelcomePage,{emp:cu,employees,company,uiSettings,news:companyNews,setNews:setCompanyNews,messages:internalMessages,setMessages:setInternalMessages,notifications,onRefresh:refreshCommunityData}),
         canAccess(cu.role,'company',cu.permissions,cuAccessDepartments)&&page==='company'&&h(CompanySettings,{company,setCompany,canEdit:canWrite(cu.role,'company',cu.permLevels)}),
@@ -1186,7 +1153,57 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
         page.startsWith('attp_')&&canAccess(cu.role,page,cu.permissions,cuAccessDepartments)&&h(ATTPDocumentsTab,{key:page,page,title:PTITLES[page],icon:PICONS[page],currentUser:cu}),
         !page.startsWith('attp_')&&PROCESS_POST_KEYS[page]&&canAccess(cu.role,page,cu.permissions,cuAccessDepartments)&&h(ProcessPostsTab,{key:page,page,title:PTITLES[page],icon:PICONS[page],items:processPosts[page]||[],setItems:setProcessPosts(page),currentUser:cu}),
         wips.includes(page)&&h(PlaceholderTab,{title:PTITLES[page],icon:PICONS[page]||'ti-clock'})
-        )
+  );
+  return h('div',{className:'layout'},
+    h(InvoiceInboxWorker,{trips,orders,setTrips,setOrders,currentUser:cu}),
+    warehouseMerging&&h('div',{role:'alert',style:{position:'fixed',inset:0,zIndex:100000,background:'rgba(0,0,0,.25)',display:'grid',placeItems:'center'}},h('div',{style:{background:'#fff',padding:24,borderRadius:12}},'Đang gộp PAC và xác nhận trên máy chủ…')),
+    h(ProductionPushIdentity,{currentUser:cu,onOpen:()=>{setProductionPreviewOpen(false);setPage('notifications');window.scfSyncNow?.();}}),
+    h('div',{className:'main'},
+      !menuHidden&&h('div',{className:'topbar'+(page!=='welcome'?' mobile-subpage-topbar':'')},
+        h('div',{className:'topbar-main'},
+          h('div',{className:'topbar-brand'},
+            isFaceMask?h('span',{className:'face-mask-brand-icon'},h('i',{className:'ti ti-mask'})):h('img',{src:LOGO_SRC,className:'topbar-logo'}),
+            h('div',{className:'topbar-title'},
+              h('div',{className:'topbar-company'},isFaceMask?'FACE MASK':(company?.name||'SCF')),
+              h('div',{className:'topbar-meta'},
+                h('span',null,'Menu'),
+                h('span',{title:'Phiên bản ứng dụng đang chạy',style:{display:'inline-flex',alignItems:'center',padding:'1px 6px',borderRadius:999,background:'rgba(255,255,255,.16)',color:'#fff',fontSize:10,fontWeight:700,letterSpacing:'.3px'}},SCF_BUILD_VERSION),
+                sb&&h(SyncStatus)
+              )
+            )
+          ),
+          h('div',{className:'topbar-actions'},
+            !isPhone&&!isFaceMask&&typeof scfCanUseSplitView==='function'&&scfCanUseSplitView(cu)&&h('button',{type:'button',className:'topbar-notification topbar-split'+(page==='split'?' active':''),onClick:()=>page==='split'?exitSplitView():setPage('split'),title:page==='split'?'Thoát chia màn hình':'Chia màn hình 2×2','aria-label':page==='split'?'Thoát chia màn hình':'Chia màn hình','aria-pressed':page==='split'},h('i',{className:'ti ti-layout-grid'})),
+            !isFaceMask&&h('button',{className:'topbar-notification',onClick:()=>setPage('notifications'),title:'Thông báo','aria-label':'Thông báo'},
+              h('i',{className:'ti ti-bell'}),unreadNotificationCount>0&&h('span',{className:'notification-count'},unreadNotificationCount>99?'99+':unreadNotificationCount)
+            ),
+            h('div',{className:'topbar-user'},
+              h('div',{className:'topbar-user-name'},cu.name)
+            ),
+            h('button',{className:'topbar-logout',onClick:logout,style:{fontSize:12,padding:'5px 10px',color:'#A32D2D',borderColor:'#F7C1C1'},title:'Đăng xuất','aria-label':'Đăng xuất'},h('i',{className:'ti ti-logout',style:{fontSize:14}}),h('span',{className:'topbar-logout-label'},'Đăng xuất'))
+          )
+        ),
+        h(TopNav,{page,setPage,role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,currentUser:cu,mobile:isPhone&&!isFaceMask})
+      ),
+      page!=='welcome'&&page!=='mobile-home'&&h('div',{className:'mobile-page-backbar'},
+        h('button',{className:'mobile-page-back',onClick:goBackPage,'aria-label':'Quay lại trang trước'},
+          h('i',{className:'ti ti-arrow-left'}),h('span',null,'Quay lại')
+        ),
+        h('div',{className:'mobile-page-title'},page==='trips'&&(cu.role==='driver'||employeeHasDepartment(cu,'Lái xe'))?'Đơn hàng lái xe':PTITLES[page]||(isFaceMask?'FACE MASK':'SCF')),
+        page==='prodsummary'&&h('button',{type:'button',className:'mobile-production-closing',onClick:()=>setProductionClosingScope({...scfClosingAutoScope(),workshop:productionClosingWorkshop})},'Chốt cuối ca')
+      ),
+      h('div',{
+        className:'content'+(menuHidden?' compact-top':'')+(page!=='welcome'?' mobile-subpage-content':'')+(page==='split'?' content-split':(readOnly?' scf-readonly':'')+(activeLevel!=='rwd'?' scf-no-delete':'')),
+        onClickCapture:e=>{if(page!=='split')guardPermissionAction(e,cu.role,page,cu.permLevels);}
+      },
+        !pageReady&&page==='prodsummary'&&canOpenCurrentPage(cu)&&preparedProductionPage?.ownerKey===scfQuickSummaryAccessKey(cu)?h('div',null,h('p',{className:'summary-cache-updated',role:'status'},'Bản đã lưu · Cập nhật lúc '+scfSummaryUpdatedLabel(preparedProductionPage.updatedAt)+' · Đang đối chiếu dữ liệu mới…'),pageError&&h('p',{role:'alert'},pageError),h(ProductionSummaryTab,{...preparedProductionPage.payload.data,currentUser:cu,preparedRows:preparedProductionPage.payload.rows,preparedDate:preparedProductionPage.payload.date,snapshotReadOnly:true})):!pageReady?h('div',{className:'card',role:pageError?'alert':'status',style:{padding:24}},
+          h('p',null,pageError||'Đang tải dữ liệu '+(PTITLES[page]||'màn hình')+'…'),
+          pageError&&h('button',{className:'bp',onClick:()=>{if(scfMissingPageComponents(page).length&&!SCF_LAZY_PAGE_SCRIPTS[page])location.reload();else setPageAttempt(v=>v+1);}},'Thử tải lại')
+        ):page==='split'?h(ScfSplitView,{key:'split-'+cu.id,currentUser:cu,orders,onExit:exitSplitView,onPanesChange:setSplitPanes,
+          renderPage:(panePage,paneId)=>h('div',{key:panePage+'-'+paneId,className:'scf-split-page'},renderScfPageBody(panePage)),
+          paneClassName:panePage=>{const level=getLvl(cu.role,panePage,cu.permLevels);return (level==='r'?' scf-readonly':'')+(level!=='rwd'?' scf-no-delete':'');},
+          onPaneClickCapture:(event,panePage)=>guardPermissionAction(event,cu.role,panePage,cu.permLevels)})
+        :renderScfPageBody(page)
       ),
       productionPreviewOpen&&page==='delivery'&&!isFaceMask&&canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments)&&h(ProductionSummaryPreviewModal,{key:cu.id,currentUser:cu,loadData:loadProductionPreviewData,onClose:()=>setProductionPreviewOpen(false),orders,products,prodCats,prodShifts,prodShiftRules,prodActuals,setProdActuals,stock}),
       quickTripSummaryOpen&&!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')&&h(TripQuickSummaryModal,{key:cu.id,mobileFullscreen:page==='delivery',currentUser:cu,employees,loadData:loadQuickSummaryData,onClose:()=>setQuickTripSummaryOpen(false),onExit:()=>{setQuickTripSummaryOpen(false);if((cu.role==='driver'||employeeHasDepartment(cu,'Lái xe'))&&scfCanOpenUserPage(cu,'trips',{mobile:isPhone,faceMask:isFaceMask}))setPage('trips');}}),

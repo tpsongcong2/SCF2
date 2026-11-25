@@ -215,9 +215,17 @@ function scfMobileStartOptions(user={}){
   if(canMobileFeature(user,'quick-summary')&&typeof canViewTripQuickSummary==='function'&&canViewTripQuickSummary(user))options.push(['quick-summary','Đơn tổng · Xem nhanh']);
   return options;
 }
+// V904: Chia màn hình chỉ cho Admin và Kế toán, chỉ trên máy tính.
+function scfCanUseSplitView(user,{mobile=false,faceMask=false}={}){
+  if(!user||mobile||faceMask)return false;
+  const admin=['admin','administrator'].includes(String(user.role||'').toLowerCase());
+  if(!admin&&!employeeHasDepartment(user,'Kế toán'))return false;
+  return ['delivery','prodsummary','invoicereport','marketsales'].some(page=>canAccess(user.role,page,user.permissions,employeeDepartments(user)));
+}
 function scfCanOpenUserPage(user,page,{mobile=false,faceMask=false}={}){
   if(!user)return false;
   if(page==='mobile-home')return mobile&&!faceMask;
+  if(page==='split')return scfCanUseSplitView(user,{mobile,faceMask});
   return canAccess(user.role,page,user.permissions,employeeDepartments(user))&&(!mobile||faceMask||canMobileFeature(user,page));
 }
 function scfMobileFallbackPage(user={}){

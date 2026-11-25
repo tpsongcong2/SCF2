@@ -256,6 +256,8 @@ function ProductionSummaryTab({orders,products,prodCats=[],prodShifts,prodShiftR
   const initialPeriod=React.useMemo(()=>scfProductionDefaultPeriod(),[]);
   const[date,setDate]=useState(initialPeriod.date);
   const[shift,setShift]=useState(initialPeriod.shift);
+  // V904: ô Tổng hợp SX nhảy theo ngày SX của ngày giao đang liên kết.
+  if(typeof useScfSplitDate==='function')useScfSplitDate('prod',scfSplitIso(date),iso=>setDate(vnDateFromISO(iso)));
   const[workshop,setWorkshop]=useState('all');
   const canEditActual=!snapshotReadOnly&&canWrite(currentUser?.role,'prodsummary',currentUser?.permLevels);
   const showShiftWeight=canViewProductionShiftWeight(currentUser);

@@ -3249,6 +3249,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   const deliveryDrag=useRef(null);
   const [dragTarget,setDragTarget]=useState('');
   const[fDate,sfDate]=useState(_ti0);const[fDateTo,sfDateTo]=useState(_ti0);
+  // V904: ô Đơn hàng trong chia màn hình – liên kết ngày giao với các ô khác.
+  if(typeof useScfSplitDate==='function')useScfSplitDate('delivery',dateFilterMode==='day'?fDate:'',iso=>{setDateFilterMode('day');sfDate(iso);});
   const[fWeek,sfWeek]=useState(currentISOWeekInput());const[fMonth,sfMonth]=useState(_ti0.slice(0,7));
   const[fPoint,sfPoint]=useState([]);const[fCustomer,sfCustomer]=useState([]);const[fProduct,sfProduct]=useState('');const[fTime,sfTime]=useState('');const[fArea,sfArea]=useState('');
   const[fTripGroup,sfTripGroup]=useState(()=>deliveryDefaultTripGroup(currentUser));
