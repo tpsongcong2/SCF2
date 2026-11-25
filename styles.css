@@ -2179,3 +2179,7 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 .dm-ps-form input,.dm-ps-form select{min-height:40px}
 .trip-product-ps-badge.pending{background:#FFF4D9;color:#805500}
 .trip-ps-pending-button{font-size:13px}
+
+/* V903: báo cáo gộp PAC nhiều dòng */
+.scf-toast-msg{white-space:pre-line}
+.delivery-group-pac{white-space:nowrap;font-size:12px;font-weight:700;color:#1f5f3a;background:#e3f1e6;border:1px solid #b7dcc0;border-radius:999px;padding:0 8px}

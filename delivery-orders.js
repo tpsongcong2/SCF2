@@ -241,7 +241,7 @@ function DeliveryTripDriverModal({trip,employees,onSave,onClose}){
     error&&h('p',{role:'alert',style:{color:'#A32D2D'}},error),
     h(Row,null,h('button',{onClick:close},saving||error?'Đóng':'Hủy'),h('button',{className:'bp',disabled:saving,onClick:save},saving?'Đang lưu…':'Lưu lái xe')));
 }
-function DeliveryOrderGroupHeader({group,count,weight,onEditDriver,mobile=false,tone='green',summaryInvoiceButton,dispatchButton,printButton,onToggleDetails,detailsHidden=false}){
+function DeliveryOrderGroupHeader({group,count,weight,pacSummary='',onEditDriver,mobile=false,tone='green',summaryInvoiceButton,dispatchButton,printButton,onToggleDetails,detailsHidden=false}){
   const isTrip=group?.mode==='trip';
   return h('div',{className:'delivery-group-header'+(mobile?' delivery-group-header-mobile delivery-trip-tone-'+tone:'')},
     onToggleDetails&&h('button',{type:'button',className:'delivery-group-toggle','data-scf-action':'view','aria-expanded':!detailsHidden,'aria-label':(detailsHidden?'Hiện':'Ẩn')+' đơn chi tiết chuyến '+group.label,title:detailsHidden?'Hiện đơn chi tiết':'Ẩn đơn chi tiết',onClick:event=>{event.stopPropagation();onToggleDetails();}},h('i',{className:detailsHidden?'ti ti-chevron-right':'ti ti-chevron-down','aria-hidden':true})),
@@ -249,6 +249,7 @@ function DeliveryOrderGroupHeader({group,count,weight,onEditDriver,mobile=false,
     isTrip&&h('span',{className:'delivery-group-driver'},h('span',null,group?.driverName?'Lái xe: '+group.driverName:'Chưa có lái'),
       onEditDriver&&h('button',{type:'button',className:'delivery-group-driver-edit','data-scf-action':'write',title:'Đổi lái xe chuyến','aria-label':'Đổi lái xe chuyến '+group.label,onClick:()=>onEditDriver(group.tripId)},h('i',{className:'ti ti-pencil'}))),
     h('span',{className:'delivery-group-summary',title:'Tổng khối lượng đặt'},count+' đơn — '+weight.toFixed(1)+' kg đặt'),
+    pacSummary&&h('span',{className:'delivery-group-pac',title:'Số PAC chuyến kho vận: B bún · ST bún sợi to · P phở · BC bánh cuốn'},pacSummary),
     dispatchButton,
     summaryInvoiceButton,printButton
   );
@@ -1201,6 +1202,8 @@ function ImportPreviewModal({data, customers, setCustomers, orders, setOrders, p
     const confirmed=await(window.scfWaitForCollectionSync?.('scf_orders',35000)??Promise.resolve(false));
     if(confirmed){
       window.showToast('Máy chủ đã xác nhận import '+cleanOrders.length+' đơn hàng ('+cleanOrders.reduce((s,o)=>s+(o.lines||[]).length,0)+' dòng sản phẩm).','success',8000);
+      // V903: gộp PAC kho vận ngay sau khi upload, có báo cáo gộp/không gộp.
+      window.scfMergeImportedWarehouseOrders?.(cleanOrders.map(o=>o.id)).catch(error=>window.showToast('Chưa gộp được PAC: '+(error?.message||error),'warn',10000));
       onClose();
       return;
     }
@@ -1744,6 +1747,7 @@ function ImageOrderImportModal({customers,products,orders,setOrders,prodShifts,c
     if(!finalRows.length){window.showToast('Không còn đơn hàng mới để nhập.','info');return;}
     setOrders(p=>[...p,...finalRows]);
     window.showToast('Đã nhập '+finalRows.length+' đơn hàng từ ảnh.','success');
+    window.scfMergeImportedWarehouseOrders?.(finalRows.map(o=>o.id)).catch(error=>window.showToast('Chưa gộp được PAC: '+(error?.message||error),'warn',10000));
     onClose();
   };
   return ReactDOM.createPortal(h(Modal,{title:'Lấy đơn từ ảnh — bản nháp',lg:true,className:'order-image-import-modal',overlayClassName:'order-image-import-overlay',onClose},
@@ -3373,6 +3377,24 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
   return {pointMatchById,pointMatchByName,orderContext};
   },[customers]);
   const tripById=React.useMemo(()=>new Map((trips||[]).map(trip=>[String(trip.id||''),trip])),[trips]);
+  // V903: số PAC của chuyến KV (B - ST - P - BC) giống ảnh đơn tổng, hiện cạnh khối lượng.
+  const tripPacSummaries=React.useMemo(()=>{
+    const result=new Map();if(typeof scfTripKvPacSummary!=='function')return result;
+    const kvTrips=(trips||[]).filter(trip=>/^(KV|KHO VAN)( |$)/.test(String(trip?.shiftName||trip?.shiftId||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim()));
+    if(!kvTrips.length)return result;
+    const kvIds=new Set(kvTrips.map(trip=>String(trip.id))),byTrip=new Map(),byId=new Map();
+    for(const order of orders||[]){
+      if(order?.status==='cancelled')continue;
+      const tripId=String(order?.tripId||'');
+      if(tripId){if(kvIds.has(tripId)){if(!byTrip.has(tripId))byTrip.set(tripId,[]);byTrip.get(tripId).push(order);}}
+      else byId.set(String(order?.id||''),order);
+    }
+    for(const trip of kvTrips){
+      const members=[...(byTrip.get(String(trip.id))||[]),...(trip.orderIds||[]).map(id=>byId.get(String(id))).filter(Boolean)];
+      const summary=scfTripKvPacSummary(trip,members);if(summary)result.set(String(trip.id),summary);
+    }
+    return result;
+  },[orders,trips]);
   const indexedTrips=React.useMemo(()=>deliveryTripIndex(trips),[trips]);
   const pickerTrips=React.useMemo(()=>(trips||[]).filter(t=>!['completion_pending','completed'].includes(t.status)),[trips]);
   const pickerTripsForOrder=React.useMemo(()=>{
@@ -5144,8 +5166,8 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
         h('tbody',null,list.length?orderTableRows.map((o,_i)=>{
           if(o._hdr){
             const photoColumn=visibleColumns.findIndex(([key])=>key==='invoice');
-            return h('tr',{key:'oh'+_i,className:'delivery-trip-tone-'+toneForGroup(o.group)},photoColumn>0?h('td',{colSpan:photoColumn,className:'delivery-group-header-cell'},h(DeliveryOrderGroupHeader,{group:o.group,...groupDetailProps(o.group),count:o.cnt,weight:o.kl,dispatchButton:groupDispatchButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null}))
-              :h('td',{colSpan:columnCount,className:'delivery-group-header-cell'},h(DeliveryOrderGroupHeader,{group:o.group,...groupDetailProps(o.group),count:o.cnt,weight:o.kl,dispatchButton:groupDispatchButton(o.group),summaryInvoiceButton:summaryInvoiceButton(o.group),printButton:groupPrintButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null})),
+            return h('tr',{key:'oh'+_i,className:'delivery-trip-tone-'+toneForGroup(o.group)},photoColumn>0?h('td',{colSpan:photoColumn,className:'delivery-group-header-cell'},h(DeliveryOrderGroupHeader,{group:o.group,...groupDetailProps(o.group),count:o.cnt,weight:o.kl,pacSummary:o.group?.mode==='trip'?tripPacSummaries.get(String(o.group.tripId))||'':'',dispatchButton:groupDispatchButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null}))
+              :h('td',{colSpan:columnCount,className:'delivery-group-header-cell'},h(DeliveryOrderGroupHeader,{group:o.group,...groupDetailProps(o.group),count:o.cnt,weight:o.kl,pacSummary:o.group?.mode==='trip'?tripPacSummaries.get(String(o.group.tripId))||'':'',dispatchButton:groupDispatchButton(o.group),summaryInvoiceButton:summaryInvoiceButton(o.group),printButton:groupPrintButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null})),
               photoColumn>0&&h('td',{className:'delivery-group-header-cell delivery-center-cell'},summaryInvoiceButton(o.group)),photoColumn>0&&columnCount-photoColumn-1>0&&h('td',{colSpan:columnCount-photoColumn-1,className:'delivery-group-header-cell',style:{textAlign:'right'}},groupPrintButton(o.group)));
           }
           if(groupIsHidden(groupInfoForOrder(o)))return null;
@@ -5238,7 +5260,7 @@ function DeliveryOrdersTab({orders,setOrders,customers,setCustomers,products,pro
     ),
     isMobile&&h('div',{className:'mobile-only mobile-card-list delivery-order-mobile-list'},
       list.length?orderTableRows.map((o,_i)=>{
-        if(o._hdr)return h(DeliveryOrderGroupHeader,{key:'mobile-header-'+_i,group:o.group,...groupDetailProps(o.group),count:o.cnt,weight:o.kl,mobile:true,tone:toneForGroup(o.group),dispatchButton:groupDispatchButton(o.group),summaryInvoiceButton:summaryInvoiceButton(o.group),printButton:groupPrintButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null});
+        if(o._hdr)return h(DeliveryOrderGroupHeader,{key:'mobile-header-'+_i,group:o.group,...groupDetailProps(o.group),count:o.cnt,weight:o.kl,pacSummary:o.group?.mode==='trip'?tripPacSummaries.get(String(o.group.tripId))||'':'',mobile:true,tone:toneForGroup(o.group),dispatchButton:groupDispatchButton(o.group),summaryInvoiceButton:summaryInvoiceButton(o.group),printButton:groupPrintButton(o.group),onEditDriver:canChangeTripDriver&&deliveryTripDriverEditable(tripById.get(String(o.group.tripId)))?setDriverEditTripId:null});
         if(groupIsHidden(groupInfoForOrder(o)))return null;
         const ctx=o._ctx||orderContext(o);
         const tripMode=o.tripAssignMode==='manual'?'manual':'auto';

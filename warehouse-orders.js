@@ -21,8 +21,10 @@ function scfWarehouseOrderTools(){
     const trip=trips.find(t=>String(t.id)===String(tripId));
     const fail=reason=>({ok:false,reason});
     if(!trip||!warehouse(trip,shifts))return fail('Chỉ gộp PAC trong chuyến KV kho vận.');
-    if(trip.driverDispatchedAt||!['planning','assigned',''].includes(String(trip.status||'')))return fail('Chuyến đã giao lái xe hoặc đã đóng; chưa thể gộp dữ liệu.');
+    if(!['planning','assigned',''].includes(String(trip.status||'')))return fail('Chuyến đã bắt đầu giao hoặc đã đóng; không gộp dữ liệu.');
     const members=orders.filter(o=>String(o.tripId||'')===String(trip.id)||(trip.orderIds||[]).map(String).includes(String(o.id)));
+    // V903: đã giao lái xe vẫn gộp được khi lái xe chưa tích xếp/giao đơn nào.
+    if(trip.driverDispatchedAt&&members.some(o=>o.driverLoadedAt||o.driverDeliveredAt||o.driverNoInvoiceAt||o.driverCompletedAt))return fail('Lái xe đã bắt đầu tích xếp đơn lên xe; không gộp để danh sách trên điện thoại lái xe không bị đổi giữa chừng.');
     if(members.some(o=>o.tripId&&String(o.tripId)!==String(trip.id)))return fail('Liên kết đơn/chuyến đang lệch. Hãy đồng bộ lại trước khi gộp.');
     const targets=members.filter(o=>o.warehouseMerged===true);
     if(targets.length>1)return fail('Chuyến đang có nhiều đơn kho vận gộp; cần kiểm tra trước.');

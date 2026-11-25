@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V901';
+const SCF_BUILD_VERSION='V903';
 const PTITLES = {
   driverprintlog:'Thông tin lái xe in đơn',
   kpi4p:'KPI & Lương 4P',
@@ -372,7 +372,7 @@ function App(){
   const[session,setSession]=useLS('scf_session',null);
   const[automaticPlanRevision,setAutomaticPlanRevision]=useState(0);
   const[warehouseMerging,setWarehouseMerging]=useState(false);
-  const warehouseMergeBusy=React.useRef(false),warehouseMergeAttempts=React.useRef(new Map());
+  const warehouseMergeBusy=React.useRef(false),warehouseMergeAttempts=React.useRef(new Map()),warehouseImportMerging=React.useRef(false),warehouseLiveRef=React.useRef({});
   useEffect(()=>{
     let timer=null;
     const resume=()=>{
@@ -862,7 +862,7 @@ function App(){
     if(planned.changed)setOrders(nextOrders,workingTrips);
   },[loading,pageReady,autoSyncReady,page,isFaceMask,session,employees,orders,trips,shifts,prodShifts,customers,products,automaticPlanRevision]);
 
-  const mergeWarehouseTrip=async(tripId,mode='manual',expectedIds=[])=>{
+  const mergeWarehouseTrip=async(tripId,mode='manual',expectedIds=[],options={})=>{
     const actorId=String(cu?.id||'');
     if(String(window.__SCF_ACCESS_CONTEXT?.employeeId||'')!==actorId)throw new Error('Tài khoản đã thay đổi. Hãy mở lại màn hình đơn/chuyến.');
     if(warehouseMergeBusy.current||window.scfGetSyncState?.().pending||window.scfGetSyncState?.().status==='syncing')throw new Error('Chờ đồng bộ đơn/chuyến xong rồi gộp PAC.');
@@ -877,12 +877,12 @@ function App(){
       const deleted=new Set(receipt.removedIds.map(String));
       _so(previous=>{const replaced=new Map(receipt.orders.map(o=>[String(o.id),o]));return previous.filter(o=>!deleted.has(String(o.id))).map(o=>{const id=String(o.id),next=replaced.get(id);replaced.delete(id);return next||o;}).concat([...replaced.values()]);});
       _st(previous=>previous.map(t=>String(t.id)===String(receipt.trip.id)?receipt.trip:t));
-      window.showToast('Đã gộp '+receipt.summary.orders+' đơn PAC thành đơn KHO VẬN. Đơn phát sinh giữ riêng.','success');
+      if(!options.quiet)window.showToast('Đã gộp '+receipt.summary.orders+' đơn PAC thành đơn KHO VẬN. Đơn phát sinh giữ riêng.','success');
       return receipt;
     }finally{warehouseMergeBusy.current=false;setWarehouseMerging(false);}
   };
   useEffect(()=>{
-    if(loading||!pageReady||!autoSyncReady||isFaceMask||!cu||warehouseMerging||!['delivery','trips','orderdetail'].includes(page)||!navigator.onLine||window.scfOrderAutomationPending?.())return;
+    if(loading||!pageReady||!autoSyncReady||isFaceMask||!cu||warehouseMerging||warehouseImportMerging.current||!['delivery','trips','orderdetail'].includes(page)||!navigator.onLine||window.scfOrderAutomationPending?.())return;
     if(!['admin','administrator'].includes(cu.role)&&!employeeHasDepartment(cu,'Kế toán'))return;
     if(!canWrite(cu.role,'delivery',cu.permLevels)||!canWrite(cu.role,'trips',cu.permLevels)||!canTripAction(cu,'editOrders'))return;
     const editing=document.activeElement;if(editing&&(['INPUT','TEXTAREA','SELECT'].includes(editing.tagName)||editing.isContentEditable))return;
@@ -901,6 +901,49 @@ function App(){
       return()=>clearTimeout(timer);
     }
   },[loading,pageReady,autoSyncReady,isFaceMask,cu?.id,page,orders,trips,products,shifts,automaticPlanRevision,warehouseMerging]);
+  // V903: gộp PAC ngay sau khi upload đơn KV và báo rõ chuyến nào đã gộp,
+  // chuyến nào không gộp kèm lý do. Hiệu ứng tự gộp ở trên vẫn là lớp dự phòng.
+  warehouseLiveRef.current={orders,trips,products,shifts};
+  window.scfMergeImportedWarehouseOrders=async(importedIds=[])=>{
+    const ids=new Set((importedIds||[]).map(String).filter(Boolean));
+    if(!ids.size||!cu||(!['admin','administrator'].includes(cu.role)&&!employeeHasDepartment(cu,'Kế toán')))return null;
+    if(!canWrite(cu.role,'delivery',cu.permLevels)||!canWrite(cu.role,'trips',cu.permLevels)||!canTripAction(cu,'editOrders'))return null;
+    if(warehouseImportMerging.current)return null;
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const idle=()=>{const sync=window.scfGetSyncState?.()||{};return !warehouseMergeBusy.current&&!sync.pending&&sync.status!=='syncing'&&!window.scfOrderAutomationPending?.();};
+    const pacOrder=(order,catalog)=>(order.lines||[]).some(line=>!line.isAdditionalProduct&&scfWarehouseOrders.pac(line,catalog||[]));
+    warehouseImportMerging.current=true;
+    try{
+      // Chờ app xếp chuyến cho các đơn vừa nhập và máy chủ xác nhận xong.
+      const deadline=Date.now()+120000;
+      while(Date.now()<deadline){
+        const mine=(warehouseLiveRef.current.orders||[]).filter(o=>ids.has(String(o.id)));
+        if(mine.length&&mine.every(o=>o.automaticPlanningPending!==true)&&idle())break;
+        await wait(700);
+      }
+      const live=warehouseLiveRef.current,catalog=live.products||[];
+      const imported=(live.orders||[]).filter(o=>ids.has(String(o.id))&&o.warehouseMergePending===true&&!o.warehouseMerged&&pacOrder(o,catalog));
+      if(!imported.length)return null;
+      const tripMap=new Map((live.trips||[]).map(t=>[String(t.id),t]));
+      const planning=imported.filter(o=>o.automaticPlanningPending===true);
+      const planned=imported.filter(o=>o.automaticPlanningPending!==true);
+      const kvTripIds=[...new Set(planned.map(o=>String(o.tripId||'')).filter(id=>tripMap.has(id)&&scfWarehouseOrders.warehouse(tripMap.get(id),live.shifts||[])))];
+      const noKvTrip=planned.filter(o=>!kvTripIds.includes(String(o.tripId||'')));
+      const label=trip=>[trip.shiftName||trip.id,trip.deliveryDate?String(trip.deliveryDate).slice(0,5):'',trip.driverName?'('+trip.driverName+')':''].filter(Boolean).join(' ');
+      const merged=[],skipped=[];
+      for(const tripId of kvTripIds){
+        const until=Date.now()+30000;while(!idle()&&Date.now()<until)await wait(500);
+        const trip=(warehouseLiveRef.current.trips||[]).find(t=>String(t.id)===tripId)||tripMap.get(tripId);
+        try{const receipt=await mergeWarehouseTrip(tripId,'auto',[],{quiet:true});merged.push('✓ '+label(trip)+': đã gộp '+receipt.summary.orders+' đơn PAC thành 1 đơn KHO VẬN');}
+        catch(error){skipped.push('✗ '+label(trip)+': không gộp — '+(error?.message||'lỗi không rõ'));}
+      }
+      const lines=[...merged,...skipped];
+      if(planning.length)lines.push('• '+planning.length+' đơn PAC chưa xếp xong chuyến; app sẽ tự gộp khi xếp xong.');
+      if(noKvTrip.length)lines.push('• '+noKvTrip.length+' đơn PAC không nằm trong chuyến KV nên không gộp.');
+      if(lines.length)window.showToast('Gộp PAC sau khi upload:\n'+lines.join('\n'),skipped.length||planning.length||noKvTrip.length?'warn':'success',skipped.length?30000:15000);
+      return{merged,skipped,planning:planning.length,noKvTrip:noKvTrip.length};
+    }finally{warehouseImportMerging.current=false;}
+  };
 
   const addNotification=React.useCallback(data=>{
     const recipientIds=[...new Set((data?.recipientIds||[data?.recipientId]).filter(Boolean).map(String))];
