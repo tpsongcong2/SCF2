@@ -2161,3 +2161,21 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 /* V889: lớp trong suốt phía sau lịch — bấm ra ngoài lịch thì lịch thu lại */
 .trip-summary-calendar-backdrop{position:fixed;inset:0;z-index:30;background:transparent}
 .trip-summary-calendar{position:relative;z-index:31}
+/* V900: lái xe — HĐ tổng (Chụp / Tải / + Đơn PS), nút từng đơn, đơn gộp KV theo điểm, PS chờ kế toán duyệt */
+.dm-total-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:8px 0 4px}
+.dm-total-actions button{min-height:42px;font-size:13px;font-weight:700;padding:6px 4px;display:inline-flex;align-items:center;justify-content:center;gap:4px;border-radius:8px}
+.dm-ps-button{background:#FFF4D9!important;color:#805500!important;border:1px solid #E8C46A!important;font-weight:700}
+.dm-order-actions{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.dm-order-actions button{min-height:38px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:8px}
+.dm-point{margin:6px 0 2px;padding-top:4px;border-top:1px dashed var(--bd);font-size:13px}
+.dm-point small{color:var(--tx2)}
+.dm-ps-badge{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;border-radius:8px;padding:1px 6px;background:#E1F5EE;color:#0F6E56;vertical-align:middle}
+.dm-ps-badge.pending{background:#FFF4D9;color:#805500}
+.dm-ps-order{font-size:12px;font-weight:700;border-radius:8px;padding:4px 8px;margin:4px 0;background:#FFF4D9;color:#805500}
+.dm-ps-order.approved{background:#E1F5EE;color:#0F6E56}
+.dm-qty-group{border:1px solid var(--bd);border-radius:10px;padding:6px 8px;margin:8px 0}
+.dm-qty-group .dm-point{border-top:0;margin-top:0}
+.dm-ps-form{display:grid;gap:6px;background:#FFFBEF;border:1px solid #E8C46A;border-radius:8px;padding:8px;margin-top:6px}
+.dm-ps-form input,.dm-ps-form select{min-height:40px}
+.trip-product-ps-badge.pending{background:#FFF4D9;color:#805500}
+.trip-ps-pending-button{font-size:13px}
