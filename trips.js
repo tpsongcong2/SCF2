@@ -638,7 +638,11 @@ function scfBuildDriverTripReport({trips,orders,products,customers,month,driverK
     const weight=scfDriverDeliveredWeight(linked,products);
     if(!(weight>0))return;
     const driverCompleted=!!trip.driverConfirmedAt||['completion_pending','completed'].includes(trip.status);
-    rows.push({...trip,dateKey,deliveryShift:trip.shiftName||trip.shiftId||'Chưa có ca',orderCount:linked.length,weight,driverCompleted,
+    // V899: địa điểm giao + khu vực của chuyến (cột Khu vực; quy tắc Công thực tế theo địa điểm).
+    const uniq=list=>[...new Set(list.map(value=>String(value||'').trim()).filter(Boolean))];
+    const points=uniq(linked.map(order=>order.pointName));
+    const areas=uniq(linked.map(order=>{if(order.area)return order.area;const customer=(customers||[]).find(c=>String(c.id)===String(order.customerId||order.custId||''));const point=(customer?.points||[]).find(p=>String(p.id)===String(order.pointId||'')||p.name===order.pointName);return point?.area||'';}));
+    rows.push({...trip,dateKey,deliveryShift:trip.shiftName||trip.shiftId||'Chưa có ca',orderCount:linked.length,weight,driverCompleted,points,areas,
       work:driverCompleted?numFmt(trip.driverWork):0,totalPay:scfDriverTripPay(trip,weight,linked)});
   });
   rows.sort((a,b)=>b.dateKey.localeCompare(a.dateKey)||a.deliveryShift.localeCompare(b.deliveryShift,'vi')||String(a.id).localeCompare(String(b.id)));
@@ -662,7 +666,7 @@ function scfOpenDriverReportTrip(trip,onOpenTrips,currentUser){
   catch{window.showToast?.('Không mở được chuyến. Hãy thử lại.','warn');return false;}
   onOpenTrips();return true;
 }
-function scfDriverReportExcelWorkbook(ExcelJS,{report,month,driverName,activeShifts=[],withActualPay=false}){
+function scfDriverReportExcelWorkbook(ExcelJS,{report,month,driverName,activeShifts=[],withActualPay=false,withArea=false}){
   const workbook=new ExcelJS.Workbook();workbook.creator='SCFOOD';
   const number=value=>Number.isFinite(Number(value))?Number(value):0;
   const rows=report.rows.filter(row=>!activeShifts.length||activeShifts.includes(row.deliveryShift));
@@ -689,13 +693,13 @@ function scfDriverReportExcelWorkbook(ExcelJS,{report,month,driverName,activeShi
     ['Ghi chú','Ngày nghỉ tính theo báo cáo tháng. Chuyến hủy và chuyến 0 kg không tính công.']
   ],[36,65]);
   addSheet('Theo ca giao',['Ca giao hàng (cả tháng)','Số chuyến','Khối lượng (kg)'],report.shifts.map(item=>[item.name,number(item.trips),number(item.weight)]),[32,18,24]);
-  const detail=addSheet('Chi tiet chuyen',['STT','Ngày','Ca giao hàng','Số đơn','Khối lượng (kg)','Trạng thái','Công','Tiền công (đ)',...(withActualPay?['Công thực tế (đ)']:[])],rows.map((row,index)=>{
+  const detail=addSheet('Chi tiet chuyen',['STT','Ngày','Ca giao hàng',...(withArea?['Khu vực']:[]),'Số đơn','Khối lượng (kg)','Trạng thái','Công','Tiền công (đ)',...(withActualPay?['Công thực tế (đ)']:[])],rows.map((row,index)=>{
     const key=row.dateKey||scfTripDateKey(row.deliveryDate),match=/^(\d{4})-?(\d{2})-?(\d{2})$/.exec(key||'');
     const date=match?new Date(Date.UTC(+match[1],+match[2]-1,+match[3])):row.deliveryDate;
-    return[index+1,date,row.deliveryShift,number(row.orderCount),number(row.weight),row.driverCompleted?'Đã hoàn thành':'Chưa hoàn thành',number(row.work),number(row.totalPay),...(withActualPay?[number(row.actualPay)]:[])];
-  }),[8,16,28,14,22,24,14,24,...(withActualPay?[24]:[])]);
+    return[index+1,date,row.deliveryShift,...(withArea?[(row.areas||[]).join(', ')]:[]),number(row.orderCount),number(row.weight),row.driverCompleted?'Đã hoàn thành':'Chưa hoàn thành',number(row.work),number(row.totalPay),...(withActualPay?[number(row.actualPay)]:[])];
+  }),[8,16,28,...(withArea?[22]:[]),14,22,24,14,24,...(withActualPay?[24]:[])]);
   detail.getColumn(2).numFmt='dd/mm/yyyy';
-  detail.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,rows.length+1),column:withActualPay?9:8}};
+  detail.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,rows.length+1),column:(withActualPay?9:8)+(withArea?1:0)}};
   return workbook;
 }
 
@@ -706,29 +710,38 @@ const SCF_DRIVER_ACTUAL_PAY_DEFAULT_RULES=[
  {id:'R1',driver:'Nguyễn Hải Long',shiftMode:'all',shiftText:'',kind:'day',monthAmount:11000000,days:26},
  {id:'R2',driver:'Vũ Trọng Quang',shiftMode:'equals',shiftText:'SS S1',kind:'trip',amount:250000},
  {id:'R3',driver:'Đỗ Trung Hiếu',shiftMode:'any',shiftText:'YP QV',kind:'trip',amount:300000},
+ {id:'R6',driver:'Đỗ Trung Hiếu',shiftMode:'shift_points',shiftText:'ĐT-2H01',pointsText:'SC2+DBG+HKD Hường',kind:'trip',amount:150000},
  {id:'R4',driver:'Nguyễn Quang Trung',shiftMode:'all',shiftText:'',kind:'trip',amount:150000},
  {id:'R5',driver:'',shiftMode:'vp',shiftText:'',kind:'trip',amount:200000}
 ];
 function scfDriverPayNorm(value){return String(value||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/gi,'d').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();}
 function scfDriverActualPayRuleList(rules){return Array.isArray(rules)&&rules.length?rules:SCF_DRIVER_ACTUAL_PAY_DEFAULT_RULES;}
 function scfDriverActualPayRuleDayAmount(rule){const days=Number(rule?.days)||0;return days>0?Math.round((Number(rule?.monthAmount)||0)/days):0;}
-function scfDriverActualPayRuleMatch(rule,driverName,shiftName){
+// V899: "Đúng tên ca + có đủ địa điểm": ca đúng tên và chuyến giao đủ MỌI địa điểm ghi (cách nhau bằng + hoặc dấu phẩy),
+// mỗi địa điểm khớp khi tên điểm giao chứa chữ đó (VD "SC2" khớp "KET SC2").
+function scfDriverActualPayPointTokens(text){return String(text||'').split(/[+,;]/).map(scfDriverPayNorm).filter(Boolean);}
+function scfDriverActualPayRuleMatch(rule,driverName,shiftName,row){
  const driver=scfDriverPayNorm(rule?.driver),name=scfDriverPayNorm(driverName),shift=scfDriverPayNorm(shiftName),text=scfDriverPayNorm(rule?.shiftText);
  if(driver&&driver!==name)return false;
  const mode=rule?.shiftMode||'all';
+ if(mode==='shift_points'){
+  if(!text||shift!==text)return false;
+  const need=scfDriverActualPayPointTokens(rule?.pointsText),have=(Array.isArray(row?.points)?row.points:[]).map(scfDriverPayNorm);
+  return need.length>0&&need.every(token=>have.some(point=>(' '+point+' ').includes(' '+token+' ')||point.includes(token)));
+ }
  if(mode==='vp')return /^(VP|VINH PHUC)( |$)/.test(shift);
  if(mode==='equals')return !!text&&shift===text;
  if(mode==='any')return !!text&&text.split(' ').some(token=>new RegExp('(^| )'+token+'( |$)').test(shift));
  return true;
 }
 function scfDriverActualPayDefault(driverName,row,rules){
- const rule=scfDriverActualPayRuleList(rules).find(item=>scfDriverActualPayRuleMatch(item,driverName,row?.deliveryShift||row?.shiftName||row?.shiftId));
+ const rule=scfDriverActualPayRuleList(rules).find(item=>scfDriverActualPayRuleMatch(item,driverName,row?.deliveryShift||row?.shiftName||row?.shiftId,row));
  if(rule&&rule.kind!=='day')return Number(rule.amount)||0;
  if(rule)return scfDriverActualPayRuleDayAmount(rule);
  return Number(row?.totalPay)||0;
 }
 function scfDriverActualPayRows(rows,driverName,rules){
- const list=scfDriverActualPayRuleList(rules),ruleOf=row=>list.find(item=>scfDriverActualPayRuleMatch(item,driverName,row?.deliveryShift||row?.shiftName||row?.shiftId));
+ const list=scfDriverActualPayRuleList(rules),ruleOf=row=>list.find(item=>scfDriverActualPayRuleMatch(item,driverName,row?.deliveryShift||row?.shiftName||row?.shiftId,row));
  // Quy tắc theo ngày công: mỗi ngày có chuyến có hàng = 1 công, ghi ở chuyến đầu tiên trong ngày.
  const firstOfDay=new Set(),seen=new Set();
  [...(rows||[])].filter(row=>ruleOf(row)?.kind==='day').sort((a,b)=>String(a.dateKey||scfTripDateKey(a.deliveryDate)).localeCompare(String(b.dateKey||scfTripDateKey(b.deliveryDate)))||String(a.deliveryTime||'').localeCompare(String(b.deliveryTime||''))||String(a.id).localeCompare(String(b.id)))
@@ -743,15 +756,25 @@ function scfDriverActualPayRows(rows,driverName,rules){
 function scfDriverActualPayRuleText(rule){
  const money=value=>Number(value||0).toLocaleString('vi-VN')+' đ';
  const who=rule?.driver?String(rule.driver):'Mọi lái xe';
- const where=rule?.shiftMode==='vp'?'chuyến Vĩnh Phúc (VP…)':rule?.shiftMode==='equals'?'chuyến ca '+rule.shiftText:rule?.shiftMode==='any'?'chuyến có ca chứa '+String(rule.shiftText||'').split(/\s+/).filter(Boolean).join(' hoặc '):'mọi chuyến';
+ const where=rule?.shiftMode==='shift_points'?'chuyến ca '+rule.shiftText+' có đủ địa điểm '+String(rule.pointsText||'').split(/[+,;]/).map(x=>x.trim()).filter(Boolean).join(' + '):rule?.shiftMode==='vp'?'chuyến Vĩnh Phúc (VP…)':rule?.shiftMode==='equals'?'chuyến ca '+rule.shiftText:rule?.shiftMode==='any'?'chuyến có ca chứa '+String(rule.shiftText||'').split(/\s+/).filter(Boolean).join(' hoặc '):'mọi chuyến';
  return rule?.kind==='day'?who+' – '+where+': tính theo ngày công, 1 công = '+money(rule.monthAmount)+' / '+(Number(rule.days)||0)+' = '+money(scfDriverActualPayRuleDayAmount(rule))+' (mỗi ngày có chuyến = 1 công, ghi ở chuyến đầu tiên trong ngày)':who+' – '+where+': '+money(rule?.amount)+'/chuyến';
 }
 // V881: kho quy tắc chấm công (chỉ Admin). Máy chủ chưa có kho này thì dùng mặc định và không cho lưu.
 const SCF_WORK_RULES_KEY='scf_work_rules';
 function scfDefaultWorkRules(){return{driverActualPay:{rules:JSON.parse(JSON.stringify(SCF_DRIVER_ACTUAL_PAY_DEFAULT_RULES)),updatedAt:'',updatedBy:''},codeRequests:[]};}
+// V899: quy tắc mặc định mới được thêm 1 lần vào bảng Admin đã lưu (đặt ngay sau quy tắc cuối cùng của cùng lái xe); Admin xóa thì không thêm lại.
+const SCF_WORK_RULE_ADDED_DEFAULTS=['R6'];
 function scfNormalizeWorkRules(value){
- const base=scfDefaultWorkRules();if(!value||typeof value!=='object'||Array.isArray(value))return base;
- return{...base,...value,driverActualPay:{...base.driverActualPay,...(value.driverActualPay||{}),rules:Array.isArray(value.driverActualPay?.rules)?value.driverActualPay.rules:base.driverActualPay.rules},codeRequests:Array.isArray(value.codeRequests)?value.codeRequests:[]};
+ const base=scfDefaultWorkRules();if(!value||typeof value!=='object'||Array.isArray(value))return {...base,addedDefaults:[...SCF_WORK_RULE_ADDED_DEFAULTS]};
+ let rules=Array.isArray(value.driverActualPay?.rules)?value.driverActualPay.rules:base.driverActualPay.rules;
+ const added=Array.isArray(value.addedDefaults)?value.addedDefaults:[];
+ for(const id of SCF_WORK_RULE_ADDED_DEFAULTS){
+  if(added.includes(id)||rules.some(rule=>rule?.id===id))continue;
+  const rule=SCF_DRIVER_ACTUAL_PAY_DEFAULT_RULES.find(item=>item.id===id);if(!rule)continue;
+  let at=-1;rules.forEach((item,index)=>{if(scfDriverPayNorm(item?.driver)===scfDriverPayNorm(rule.driver))at=index;});
+  rules=at<0?[{...rule},...rules]:[...rules.slice(0,at+1),{...rule},...rules.slice(at+1)];
+ }
+ return{...base,...value,addedDefaults:[...new Set([...added,...SCF_WORK_RULE_ADDED_DEFAULTS])],driverActualPay:{...base.driverActualPay,...(value.driverActualPay||{}),rules},codeRequests:Array.isArray(value.codeRequests)?value.codeRequests:[]};
 }
 async function scfLoadWorkRules(){
  try{const value=scfNormalizeWorkRules(await dbGetRequired(SCF_WORK_RULES_KEY,null));window.__SCF_WORK_RULES=value;window.__SCF_WORK_RULES_SERVER_OK=true;return value;}
@@ -831,6 +854,7 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
   const canOpen=typeof onOpenTrips==='function'&&canAccess(currentUser?.role,'trips',currentUser?.permissions,employeeDepartments(currentUser));
   const canOpenTrip=row=>canOpen&&(!isDriver||!!row.driverDispatchedAt||['active','completion_pending','completed'].includes(row.status));
   const canViewMonthWeight=canViewDriverReportMonthlyWeight(currentUser);
+  const showArea=typeof canViewDriverReportArea==='function'?canViewDriverReportArea(currentUser):isAdminViewer;
   // Retain a single saved selection from older versions as a one-item list.
   const activeShifts=[...new Set((Array.isArray(shiftFilter)?shiftFilter:shiftFilter?[shiftFilter]:[]).filter(name=>report.shifts.some(item=>item.name===name)))];
   const toggleShift=name=>setShiftFilter(previous=>{const selected=(Array.isArray(previous)?previous:previous?[previous]:[]).filter(value=>report.shifts.some(item=>item.name===value));return selected.includes(name)?selected.filter(value=>value!==name):[...selected,name];});
@@ -847,7 +871,7 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
     const actorId=String(currentUser.id);setExportBusy(true);setExportError('');
     try{
       await scfLoadOptionalScript('ExcelJS','./vendor/exceljs-4.4.0.min.js');
-      const workbook=scfDriverReportExcelWorkbook(window.ExcelJS,{report,month,driverName:selectedName,activeShifts,withActualPay:true});
+      const workbook=scfDriverReportExcelWorkbook(window.ExcelJS,{report,month,driverName:selectedName,activeShifts,withActualPay:true,withArea:showArea});
       const bytes=await workbook.xlsx.writeBuffer();
       if(window.__SCF_ACCESS_CONTEXT&&String(window.__SCF_ACCESS_CONTEXT.employeeId)!==actorId)throw Error('Tài khoản đã thay đổi. Hãy mở lại báo công.');
       const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
@@ -889,10 +913,10 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
         h('p',{className:'driver-report-note'},canOpen?(isDriver?'Báo công gồm cả chuyến đã xếp. Bấm vào chuyến đã giao cho bạn để xem chi tiết. Chuyến 0 kg và chuyến hủy được ẩn.':'Bấm vào chuyến để xem chi tiết. Chuyến 0 kg và chuyến hủy được ẩn.'):'Chuyến 0 kg và chuyến hủy được ẩn. Tài khoản chưa có quyền xem chi tiết chuyến.'),
         !rows.length?h('div',{className:'driver-report-empty'},'Chưa có chuyến có hàng theo lựa chọn này.'):
         h(React.Fragment,null,
-          h('div',{className:'desktop-only tw'},h('table',null,h('thead',null,h('tr',null,...['Ngày','Ca giao hàng',...(isAdmin?['Số đơn']:[]),'Khối lượng giao','Trạng thái',...(isAdmin?['Công','Tiền công','Công thực tế']:[])].map(label=>h('th',{key:label},label)))),
-            h('tbody',null,visible.trips.map(row=>h('tr',{key:row.id,className:canOpenTrip(row)?'driver-report-trip-row':'',onClick:()=>open(row)},h('td',null,canOpenTrip(row)?h('button',{type:'button',className:'driver-report-trip-link','aria-label':'Xem chuyến '+row.deliveryDate+' '+row.deliveryShift,onClick:event=>{event.stopPropagation();open(row);}},row.deliveryDate,h('i',{className:'ti ti-chevron-right'})):row.deliveryDate),h('td',null,h('b',null,row.deliveryShift)),isAdmin&&h('td',null,row.orderCount),h('td',null,fmt(row.weight)+' kg'),h('td',null,status(row)),isAdmin&&h('td',null,fmt(row.work)),isAdmin&&h('td',null,fmt(row.totalPay)+' đ'),isAdmin&&h('td',null,h(ScfDriverActualPayInput,{row,onSave:saveActualPay}))))))),
+          h('div',{className:'desktop-only tw'},h('table',null,h('thead',null,h('tr',null,...['Ngày','Ca giao hàng',...(showArea?['Khu vực']:[]),...(isAdmin?['Số đơn']:[]),'Khối lượng giao','Trạng thái',...(isAdmin?['Công','Tiền công','Công thực tế']:[])].map(label=>h('th',{key:label},label)))),
+            h('tbody',null,visible.trips.map(row=>h('tr',{key:row.id,className:canOpenTrip(row)?'driver-report-trip-row':'',onClick:()=>open(row)},h('td',null,canOpenTrip(row)?h('button',{type:'button',className:'driver-report-trip-link','aria-label':'Xem chuyến '+row.deliveryDate+' '+row.deliveryShift,onClick:event=>{event.stopPropagation();open(row);}},row.deliveryDate,h('i',{className:'ti ti-chevron-right'})):row.deliveryDate),h('td',null,h('b',null,row.deliveryShift)),showArea&&h('td',{className:'driver-report-area'},(row.areas||[]).join(', ')||'—'),isAdmin&&h('td',null,row.orderCount),h('td',null,fmt(row.weight)+' kg'),h('td',null,status(row)),isAdmin&&h('td',null,fmt(row.work)),isAdmin&&h('td',null,fmt(row.totalPay)+' đ'),isAdmin&&h('td',null,h(ScfDriverActualPayInput,{row,onSave:saveActualPay}))))))),
           h('div',{className:'mobile-only trip-attendance-list'},visible.trips.map(row=>h('div',{key:'mobile-'+row.id,className:'mobile-data-card trip-attendance-card driver-report-trip-card',onClick:()=>open(row)},
-            h('div',{className:'mobile-data-head'},h('div',null,h('div',{className:'mobile-data-title'},row.deliveryShift),h('div',{className:'mobile-data-sub'},row.deliveryDate+(isAdmin?' · '+row.orderCount+' đơn':''))),h('span',{className:'badge',style:{background:row.driverCompleted?'#E1F5EE':'#FFF4D9',color:row.driverCompleted?'#0F6E56':'#805500'}},status(row))),
+            h('div',{className:'mobile-data-head'},h('div',null,h('div',{className:'mobile-data-title'},row.deliveryShift),h('div',{className:'mobile-data-sub'},row.deliveryDate+(showArea&&(row.areas||[]).length?' · '+row.areas.join(', '):'')+(isAdmin?' · '+row.orderCount+' đơn':''))),h('span',{className:'badge',style:{background:row.driverCompleted?'#E1F5EE':'#FFF4D9',color:row.driverCompleted?'#0F6E56':'#805500'}},status(row))),
             h('div',{className:'driver-report-trip-amounts'},h('b',null,fmt(row.weight)+' kg'),isAdmin&&h('span',null,'Công: '+fmt(row.work)),isAdmin&&h('span',null,fmt(row.totalPay)+' đ')),
             isAdmin&&h('div',{className:'driver-report-trip-amounts'},h('span',null,'Công thực tế'),h(ScfDriverActualPayInput,{row,onSave:saveActualPay})),
             canOpenTrip(row)&&h('button',{type:'button',className:'driver-report-mobile-open','aria-label':'Xem chuyến '+row.deliveryDate+' '+row.deliveryShift,onClick:event=>{event.stopPropagation();open(row);}},'Xem chi tiết chuyến',h('i',{className:'ti ti-chevron-right'}))

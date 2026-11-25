@@ -2,7 +2,7 @@
 // - Công thực tế lái xe: Admin sửa bảng quy tắc, Báo công lái xe áp dụng ngay (không cần sửa code).
 // - Tiền công lái xe và chấm công sản xuất: quy tắc đang viết trong code; Admin ghi đề xuất thay đổi,
 //   app lưu thành "Yêu cầu sửa code" để gửi người phát triển.
-const SCF_WORK_RULE_SHIFT_MODES=[['all','Mọi chuyến'],['vp','Chuyến Vĩnh Phúc (VP…)'],['equals','Đúng tên ca'],['any','Ca có chứa (YP, QV…)']];
+const SCF_WORK_RULE_SHIFT_MODES=[['all','Mọi chuyến'],['vp','Chuyến Vĩnh Phúc (VP…)'],['equals','Đúng tên ca'],['any','Ca có chứa (YP, QV…)'],['shift_points','Đúng tên ca + có đủ địa điểm']];
 const SCF_DRIVER_TRIP_PAY_TEXT=[
   'Chuyến 0 kg không tính tiền công.',
   'Chuyến KV / Kho vận: 150.000 đ.',
@@ -26,7 +26,8 @@ function scfWorkRuleIssues(rules){
   const issues=[];
   (rules||[]).forEach((rule,index)=>{
     const label='Quy tắc '+(index+1)+': ';
-    if(['equals','any'].includes(rule.shiftMode)&&!String(rule.shiftText||'').trim())issues.push(label+'nhập tên ca.');
+    if(['equals','any','shift_points'].includes(rule.shiftMode)&&!String(rule.shiftText||'').trim())issues.push(label+'nhập tên ca.');
+    if(rule.shiftMode==='shift_points'&&!scfDriverActualPayPointTokens(rule.pointsText).length)issues.push(label+'nhập địa điểm (VD: SC2+DBG+HKD Hường).');
     if(rule.kind==='day'){if(!(Number(rule.monthAmount)>0))issues.push(label+'nhập lương tháng.');if(!(Number(rule.days)>0))issues.push(label+'nhập số ngày công chuẩn.');if(!String(rule.driver||'').trim())issues.push(label+'quy tắc theo ngày công cần tên lái xe.');}
     else if(!(Number(rule.amount)>=0)||String(rule.amount??'')==='')issues.push(label+'nhập số tiền mỗi chuyến.');
   });
@@ -52,7 +53,7 @@ function WorkRulesTab({employees=[],trips=[],currentUser}){
   const move=(index,step)=>{const next=[...rules],target=index+step;if(target<0||target>=next.length)return;[next[index],next[target]]=[next[target],next[index]];setDraft(next);};
   const saveRules=async()=>{
     const issues=scfWorkRuleIssues(rules);if(issues.length){window.showToast(issues.join(' '),'warn',10000);return;}
-    const clean=rules.map(rule=>({id:rule.id||scfWorkRuleId(),driver:String(rule.driver||'').trim(),shiftMode:rule.shiftMode||'all',shiftText:String(rule.shiftText||'').trim(),kind:rule.kind==='day'?'day':'trip',...(rule.kind==='day'?{monthAmount:Number(rule.monthAmount)||0,days:Number(rule.days)||0}:{amount:Number(rule.amount)||0})}));
+    const clean=rules.map(rule=>({id:rule.id||scfWorkRuleId(),driver:String(rule.driver||'').trim(),shiftMode:rule.shiftMode||'all',shiftText:String(rule.shiftText||'').trim(),...(rule.shiftMode==='shift_points'?{pointsText:String(rule.pointsText||'').trim()}:{}),kind:rule.kind==='day'?'day':'trip',...(rule.kind==='day'?{monthAmount:Number(rule.monthAmount)||0,days:Number(rule.days)||0}:{amount:Number(rule.amount)||0})}));
     if(await save({...data,driverActualPay:{rules:clean,updatedAt:fmtDT(),updatedBy:currentUser?.name||''}},'Đã lưu quy tắc Công thực tế. Báo công lái xe áp dụng ngay.'))setDraft(null);
   };
   const addRequest=async section=>{
@@ -86,12 +87,13 @@ function WorkRulesTab({employees=[],trips=[],currentUser}){
       textList([...scfDriverActualPayRuleList(data.driverActualPay.rules).map(rule=>scfDriverActualPayRuleText(rule)),'Các chuyến còn lại: bằng cột Tiền công.']),
       h('datalist',{id:'work-rules-drivers'},driverNames.map(name=>h('option',{key:name,value:name}))),
       h('div',{className:'tw'},h('table',null,
-        h('thead',null,h('tr',null,...['#','Lái xe (trống = mọi lái xe)','Áp dụng cho','Tên ca','Cách tính','Số tiền',''].map(label=>h('th',{key:label},label)))),
+        h('thead',null,h('tr',null,...['#','Lái xe (trống = mọi lái xe)','Áp dụng cho','Tên ca','Địa điểm (đủ tất cả)','Cách tính','Số tiền',''].map(label=>h('th',{key:label},label)))),
         h('tbody',null,rules.map((rule,index)=>h('tr',{key:rule.id||index},
           h('td',null,index+1),
           h('td',null,h('input',{list:'work-rules-drivers',value:rule.driver||'','aria-label':'Lái xe quy tắc '+(index+1),onChange:e=>update(index,{driver:e.target.value}),style:{minWidth:170}})),
           h('td',null,h('select',{value:rule.shiftMode||'all','aria-label':'Áp dụng cho quy tắc '+(index+1),onChange:e=>update(index,{shiftMode:e.target.value})},SCF_WORK_RULE_SHIFT_MODES.map(([value,label])=>h('option',{key:value,value},label)))),
-          h('td',null,['equals','any'].includes(rule.shiftMode)?h('input',{value:rule.shiftText||'','aria-label':'Tên ca quy tắc '+(index+1),placeholder:rule.shiftMode==='any'?'VD: YP QV':'VD: SS S1',onChange:e=>update(index,{shiftText:e.target.value}),style:{width:110}}):'—'),
+          h('td',null,['equals','any','shift_points'].includes(rule.shiftMode)?h('input',{value:rule.shiftText||'','aria-label':'Tên ca quy tắc '+(index+1),placeholder:rule.shiftMode==='any'?'VD: YP QV':rule.shiftMode==='shift_points'?'VD: ĐT-2H01':'VD: SS S1',onChange:e=>update(index,{shiftText:e.target.value}),style:{width:110}}):'—'),
+          h('td',null,rule.shiftMode==='shift_points'?h('input',{value:rule.pointsText||'','aria-label':'Địa điểm quy tắc '+(index+1),placeholder:'VD: SC2+DBG+HKD Hường',title:'Chuyến phải giao đủ mọi địa điểm, cách nhau bằng dấu +',onChange:e=>update(index,{pointsText:e.target.value}),style:{width:190}}):'—'),
           h('td',null,h('select',{value:rule.kind==='day'?'day':'trip','aria-label':'Cách tính quy tắc '+(index+1),onChange:e=>update(index,e.target.value==='day'?{kind:'day',monthAmount:rule.monthAmount||0,days:rule.days||26}:{kind:'trip',amount:rule.amount||0})},h('option',{value:'trip'},'Theo chuyến'),h('option',{value:'day'},'Theo ngày công'))),
           h('td',null,rule.kind==='day'
             ?h('span',{style:{display:'inline-flex',gap:4,alignItems:'center',flexWrap:'wrap'}},h('input',{type:'number',min:0,step:100000,value:rule.monthAmount??'','aria-label':'Lương tháng quy tắc '+(index+1),onChange:e=>update(index,{monthAmount:e.target.value}),style:{width:120}}),' / ',h('input',{type:'number',min:1,step:1,value:rule.days??'','aria-label':'Số ngày công quy tắc '+(index+1),onChange:e=>update(index,{days:e.target.value}),style:{width:60}}),h('small',null,'= '+money(scfDriverActualPayRuleDayAmount(rule))+' đ/công'))

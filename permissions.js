@@ -313,6 +313,11 @@ function canViewAllDebtCustomers(user){
   const role=String(user?.role||'').trim().toLowerCase();
   return ['admin','administrator'].includes(role)||user?.salesDebtAllCustomers===true;
 }
+// V899: cột Khu vực trong Báo công lái xe — mặc định chỉ Admin; cấp thêm trong phân quyền.
+function canViewDriverReportArea(user){
+  const role=String(user?.role||'').trim().toLowerCase();
+  return ['admin','administrator'].includes(role)||user?.driverReportArea===true;
+}
 function canViewDriverReportMonthlyWeight(user){
   const role=String(user?.role||'').trim().toLowerCase();
   return ['admin','administrator'].includes(role)||user?.driverReportMonthlyWeight===true;
