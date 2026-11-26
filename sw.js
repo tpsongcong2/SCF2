@@ -1,4 +1,4 @@
-const CACHE = 'scf-v907';
+const CACHE = 'scf-v909';
 const ASSETS = [
   './',
   './index.html',
@@ -7,19 +7,19 @@ const ASSETS = [
   './vendor/supabase.min.js?v=358',
   './vendor/react.production.min.js?v=358',
   './vendor/react-dom.production.min.js?v=358',
-  './styles.css?v=907',
+  './styles.css?v=909',
   './runtime.js?v=457',
   './storage.js?v=881',
   './android-print.js?v=860',
   './print-agent.js?v=860',
   './print-lan.js?v=860',
-  './driver-print-history.js?v=789',
+  './driver-print-history.js?v=908',
   './work-rules.js?v=899',
   './helpers.js?v=775',
   './warehouse-orders.js?v=903',
   './defaults.js?v=602',
   './auth.js',
-  './server-auth.js?v=907',
+  './server-auth.js?v=909',
   './templates.js?v=860',
   './ui-common.js?v=860',
   './invoice-orientation.js?v=737',
@@ -55,7 +55,7 @@ const ASSETS = [
   './driver-production-link.js?v=860',
   './agent-registry-ui.js?v=788',
   './driver-orders-mobile.js?v=907',
-  './driver-label-print.js?v=865',
+  './driver-label-print.js?v=908',
   './driver-mobile-preview.js?v=907',
   './delivery-excel.js?v=718',
   './vendor/exceljs-4.4.0.min.js',
@@ -69,7 +69,7 @@ const ASSETS = [
   './permissions.js?v=904',
   './split-view.js?v=904',
   './permission-settings.js?v=899',
-  './app.js?v=907',
+  './app.js?v=909',
   './bootstrap.js?v=645',
   './manifest.json',
   './icon-192.png',
@@ -82,7 +82,7 @@ const ASSETS = [
 // thật sự cần tới; tránh tải lặp toàn bộ ứng dụng và ba bản font ngay lần mở đầu.
 const PRECACHE_ASSETS = [
   './index.html',
-  './styles.css?v=907',
+  './styles.css?v=909',
   './vendor/tabler-icons.min.css?v=394'
 ];
 

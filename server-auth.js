@@ -160,6 +160,13 @@ async function serverListOwnSessions(){
   if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Chưa tải được danh sách máy đang đăng nhập. Cần dán bản scf-auth V907.'));
   return Array.isArray(data.sessions)?data.sessions:[];
 }
+// V909: Admin xem máy của mọi nhân viên đang online và thời gian không hoạt động.
+async function serverListAllSessions(){
+  if(!SCF_SERVER_AUTH_ENABLED||!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');
+  const{data,error}=await invokeScfAuth({body:{action:'list_all_sessions'}},25000);
+  if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Chưa tải được danh sách nhân viên đăng nhập. Cần dán bản scf-auth V909.'));
+  return{now:data.now,onlineMinutes:Number(data.onlineMinutes)||15,people:Array.isArray(data.people)?data.people:[]};
+}
 async function serverLogoutOtherSessions(){
   if(!SCF_SERVER_AUTH_ENABLED||!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');
   const{data,error}=await invokeScfAuth({body:{action:'logout_other_sessions'}},20000);

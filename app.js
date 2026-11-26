@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V907';
+const SCF_BUILD_VERSION='V909';
 const PTITLES = {
   split:'Chia màn hình',
   driverprintlog:'Thông tin lái xe in đơn',
@@ -264,7 +264,7 @@ function scfLoadOptionalScript(name,url,failMessage='Chưa tải được công 
 }
 // V868: các tệp chỉ dùng cho một số trang được nạp khi mở trang đó (không nạp lúc khởi động) để mở app nhanh hơn.
 // Sửa một tệp dưới đây thì tăng ?v= tại đây (không còn trong index.html; sw.js vẫn lưu sẵn để dùng khi mất mạng).
-const SCF_LAZY_SCRIPT_FILES={'work-rules.js':['WorkRulesTab','./work-rules.js?v=899'],'navigation-reports.js':['SalesReportTab','./navigation-reports.js?v=904'],'organization.js':['CustomersTab','./organization.js?v=568'],'order-detail.js':['OrderDetailListTab','./order-detail.js?v=874'],'production-closing.js':['ProductionReportTab','./production-closing.js?v=593'],'production-recipes.js':['ProductionRecipesTab','./production-recipes.js?v=590'],'attp-audit.js':['CustomerAuditList','./attp-audit.js?v=860'],'attp-documents.js':['ATTPDocumentsTab','./attp-documents.js?v=860'],'personnel.js':['PersonnelInformationTab','./personnel.js?v=638'],'user-guide.js':['UserGuideTab','./user-guide.js?v=645'],'notifications.js':['NotificationsTab','./notifications.js?v=663'],'driver-print-history.js':['DriverPrintHistoryTab','./driver-print-history.js?v=789']};
+const SCF_LAZY_SCRIPT_FILES={'work-rules.js':['WorkRulesTab','./work-rules.js?v=899'],'navigation-reports.js':['SalesReportTab','./navigation-reports.js?v=904'],'organization.js':['CustomersTab','./organization.js?v=568'],'order-detail.js':['OrderDetailListTab','./order-detail.js?v=874'],'production-closing.js':['ProductionReportTab','./production-closing.js?v=593'],'production-recipes.js':['ProductionRecipesTab','./production-recipes.js?v=590'],'attp-audit.js':['CustomerAuditList','./attp-audit.js?v=860'],'attp-documents.js':['ATTPDocumentsTab','./attp-documents.js?v=860'],'personnel.js':['PersonnelInformationTab','./personnel.js?v=638'],'user-guide.js':['UserGuideTab','./user-guide.js?v=645'],'notifications.js':['NotificationsTab','./notifications.js?v=663'],'driver-print-history.js':['DriverPrintHistoryTab','./driver-print-history.js?v=908']};
 const SCF_LAZY_PAGE_SCRIPTS={workrules:['work-rules.js'],driverprintlog:['driver-print-history.js'],attp_audit:['attp-audit.js','attp-documents.js'],attp_claims:['attp-audit.js','attp-documents.js'],attp_process:['attp-audit.js','attp-documents.js'],attp_standards:['attp-audit.js','attp-documents.js'],attp_daily:['attp-audit.js','attp-documents.js'],attp_legal:['attp-audit.js','attp-documents.js'],personnel:['personnel.js'],depts:['organization.js'],customers:['organization.js'],areas:['organization.js'],workcats:['organization.js'],tasks:['organization.js'],notifications:['notifications.js'],userguide:['user-guide.js'],nccs:['navigation-reports.js'],nccgoods:['navigation-reports.js'],purchaseorders:['navigation-reports.js'],purchasegoods:['navigation-reports.js'],fuelpurchases:['navigation-reports.js'],fuelreport:['navigation-reports.js'],purchasereport:['navigation-reports.js'],maintreport:['navigation-reports.js'],materialusage:['navigation-reports.js'],powderdebtreport:['navigation-reports.js'],orderdetail:['order-detail.js'],salesreport:['navigation-reports.js'],marketsales:['navigation-reports.js'],invoicereport:['navigation-reports.js'],prodreport:['production-closing.js'],prodbom:['production-recipes.js'],prodsummary:['production-closing.js'],syncreport:['navigation-reports.js'],dbusage:['navigation-reports.js'],split:['navigation-reports.js','production-closing.js']};
 async function scfLoadPageScripts(page){
   // Nạp tuần tự theo thứ tự cũ trong index.html (attp-audit trước attp-documents).
@@ -368,29 +368,76 @@ function SyncStatus(){
 }
 
 // V907: Admin xem các máy đang đăng nhập tài khoản này và đăng xuất từ xa các máy khác.
+// V909: thêm danh sách nhân viên: ai đang online (máy nào), ai đã bao lâu không hoạt động/đăng nhập.
+function scfAgoText(iso,nowMs=Date.now()){
+  const t=Date.parse(String(iso||''));if(!t)return '';
+  const m=Math.max(0,Math.floor((nowMs-t)/60000));
+  if(m<1)return 'vừa xong';if(m<60)return m+' phút';
+  const hrs=Math.floor(m/60);if(hrs<24)return hrs+' giờ'+(m%60?' '+(m%60)+' phút':'');
+  const d=Math.floor(hrs/24);return d+' ngày'+(hrs%24&&d<7?' '+(hrs%24)+' giờ':'');
+}
+function scfSessionWhen(value){const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString('vi-VN',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'—';}
+function scfStaffSessionStatus(person,nowMs=Date.now()){
+  if(person.online)return{kind:'online',text:'Đang online'};
+  if(!person.lastActiveAt)return{kind:'never',text:'Chưa đăng nhập lần nào'};
+  const days=(nowMs-Date.parse(person.lastActiveAt))/86400000;
+  return{kind:days>=7?'long':'idle',text:'Không hoạt động '+scfAgoText(person.lastActiveAt,nowMs)+' (lần cuối '+scfSessionWhen(person.lastActiveAt)+')',days};
+}
+function scfFilterStaffSessions(people,{query='',filter='all',nowMs=Date.now()}={}){
+  const q=String(query||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toLowerCase().trim();
+  const rank={online:0,idle:1,long:2,never:3};
+  return (people||[]).map(person=>({...person,status:scfStaffSessionStatus(person,nowMs)}))
+    .filter(person=>!q||(person.name+' '+person.dept).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toLowerCase().includes(q))
+    .filter(person=>filter==='all'?!person.inactive||person.online:filter==='online'?person.online:filter==='long'?person.status.kind==='long':filter==='never'?person.status.kind==='never':filter==='inactive'?person.inactive:true)
+    .sort((a,b)=>rank[a.status.kind]-rank[b.status.kind]||(a.status.kind==='online'?String(b.devices[0]?.lastSeenAt||'').localeCompare(String(a.devices[0]?.lastSeenAt||'')):String(b.lastActiveAt||'').localeCompare(String(a.lastActiveAt||'')))||a.name.localeCompare(b.name,'vi'));
+}
 function ScfAdminSessionsModal({onClose}){
   const[sessions,setSessions]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[done,setDone]=useState('');
+  const[staff,setStaff]=useState(null),[staffError,setStaffError]=useState(''),[query,setQuery]=useState(''),[filter,setFilter]=useState('all');
   const load=()=>{setError('');serverListOwnSessions().then(setSessions).catch(e=>{setSessions([]);setError(e.message||String(e));});};
-  useEffect(load,[]);
+  const loadStaff=()=>{setStaffError('');serverListAllSessions().then(value=>setStaff({...value,loadedAt:Date.now()})).catch(e=>{setStaff({people:[],loadedAt:Date.now()});setStaffError(e.message||String(e));});};
+  useEffect(()=>{load();loadStaff();},[]);
   const others=(sessions||[]).filter(item=>!item.current);
-  const when=value=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString('vi-VN',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'—';};
   const logoutOthers=async()=>{
     if(busy)return;
     if(!await window.scfConfirm('Đăng xuất tài khoản Admin này ở tất cả các máy khác? Máy đang dùng vẫn giữ đăng nhập.','Đăng xuất các máy khác',true))return;
     setBusy(true);setError('');
-    try{const result=await serverLogoutOtherSessions();setDone('Đã đăng xuất '+result.removed+' máy khác.'+(result.authRevoked?'':' Máy khác sẽ bị thoát ở lần kết nối tiếp theo.'));window.showToast('Đã đăng xuất các máy khác.','success');load();}
+    try{const result=await serverLogoutOtherSessions();setDone('Đã đăng xuất '+result.removed+' máy khác.'+(result.authRevoked?'':' Máy khác sẽ bị thoát ở lần kết nối tiếp theo.'));window.showToast('Đã đăng xuất các máy khác.','success');load();loadStaff();}
     catch(e){setError(e.message||String(e));}finally{setBusy(false);}
   };
-  return h(Modal,{title:'Máy đang đăng nhập tài khoản Admin',onClose},
+  const nowMs=staff?.now?Date.parse(staff.now)+(Date.now()-(staff.loadedAt||Date.now())):Date.now();
+  const rows=staff?scfFilterStaffSessions(staff.people,{query,filter,nowMs}):[];
+  const counts=staff?{online:(staff.people||[]).filter(p=>p.online).length,total:(staff.people||[]).filter(p=>!p.inactive).length}:null;
+  return h(Modal,{title:'Máy đăng nhập & hoạt động nhân viên',lg:true,onClose},
+    h('h4',{className:'scf-session-heading'},'Tài khoản Admin này'),
     sessions===null?h('p',{role:'status'},'Đang tải danh sách máy…'):
-    h('div',{className:'scf-session-list'},(sessions.length?sessions:[]).map((item,index)=>h('div',{key:index,className:'scf-session-item'+(item.current?' current':'')},
+    h('div',{className:'scf-session-list'},sessions.map((item,index)=>h('div',{key:index,className:'scf-session-item'+(item.current?' current':'')},
       h('i',{className:'ti '+(item.deviceType==='mobile'?'ti-device-mobile':'ti-device-desktop'),'aria-hidden':true}),
-      h('div',null,h('b',null,(item.deviceLabel||'Thiết bị')+(item.current?' · Máy đang dùng':'')),h('small',null,'Đăng nhập '+when(item.acquiredAt)+' · Hoạt động '+when(item.lastSeenAt)+(item.ipAddress?' · IP '+item.ipAddress:'')+' · Mã …'+item.deviceHint)))),
+      h('div',null,h('b',null,(item.deviceLabel||'Thiết bị')+(item.current?' · Máy đang dùng':'')),h('small',null,'Đăng nhập '+scfSessionWhen(item.acquiredAt)+' · Hoạt động '+scfSessionWhen(item.lastSeenAt)+(item.ipAddress?' · IP '+item.ipAddress:'')+' · Mã …'+item.deviceHint)))),
       !sessions.length&&h('p',null,'Không có máy nào khác.')),
     done&&h('p',{role:'status',style:{color:'#0F6E56',fontWeight:700}},done),
     error&&h('p',{role:'alert',style:{color:'#A32D2D'}},error),
-    h(Row,null,h('button',{type:'button',onClick:onClose},'Đóng'),
-      h('button',{type:'button',className:'bp',style:{background:'#A32D2D',borderColor:'#A32D2D'},disabled:busy||sessions===null,onClick:logoutOthers},h('i',{className:'ti ti-logout'}),busy?' Đang đăng xuất…':' Đăng xuất các máy khác'+(others.length?' ('+others.length+')':''))));
+    h('div',{className:'scf-session-actions'},
+      h('button',{type:'button',className:'bp',style:{background:'#A32D2D',borderColor:'#A32D2D'},disabled:busy||sessions===null,onClick:logoutOthers},h('i',{className:'ti ti-logout'}),busy?' Đang đăng xuất…':' Đăng xuất các máy khác'+(others.length?' ('+others.length+')':''))),
+    h('h4',{className:'scf-session-heading'},'Nhân viên',counts&&h('small',null,' · '+counts.online+' đang online / '+counts.total+' nhân viên'),
+      h('button',{type:'button',className:'bi',style:{marginLeft:'auto'},title:'Tải lại',onClick:loadStaff},h('i',{className:'ti ti-refresh'}),' Tải lại')),
+    h('div',{className:'scf-staff-filters'},
+      h('input',{type:'search',placeholder:'Tìm tên hoặc bộ phận…','aria-label':'Tìm nhân viên',value:query,onChange:e=>setQuery(e.target.value)}),
+      h('select',{'aria-label':'Lọc trạng thái nhân viên',value:filter,onChange:e=>setFilter(e.target.value)},
+        [['all','Tất cả đang làm'],['online','Đang online'],['long','Không hoạt động từ 7 ngày'],['never','Chưa đăng nhập lần nào'],['inactive','Đã nghỉ / tắt tài khoản']].map(([v,l])=>h('option',{key:v,value:v},l)))),
+    staffError&&h('p',{role:'alert',style:{color:'#A32D2D'}},staffError),
+    staff===null?h('p',{role:'status'},'Đang tải hoạt động nhân viên…'):
+    h('div',{className:'tw scf-staff-table'},h('table',null,
+      h('thead',null,h('tr',null,['Nhân viên','Bộ phận','Trạng thái','Máy đang đăng nhập'].map(t=>h('th',{key:t},t)))),
+      h('tbody',null,rows.map(person=>h('tr',{key:person.employeeId,className:'scf-staff-'+person.status.kind},
+        h('td',null,h('b',null,person.name),person.inactive&&h('small',null,' · đã tắt')),
+        h('td',null,person.dept||'—'),
+        h('td',null,h('span',{className:'scf-staff-status '+person.status.kind},person.status.text)),
+        h('td',null,person.devices.length?person.devices.map((d,index)=>h('div',{key:index,className:'scf-staff-device'+(d.online?' online':'')},
+          h('i',{className:'ti '+(d.deviceType==='mobile'?'ti-device-mobile':'ti-device-desktop'),'aria-hidden':true}),
+          ' '+(d.deviceLabel||'Thiết bị')+(d.current?' (máy này)':'')+' · '+(d.online?'đang dùng, ':'')+'hoạt động '+(scfAgoText(d.lastSeenAt,nowMs)||'—')+(scfAgoText(d.lastSeenAt,nowMs)&&scfAgoText(d.lastSeenAt,nowMs)!=='vừa xong'?' trước':'')+(d.ipAddress?' · IP '+d.ipAddress:''))):h('small',null,'—')))),
+        !rows.length&&h('tr',null,h('td',{colSpan:4},'Không có nhân viên phù hợp.'))))),
+    h(Row,null,h('button',{type:'button',onClick:onClose},'Đóng')));
 }
 
 function App(){
