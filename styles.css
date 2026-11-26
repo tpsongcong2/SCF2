@@ -2208,3 +2208,28 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 .scf-split-body .delivery-page,.scf-split-body .delivery-page.compact-menu{height:100%!important;min-height:0!important}
 .scf-split-body .delivery-sticky-head{top:0}
 .scf-split-body .detail-orders-wrap{max-height:none}
+
+/* V906: 5 dòng lương tháng trong Báo công lái xe (chỉ Admin) */
+.driver-payroll-row td{background:#f8fbf9}
+.driver-payroll-input{width:130px;height:30px;text-align:right;font-weight:700;border:1px solid #1D9E75;border-radius:6px;padding:0 8px}
+.driver-payroll-input.carried{color:#6b7a72;font-style:italic;border-style:dashed}
+.driver-payroll-carried{color:#8a6d00;font-weight:500;margin-left:4px}
+.driver-payroll-formula{color:var(--tx2);font-weight:500;margin-left:4px}
+.driver-payroll-total td{font-weight:700;background:#e6f2eb}
+.driver-payroll-net td{font-weight:800;background:#d7efe2;color:#0f5132;font-size:14px}
+
+/* V907: nút PS chưa dùng được vẫn bấm được để báo lý do */
+.dm-ps-button.blocked{opacity:.6}
+/* V907: Admin xóa ảnh HĐ lái xe chụp sai */
+.scf-admin-photo-open{color:#A32D2D!important}
+.scf-admin-photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.scf-admin-photo-item{display:grid;gap:6px;justify-items:center;border:1px solid var(--bd);border-radius:8px;padding:8px;background:#fff}
+.scf-admin-photo-delete{color:#fff!important;background:#A32D2D!important;border-color:#A32D2D!important;font-weight:700}
+/* V907: Admin – máy đang đăng nhập, đăng xuất từ xa */
+.topbar-remote-logout{color:#1f5f3a!important;border-color:#b7dcc0!important;margin-right:4px}
+.scf-session-list{display:grid;gap:8px;margin-bottom:10px}
+.scf-session-item{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:#fff}
+.scf-session-item i{font-size:22px;color:var(--pri)}
+.scf-session-item div{display:grid;gap:2px}
+.scf-session-item small{color:var(--tx2)}
+.scf-session-item.current{background:#EAF3DE;border-color:#b7dcc0}

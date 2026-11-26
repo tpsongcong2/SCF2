@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V904';
+const SCF_BUILD_VERSION='V907';
 const PTITLES = {
   split:'Chia màn hình',
   driverprintlog:'Thông tin lái xe in đơn',
@@ -367,6 +367,32 @@ function SyncStatus(){
   );
 }
 
+// V907: Admin xem các máy đang đăng nhập tài khoản này và đăng xuất từ xa các máy khác.
+function ScfAdminSessionsModal({onClose}){
+  const[sessions,setSessions]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[done,setDone]=useState('');
+  const load=()=>{setError('');serverListOwnSessions().then(setSessions).catch(e=>{setSessions([]);setError(e.message||String(e));});};
+  useEffect(load,[]);
+  const others=(sessions||[]).filter(item=>!item.current);
+  const when=value=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString('vi-VN',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'—';};
+  const logoutOthers=async()=>{
+    if(busy)return;
+    if(!await window.scfConfirm('Đăng xuất tài khoản Admin này ở tất cả các máy khác? Máy đang dùng vẫn giữ đăng nhập.','Đăng xuất các máy khác',true))return;
+    setBusy(true);setError('');
+    try{const result=await serverLogoutOtherSessions();setDone('Đã đăng xuất '+result.removed+' máy khác.'+(result.authRevoked?'':' Máy khác sẽ bị thoát ở lần kết nối tiếp theo.'));window.showToast('Đã đăng xuất các máy khác.','success');load();}
+    catch(e){setError(e.message||String(e));}finally{setBusy(false);}
+  };
+  return h(Modal,{title:'Máy đang đăng nhập tài khoản Admin',onClose},
+    sessions===null?h('p',{role:'status'},'Đang tải danh sách máy…'):
+    h('div',{className:'scf-session-list'},(sessions.length?sessions:[]).map((item,index)=>h('div',{key:index,className:'scf-session-item'+(item.current?' current':'')},
+      h('i',{className:'ti '+(item.deviceType==='mobile'?'ti-device-mobile':'ti-device-desktop'),'aria-hidden':true}),
+      h('div',null,h('b',null,(item.deviceLabel||'Thiết bị')+(item.current?' · Máy đang dùng':'')),h('small',null,'Đăng nhập '+when(item.acquiredAt)+' · Hoạt động '+when(item.lastSeenAt)+(item.ipAddress?' · IP '+item.ipAddress:'')+' · Mã …'+item.deviceHint)))),
+      !sessions.length&&h('p',null,'Không có máy nào khác.')),
+    done&&h('p',{role:'status',style:{color:'#0F6E56',fontWeight:700}},done),
+    error&&h('p',{role:'alert',style:{color:'#A32D2D'}},error),
+    h(Row,null,h('button',{type:'button',onClick:onClose},'Đóng'),
+      h('button',{type:'button',className:'bp',style:{background:'#A32D2D',borderColor:'#A32D2D'},disabled:busy||sessions===null,onClick:logoutOthers},h('i',{className:'ti ti-logout'}),busy?' Đang đăng xuất…':' Đăng xuất các máy khác'+(others.length?' ('+others.length+')':''))));
+}
+
 function App(){
   const isFaceMask=window.SCF_APP_VARIANT==='face-mask';
   const employeeStorageKey=isFaceMask?'scf_privileged_employees':'scf_employees';
@@ -377,6 +403,7 @@ function App(){
   const[automaticPlanRevision,setAutomaticPlanRevision]=useState(0);
   const[warehouseMerging,setWarehouseMerging]=useState(false);
   const[splitPanes,setSplitPanes]=useState([]);
+  const[adminSessionsOpen,setAdminSessionsOpen]=useState(false);
   const warehouseMergeBusy=React.useRef(false),warehouseMergeAttempts=React.useRef(new Map()),warehouseImportMerging=React.useRef(false),warehouseLiveRef=React.useRef({});
   useEffect(()=>{
     let timer=null;
@@ -1180,6 +1207,7 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
             h('div',{className:'topbar-user'},
               h('div',{className:'topbar-user-name'},cu.name)
             ),
+            ['admin','administrator'].includes(String(cu.role||'').toLowerCase())&&SCF_SERVER_AUTH_ENABLED&&h('button',{type:'button',className:'topbar-logout topbar-remote-logout',onClick:()=>setAdminSessionsOpen(true),title:'Xem và đăng xuất từ xa các máy khác đang đăng nhập tài khoản Admin này','aria-label':'Máy đang đăng nhập'},h('i',{className:'ti ti-devices'}),h('span',{className:'topbar-logout-label'},'Máy đăng nhập')),
             h('button',{className:'topbar-logout',onClick:logout,style:{fontSize:12,padding:'5px 10px',color:'#A32D2D',borderColor:'#F7C1C1'},title:'Đăng xuất','aria-label':'Đăng xuất'},h('i',{className:'ti ti-logout',style:{fontSize:14}}),h('span',{className:'topbar-logout-label'},'Đăng xuất'))
           )
         ),
@@ -1209,6 +1237,7 @@ canAccess(cu.role,'cashflowreport',cu.permissions)&&page==='cashflowreport'&&h(F
       quickTripSummaryOpen&&!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')&&h(TripQuickSummaryModal,{key:cu.id,mobileFullscreen:page==='delivery',currentUser:cu,employees,loadData:loadQuickSummaryData,onClose:()=>setQuickTripSummaryOpen(false),onExit:()=>{setQuickTripSummaryOpen(false);if((cu.role==='driver'||employeeHasDepartment(cu,'Lái xe'))&&scfCanOpenUserPage(cu,'trips',{mobile:isPhone,faceMask:isFaceMask}))setPage('trips');}}),
       (page==='welcome'||page==='mobile-home'||(page==='trips'&&isPhone&&(cu.role==='driver'||String(cu.dept||'').includes('Lái xe')))||isFaceMask||(quickTripSummaryOpen&&page!=='delivery')||daySummaryOpen)&&h(MobileNav,{page,setPage:next=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(false);setPage(next);},role:cu.role,perms:cu.permissions,dept:cuAccessDepartments,currentUser:cu,onLogout:logout,onQuickTripSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(true);}:undefined})
     ),
+    adminSessionsOpen&&h(ScfAdminSessionsModal,{key:cu.id,onClose:()=>setAdminSessionsOpen(false)}),
     cu.mustChangePw&&h(CpwModal,{
       emp:cu,cu,forced:true,onClose:logout,onExit:logout,
       onSave:(password)=>{

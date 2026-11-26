@@ -35,6 +35,12 @@ function scfDriverLabelSvg(trip,label){
 function scfDriverAutoLabelDateIso(trip,product){
   try{const raw=product?scfDriverManualLabels(trip,product,'1')[0]?.plan?.labelDate:'';const m=String(raw||trip?.deliveryDate||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);return m?m[3]+'-'+m[2]+'-'+m[1]:'';}catch{const m=String(trip?.deliveryDate||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);return m?m[3]+'-'+m[2]+'-'+m[1]:'';}
 }
+// V908: In khác đơn — ghi đủ sản phẩm, số tem, số kg, ngày tem, giờ tem vào lịch sử in để Admin xem.
+function scfDriverManualLabelSummary(details){
+  const list=Array.isArray(details)?details:[],first=list[0]||{};
+  const kg=list.reduce((sum,d)=>sum+(Number(d.weightKg)||0),0);
+  return{productName:String(first.productName||''),labelCount:list.length,totalKg:Math.round(kg*1000)/1000,labelDate:String(first.productionDate||''),labelTime:String(first.productionTime||''),shelfLifeHours:Number(first.shelfLifeHours)===36?36:24};
+}
 function DriverLabelPreview({trip,label}){
   const [url,setUrl]=useState('');
   const svg=label?scfDriverLabelSvg(trip,label):'';
@@ -68,7 +74,7 @@ function DriverLabelPrintModal({trip,orders,products,prodCats=[],user,onClose,ge
         const svgs=actual.map(label=>scfDriverLabelSvg(live.trip,{...label,shelfLifeHours:request.shelfLifeHours}));if(JSON.stringify(svgs)!==JSON.stringify(request.svgs))throw Error('Thông tin đơn, số lượng hoặc quy cách vừa thay đổi. Hãy xem lại trước khi in.');
       };
       validate();if(!previewMode&&!request.mobilePrintRoute)request.mobilePrintRoute=await scfChooseMobileLabelRoute(scfPrintAgentSettings({trip:true}));
-      validate();for(const pac of [false,true]){const svgs=request.svgs.filter((svg,index)=>request.pac[index]===pac);if(!svgs.length||request.sentGroups.includes(pac))continue;const queued=await scfQueueLabelPrint({agentId:request.agent,printerRole:request.printer,mobilePrintRoute:request.mobilePrintRoute,deferNativeOpen:true,title:'Tem giao hàng '+(trip.shiftName||trip.id),paperWidthMm:pac?100:58,paperHeightMm:pac?100:40,svgs,labelDetails:request.labelDetails.filter((detail,index)=>request.pac[index]===pac),rotate180:!pac,beforeEnqueue:validate,simulate:previewMode,tripContext:{tripId:trip.id,orderIds:request.mode==='orders'?request.ids:[],mode:request.mode,manualDeliveryTime:request.mode==='manual'?request.deliveryTime:''}});if(queued?.transport==='android'){request.native=true;request.nativeAccess=request.nativeAccess||[];request.nativeAccess.push(queued.androidAccess);}request.sentGroups.push(pac);}
+      validate();for(const pac of [false,true]){const svgs=request.svgs.filter((svg,index)=>request.pac[index]===pac);if(!svgs.length||request.sentGroups.includes(pac))continue;const queued=await scfQueueLabelPrint({agentId:request.agent,printerRole:request.printer,mobilePrintRoute:request.mobilePrintRoute,deferNativeOpen:true,title:'Tem giao hàng '+(trip.shiftName||trip.id),paperWidthMm:pac?100:58,paperHeightMm:pac?100:40,svgs,labelDetails:request.labelDetails.filter((detail,index)=>request.pac[index]===pac),rotate180:!pac,beforeEnqueue:validate,simulate:previewMode,tripContext:{tripId:trip.id,orderIds:request.mode==='orders'?request.ids:[],mode:request.mode,manualDeliveryTime:request.mode==='manual'?request.deliveryTime:'',...(request.mode==='manual'?{manualLabel:scfDriverManualLabelSummary(request.labelDetails.filter((detail,index)=>request.pac[index]===pac))}:{})}});if(queued?.transport==='android'){request.native=true;request.nativeAccess=request.nativeAccess||[];request.nativeAccess.push(queued.androidAccess);}request.sentGroups.push(pac);}
       if(!previewMode&&request.nativeAccess?.length)scfOpenX420PrintJob(request.nativeAccess[0]);
       if(!previewMode)scfSavePrintAgentSettings({agentId:request.agent,printerRole:request.printer});window.showToast(previewMode?'Trải nghiệm: đã mô phỏng gửi '+request.svgs.length+' tem; không gửi máy in thật.':request.native?'Đã tạo lệnh tem. Mở app XPRINTER 420 để xác nhận in.':'Đã gửi '+request.svgs.length+' tem đến Agent máy in.','success');onClose();
     }catch(e){setError((confirm.sentGroups.length?'Đã gửi một phần tem. Bấm xác nhận để gửi phần còn lại. ':'')+(e.message||'Chưa gửi được tem.'));if(!confirm.sentGroups.length)setConfirm(null);}finally{working.current=false;setBusy(false);}

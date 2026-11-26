@@ -153,6 +153,19 @@ async function serverLogout(){
   // A failed release must not prevent signing out the local auth session.
   try{await withRemoteTimeout(sb.auth.signOut({scope:'local'}),12000);}catch{console.warn('Chưa hoàn tất việc thoát phiên xác thực.');}
 }
+// V907: Admin xem các máy đang đăng nhập và đăng xuất từ xa các máy khác.
+async function serverListOwnSessions(){
+  if(!SCF_SERVER_AUTH_ENABLED||!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');
+  const{data,error}=await invokeScfAuth({body:{action:'list_own_sessions'}},15000);
+  if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Chưa tải được danh sách máy đang đăng nhập. Cần dán bản scf-auth V907.'));
+  return Array.isArray(data.sessions)?data.sessions:[];
+}
+async function serverLogoutOtherSessions(){
+  if(!SCF_SERVER_AUTH_ENABLED||!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');
+  const{data,error}=await invokeScfAuth({body:{action:'logout_other_sessions'}},20000);
+  if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Chưa đăng xuất được các máy khác. Cần dán bản scf-auth V907.'));
+  return{removed:Number(data.removed)||0,authRevoked:data.authRevoked===true};
+}
 async function serverTouchSession(){
   if(!SCF_SERVER_AUTH_ENABLED||!sb)return false;
   const{data,error}=await invokeScfAuth({body:{action:'touch_session'}},10000);
