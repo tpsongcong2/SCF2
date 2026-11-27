@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V909';
+const SCF_BUILD_VERSION='V912';
 const PTITLES = {
   split:'Chia màn hình',
   driverprintlog:'Thông tin lái xe in đơn',
@@ -61,6 +61,8 @@ const SCF_PAGE_DATA={
   syncreport:[],purchase:[],workreport_vp:[],workreport_sx:[]
 };
 // V904: chia màn hình tải đủ dữ liệu của cả 4 trang có thể đặt trong ô.
+// V911: Cài đặt chuyến giao hàng cần danh sách ca giao để phân quyền xem đơn tổng.
+SCF_PAGE_DATA['trip-settings']=['shifts'];
 SCF_PAGE_DATA.split=[...new Set(['delivery','prodsummary','invoicereport','marketsales'].flatMap(key=>SCF_PAGE_DATA[key]||[]))];
 function scfPageDataKeys(page,allKeys){
   const keys=['company','ui_settings','notifications'];
@@ -391,6 +393,11 @@ function scfFilterStaffSessions(people,{query='',filter='all',nowMs=Date.now()}=
     .filter(person=>filter==='all'?!person.inactive||person.online:filter==='online'?person.online:filter==='long'?person.status.kind==='long':filter==='never'?person.status.kind==='never':filter==='inactive'?person.inactive:true)
     .sort((a,b)=>rank[a.status.kind]-rank[b.status.kind]||(a.status.kind==='online'?String(b.devices[0]?.lastSeenAt||'').localeCompare(String(a.devices[0]?.lastSeenAt||'')):String(b.lastActiveAt||'').localeCompare(String(a.lastActiveAt||'')))||a.name.localeCompare(b.name,'vi'));
 }
+// V910: nói rõ kết quả đăng xuất từ xa (máy đang tắt/ẩn app sẽ bị thoát ngay khi mở lại app).
+function scfRemoteLogoutMessage(who,removed,adminSelf){
+  const base=removed>0?'Đã đăng xuất '+who+' trên '+removed+' máy'+(adminSelf?' khác':'')+'.':'Đã khóa phiên cũ của '+who+(adminSelf?' ở các máy khác':'')+'. Hiện không có máy nào đang mở app.';
+  return base+' Máy đang mở app sẽ tự thoát trong khoảng 15 giây; máy đang tắt hoặc để ẩn sẽ thoát ngay khi mở lại app. Đăng nhập lại bằng mật khẩu vẫn được.';
+}
 function ScfAdminSessionsModal({onClose}){
   const[sessions,setSessions]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[done,setDone]=useState('');
   const[staff,setStaff]=useState(null),[staffError,setStaffError]=useState(''),[query,setQuery]=useState(''),[filter,setFilter]=useState('all');
@@ -400,10 +407,18 @@ function ScfAdminSessionsModal({onClose}){
   const others=(sessions||[]).filter(item=>!item.current);
   const logoutOthers=async()=>{
     if(busy)return;
-    if(!await window.scfConfirm('Đăng xuất tài khoản Admin này ở tất cả các máy khác? Máy đang dùng vẫn giữ đăng nhập.','Đăng xuất các máy khác',true))return;
+    if(!await window.scfConfirm('Đăng xuất tài khoản Admin này ở tất cả các máy khác? Máy đang dùng vẫn giữ đăng nhập.','Đăng xuất các máy khác',true,'Đăng xuất'))return;
     setBusy(true);setError('');
-    try{const result=await serverLogoutOtherSessions();setDone('Đã đăng xuất '+result.removed+' máy khác.'+(result.authRevoked?'':' Máy khác sẽ bị thoát ở lần kết nối tiếp theo.'));window.showToast('Đã đăng xuất các máy khác.','success');load();loadStaff();}
+    try{const result=await serverLogoutOtherSessions();setDone(scfRemoteLogoutMessage('tài khoản Admin',result.removed,true));window.showToast('Đã đăng xuất các máy khác.','success');load();loadStaff();}
     catch(e){setError(e.message||String(e));}finally{setBusy(false);}
+  };
+  const [kicking,setKicking]=useState('');
+  const logoutStaff=async person=>{
+    if(kicking)return;
+    if(!await window.scfConfirm('Đăng xuất '+person.name+' trên tất cả các máy đang đăng nhập? Nhân viên phải đăng nhập lại bằng mật khẩu.','Đăng xuất nhân viên',true,'Đăng xuất'))return;
+    setKicking(person.employeeId);setStaffError('');
+    try{const result=await serverLogoutEmployeeSessions(person.employeeId);setDone(scfRemoteLogoutMessage(person.name,result.removed,false));window.showToast('Đã đăng xuất '+person.name+'.','success');loadStaff();}
+    catch(e){setStaffError(e.message||String(e));}finally{setKicking('');}
   };
   const nowMs=staff?.now?Date.parse(staff.now)+(Date.now()-(staff.loadedAt||Date.now())):Date.now();
   const rows=staff?scfFilterStaffSessions(staff.people,{query,filter,nowMs}):[];
@@ -417,6 +432,7 @@ function ScfAdminSessionsModal({onClose}){
       !sessions.length&&h('p',null,'Không có máy nào khác.')),
     done&&h('p',{role:'status',style:{color:'#0F6E56',fontWeight:700}},done),
     error&&h('p',{role:'alert',style:{color:'#A32D2D'}},error),
+    h('p',{className:'scf-session-hint'},'Nút này chỉ đăng xuất các máy khác đang dùng tài khoản Admin này. Muốn đăng xuất một nhân viên, bấm Đăng xuất ở dòng của nhân viên đó bên dưới.'),
     h('div',{className:'scf-session-actions'},
       h('button',{type:'button',className:'bp',style:{background:'#A32D2D',borderColor:'#A32D2D'},disabled:busy||sessions===null,onClick:logoutOthers},h('i',{className:'ti ti-logout'}),busy?' Đang đăng xuất…':' Đăng xuất các máy khác'+(others.length?' ('+others.length+')':''))),
     h('h4',{className:'scf-session-heading'},'Nhân viên',counts&&h('small',null,' · '+counts.online+' đang online / '+counts.total+' nhân viên'),
@@ -428,15 +444,16 @@ function ScfAdminSessionsModal({onClose}){
     staffError&&h('p',{role:'alert',style:{color:'#A32D2D'}},staffError),
     staff===null?h('p',{role:'status'},'Đang tải hoạt động nhân viên…'):
     h('div',{className:'tw scf-staff-table'},h('table',null,
-      h('thead',null,h('tr',null,['Nhân viên','Bộ phận','Trạng thái','Máy đang đăng nhập'].map(t=>h('th',{key:t},t)))),
+      h('thead',null,h('tr',null,['Nhân viên','Bộ phận','Trạng thái','Máy đang đăng nhập',''].map((t,i)=>h('th',{key:i},t)))),
       h('tbody',null,rows.map(person=>h('tr',{key:person.employeeId,className:'scf-staff-'+person.status.kind},
         h('td',null,h('b',null,person.name),person.inactive&&h('small',null,' · đã tắt')),
         h('td',null,person.dept||'—'),
         h('td',null,h('span',{className:'scf-staff-status '+person.status.kind},person.status.text)),
         h('td',null,person.devices.length?person.devices.map((d,index)=>h('div',{key:index,className:'scf-staff-device'+(d.online?' online':'')},
           h('i',{className:'ti '+(d.deviceType==='mobile'?'ti-device-mobile':'ti-device-desktop'),'aria-hidden':true}),
-          ' '+(d.deviceLabel||'Thiết bị')+(d.current?' (máy này)':'')+' · '+(d.online?'đang dùng, ':'')+'hoạt động '+(scfAgoText(d.lastSeenAt,nowMs)||'—')+(scfAgoText(d.lastSeenAt,nowMs)&&scfAgoText(d.lastSeenAt,nowMs)!=='vừa xong'?' trước':'')+(d.ipAddress?' · IP '+d.ipAddress:''))):h('small',null,'—')))),
-        !rows.length&&h('tr',null,h('td',{colSpan:4},'Không có nhân viên phù hợp.'))))),
+          ' '+(d.deviceLabel||'Thiết bị')+(d.current?' (máy này)':'')+' · '+(d.online?'đang dùng, ':'')+'hoạt động '+(scfAgoText(d.lastSeenAt,nowMs)||'—')+(scfAgoText(d.lastSeenAt,nowMs)&&scfAgoText(d.lastSeenAt,nowMs)!=='vừa xong'?' trước':'')+(d.ipAddress?' · IP '+d.ipAddress:''))):h('small',null,'—')),
+        h('td',null,person.devices.length>0&&!person.devices.some(d=>d.current)&&h('button',{type:'button',className:'bi scf-staff-logout','data-scf-action':'write',disabled:!!kicking,'aria-label':'Đăng xuất '+person.name+' trên tất cả các máy',title:'Đăng xuất nhân viên này trên tất cả các máy',onClick:()=>logoutStaff(person)},h('i',{className:'ti ti-logout'}),kicking===person.employeeId?' Đang đăng xuất…':' Đăng xuất')))),
+        !rows.length&&h('tr',null,h('td',{colSpan:5},'Không có nhân viên phù hợp.'))))),
     h(Row,null,h('button',{type:'button',onClick:onClose},'Đóng')));
 }
 
@@ -1203,7 +1220,7 @@ function App(){
         canAccess(cu.role,'quotes',cu.permissions)&&page==='quotes'&&h(QuotesTab,{quotes,setQuotes,customers,products,currentUser:cu}),
         canAccess(cu.role,page,cu.permissions)&&['delivery','deliverymobile'].includes(page)&&h(DeliveryOrdersTab,{key:page,highlightOrderOnHover:uiSettings.deliveryOrderHover!==false,orders,setOrders,financeDebts,setFinanceDebts,customers,setCustomers,products,prodCats,quotes,employees,currentUser:cu,trips,setTrips,company,prodShifts,prodShiftRules,shifts,menuHidden,setMenuHidden,printTemplateSettings,notify:addNotification,onViewOrderSummary:!isFaceMask&&canViewTripQuickSummary(cu)&&canMobileFeature(cu,'quick-summary')?()=>{window.dispatchEvent(new CustomEvent('scf-close-day-summary'));setQuickTripSummaryOpen(true);}:undefined,onViewProduction:canAccess(cu.role,'prodsummary',cu.permissions,cuAccessDepartments)&&(!window.matchMedia?.('(max-width:768px)')?.matches||canMobileFeature(cu,'prodsummary'))?()=>setProductionPreviewOpen(true):undefined}),
         canAccess(cu.role,'intem',cu.permissions)&&page==='intem'&&h(IntemTab,{products,company}),
-        page==='trip-settings'&&canAccess(cu.role,'trip-settings',cu.permissions,cuAccessDepartments)&&h(DeliveryTripSettings,{uiSettings,setUiSettings,currentUser:cu}),
+        page==='trip-settings'&&canAccess(cu.role,'trip-settings',cu.permissions,cuAccessDepartments)&&h(DeliveryTripSettings,{uiSettings,setUiSettings,currentUser:cu,employees,setEmployees,shifts}),
         page==='driver-preview'&&canAccess(cu.role,'driver-preview',cu.permissions,cuAccessDepartments)&&h(DriverMobilePreview,{currentUser:cu}),
         canAccess(cu.role,'trips',cu.permissions,cuAccessDepartments)&&page==='trips'&&h(TripsTab,{trips,setTrips,orders,setOrders,employees,shifts,prodShifts,customers,products,prodCats,quotes,financeDebts,setFinanceDebts,company,currentUser:cu,notify:addNotification,onWarehouseMerge:mergeWarehouseTrip,onBackToDriverReport:()=>setPage('workreport_lx')}),
         canAccess(cu.role,'workrules',cu.permissions,cuAccessDepartments)&&page==='workrules'&&h(WorkRulesTab,{employees,trips,currentUser:cu}),

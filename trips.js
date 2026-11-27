@@ -1582,7 +1582,19 @@ function scfQuickSummaryFullAccess(user){
     (scfExplicitQuickSummaryAccess(user)&&user.role!=='driver'&&!employeeHasDepartment(user,'Lái xe'));
 }
 function scfQuickSummaryAccessKey(user){
-  return JSON.stringify([user?.id,user?.role,employeeDepartments(user),user?.permissions,user?.mobilePermissions]);
+  return JSON.stringify([user?.id,user?.role,employeeDepartments(user),user?.permissions,user?.mobilePermissions,user?.summaryShiftAccess||[]]);
+}
+// V911: Admin cho lái xe xem thêm đơn tổng theo ca giao hàng (Cài đặt chuyến giao hàng → Đơn tổng lái xe).
+// Lưu trên hồ sơ lái xe: summaryShiftAccess=[{id,name}]. Chuyến trong ca được chọn hiện cả khi chưa giao cho lái xe
+// (chuyến kế hoạch / đơn sớm) nhưng chỉ hiện tên lái xe khi chuyến đã giao.
+function scfSummaryShiftAccess(user){
+  return (Array.isArray(user?.summaryShiftAccess)?user.summaryShiftAccess:[]).map(item=>typeof item==='string'?{id:item,name:''}:{id:String(item?.id||''),name:String(item?.name||'')}).filter(item=>item.id||item.name);
+}
+function scfSummaryShiftKey(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toUpperCase().replace(/[^A-Z0-9]+/g,'');}
+function scfTripInSummaryShifts(trip,access){
+  if(!access?.length)return false;
+  const id=String(trip?.shiftId||''),name=scfSummaryShiftKey(trip?.shiftName);
+  return access.some(item=>(item.id&&id&&item.id===id)||(item.name&&name&&scfSummaryShiftKey(item.name)===name));
 }
 function scfScopeQuickSummaryData(data,user,employees=[]){
   if(!canViewTripQuickSummary(user))return {...data,trips:[],orders:[]};
@@ -1598,10 +1610,13 @@ function scfScopeQuickSummaryData(data,user,employees=[]){
     return own&&(!!trip.driverDispatchedAt||['active','completion_pending','completed'].includes(trip.status));
   };
   const index=scfCreateOrderTripIndex(data.orders,data.trips);
-  const trips=(data.trips||[]).filter(ownTrip);
+  const access=scfSummaryShiftAccess(user);
+  const ownIds=new Set((data.trips||[]).filter(ownTrip).map(trip=>String(trip.id)));
+  const trips=(data.trips||[]).filter(trip=>ownIds.has(String(trip.id))||trip.status!=='cancelled'&&scfTripInSummaryShifts(trip,access));
   const ids=new Set(trips.map(trip=>String(trip.id)));
   const orders=(data.orders||[]).filter(order=>order.status!=='cancelled'&&ids.has(String(index.tripForOrder(order)?.id||'')));
-  return {...data,orders,trips:scfTripMembershipView(trips,orders).map(trip=>({...trip,totalWeight:0}))};
+  const dispatched=trip=>!!trip.driverDispatchedAt||['active','completion_pending','completed'].includes(trip.status);
+  return {...data,orders,trips:scfTripMembershipView(trips,orders).map(trip=>({...trip,totalWeight:0,...(ownIds.has(String(trip.id))||dispatched(trip)?{}:{driverName:'',driverId:''})}))};
 }
 function scfSelectQuickSummaryTrips(trips,orders,date,group){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date||'')||!['samsung','dt'].includes(group))return [];
@@ -1992,6 +2007,8 @@ function scfTripSummaryPrintHtml(trip,orders,products=[],customers=[],shifts=[],
     const packSummary=includeReport?(scfIsWarehouseTrip(trip,shifts)?scfTripUnitSummaryHtml(rawTripOrders,products):scfTripPackSummaryHtml(rawTripOrders,products)):'';
     const tripOrders=scfEscapePrintData(rawTripOrders);
     trip=scfEscapePrintData(trip);
+    // V911: dòng Tổng cộng dưới bảng đơn (số đơn, số mặt hàng, tổng SL đặt).
+    const printGrand={qty:0,products:new Set()};
     const rows=tripOrders.flatMap((o,orderIndex)=>{
       const isPiece=l=>normalizePlainText(l.unit||'')==='cai';
       const lineRows=((o.lines||[]).length?o.lines:[{}]).map(l=>{
@@ -1999,6 +2016,7 @@ function scfTripSummaryPrintHtml(trip,orders,products=[],customers=[],shifts=[],
         const tone=scfTripProductTone(name),brick=tone==='brick',yellow=tone==='yellow';
         const bold=isPiece(l)||brick,className=brick?'product-brick':yellow?'product-yellow':'';
         const value=(numFmt(l.qtyProd??l.qtyInvoice??l.qty)||0).toLocaleString('vi-VN',{maximumFractionDigits:2});
+        printGrand.qty+=numFmt(l.qtyProd??l.qtyInvoice??l.qty)||0;if(name)printGrand.products.add(normalizedName);
         return{className,date:l.warehouseSourceDeliveryDate||o.deliveryDate||trip.deliveryDate||'',point:l.warehouseSourcePointName||o.pointName||o.customer||'',time:l.warehouseSourceDeliveryTime||o.deliveryTime||'',product:(bold?'<b>':'')+name+(bold?'</b>':''),quantity:(bold?'<b>':'')+value+(bold?'</b>':'')};
       });
       const span=lineRows.length;
@@ -2010,7 +2028,7 @@ function scfTripSummaryPrintHtml(trip,orders,products=[],customers=[],shifts=[],
         return '<tr>'+date+shared+'<td'+special+'>'+line.product+'</td><td'+special+' style="text-align:right;font-weight:700">'+line.quantity+'</td><td'+special+'><span class="delivery-blank"></span></td>'+time+'</tr>';
       });
     }).join('');
-    const printHtml='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Chuyến '+trip.id+'</title><style>*{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial;padding:16px;font-size:13px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #222;padding:5px 8px;vertical-align:middle;height:22px}th{background:#edf4ed}.order-middle{vertical-align:middle;text-align:center}.product-brick{background:#f6ddd6;color:#000;font-weight:700}.product-yellow{background:#fff7cc;color:#000}.delivery-blank{display:block;width:70px;height:18px;margin:auto}.total{font-weight:700;text-align:right;padding:8px;background:#f7faf7}.pack-summary{margin-top:16px;page-break-inside:avoid}.pack-summary h3{margin:0 0 7px;color:#2d6a4f;text-transform:uppercase;font-size:15px}.pack-summary th{background:#fff9df}.pack-summary .num{text-align:right;white-space:nowrap}.summary-row td{background:#f7faf7}.pack-note{font-size:11px;margin-top:6px;font-style:italic}@media print{@page{size:A4 landscape;margin:8mm}body{padding:0}.product-brick{background:#f6ddd6!important;color:#000!important}.product-yellow{background:#fff7cc!important;color:#000!important}th,td{border-color:#000}}</style></head><body><h2>Chuyến giao hàng</h2><p>Ngày: <b>'+trip.deliveryDate+'</b> &nbsp;|&nbsp; Ca: <b>'+(trip.shiftName||'—')+'</b> &nbsp;|&nbsp; Lái xe: <b>'+(trip.driverName||'—')+'</b></p><table><thead><tr><th>Ngày giao</th><th>Địa điểm</th><th>Hàng hóa</th><th>SL đặt</th><th>SL giao</th><th>Giờ giao</th></tr></thead><tbody>'+rows+'</tbody></table><div class="total">Tổng: '+tripOrders.length+' đơn</div>'+packSummary+'<br><div style="display:table;width:100%;margin-top:24px;page-break-inside:avoid"><div style="display:table-cell;text-align:center;width:50%"><div>Kho xuất hàng</div><div style="height:50px"></div><small>(Ký tên)</small></div><div style="display:table-cell;text-align:center;width:50%"><div>Lái xe</div><div style="height:50px"></div><small>(Ký tên)</small></div></div></body></html>';
+    const printHtml='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Chuyến '+trip.id+'</title><style>*{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial;padding:16px;font-size:13px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #222;padding:5px 8px;vertical-align:middle;height:22px}th{background:#edf4ed}.order-middle{vertical-align:middle;text-align:center}.product-brick{background:#f6ddd6;color:#000;font-weight:700}.product-yellow{background:#fff7cc;color:#000}.delivery-blank{display:block;width:70px;height:18px;margin:auto}.total{font-weight:700;text-align:right;padding:8px;background:#f7faf7}.grand-total td{background:#c0dd97;font-weight:700;height:26px}.pack-summary{margin-top:16px;page-break-inside:avoid}.pack-summary h3{margin:0 0 7px;color:#2d6a4f;text-transform:uppercase;font-size:15px}.pack-summary th{background:#fff9df}.pack-summary .num{text-align:right;white-space:nowrap}.summary-row td{background:#f7faf7}.pack-note{font-size:11px;margin-top:6px;font-style:italic}@media print{@page{size:A4 landscape;margin:8mm}body{padding:0}.product-brick{background:#f6ddd6!important;color:#000!important}.product-yellow{background:#fff7cc!important;color:#000!important}th,td{border-color:#000}}</style></head><body><h2>Chuyến giao hàng</h2><p>Ngày: <b>'+trip.deliveryDate+'</b> &nbsp;|&nbsp; Ca: <b>'+(trip.shiftName||'—')+'</b> &nbsp;|&nbsp; Lái xe: <b>'+(trip.driverName||'—')+'</b></p><table><thead><tr><th>Ngày giao</th><th>Địa điểm</th><th>Hàng hóa</th><th>SL đặt</th><th>SL giao</th><th>Giờ giao</th></tr></thead><tbody>'+rows+'<tr class="grand-total"><td colspan="3">Tổng cộng · '+tripOrders.length+' đơn · '+printGrand.products.size+' mặt hàng</td><td style="text-align:right;font-weight:700">'+printGrand.qty.toLocaleString('vi-VN',{maximumFractionDigits:2})+'</td><td></td><td></td></tr></tbody></table>'+packSummary+'<br><div style="display:table;width:100%;margin-top:24px;page-break-inside:avoid"><div style="display:table-cell;text-align:center;width:50%"><div>Kho xuất hàng</div><div style="height:50px"></div><small>(Ký tên)</small></div><div style="display:table-cell;text-align:center;width:50%"><div>Lái xe</div><div style="height:50px"></div><small>(Ký tên)</small></div></div></body></html>';
 
   return printHtml;
 }

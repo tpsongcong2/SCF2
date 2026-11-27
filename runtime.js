@@ -71,7 +71,7 @@ window.scfLoadExternalScript=function(name){
   const _origAlert=window.alert;
   const _origConfirm=window.confirm;
   window.scfAlert=function(msg,type){window.showToast(msg,type||'info',4000);};
-  window.scfConfirm=function(msg,title,isDanger){
+  window.scfConfirm=function(msg,title,isDanger,okLabel){
     return new Promise(resolve=>{
       const ov=document.createElement('div');ov.className='scf-dialog-overlay';
       const dtype=isDanger?'danger':'warn';
@@ -84,7 +84,7 @@ window.scfLoadExternalScript=function(name){
       const message=document.createElement('p');message.textContent=String(msg??'');
       const buttons=document.createElement('div');buttons.className='scf-dialog-btns';
       const cancel=document.createElement('button');cancel.id='scf-d-cancel';cancel.type='button';cancel.style.cssText='padding:8px 16px';cancel.textContent='Hủy';
-      const ok=document.createElement('button');ok.id='scf-d-ok';ok.type='button';ok.className='bp';ok.style.cssText='padding:8px 18px;background:'+(isDanger?'#A32D2D':'var(--pri)')+'!important';ok.textContent=isDanger?'Xóa':'Đồng ý';
+      const ok=document.createElement('button');ok.id='scf-d-ok';ok.type='button';ok.className='bp';ok.style.cssText='padding:8px 18px;background:'+(isDanger?'#A32D2D':'var(--pri)')+'!important';ok.textContent=okLabel?String(okLabel):isDanger?'Xóa':'Đồng ý';
       buttons.append(cancel,ok);dialog.append(iconWrap,heading,message,buttons);ov.appendChild(dialog);
       document.body.appendChild(ov);
       cancel.onclick=()=>{ov.remove();resolve(false);};

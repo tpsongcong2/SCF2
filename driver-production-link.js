@@ -1,5 +1,41 @@
 /* Opt-in only. Capture quantities and schedule when loading; never edit production yields. */
-function DeliveryTripSettings({uiSettings,setUiSettings,currentUser}){
+// V911: Admin cho lái xe xem thêm đơn tổng theo ca giao hàng. Lưu trên hồ sơ lái xe (summaryShiftAccess).
+function scfIsDriverEmployee(employee){return employee&&employee.active!==false&&(employee.role==='driver'||employeeHasDepartment(employee,'Lái xe'));}
+function ScfDriverSummaryAccessPanel({employees=[],setEmployees,shifts=[]}){
+ const drivers=React.useMemo(()=>(employees||[]).filter(scfIsDriverEmployee).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'vi')),[employees]);
+ const shiftList=React.useMemo(()=>(shifts||[]).filter(shift=>shift&&shift.active!==false&&String(shift.name||shift.id||'').trim()).sort((a,b)=>String(a.name||a.id).localeCompare(String(b.name||b.id),'vi',{numeric:true})),[shifts]);
+ const fromEmployees=()=>Object.fromEntries(drivers.map(d=>[String(d.id),scfSummaryShiftAccess(d).map(item=>item.id||shiftList.find(s=>scfSummaryShiftKey(s.name)===scfSummaryShiftKey(item.name))?.id||'').filter(Boolean)]));
+ const [draft,setDraft]=useState(fromEmployees),[saving,setSaving]=useState(false),[query,setQuery]=useState('');
+ useEffect(()=>setDraft(fromEmployees()),[drivers,shiftList]);
+ const baseline=fromEmployees(),dirty=JSON.stringify(Object.fromEntries(Object.entries(draft).map(([k,v])=>[k,[...v].sort()])))!==JSON.stringify(Object.fromEntries(Object.entries(baseline).map(([k,v])=>[k,[...v].sort()])));
+ const toggle=(driverId,shiftId)=>setDraft(prev=>{const list=new Set(prev[driverId]||[]);list.has(shiftId)?list.delete(shiftId):list.add(shiftId);return{...prev,[driverId]:[...list]};});
+ const setAll=(driverId,on)=>setDraft(prev=>({...prev,[driverId]:on?shiftList.map(s=>String(s.id)):[]}));
+ const save=async()=>{
+  if(saving||typeof setEmployees!=='function')return;setSaving(true);
+  try{
+   const stamp=typeof fmtDT==='function'?fmtDT():new Date().toISOString();
+   setEmployees(prev=>(prev||[]).map(employee=>{
+    const id=String(employee?.id||'');if(!(id in draft)||!scfIsDriverEmployee(employee))return employee;
+    const next=(draft[id]||[]).map(shiftId=>{const shift=shiftList.find(s=>String(s.id)===shiftId);return shift?{id:String(shift.id),name:String(shift.name||'')}:null;}).filter(Boolean);
+    return JSON.stringify(scfSummaryShiftAccess(employee).map(i=>i.id).sort())===JSON.stringify(next.map(i=>i.id).sort())?employee:{...employee,summaryShiftAccess:next,summaryShiftAccessUpdatedAt:stamp};
+   }));
+   window.showToast('Đã lưu quyền xem đơn tổng của lái xe; đang đồng bộ.','success');
+  }catch(error){window.showToast(error.message||'Chưa lưu được.','error');}finally{setSaving(false);}
+ };
+ const q=String(query||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toLowerCase();
+ const shown=drivers.filter(d=>!q||String(d.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toLowerCase().includes(q));
+ return h('div',{className:'trip-summary-access'},
+  h('h3',null,'Lái xe xem đơn tổng theo ca giao hàng'),
+  h('p',{className:'trip-settings-hint'},'Lái xe luôn xem được chuyến của chính mình. Tích ca giao để cho xem thêm đơn tổng các chuyến của ca đó, kể cả chuyến của lái xe khác và chuyến kế hoạch / đơn sớm chưa giao. Chuyến chưa giao cho lái xe thì không hiện tên lái xe. Chỉ xem, không sửa được.'),
+  !drivers.length?h('p',null,'Chưa có tài khoản lái xe.'):!shiftList.length?h('p',null,'Chưa có ca giao hàng.'):h(React.Fragment,null,
+   h('input',{type:'search',className:'trip-summary-access-search',placeholder:'Tìm lái xe…','aria-label':'Tìm lái xe',value:query,onChange:e=>setQuery(e.target.value)}),
+   h('div',{className:'trip-summary-access-list'},shown.map(d=>{const id=String(d.id),picked=new Set(draft[id]||[]);return h('section',{key:id,className:'trip-summary-access-row'},
+    h('div',{className:'trip-summary-access-head'},h('b',null,d.name||id),h('small',null,picked.size?' · '+picked.size+' ca':' · chỉ chuyến của mình'),
+     h('button',{type:'button',className:'bi',disabled:saving,onClick:()=>setAll(id,picked.size<shiftList.length)},picked.size<shiftList.length?'Chọn tất cả':'Bỏ hết')),
+    h('div',{className:'trip-summary-access-shifts'},shiftList.map(shift=>{const sid=String(shift.id);return h('label',{key:sid,className:picked.has(sid)?'on':''},h('input',{type:'checkbox',checked:picked.has(sid),disabled:saving,'aria-label':(d.name||id)+' xem đơn tổng ca '+(shift.name||sid),onChange:()=>toggle(id,sid)}),' '+(shift.name||sid));})));})),
+   h('div',{className:'trip-settings-actions'},h('button',{type:'button',disabled:saving||!dirty,onClick:()=>setDraft(baseline)},'Hoàn tác'),h('button',{type:'button',className:'bp',disabled:saving||!dirty,onClick:save},saving?'Đang lưu…':'Lưu quyền xem đơn tổng'))));
+}
+function DeliveryTripSettings({uiSettings,setUiSettings,currentUser,employees=[],setEmployees,shifts=[]}){
  const [settingsTab,setSettingsTab]=useState('scf');const settingsId=React.useId();
  const [printers,setPrinters]=useState(()=>normalizeUiSettings(uiSettings).driverPrinters);
  useEffect(()=>setPrinters(normalizeUiSettings(uiSettings).driverPrinters),[uiSettings?.driverPrinters]);
@@ -30,7 +66,7 @@ function DeliveryTripSettings({uiSettings,setUiSettings,currentUser}){
   if(busy)return;setBusy(true);setLanMessage('');
   try{const agentId=pairAgent||printers.labelAgentId,endpoint=agentId===printers.labelAgentId?printers.labelLanUrl:printers.a4LanUrl;const {data,error}=await invokeScfAuth({body:{action:'driver_lan_test',agentId}});if(error||!data?.ok)throw Error(await serverFunctionErrorMessage(error,data,'Chưa xác nhận được kết nối.'));const result=await scfLanRequest(data.endpoint||endpoint,'/health',{authorization:data.lanAuthorization});setLanMessage('Đã kết nối Wi-Fi tới '+result.agentId+' · '+result.version);}catch(error){setLanMessage(error.message);}finally{setBusy(false);}
  };
- const tabs=[['workflow','Quy trình lái xe','ti-list-check'],['scf','Máy in SCF','ti-printer'],['xp420','App XP420','ti-device-mobile'],['wifi','Wi-Fi Agent','ti-wifi']];
+ const tabs=[['workflow','Quy trình lái xe','ti-list-check'],['summary','Đơn tổng lái xe','ti-eye'],['scf','Máy in SCF','ti-printer'],['xp420','App XP420','ti-device-mobile'],['wifi','Wi-Fi Agent','ti-wifi']];
  const toggle=(text,checked,onChange,hint)=>h('label',{className:'trip-settings-toggle'},h('span',null,h('b',null,text),hint&&h('small',null,hint)),h('input',{type:'checkbox',role:'switch','aria-label':text,checked,disabled:busy,onChange:e=>onChange(e.target.checked)}));
  const field=(key,label,options={})=>h('label',{className:'trip-settings-field'},label,h('input',{'aria-label':label,value:printers[key]||'',disabled:busy||options.disabled,placeholder:options.placeholder||'',onChange:e=>setPrinters(p=>({...p,[key]:e.target.value,...(key==='labelLanUrl'?{labelAutoAddress:false}:key==='a4LanUrl'?{a4AutoAddress:false}:{})}))}));
  const base=normalizeUiSettings(uiSettings),dirty=JSON.stringify(printers)!==JSON.stringify(base.driverPrinters)||workflowRequired!==(uiSettings?.driverWorkflowRequired!==false)||enabled!==(uiSettings?.driverProductionLink===true);
@@ -44,6 +80,7 @@ function DeliveryTripSettings({uiSettings,setUiSettings,currentUser}){
     h('h3',null,'Quy trình lái xe'),toggle('Bắt buộc lái xe thực hiện đúng quy trình',workflowRequired,setWorkflowRequired,'Nhận đơn → Kiểm & xếp → Giao & về'),
     h('p',{className:'trip-settings-hint'},workflowRequired?'Thực hiện tuần tự từng bước. Chuyến đã khóa vẫn không được sửa.':'Cho phép thao tác tự do cả ba phần; chưa bắt buộc đủ nhận đơn, kiểm xếp, ảnh và công rổ. Chuyến đã khóa vẫn không được sửa.'),
     h('hr'),toggle('Kết nối kiểm hàng với đã sản xuất xong',enabled,setEnabled,'Tích đã xếp lên xe xác nhận nguồn đơn đã sản xuất xong.'),h('p',{className:'trip-settings-hint'},'Chỉ áp dụng cho lần tích mới sau khi bật và xác nhận lưu; các lần tích cũ không tự xác nhận.')]),
+   panel('summary',[h(ScfDriverSummaryAccessPanel,{key:'summary-access',employees,setEmployees,shifts})]),
    panel('scf',[
     h('h3',null,'Máy in qua máy tính SCF'),h('p',{className:'trip-settings-hint'},'Cấu hình chung cho lái xe và kế toán được cấp quyền in.'),toggle('Dùng cấu hình máy in chung',printers.enabled,v=>setPrinters(p=>({...p,enabled:v}))),
     h('div',{className:'trip-settings-printer-grid'},

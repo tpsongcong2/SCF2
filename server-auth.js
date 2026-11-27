@@ -161,6 +161,13 @@ async function serverListOwnSessions(){
   return Array.isArray(data.sessions)?data.sessions:[];
 }
 // V909: Admin xem máy của mọi nhân viên đang online và thời gian không hoạt động.
+// V910: Admin đăng xuất từ xa một nhân viên trên tất cả các máy.
+async function serverLogoutEmployeeSessions(employeeId){
+  if(!SCF_SERVER_AUTH_ENABLED||!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');
+  const{data,error}=await invokeScfAuth({body:{action:'logout_employee_sessions',employeeId:String(employeeId||'')}},20000);
+  if(error||!data?.ok)throw new Error(await serverFunctionErrorMessage(error,data,'Chưa đăng xuất được nhân viên. Cần dán bản scf-auth V910.'));
+  return{removed:Number(data.removed)||0};
+}
 async function serverListAllSessions(){
   if(!SCF_SERVER_AUTH_ENABLED||!sb)throw new Error('Chưa kết nối được máy chủ xác thực.');
   const{data,error}=await invokeScfAuth({body:{action:'list_all_sessions'}},25000);

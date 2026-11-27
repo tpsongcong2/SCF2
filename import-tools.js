@@ -213,8 +213,11 @@ function scfOrderPrintProduction(order){
   let plans=[];
   try{if(typeof prodShiftPlansForOrder==='function')plans=prodShiftPlansForOrder(order,shifts,rules)||[];}catch(e){plans=[];}
   const timeOf=plan=>{const t=String(plan?.prodTime||'').trim();if(t)return t;const rule=rules.find(r=>String(r.id)===String(plan?.prodWorkShiftId||''));return rule?.start||'';};
-  const candidates=plans.filter(plan=>!plan.line||scfOrderPrintInvoiceQty(plan.line)!==0).map(plan=>({date:String(plan.prodDate||'').trim(),time:timeOf(plan)})).filter(x=>x.date);
-  if(!candidates.length&&order?.prodDate)candidates.push({date:String(order.prodDate),time:String(order.prodTime||'')});
+  // V912: Ngày/Giờ SX trên phiếu SEVT1 lấy theo ngày/giờ TEM của đơn (đúng như cột Tem trên đơn hàng, ví dụ 14:00),
+  // không lấy giờ bắt đầu ca sản xuất (ví dụ ca chiều sớm 12:00). Đơn chưa có giờ tem thì mới dùng giờ ca SX như trước.
+  const labelTime=plan=>String(plan?.labelTime||plan?.line?.labelTime||'').trim();
+  const candidates=plans.filter(plan=>!plan.line||scfOrderPrintInvoiceQty(plan.line)!==0).map(plan=>labelTime(plan)?{date:String(plan.labelDate||plan.line?.labelDate||plan.prodDate||'').trim(),time:labelTime(plan)}:{date:String(plan.prodDate||'').trim(),time:timeOf(plan)}).filter(x=>x.date);
+  if(!candidates.length&&(order?.labelDate||order?.prodDate))candidates.push(order?.labelTime?{date:String(order.labelDate||order.prodDate),time:String(order.labelTime)}:{date:String(order.prodDate),time:String(order.prodTime||'')});
   if(!candidates.length)return {date:'',time:'',hsd:''};
   const key=x=>{const [d,m,y]=x.date.split('/');return (y||'')+(m||'').padStart(2,'0')+(d||'').padStart(2,'0')+' '+(x.time||'99:99').padStart(5,'0');};
   const first=candidates.slice().sort((a,b)=>key(a)<key(b)?-1:key(a)>key(b)?1:0)[0];

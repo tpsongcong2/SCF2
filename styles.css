@@ -2247,3 +2247,16 @@ button.delivery-group-toggle{display:inline-flex;align-items:center;justify-cont
 .scf-staff-status.never{background:#FCEBEB;color:#A32D2D}
 .scf-staff-device{font-size:12px;color:var(--tx2)}
 .scf-staff-device.online{color:#0F6E56;font-weight:700}
+/* V910: Admin đăng xuất nhân viên từ xa */
+.scf-staff-logout{color:#A32D2D!important;white-space:nowrap}
+.scf-session-hint{font-size:12px;color:var(--tx2);margin:2px 0}
+/* V911: lái xe xem đơn tổng theo ca giao */
+.trip-summary-access-search{max-width:320px;margin:6px 0 10px}
+.trip-summary-access-list{display:grid;gap:8px;max-height:60vh;overflow:auto}
+.trip-summary-access-row{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;background:#fff}
+.trip-summary-access-head{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.trip-summary-access-head small{color:var(--tx2)}
+.trip-summary-access-head button{margin-left:auto}
+.trip-summary-access-shifts{display:flex;flex-wrap:wrap;gap:6px}
+.trip-summary-access-shifts label{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border:1px solid var(--bd);border-radius:999px;font-size:12px;cursor:pointer}
+.trip-summary-access-shifts label.on{background:#EAF3DE;border-color:#97C459;color:#27500A;font-weight:700}
