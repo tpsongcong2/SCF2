@@ -924,6 +924,7 @@ function DriverTripWorkReportTab({trips,orders,products,customers,employees,curr
   // Quy tắc Công thực tế do Admin cài ở trang Quy tắc chấm công; chỉ Admin tải.
   const[workRules,setWorkRules]=useState(()=>window.__SCF_WORK_RULES||null);
   useEffect(()=>{if(!isAdminViewer||typeof scfLoadWorkRules!=='function')return;let active=true;scfLoadWorkRules().then(value=>{if(active)setWorkRules(value);}).catch(()=>{});return()=>{active=false;};},[isAdminViewer]);
+  useEffect(()=>{if(typeof window.addEventListener!=='function')return;const receive=event=>{if(event.detail?.value)setWorkRules(event.detail.value);};window.addEventListener('scf-work-rules-reconciled',receive);return()=>window.removeEventListener('scf-work-rules-reconciled',receive);},[]);
   // Công thực tế: ưu tiên giá trị Admin vừa sửa trên máy này (chuyến đang có trong app) trước bản đối chiếu máy chủ.
   const report=React.useMemo(()=>{
     if(!isAdminViewer)return baseReport;

@@ -1,4 +1,4 @@
-const CACHE = 'scf-v915';
+const CACHE = 'scf-v916';
 const ASSETS = [
   './',
   './index.html',
@@ -9,12 +9,12 @@ const ASSETS = [
   './vendor/react-dom.production.min.js?v=358',
   './styles.css?v=911',
   './runtime.js?v=910',
-  './storage.js?v=881',
+  './storage.js?v=916',
   './android-print.js?v=860',
   './print-agent.js?v=860',
   './print-lan.js?v=860',
   './driver-print-history.js?v=908',
-  './work-rules.js?v=899',
+  './work-rules.js?v=916',
   './helpers.js?v=775',
   './warehouse-orders.js?v=903',
   './defaults.js?v=602',
@@ -49,7 +49,7 @@ const ASSETS = [
   './delivery-catalog-edit.js?v=733',
   './qrcode.min.js?v=357',
   './import-tools.js?v=914',
-  './trips.js?v=913',
+  './trips.js?v=916',
   './order-labels.js?v=860',
   './accounting-print.js?v=860',
   './driver-production-link.js?v=911',
@@ -69,7 +69,7 @@ const ASSETS = [
   './permissions.js?v=915',
   './split-view.js?v=904',
   './permission-settings.js?v=899',
-  './app.js?v=915',
+  './app.js?v=916',
   './bootstrap.js?v=645',
   './manifest.json',
   './icon-192.png',

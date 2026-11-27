@@ -38,6 +38,7 @@ function WorkRulesTab({employees=[],trips=[],currentUser}){
   const[data,setData]=useState(null);const[draft,setDraft]=useState(null);const[busy,setBusy]=useState(false);
   const[requestText,setRequestText]=useState({});const[serverOk,setServerOk]=useState(true);
   useEffect(()=>{let active=true;scfLoadWorkRules().then(value=>{if(!active)return;setData(value);setServerOk(!!window.__SCF_WORK_RULES_SERVER_OK);});return()=>{active=false;};},[]);
+  useEffect(()=>{if(typeof window.addEventListener!=='function')return;const receive=event=>{if(event.detail?.value)setData(event.detail.value);};window.addEventListener('scf-work-rules-reconciled',receive);return()=>window.removeEventListener('scf-work-rules-reconciled',receive);},[]);
   const driverNames=React.useMemo(()=>[...new Set([...(employees||[]).filter(e=>e?.role==='driver'||scfDriverPayNorm(e?.dept).includes('LAI XE')).map(e=>e.name),...(trips||[]).map(t=>t.driverName)].map(name=>String(name||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')),[employees,trips]);
   if(!isAdmin)return h('div',{className:'card'},'Chỉ Admin được xem Quy tắc chấm công.');
   if(!data)return h('div',{className:'card',role:'status'},'Đang tải quy tắc chấm công…');

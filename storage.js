@@ -659,6 +659,48 @@ async function scfSaveNotificationsAfterConflict(value,base,timeoutMs,actor){
   if(JSON.stringify(merged)===JSON.stringify(loaded.value))return loaded;
   return withRemoteTimeout(serverSavePermittedCollection('scf_notifications',merged,loaded.updatedAt||'',loaded.value,timeoutMs),timeoutMs);
 }
+// V916: Quy tắc chấm công (scf_work_rules) là một đối tượng, không phải danh sách có mã.
+// Trước đây sau mỗi lần lưu thành công, app không cập nhật bản gốc của đối tượng này và máy
+// chủ so phiên bản theo chuỗi ("…Z" ≠ "…+00:00"), nên từ lần lưu thứ hai đều báo "máy khác
+// vừa sửa" dù chính máy này lưu. Nay: giữ bản gốc sau khi lưu; khi bị báo xung đột thì tải bản
+// máy chủ, ghép 3 chiều theo từng mục (bản gốc / máy này / máy chủ) rồi lưu lại. Chỉ dừng lại
+// để kiểm tra khi cùng một mục bị hai máy sửa khác nhau.
+const SCF_OBJECT_MERGE_CONFLICT={conflict:true};
+function scfPlainSyncObject(value){return !!value&&typeof value==='object'&&!Array.isArray(value);}
+// Máy chủ lưu JSONB nên thứ tự trường có thể khác: so sánh không phụ thuộc thứ tự trường.
+function scfStableSyncJson(value){
+  if(Array.isArray(value))return '['+value.map(scfStableSyncJson).join(',')+']';
+  if(scfPlainSyncObject(value))return '{'+Object.keys(value).filter(k=>value[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+scfStableSyncJson(value[k])).join(',')+'}';
+  return value===undefined?'~':JSON.stringify(value);
+}
+function scfMergeSyncObject(base,local,remote){
+  const same=(a,b)=>scfStableSyncJson(a)===scfStableSyncJson(b);
+  if(same(local,remote)||same(local,base))return remote;
+  if(same(remote,base))return local;
+  if(!scfPlainSyncObject(local)||!scfPlainSyncObject(remote))return SCF_OBJECT_MERGE_CONFLICT;
+  const b=scfPlainSyncObject(base)?base:{},own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k),out={};
+  for(const k of new Set([...Object.keys(remote),...Object.keys(local)])){
+    const next=scfMergeSyncObject(own(b,k)?b[k]:undefined,own(local,k)?local[k]:undefined,own(remote,k)?remote[k]:undefined);
+    if(next===SCF_OBJECT_MERGE_CONFLICT)return next;
+    if(next!==undefined)out[k]=next;
+  }
+  return out;
+}
+async function scfSaveObjectAfterConflict(key,value,base,timeoutMs,actor){
+  const ensureActor=()=>{if(actor!==String(window.__SCF_ACCESS_CONTEXT?.employeeId||''))throw new Error('Tài khoản đã thay đổi. Giữ nguyên hàng chờ để kiểm tra.');};
+  ensureActor();const loaded=await serverLoadPermittedCollection(key);ensureActor();
+  const merged=scfMergeSyncObject(base,value,loaded.value);
+  if(!scfPlainSyncObject(merged)||merged===SCF_OBJECT_MERGE_CONFLICT){
+    const error=new Error('Máy khác vừa sửa cùng mục trong "'+syncCollectionLabel(key)+'". Thay đổi trên máy này vẫn được giữ để kiểm tra.');error.code='SCF_WRITE_CONFLICT';throw error;
+  }
+  if(scfStableSyncJson(merged)===scfStableSyncJson(loaded.value))return{value:loaded.value,updatedAt:loaded.updatedAt||''};
+  return withRemoteTimeout(serverSavePermittedCollection(key,merged,loaded.updatedAt||'',loaded.value,timeoutMs),timeoutMs);
+}
+window.scfPublishMergedWorkRules=function scfPublishMergedWorkRules(value){
+  if(!scfPlainSyncObject(value))return;
+  window.__SCF_WORK_RULES=typeof scfNormalizeWorkRules==='function'?scfNormalizeWorkRules(value):value;
+  window.dispatchEvent(new CustomEvent('scf-work-rules-reconciled',{detail:{value:window.__SCF_WORK_RULES}}));
+};
 async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,baseValue,timeoutMs){
   const syncActor=String(window.__SCF_ACCESS_CONTEXT?.employeeId||'');
   if(key==='scf_notifications'&&Array.isArray(val)&&val.length>=2000){
@@ -700,6 +742,7 @@ async function scfSavePermittedCollection(key,val,patches,expectedUpdatedAt,base
     catch(error){
       if(key==='scf_notifications'&&error?.code==='SCF_WRITE_CONFLICT')return scfSaveNotificationsAfterConflict(val,baseValue,timeoutMs,syncActor);
       if(key==='scf_fuelpurchases'&&error?.code==='SCF_WRITE_CONFLICT')return scfSaveFuelAfterConflict(val,baseValue,timeoutMs);
+      if(key==='scf_work_rules'&&error?.code==='SCF_WRITE_CONFLICT'&&scfPlainSyncObject(val))return scfSaveObjectAfterConflict(key,val,baseValue,timeoutMs,syncActor);
       if(!['SCF_REMOTE_TIMEOUT','SCF_DATABASE_TIMEOUT'].includes(error?.code)||key!=='scf_orders'||!patches?.length)throw error;
       // A timed-out HTTP response is ambiguous: the server may already have
       // committed the patch. Read only the changed orders before retrying it.
@@ -769,10 +812,10 @@ async function performDbSet(key,val,queuedAt='',mode=''){
       if(readSyncQueue()[key]?.updatedAt!==queuedAt)return false;
       scfVerifyOrderTripSave(key,saved,val,patches);
       scfVerifyTripDriverSave(key,saved,val);
-      const hasSavedValue=Array.isArray(saved?.value)||(key==='scf_prod_actuals'&&saved?.value&&typeof saved.value==='object');
+      const hasSavedValue=Array.isArray(saved?.value)||((key==='scf_prod_actuals'||key==='scf_work_rules')&&!!saved?.value&&typeof saved.value==='object');
       const merged=hasSavedValue&&JSON.stringify(saved.value)!==JSON.stringify(val);
       if(hasSavedValue)scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(val));
-      scfRemoteVersions.set(key,(merged&&key!=='scf_prod_actuals')||patches?'':String(saved?.updatedAt||''));
+      scfRemoteVersions.set(key,(merged&&key!=='scf_prod_actuals'&&key!=='scf_work_rules')||patches?'':String(saved?.updatedAt||''));if(merged&&key==='scf_work_rules')window.scfPublishMergedWorkRules?.(saved.value);
       scfPublishMergedCollection(key,saved?.value,val,queuedAt);
       removeQueuedWrite(key,queuedAt);window.__SCF_COLLECTION_SYNC_RESULTS[key]={status:'confirmed',updatedAt:queuedAt};setSyncState('synced');
       if(merged)setTimeout(()=>window.scfSyncNow?.(),100);return true;
@@ -907,10 +950,10 @@ async function runPendingWrites(){
         if(readSyncQueue()[key]?.updatedAt!==item.updatedAt)return false;
         scfVerifyOrderTripSave(key,saved,item.value,patches);
         scfVerifyTripDriverSave(key,saved,item.value);
-        const hasSavedValue=Array.isArray(saved?.value)||(key==='scf_prod_actuals'&&saved?.value&&typeof saved.value==='object');
+        const hasSavedValue=Array.isArray(saved?.value)||((key==='scf_prod_actuals'||key==='scf_work_rules')&&!!saved?.value&&typeof saved.value==='object');
         const merged=hasSavedValue&&JSON.stringify(saved.value)!==JSON.stringify(item.value);
         if(hasSavedValue)scfRemoteSnapshots.set(key,syncSnapshot(saved.value));else if(patches)scfRemoteSnapshots.set(key,syncSnapshot(item.value));
-        scfRemoteVersions.set(key,(merged&&key!=='scf_prod_actuals')||patches?'':String(saved?.updatedAt||''));
+        scfRemoteVersions.set(key,(merged&&key!=='scf_prod_actuals'&&key!=='scf_work_rules')||patches?'':String(saved?.updatedAt||''));if(merged&&key==='scf_work_rules')window.scfPublishMergedWorkRules?.(saved.value);
         scfPublishMergedCollection(key,saved?.value,item.value,item.updatedAt);
         if(merged)setTimeout(()=>window.scfSyncNow?.(),100);
       }
