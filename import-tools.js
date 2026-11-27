@@ -769,12 +769,14 @@ function Sidebar({page,setPage,col,setCol,company,role,perms}){
   );
 }
 function TopNav({page,setPage,role,perms,dept,currentUser,mobile=false}){
+  // V914: lái xe được tích "Hóa đơn" thấy Báo cáo hóa đơn trên menu (trang khác giữ nguyên quyền).
+  const scfNavPageAllowed=(user,key,role,perms,dept)=>canAccess(role,key,perms,dept)||key==='invoicereport'&&typeof scfDriverInvoiceReportAccess==='function'&&scfDriverInvoiceReportAccess(user);
   const[open,setOpen]=useState(null);
   const viewer=currentUser||{role,permissions:perms,dept};
   const groups=[]; let cur=null;
   NAV.forEach(item=>{
     if(item.sec){cur={sec:item.sec,pages:[]};groups.push(cur);return;}
-    if(!canAccess(role,item.key,perms,dept)||mobile&&!canMobileFeature(currentUser||{role,permissions:perms,dept},item.key))return;
+    if(!scfNavPageAllowed(currentUser||{role,permissions:perms,dept},item.key,role,perms,dept)||mobile&&!canMobileFeature(currentUser||{role,permissions:perms,dept},item.key))return;
     if(cur)cur.pages.push(mobile&&item.key==='trips'&&(viewer.role==='driver'||employeeHasDepartment(viewer,'Lái xe'))?{...item,label:'Đơn hàng lái xe'}:item);
     else groups.push({sec:item.label,pages:[item],single:true,icon:item.icon});
   });
@@ -803,13 +805,15 @@ function TopNav({page,setPage,role,perms,dept,currentUser,mobile=false}){
 }
 
 function MobileNav({page,setPage,role,perms,dept,currentUser,onLogout,onQuickTripSummary}){
+  // V914: lái xe được tích "Hóa đơn" thấy Báo cáo hóa đơn trên menu (trang khác giữ nguyên quyền).
+  const scfNavPageAllowed=(user,key,role,perms,dept)=>canAccess(role,key,perms,dept)||key==='invoicereport'&&typeof scfDriverInvoiceReportAccess==='function'&&scfDriverInvoiceReportAccess(user);
   const[open,setOpen]=useState(false);
   const viewer=currentUser||{role,permissions:perms,dept};
   const allowed=key=>canMobileFeature(viewer,key);
   const groups=[]; let cur=null;
   NAV.forEach(item=>{
     if(item.sec){cur={sec:item.sec,pages:[]};groups.push(cur);return;}
-    if(!canAccess(role,item.key,perms,dept)||!allowed(item.key))return;
+    if(!scfNavPageAllowed(viewer,item.key,role,perms,dept)||!allowed(item.key))return;
     if(cur)cur.pages.push(item.key==='trips'&&(viewer.role==='driver'||employeeHasDepartment(viewer,'Lái xe'))?{...item,label:'Đơn hàng lái xe'}:item);
     else groups.push({sec:item.label,pages:[item],single:true});
   });
@@ -818,13 +822,13 @@ function MobileNav({page,setPage,role,perms,dept,currentUser,onLogout,onQuickTri
   const productionDept=(Array.isArray(dept)?dept:[dept]).some(value=>String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('san xuat'));
   if(productionDept)preferred.push('prodsummary');
   const quick=preferred.map(key=>{const item=NAV.find(item=>item.key===key);return item&&key==='trips'&&(viewer.role==='driver'||employeeHasDepartment(viewer,'Lái xe'))?{...item,label:'Đơn hàng lái xe'}:item;})
-    .filter(item=>item&&canAccess(role,item.key,perms,dept)&&allowed(item.key));
+    .filter(item=>item&&scfNavPageAllowed(viewer,item.key,role,perms,dept)&&allowed(item.key));
   const reserved=(onQuickTripSummary&&allowed('quick-summary')?1:0)+(allowed('more')?1:0);
-  const extraKeys=(viewer.role==='driver'||employeeHasDepartment(viewer,'Lái xe'))?['workreport_lx','fuelpurchases','notifications','leaves','tasks']:['notifications','leaves','tasks','workreport_lx','fuelpurchases'];
-  const shortLabels={workreport_lx:'Công',fuelpurchases:'Xăng',notifications:'TB',leaves:'Xin nghỉ',tasks:'Việc'};
-  for(const key of quick.length+reserved>0?extraKeys:[]){if(quick.length+reserved>=6)break;const item=NAV.find(item=>item.key===key);if(item&&!quick.some(row=>row.key===key)&&canAccess(role,key,perms,dept)&&allowed(key))quick.push({...item,shortLabel:shortLabels[key]});}
+  const extraKeys=(viewer.role==='driver'||employeeHasDepartment(viewer,'Lái xe'))?['workreport_lx','invoicereport','fuelpurchases','notifications','leaves','tasks']:['notifications','leaves','tasks','workreport_lx','fuelpurchases'];
+  const shortLabels={workreport_lx:'Công',fuelpurchases:'Xăng',notifications:'TB',leaves:'Xin nghỉ',tasks:'Việc',invoicereport:'Hóa đơn'};
+  for(const key of quick.length+reserved>0?extraKeys:[]){if(quick.length+reserved>=6)break;const item=NAV.find(item=>item.key===key);if(item&&!quick.some(row=>row.key===key)&&scfNavPageAllowed(viewer,key,role,perms,dept)&&allowed(key))quick.push({...item,shortLabel:shortLabels[key]});}
   const currentIsQuick=quick.some(item=>item.key===page);
-  const go=key=>{if(allowed(key)&&canAccess(role,key,perms,dept)){setPage(key);setOpen(false);}};
+  const go=key=>{if(allowed(key)&&scfNavPageAllowed(viewer,key,role,perms,dept)){setPage(key);setOpen(false);}};
   const items=[...quick,...(onQuickTripSummary&&allowed('quick-summary')?[{key:'quick-summary',icon:'ti-photo-search',label:'Đơn tổng'}]:[]),...(allowed('more')?[{key:'more',icon:'ti-grid-dots',label:'Thêm'}]:[])];
 
   return h(React.Fragment,null,

@@ -2715,11 +2715,19 @@ function SalesDebtReportTab({orders,setOrders,customers,products,quotes=[],trips
 }
 
 function InvoiceUploadReportTab({orders,setOrders,currentUser,customers,products,trips=[],setPage}){
+  // V914: lái xe (được tích "Hóa đơn") chỉ thấy đơn thuộc các chuyến đã giao cho mình; không tải ảnh ở đây.
+  const driverOnly=typeof scfIsDriverOnlyUser==='function'&&scfIsDriverOnlyUser(currentUser);
+  if(driverOnly){
+    const own=(trips||[]).filter(trip=>typeof scfTripBelongsToDriver==='function'&&scfTripBelongsToDriver(trip,currentUser)&&(!!trip.driverDispatchedAt||['active','completion_pending','completed'].includes(trip.status)));
+    const ownIds=new Set(own.map(trip=>String(trip.id))),listed=new Set(own.flatMap(trip=>(trip.orderIds||[]).map(String)));
+    orders=(orders||[]).filter(order=>order.tripId?ownIds.has(String(order.tripId)):listed.has(String(order.id)));
+    trips=own;
+  }
   if(typeof scfWarehouseOrders!=='undefined')orders=scfWarehouseOrders.invoiceView(orders,trips,products);
   // Use the same explicit day/month interpretation as the report filters.
   // The generic formatter guesses US month/day for ambiguous slash dates.
   const displayDate=value=>{const key=dateKey(value);return key?key.slice(8,10)+'/'+key.slice(5,7)+'/'+key.slice(2,4):'—';};
-  const canUpload=!!setOrders&&!!currentUser&&(currentUser.role==='admin'||employeeDepartmentIncludes(currentUser,'Kế toán'))&&canAccess(currentUser.role,'invoicereport',currentUser.permissions);
+  const canUpload=!driverOnly&&!!setOrders&&!!currentUser&&(currentUser.role==='admin'||employeeDepartmentIncludes(currentUser,'Kế toán'))&&canAccess(currentUser.role,'invoicereport',currentUser.permissions);
   const live=React.useRef({}),busy=React.useRef(new Set());live.current={orders,currentUser,canUpload};
   const uploadInvoice=async(order,file)=>{
     const id=String(order.id||''),actor=String(currentUser?.id||'');

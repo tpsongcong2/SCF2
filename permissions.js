@@ -196,9 +196,16 @@ function DeliveryQuantityTotalsPermissionField({employee,onChange,disabled=false
 // Quyền nút trên điện thoại bổ sung cho quyền trang/nghiệp vụ hiện có.
 // Tài khoản cũ chưa cấu hình giữ cách hiển thị hiện tại.
 const SCF_MOBILE_PERMISSION_GROUPS=[
-  {label:'Truy cập từ thanh dưới điện thoại',options:[['welcome','Thời tiết'],['delivery','Đơn giao hàng'],['trips','Chuyến giao hàng'],['attendance','Chấm công'],['prodsummary','SX · Tổng hợp sản xuất'],['quick-summary','Đơn tổng'],['workreport_lx','Công lái xe'],['fuelpurchases','Mua xăng dầu'],['notifications','Thông báo'],['leaves','Xin nghỉ'],['tasks','Giao việc'],['more','Thêm · Danh sách chức năng']]},
+  {label:'Truy cập từ thanh dưới điện thoại',options:[['welcome','Thời tiết'],['delivery','Đơn giao hàng'],['trips','Chuyến giao hàng'],['attendance','Chấm công'],['prodsummary','SX · Tổng hợp sản xuất'],['quick-summary','Đơn tổng'],['workreport_lx','Công lái xe'],['fuelpurchases','Mua xăng dầu'],['notifications','Thông báo'],['leaves','Xin nghỉ'],['tasks','Giao việc'],['invoicereport','Hóa đơn'],['more','Thêm · Danh sách chức năng']]},
   {label:'Tính năng chuyến giao trên điện thoại',options:[['tripSummary','Xem ảnh đơn tổng'],['tripUpdate','Cập nhật SL giao và HĐ'],['tripPrint','In đơn'],['tripInvoices','Hiện ảnh hóa đơn'],['tripImage','Tạo ảnh chuyến']]}
 ];
+// V914: lái xe được tích "Hóa đơn" thì vào được Báo cáo hóa đơn, chỉ thấy các đơn thuộc chuyến của mình.
+// V915: Mặc định lái xe CÓ nút Hóa đơn; Admin bỏ tích thì mất (mobilePermissions.invoicereport===false).
+function scfIsDriverOnlyUser(user){
+  if(!user||['admin','administrator'].includes(String(user.role||'').toLowerCase()))return false;
+  return (String(user.role||'')==='driver'||employeeHasDepartment(user,'Lái xe'))&&!employeeHasDepartment(user,'Kế toán');
+}
+function scfDriverInvoiceReportAccess(user){return scfIsDriverOnlyUser(user)&&user?.active!==false&&user?.mobilePermissions?.invoicereport!==false;}
 function canMobileFeature(user,key){
   if(key==='deliverymobile')key='delivery';
   user=scfUnifiedDeliveryPermissions(user);
@@ -226,6 +233,7 @@ function scfCanOpenUserPage(user,page,{mobile=false,faceMask=false}={}){
   if(!user)return false;
   if(page==='mobile-home')return mobile&&!faceMask;
   if(page==='split')return scfCanUseSplitView(user,{mobile,faceMask});
+  if(page==='invoicereport'&&!faceMask&&scfDriverInvoiceReportAccess(user))return true;
   return canAccess(user.role,page,user.permissions,employeeDepartments(user))&&(!mobile||faceMask||canMobileFeature(user,page));
 }
 function scfMobileFallbackPage(user={}){
@@ -240,7 +248,7 @@ function scfMobileStartTarget(user={}){
   return scfMobileStartOptions(user).some(([key])=>key===requested)?requested:scfMobileFallbackPage(user);
 }
 function MobilePermissionFields({employee,onChange,onStartPageChange,disabled=false}){
-  const blocked=SCF_MOBILE_PERMISSION_GROUPS[0].options.filter(([key])=>!['more','quick-summary'].includes(key)&&canMobileFeature(employee,key)&&!canAccess(employee?.role,key,employee?.permissions,employeeDepartments(employee))).map(([,label])=>label);
+  const blocked=SCF_MOBILE_PERMISSION_GROUPS[0].options.filter(([key])=>!['more','quick-summary'].includes(key)&&canMobileFeature(employee,key)&&!canAccess(employee?.role,key,employee?.permissions,employeeDepartments(employee))&&!(key==='invoicereport'&&scfDriverInvoiceReportAccess(employee))).map(([,label])=>label);
   return h('div',{className:'mobile-permission-settings',style:{border:'1px solid var(--bd)',borderRadius:'var(--r)',padding:10,margin:'10px 0',background:'var(--bg2)'}},
     h('b',null,'Phân quyền giao diện điện thoại'),
     h('div',{style:{fontSize:12,color:'var(--tx2)',margin:'6px 0'}},'Tích để hiện nút và cho phép mở tính năng. Các trang vẫn cần quyền truy cập và quyền nghiệp vụ tương ứng. Riêng Đơn tổng cho phép xem độc lập, không cấp quyền sửa đơn hay quản lý chuyến; lái xe chỉ xem chuyến của mình.'),
