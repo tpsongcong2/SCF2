@@ -1765,7 +1765,7 @@ function TripQuickSummaryModal({currentUser,employees=[],loadData=scfLoadQuickTr
       future&&h('span',{className:'trip-summary-future'},'Đặt trước'),
       h('span',{className:'summary-cache-updated',role:'status'},busy?h('span',null,h('i',{className:'ti ti-loader-2 spin','aria-hidden':true}),' Đang tải…'):status||'',!busy&&shown?.updating?h('em',{className:'trip-summary-renewing'},' · đang tạo mới…'):null),
       scfQuickSummaryFullAccess(currentUser)&&h('label',{className:'trip-summary-driver-toggle'},h('input',{type:'checkbox',checked:showDriverName,onChange:e=>go(date,group,e.target.checked)}),'Tên lái xe')),
-    !scfQuickSummaryFullAccess(currentUser)&&h('p',{className:'trip-summary-quick-scope'},'Chỉ hiện đơn thuộc các chuyến đã giao cho bạn.'),
+    // V913: bỏ dòng "Chỉ hiện đơn thuộc các chuyến đã giao cho bạn." ở đơn tổng của lái xe.
     error&&h('p',{role:'alert',className:'trip-summary-quick-error'},error),
     shown&&h('div',{className:'trip-summary-quick-result'},
       h(TripSummaryImage,{key:shown.accessKey+'-'+shown.date+'-'+shown.group,...shown.data,preparedPreview:shown.preparedPreview,updating:shown.updating,trips:shown.trips,title:shown.title,accessKey:shown.accessKey,showDriverName:shown.showDriverName,drawTitle:false,filename:'Don-tong-'+shown.group+'-'+shown.date+'.png',bare:true,keepPrevious:!!shown.preparedPreview})

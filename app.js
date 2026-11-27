@@ -1,5 +1,5 @@
 /* ─── APP ROOT ─── */
-const SCF_BUILD_VERSION='V912';
+const SCF_BUILD_VERSION='V913';
 const PTITLES = {
   split:'Chia màn hình',
   driverprintlog:'Thông tin lái xe in đơn',
